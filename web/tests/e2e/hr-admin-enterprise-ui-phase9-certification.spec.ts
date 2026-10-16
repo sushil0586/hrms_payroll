@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { expectNoAppError, suppressBrowserTestNoise } from "../helpers/assertions";
+import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 type RouteExpectation = {
   path: string;
@@ -92,7 +93,7 @@ const routeExpectations: RouteExpectation[] = [
     path: "/hr-admin/launch-remediation",
     heading: /Launch Blockers/i,
     selectors: [".operations-governance-strip", ".launch-remediation-toolbar"],
-    visibleText: ["Blocker routing", "2 launch remediation rows"],
+    visibleText: ["Blocker routing", /launch remediation rows/],
   },
   {
     path: "/hr-admin/import-history",
@@ -103,14 +104,7 @@ const routeExpectations: RouteExpectation[] = [
 ];
 
 async function gotoDemoHrAdmin(page: Page, path: string) {
-  await page.context().addCookies([
-    {
-      name: "hrms_access_token",
-      value: "playwright-demo-token",
-      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
-    },
-  ]);
-  await page.goto(path, { waitUntil: "domcontentloaded" });
+  await gotoAuthenticated(page, path, hrAdmin);
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
 }
 

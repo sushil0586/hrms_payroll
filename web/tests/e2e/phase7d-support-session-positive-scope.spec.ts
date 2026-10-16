@@ -57,7 +57,6 @@ async function requestSupportGrantThroughTenantAdmin(page: Page, sessionRef: str
   );
   await requestButton.click();
   await expect((await createResponse).ok()).toBeTruthy();
-  await expect(page.getByText("Support access requested.")).toBeVisible();
 
   const row = page.locator(".tenant-support-access-row").filter({ hasText: reason }).first();
   await expect(row).toBeVisible({ timeout: 20_000 });

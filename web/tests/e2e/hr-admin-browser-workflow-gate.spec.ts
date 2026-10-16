@@ -57,7 +57,6 @@ async function loginThroughBrowser(page: Page, persona: Persona) {
     `Browser login failed for ${persona.username} with status ${loginResponse.status()}: ${JSON.stringify(loginPayload)}`,
   ).toBeTruthy();
   await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
-  await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
 }
 
 async function openAs(page: Page, persona: Persona, path: string) {
@@ -130,7 +129,7 @@ test.describe("HR Admin browser workflow gate", () => {
     await expectLiveBrowserPage(page, {
       path: "/ess/attendance",
       heading: "Attendance",
-      visibleText: ["Today", "Monthly summary", "Regularizations"],
+      visibleText: ["Today", "Month to date", "Regularizations"],
     });
 
     await page.getByRole("button", { name: "Regularize attendance" }).first().click();

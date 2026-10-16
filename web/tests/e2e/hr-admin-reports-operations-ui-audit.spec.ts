@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "../helpers/assertions";
+import { expectNoAppError, expectNoHorizontalOverflow, fetchBrowserPath, suppressBrowserTestNoise } from "../helpers/assertions";
 import { auditVisibleControls, expectVisibleLinksAreReal } from "../helpers/hr-admin-ui-audit";
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
@@ -70,8 +70,8 @@ async function expectVisibleReportExportsHealthy(page: Page, route: string) {
   );
 
   for (const href of [...new Set(exportHrefs)]) {
-    const response = await page.request.get(href, { failOnStatusCode: false, maxRedirects: 2 });
-    expect(response.status(), `${route} exposes a report export that does not open cleanly: ${href}`).toBeLessThan(400);
+    const response = await fetchBrowserPath(page, href);
+    expect(response.status, `${route} exposes a report export that does not open cleanly: ${href}`).toBeLessThan(400);
   }
 }
 

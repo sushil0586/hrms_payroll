@@ -217,16 +217,15 @@ export function PayrollInputOperationsPanel({
     () => setup.snapshots.filter((item) => item.payroll_run_id === lockRunId),
     [lockRunId, setup.snapshots],
   );
-  const hasLoadedLockSnapshots = lockRunSnapshots.length > 0;
-  const lockReadyCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "ready").length : selectedLockRun?.ready_count ?? 0;
-  const lockWarningCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "warning").length : selectedLockRun?.warning_count ?? 0;
-  const lockBlockedCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "blocked").length : selectedLockRun?.blocked_count ?? 0;
-  const lockLockedCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "locked").length : selectedLockRun?.locked_count ?? 0;
-  const lockSnapshotCount = hasLoadedLockSnapshots ? lockRunSnapshots.length : selectedLockRun?.snapshot_count ?? 0;
+  const lockReadyCount = selectedLockRun?.ready_count ?? lockRunSnapshots.filter((item) => item.snapshot_status === "ready").length;
+  const lockWarningCount = selectedLockRun?.warning_count ?? lockRunSnapshots.filter((item) => item.snapshot_status === "warning").length;
+  const lockBlockedCount = selectedLockRun?.blocked_count ?? lockRunSnapshots.filter((item) => item.snapshot_status === "blocked").length;
+  const lockLockedCount = selectedLockRun?.locked_count ?? lockRunSnapshots.filter((item) => item.snapshot_status === "locked").length;
+  const lockSnapshotCount = selectedLockRun?.snapshot_count ?? lockRunSnapshots.length;
   const firstBlockingSnapshot = lockRunSnapshots.find((item) => item.blockers.length > 0);
   const firstWarningSnapshot = lockRunSnapshots.find((item) => item.warnings.length > 0);
   const firstReconciliationBlocker = lockRunSnapshots.find((item) => item.reconciliation_summary.high_count > 0);
-  const reconciliationBlockerCount = lockRunSnapshots.reduce((sum, item) => sum + item.reconciliation_summary.high_count, 0);
+  const reconciliationBlockerCount = selectedLockRun?.reconciliation_summary.high_count ?? lockRunSnapshots.reduce((sum, item) => sum + item.reconciliation_summary.high_count, 0);
   const noPeriodWarning = setup.options.periods.length === 0 ? "No payroll periods are configured. Create a period before creating a payroll run." : "";
   const noCompatiblePayGroupWarning =
     runForm.period_id && compatiblePayGroups.length === 0

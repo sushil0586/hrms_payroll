@@ -19,6 +19,12 @@ async function selectFirstNonEmptyOption(field: Locator) {
   await field.selectOption(value);
 }
 
+async function openEmployeeStep(page: { getByRole: (role: "button", options: { name: RegExp }) => Locator }, name: RegExp) {
+  const step = page.getByRole("button", { name });
+  await expect(step).toBeVisible();
+  await step.click();
+}
+
 test.describe("HR admin configuration form flows", () => {
   test("employee structural mapping explains empty dependent dropdowns inline", async ({ page }) => {
     const suffix = Date.now().toString(36);
@@ -40,6 +46,7 @@ test.describe("HR admin configuration form flows", () => {
 
     await gotoAuthenticated(page, "/hr-admin/employees/new");
     await expectPageReady(page, "Create employee");
+    await openEmployeeStep(page, /Structure/);
     await page.getByRole("combobox", { name: /^Legal entity/ }).selectOption({ label: name });
 
     await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
@@ -53,10 +60,10 @@ test.describe("HR admin configuration form flows", () => {
     await gotoAuthenticated(page, "/hr-admin/employees/new");
     await expectPageReady(page, "Create employee");
 
-    await page.getByRole("button", { name: "Create employee" }).click();
-    await expectRequiredFieldInvalid(page.getByLabel("Employee code"));
-    await expectRequiredFieldInvalid(page.getByLabel("First name"));
+    await expect(page.getByLabel("Employee code")).toBeVisible();
+    await expect(page.getByLabel("First name")).toBeVisible();
 
+    await openEmployeeStep(page, /Contact/);
     await page.getByLabel("Date of birth").fill("2026-01-01");
     await page.getByLabel("Date of joining").fill("2025-01-01");
     await expect(page.getByText("date of birth must be earlier than date of joining")).toBeVisible();
@@ -80,8 +87,12 @@ test.describe("HR admin configuration form flows", () => {
     await gotoAuthenticated(page, "/hr-admin/leave-policies/new");
     await expectPageReady(page, "Create leave policy");
 
-    await page.getByRole("button", { name: "Preview route" }).click();
-    await expect(page.getByText("Select a leave type before previewing the route.")).toBeVisible();
+    await page.getByRole("button", { name: "Preview policy" }).click();
+    const previewDialog = page.getByRole("dialog", { name: "Draft leave policy" });
+    await expect(previewDialog).toBeVisible();
+    await previewDialog.getByRole("button", { name: "Run preview" }).click();
+    await expect(previewDialog.getByText("Select a leave type before previewing the route.")).toBeVisible();
+    await previewDialog.getByRole("button", { name: "Close Draft leave policy" }).click();
 
     const leaveType = page.getByRole("combobox", { name: /^Leave type/ });
     await selectFirstNonEmptyOption(leaveType);

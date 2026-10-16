@@ -26,6 +26,7 @@ export async function proxyHrAdminPayrollConfigRequest({ request, upstreamPath, 
     headers: {
       "Content-Type": "application/json",
       Authorization: `Token ${token}`,
+      ...(request.headers.get("idempotency-key") ? { "Idempotency-Key": request.headers.get("idempotency-key")! } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",

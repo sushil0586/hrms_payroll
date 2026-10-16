@@ -46,6 +46,8 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      - media-data:/app/media
     healthcheck:
       test: ["CMD-SHELL", "python manage.py production_preflight --json --strict --skip-network >/tmp/preflight.json && curl -fsS http://localhost:8000/api/v1/health/"]
       interval: 30s
@@ -87,7 +89,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    command: ["celery", "-A", "config", "worker", "-l", "INFO"]
+    volumes:
+      - media-data:/app/media
+    command: ["celery", "-A", "config", "worker", "-l", "INFO", "--concurrency", "${CELERY_WORKER_CONCURRENCY:-2}"]
 
   celery-beat:
     build:
@@ -106,6 +110,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      - media-data:/app/media
     command: ["celery", "-A", "config", "beat", "-l", "INFO"]
 
   payroll-provider-jobs:
@@ -124,6 +130,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      - media-data:/app/media
     command:
       - /bin/sh
       - -c
@@ -145,6 +153,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      - media-data:/app/media
     command:
       - /bin/sh
       - -c
@@ -171,3 +181,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  media-data:

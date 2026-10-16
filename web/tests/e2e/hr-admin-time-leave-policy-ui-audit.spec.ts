@@ -98,13 +98,13 @@ const dynamicTimeLeavePolicyRoutes = [
     name: "attendance record edit",
     sourceRoute: "/hr-admin/attendance-records",
     actionName: "Edit record",
-    expectedUrl: /\/hr-admin\/attendance-records\/[^/]+\/edit/,
+    expectedUrl: /\/hr-admin\/attendance-records\?.*editRecord=[^&]+/,
   },
   {
     name: "attendance regularization review",
     sourceRoute: "/hr-admin/attendance-regularizations",
     actionName: "Review request",
-    expectedUrl: /\/hr-admin\/attendance-regularizations\/[^/]+\/review/,
+    expectedUrl: /\/hr-admin\/attendance-regularizations\?.*reviewRegularization=[^&]+/,
   },
   {
     name: "attendance policy edit",
@@ -134,31 +134,31 @@ const dynamicTimeLeavePolicyRoutes = [
     name: "leave policy edit",
     sourceRoute: "/hr-admin/leave-policies",
     actionName: "Edit",
-    expectedUrl: /\/hr-admin\/leave-policies\/[^/]+\/edit/,
+    expectedUrl: /\/hr-admin\/leave-policies\?.*editLeavePolicy=[^&]+/,
   },
   {
     name: "leave assignment edit",
     sourceRoute: "/hr-admin/leave-policy-assignments",
     actionName: "Edit",
-    expectedUrl: /\/hr-admin\/leave-policy-assignments\/[^/]+\/edit/,
+    expectedUrl: /\/hr-admin\/leave-policy-assignments\?.*editLeaveAssignment=[^&]+/,
   },
   {
     name: "leave type edit",
     sourceRoute: "/hr-admin/leave-types",
     actionName: "Edit",
-    expectedUrl: /\/hr-admin\/leave-types\/[^/]+\/edit/,
+    expectedUrl: /\/hr-admin\/leave-types\?.*editLeaveType=[^&]+/,
   },
   {
     name: "roster template edit",
     sourceRoute: "/hr-admin/shift-roster-templates",
-    actionName: "Edit",
-    expectedUrl: /\/hr-admin\/shift-roster-templates\/[^/]+\/edit/,
+    actionName: "Edit template",
+    expectedUrl: /\/hr-admin\/shift-roster-templates\?.*editRoster=[^&]+/,
   },
   {
     name: "shift edit",
     sourceRoute: "/hr-admin/shifts",
-    actionName: "Edit",
-    expectedUrl: /\/hr-admin\/shifts\/[^/]+\/edit/,
+    actionName: "Edit shift",
+    expectedUrl: /\/hr-admin\/shifts\?.*editShift=[^&]+/,
   },
 ];
 
@@ -198,7 +198,9 @@ async function expectVisibleTimeLeavePolicyLinksHealthy(page: Page, route: strin
 }
 
 async function expectNoVisibleControlCollisions(page: Page, route: string) {
-  const collisions = await page.locator("main button, main a.button, main input:not([type='hidden']), main select, main textarea, main summary").evaluateAll((elements) => {
+  const activeDialog = page.getByRole("dialog").last();
+  const controlRoot = (await activeDialog.isVisible().catch(() => false)) ? activeDialog : page.locator("main");
+  const collisions = await controlRoot.locator("button, a.button, input:not([type='hidden']), select, textarea, summary").evaluateAll((elements) => {
     function clippedRect(element: Element) {
       const rect = element.getBoundingClientRect();
       let left = rect.left;
@@ -310,8 +312,81 @@ async function auditLinkedTimeLeavePolicyRoute(
     return;
   }
   await expect(action, `${sourceRoute} should expose a ${routeName} link`).toBeVisible();
-  await action.click();
+  const actionHref = await action.getAttribute("href");
+  if (routeName === "leave policy edit") {
+    expect(actionHref, "leave policy edit action should target the compact query-modal route").toMatch(/^\/hr-admin\/leave-policies\?editLeavePolicy=[^&]+$/);
+    await page.goto(actionHref!, { waitUntil: "domcontentloaded" });
+  } else {
+    await action.click();
+  }
   await expect(page, `${routeName} should open the intended child page`).toHaveURL(expectedUrl);
+
+  if (routeName === "attendance record edit") {
+    const recordId = new URL(actionHref ?? "", page.url()).searchParams.get("editRecord");
+    expect(recordId, "attendance edit link should preserve the selected record ID").toBeTruthy();
+
+    const dialog = page.getByRole("dialog", { name: /^Edit / });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("form.attendance-record-form")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Save attendance record" })).toBeVisible();
+    const notes = dialog.getByRole("textbox", { name: "Notes" });
+    const persistedNote = `P3-0465 persistence ${recordId}`;
+    await notes.fill(persistedNote);
+
+    const saveResponse = page.waitForResponse((response) =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname.endsWith(`/api/hr-admin/attendance-records/${recordId}`),
+    );
+    await dialog.getByRole("button", { name: "Save attendance record" }).click();
+    expect((await saveResponse).ok(), "attendance record PATCH should succeed").toBe(true);
+    await expect(page).not.toHaveURL(/editRecord=/);
+
+    await page.goto(actionHref!);
+    await expect(page).toHaveURL(new RegExp(`editRecord=${recordId}`));
+    await expect(page.getByRole("dialog").getByRole("textbox", { name: "Notes" })).toHaveValue(persistedNote);
+  }
+  if (routeName === "attendance regularization review") {
+    const regularizationId = new URL(actionHref ?? "", page.url()).searchParams.get("reviewRegularization");
+    expect(regularizationId, "regularization review link should preserve the selected request ID").toBeTruthy();
+    expect(new URL(page.url()).searchParams.get("reviewRegularization")).toBe(regularizationId);
+    await expect(page.getByRole("heading", { name: "Regularization detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quick review" })).toBeVisible();
+  }
+  if (routeName === "leave policy edit") {
+    const policyId = new URL(actionHref ?? "", page.url()).searchParams.get("editLeavePolicy");
+    expect(policyId, "leave policy edit link should preserve the selected policy ID").toBeTruthy();
+
+    const dialog = page.getByRole("dialog", { name: "Edit leave policy" });
+    await expect(dialog).toBeVisible();
+    const nameInput = dialog.getByRole("textbox", { name: /^Name/ });
+    await expect(nameInput, "selected leave policy name should be directly editable").toBeEnabled();
+    await expect(dialog.getByRole("button", { name: "Save changes" }), "selected leave policy should allow direct save").toBeEnabled();
+    await expect.poll(() => nameInput.evaluate((element) =>
+      Object.keys(element).some((key) => key.startsWith("__reactProps")),
+    ), { message: "leave policy form should be hydrated before editing" }).toBe(true);
+    const originalName = await nameInput.inputValue();
+    const persistedName = `${originalName} P3-0465`;
+    await nameInput.fill(persistedName);
+
+    const savePolicy = async (expectedName: string) => {
+      const responsePromise = page.waitForResponse((response) =>
+        response.request().method() === "PATCH"
+        && new URL(response.url()).pathname.endsWith(`/api/hr-admin/leave-policies/${policyId}`),
+      );
+      await dialog.getByRole("button", { name: "Save changes" }).click();
+      const response = await responsePromise;
+      expect(response.ok(), "leave policy PATCH should succeed").toBe(true);
+      expect((await response.json()).name, "leave policy PATCH should return the edited policy name").toBe(expectedName);
+      await expect(page).not.toHaveURL(/editLeavePolicy=/);
+    };
+
+    await savePolicy(persistedName);
+    await page.goto(actionHref!);
+    await expect(page.getByRole("dialog", { name: "Edit leave policy" }).getByRole("textbox", { name: /^Name/ })).toHaveValue(persistedName);
+
+    await nameInput.fill(originalName);
+    await savePolicy(originalName);
+  }
   await auditCurrentTimeLeavePolicyPage(page, routeName);
 }
 

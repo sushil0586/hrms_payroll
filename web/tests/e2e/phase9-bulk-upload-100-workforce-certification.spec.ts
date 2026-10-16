@@ -473,7 +473,7 @@ test.describe("Phase 9 bulk upload 100 workforce certification", () => {
     expect(await countImportedEmployees(page, runRef)).toBe(100);
     await gotoAuthenticated(page, `/hr-admin/employees?q=P9-${runRef}-100&status=all&page_size=5`, hrAdmin);
     await expectPageReady(page, "Employees");
-    await expect(page.locator(".employee-directory-item").filter({ hasText: `P9-${runRef}-100` })).toBeVisible();
+    await expect(page.getByRole("link").filter({ hasText: `P9-${runRef}-100` })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await expectCommittedImportAudit(page, "employees", employeeCsvHash, { rowCount: 101, createdCount: 100, blockedCount: 1 });
@@ -586,12 +586,19 @@ test.describe("Phase 9 bulk upload 100 workforce certification", () => {
 
     await gotoAuthenticated(page, `/hr-admin/attendance-records?q=P9-${runRef}-020&page_size=25`, hrAdmin);
     await expectPageReady(page, "Attendance records");
-    await expect(page.locator(".record-card").filter({ hasText: `P9-${runRef}-020` }).filter({ hasText: "2026-11-12" })).toBeVisible();
+    const importedAttendanceRow = page
+      .getByRole("table")
+      .getByRole("row")
+      .filter({ hasText: `P9-${runRef}-020` })
+      .filter({ hasText: /12 Nov 2026|Nov 12, 2026/ });
+    await expect(importedAttendanceRow).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await gotoAuthenticated(page, "/hr-admin/leave-policy-assignments", hrAdmin);
     await expectPageReady(page, "Leave assignments");
     const leavePolicyAssignmentWorkbench = page.getByTestId("leave-policy-assignment-import-workbench");
+    const assignmentTools = page.locator("details").filter({ has: leavePolicyAssignmentWorkbench });
+    await assignmentTools.locator("summary").click();
     await expect(leavePolicyAssignmentWorkbench).toBeVisible();
     await leavePolicyAssignmentWorkbench.locator("input[type='file']").setInputFiles({
       name: `phase9-leave-policy-assignments-${runRef}.csv`,
@@ -643,7 +650,8 @@ test.describe("Phase 9 bulk upload 100 workforce certification", () => {
 
     await gotoAuthenticated(page, `/hr-admin/leave-requests?q=P9-${runRef}-020&page_size=25`, hrAdmin);
     await expectPageReady(page, "Leave Requests");
-    await expect(page.locator(".record-card").filter({ hasText: `P9-${runRef}-020` }).filter({ hasText: "Phase 9 leave attendance collision" })).toBeVisible();
+    await expect(page.getByRole("table").getByRole("row").filter({ hasText: `P9-${runRef}-020` })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Leave request detail" })).toContainText("Phase 9 leave attendance collision");
     await expectNoHorizontalOverflow(page);
 
     await expectImportHistoryUi(page);

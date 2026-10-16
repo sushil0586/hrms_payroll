@@ -25,7 +25,7 @@ Use ESS Attendance to review daily attendance, understand exceptions, and reques
 | I need to | Start here | Verify before finishing |
 | --- | --- | --- |
 | Check today's attendance | Today card | Shift, check-in, check-out, status, and exception message. |
-| Review month health | Monthly summary | Present, absent, late, worked hours, and unresolved exceptions. |
+| Review month health | Month to date | Present, absent, late, worked hours, and unresolved exceptions. |
 | Correct a missing punch | **Regularize attendance** modal | Date, requested status, corrected time, reason, and lock state. |
 | Review a submitted correction | Regularizations > detail modal | Approval status, manager decision, timeline, and corrected values. |
 | Understand why submit is blocked | Validation message | Reason, time order, locked period, attendance record availability, and API state. |
@@ -47,7 +47,7 @@ Employees use this page to confirm that attendance records are accurate before p
 | Section | Meaning |
 | --- | --- |
 | Today | Shows the current day status, shift, check-in, and check-out. |
-| Monthly summary | Shows present, absent, late, and worked-hour totals for the active month. |
+| Month to date | Shows present, absent, late, and worked-hour totals for the active month. |
 | Correction queue | Shows open correction count and gives a focused **New correction** action. |
 | Regularizations | Shows correction request history with status tabs, search, and pagination. |
 | Regularization detail | Opens in a modal so the employee can inspect manager decision, timeline, and correction detail without leaving the page. |
@@ -61,7 +61,7 @@ The page should stay single-purpose: review attendance first, then open a focuse
 | Screen label | What it means |
 | --- | --- |
 | Today | Current day shift, status, check-in, and check-out context. |
-| Monthly summary | Month-level attendance health and exception summary. |
+| Month to date | Month-level attendance health and exception summary. |
 | Correction queue | Open correction count and the primary correction action. |
 | Regularizations | Submitted correction history with filters and pagination. |
 | Regularize attendance | Focused modal for one attendance correction. |
@@ -134,7 +134,7 @@ This keeps ESS Attendance easy for employees: the page is for review, and the mo
 
 The ESS Attendance launch certification covers:
 
-- Page structure: Today, Monthly summary, Correction queue, Regularizations, pagination, and no horizontal overflow.
+- Page structure: Today, Month to date, Correction queue, Regularizations, pagination, and no horizontal overflow.
 - Detail drilldown: a regularization opens in a modal and closes with `Esc`.
 - Regularization modal: reason requirement, invalid time-order blocking, locked-record guard, and request summary.
 - Positive submission path: an unlocked attendance record can submit a correction through the browser against a live local backend.

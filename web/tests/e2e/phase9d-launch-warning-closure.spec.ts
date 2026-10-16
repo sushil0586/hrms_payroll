@@ -66,7 +66,7 @@ async function closeMissingManagerWarnings(page: Page) {
 
 async function closeManagerQueue(page: Page, queue: "leave" | "attendance") {
   await gotoAuthenticated(page, `/mss/approvals?queue=${queue}`, manager);
-  await expectPageReady(page, "Manager inbox");
+  await expectPageReady(page, "Manager approvals");
 
   for (let index = 0; index < 5; index += 1) {
     const emptyMessage = queue === "leave" ? "No pending leave approvals." : "No pending regularizations.";

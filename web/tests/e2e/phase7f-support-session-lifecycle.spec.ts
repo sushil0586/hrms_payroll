@@ -30,6 +30,11 @@ async function captureLifecycleStep(page: Page, testInfo: TestInfo, name: string
 }
 
 async function switchPersona(page: Page, persona: Persona, path: string) {
+  await loginAs(page, persona);
+  await page.goto(path, { waitUntil: "domcontentloaded" });
+}
+
+async function loginAs(page: Page, persona: Persona) {
   await page.request.post("/api/auth/logout").catch(() => null);
   await page.context().clearCookies();
   const response = await page.request.post("/api/auth/login", {
@@ -39,13 +44,10 @@ async function switchPersona(page: Page, persona: Persona, path: string) {
     },
   });
   expect(response.ok()).toBeTruthy();
-  await page.goto(path, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
 }
 
 async function createSupportGrant(page: Page, sessionRef: string, reason: string, status: "approved" | "active" = "active") {
-  await switchPersona(page, hrAdmin, "/tenant-admin/support-access");
-  await expectPageReady(page, "Support Access");
+  await loginAs(page, hrAdmin);
   const createResponse = await page.request.post("/api/tenant-admin/support-access-grants", {
     data: {
       support_agent_identifier: platformAdmin.username,
@@ -112,8 +114,8 @@ async function expectTrustAuditEvents(page: Page, sessionRef: string, labels: st
 
 async function openTenantAdminConsole(page: Page) {
   await page.goto("/tenant-admin/support-access", { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("load");
   await expectPageReady(page, "Support Access");
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await expect(page.getByRole("main").getByRole("button", { name: "Request access" })).toBeVisible();
 }
 
@@ -137,7 +139,7 @@ test.describe("Phase 7F support session lifecycle", () => {
       endRow.getByRole("button", { name: "End session" }).click(),
     ]);
     await expect(endResponse.ok()).toBeTruthy();
-    await expect(page.getByText("End session saved.")).toBeVisible();
+    await expect(page.getByText("End session saved successfully.")).toBeVisible();
     await expect(endRow.getByText("Ended")).toBeVisible({ timeout: 20_000 });
     await captureLifecycleStep(page, testInfo, "01-ended-session-row");
     await expectSupportDenied(page, endSessionRef, "support_session_not_active");
@@ -162,7 +164,7 @@ test.describe("Phase 7F support session lifecycle", () => {
       revokeRow.getByRole("button", { name: "Revoke" }).click(),
     ]);
     await expect(revokeResponse.ok()).toBeTruthy();
-    await expect(page.getByText("Revoke saved.")).toBeVisible();
+    await expect(page.getByText("Revoke saved successfully.")).toBeVisible();
     await expect(revokeRow.getByText("Revoked")).toBeVisible({ timeout: 20_000 });
     await captureLifecycleStep(page, testInfo, "03-revoked-session-row");
     await expectSupportDenied(page, revokeSessionRef, "support_session_not_active");

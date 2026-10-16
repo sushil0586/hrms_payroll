@@ -177,8 +177,7 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
       return;
     }
 
-    router.push(`/hr-admin/organization?section=${section}`);
-    router.refresh();
+    window.location.assign(new URL(`/hr-admin/organization?section=${section}`, window.location.origin));
   }
 
   return (

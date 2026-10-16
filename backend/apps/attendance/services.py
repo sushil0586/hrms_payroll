@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -73,6 +75,155 @@ ROSTER_PATTERN_DEFAULTS = {
     "four_on_four_off": [4, 4],
     "two_two_three": [2, 2, 3],
 }
+
+
+@dataclass
+class AttendanceDerivationContext:
+    """Request-scoped related data used to derive a page of attendance rows."""
+
+    tenant: object
+    policy_assignments: list
+    shift_assignments_by_employee: dict
+    shifts_by_id: dict
+    holiday_calendars_by_year: dict
+    leaves_by_employee: dict
+
+    @classmethod
+    def for_records(cls, records):
+        records = list(records)
+        if not records:
+            return None
+        tenant = records[0].tenant
+        employee_ids = {record.employee_id for record in records}
+        dates = [record.attendance_date for record in records]
+        start_date, end_date = min(dates), max(dates)
+        policy_assignments = list(
+            AttendancePolicyAssignment.objects.filter(
+                tenant=tenant, is_active=True, attendance_policy__status=AttendancePolicyStatus.ACTIVE
+            )
+            .select_related(
+                "attendance_policy",
+                "attendance_policy__default_shift",
+                "attendance_policy__holiday_calendar",
+            )
+            .prefetch_related("attendance_policy__holiday_calendar__holidays")
+            .order_by("priority", "created_at")
+        )
+        shift_assignments = list(
+            EmployeeShiftAssignment.objects.filter(
+                tenant=tenant, employee_id__in=employee_ids, effective_from__lte=end_date
+            )
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=start_date))
+            .select_related("employee", "shift")
+        )
+        shifts_by_employee = defaultdict(list)
+        for assignment in shift_assignments:
+            shifts_by_employee[assignment.employee_id].append(assignment)
+        calendars = list(
+            HolidayCalendar.objects.filter(
+                tenant=tenant, year__in={value.year for value in dates}, is_active=True
+            )
+            .prefetch_related("holidays")
+            .order_by("created_at")
+        )
+        calendars_by_year = defaultdict(list)
+        for calendar in calendars:
+            calendars_by_year[calendar.year].append(calendar)
+
+        from apps.leave_management.models import LeaveRequest, LeaveRequestStatus
+
+        leaves_by_employee = defaultdict(list)
+        leaves = LeaveRequest.objects.filter(
+            tenant=tenant,
+            employee_id__in=employee_ids,
+            status__in=[LeaveRequestStatus.APPROVED, LeaveRequestStatus.PARTIALLY_APPROVED],
+            start_date__lte=end_date,
+            end_date__gte=start_date,
+        ).select_related("leave_type")
+        for leave in leaves:
+            leaves_by_employee[leave.employee_id].append(leave)
+        return cls(
+            tenant=tenant,
+            policy_assignments=policy_assignments,
+            shift_assignments_by_employee=dict(shifts_by_employee),
+            shifts_by_id={str(item.id): item for item in Shift.objects.filter(tenant=tenant)},
+            holiday_calendars_by_year=dict(calendars_by_year),
+            leaves_by_employee=dict(leaves_by_employee),
+        )
+
+    def policy_for(self, employee):
+        matches = []
+        for assignment in self.policy_assignments:
+            if assignment.employee_id:
+                if assignment.employee_id == employee.id:
+                    matches.append(assignment)
+                continue
+            scopes = (
+                (assignment.legal_entity_id, employee.legal_entity_id),
+                (assignment.branch_id, employee.branch_id),
+                (assignment.location_id, employee.location_id),
+                (assignment.department_id, employee.department_id),
+                (assignment.grade_id, employee.grade_id),
+                (assignment.employment_type_id, employee.employment_type_id),
+            )
+            if all(not expected or expected == actual for expected, actual in scopes):
+                matches.append(assignment)
+        if not matches:
+            return None
+        assignment = min(
+            matches,
+            key=lambda item: (
+                item.priority,
+                tuple(-value for value in _attendance_assignment_resolution_signature(item)),
+                item.created_at,
+            ),
+        )
+        return assignment.attendance_policy
+
+    def shift_assignment_for(self, employee, work_date):
+        assignments = [
+            item
+            for item in self.shift_assignments_by_employee.get(employee.id, [])
+            if item.effective_from <= work_date and (item.effective_to is None or item.effective_to >= work_date)
+        ]
+        assignments.sort(
+            key=lambda item: (
+                _get_shift_assignment_kind_priority(item.assignment_kind),
+                1 if item.is_primary else 0,
+                item.effective_from.toordinal(),
+                item.created_at.timestamp(),
+            ),
+            reverse=True,
+        )
+        return assignments[0] if assignments else None
+
+    def holiday_for(self, employee, work_date, policy):
+        if policy and policy.holiday_calendar_id and policy.holiday_calendar.year == work_date.year:
+            calendar = policy.holiday_calendar
+        else:
+            candidates = []
+            for calendar in self.holiday_calendars_by_year.get(work_date.year, []):
+                scopes = (
+                    (calendar.legal_entity_id, employee.legal_entity_id),
+                    (calendar.branch_id, employee.branch_id),
+                    (calendar.location_id, employee.location_id),
+                )
+                if not all(not expected or expected == actual for expected, actual in scopes):
+                    continue
+                specificity = sum(bool(expected) for expected, _actual in scopes)
+                candidates.append((specificity, calendar))
+            candidates.sort(key=lambda item: (-item[0], str(item[1].created_at)))
+            calendar = candidates[0][1] if candidates else None
+        if not calendar:
+            return None
+        return next((item for item in calendar.holidays.all() if item.date == work_date), None)
+
+    def leave_collisions_for(self, employee, work_date):
+        return [
+            item
+            for item in self.leaves_by_employee.get(employee.id, [])
+            if item.start_date <= work_date <= item.end_date
+        ]
 
 
 def _quantize_hours(value: Decimal | int | float | str | None) -> Decimal:
@@ -501,7 +652,7 @@ def _parse_rotation_anchor_date(value, *, fallback_date):
     return fallback_date
 
 
-def _resolve_shift_from_assignment(assignment: EmployeeShiftAssignment, *, attendance_date):
+def _resolve_shift_from_assignment(assignment: EmployeeShiftAssignment, *, attendance_date, shifts_by_id=None):
     if assignment.assignment_kind != EmployeeShiftAssignmentKind.WEEKLY_ROTATION:
         return {
             "shift": assignment.shift,
@@ -527,7 +678,7 @@ def _resolve_shift_from_assignment(assignment: EmployeeShiftAssignment, *, atten
     day_pointer = elapsed_days % cycle_days
     shift_ids = {entry["shift_id"] for entry in entries}
     shift_ids.discard(None)
-    shift_map = {
+    shift_map = shifts_by_id if shifts_by_id is not None else {
         str(item.id): item
         for item in Shift.objects.filter(tenant=assignment.tenant, id__in=shift_ids)
     }
@@ -961,7 +1112,9 @@ def _resolve_shift_for_employee(employee, *, attendance_date, fallback_shift=Non
     return fallback_shift
 
 
-def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePolicy | None = None) -> dict:
+def resolve_employee_work_day(
+    *, employee, work_date: date, policy: AttendancePolicy | None = None, context: AttendanceDerivationContext | None = None
+) -> dict:
     """Resolve the expected schedule context for one employee/date.
 
     This is the shared schedule-spine contract consumed by leave, attendance,
@@ -969,12 +1122,17 @@ def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePo
     migrate to this function incrementally.
     """
 
-    policy = policy or resolve_attendance_policy_for_employee(employee, as_of=work_date)
-    assignment = _find_matching_employee_shift_assignment(employee=employee, attendance_date=work_date)
-    resolved_assignment = _resolve_shift_from_assignment(assignment, attendance_date=work_date) if assignment else None
+    policy = policy or (context.policy_for(employee) if context else resolve_attendance_policy_for_employee(employee, as_of=work_date))
+    assignment = context.shift_assignment_for(employee, work_date) if context else _find_matching_employee_shift_assignment(employee=employee, attendance_date=work_date)
+    resolved_assignment = (
+        _resolve_shift_from_assignment(
+            assignment, attendance_date=work_date, shifts_by_id=context.shifts_by_id if context else None
+        )
+        if assignment else None
+    )
     shift = resolved_assignment["shift"] if resolved_assignment else getattr(policy, "default_shift", None)
     is_roster_off_day = bool(resolved_assignment and resolved_assignment.get("entry_kind") == "off")
-    holiday = _resolve_holiday_for_employee(employee, attendance_date=work_date, policy=policy)
+    holiday = context.holiday_for(employee, work_date, policy) if context else _resolve_holiday_for_employee(employee, attendance_date=work_date, policy=policy)
     weekday_name = work_date.strftime("%A").lower()
     shift_weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])}
     default_weekly_off_days = {"saturday", "sunday"}
@@ -1226,8 +1384,12 @@ def evaluate_attendance_runtime(
     }
 
 
-def build_attendance_derivation_summary(record: AttendanceRecord) -> dict:
-    schedule_day = resolve_employee_work_day(employee=record.employee, work_date=record.attendance_date)
+def build_attendance_derivation_summary(
+    record: AttendanceRecord, *, context: AttendanceDerivationContext | None = None
+) -> dict:
+    schedule_day = resolve_employee_work_day(
+        employee=record.employee, work_date=record.attendance_date, context=context
+    )
     from apps.leave_management.models import LeaveRequest, LeaveRequestStatus
 
     leave_collisions = [
@@ -1239,13 +1401,13 @@ def build_attendance_derivation_summary(record: AttendanceRecord) -> dict:
             "end_date": item.end_date.isoformat(),
             "message": "Leave request overlaps this attendance day.",
         }
-        for item in LeaveRequest.objects.filter(
+        for item in (context.leave_collisions_for(record.employee, record.attendance_date) if context else LeaveRequest.objects.filter(
             tenant=record.tenant,
             employee=record.employee,
             status__in=[LeaveRequestStatus.APPROVED, LeaveRequestStatus.PARTIALLY_APPROVED],
             start_date__lte=record.attendance_date,
             end_date__gte=record.attendance_date,
-        ).select_related("leave_type")
+        ).select_related("leave_type"))
     ]
     expected_hours = _quantize_hours(schedule_day.get("expected_hours"))
     worked_hours = _quantize_hours(record.work_duration_hours)
@@ -1440,6 +1602,66 @@ def refresh_attendance_records_for_tenant(tenant, *, from_date: date | None = No
             "shift",
             "holiday",
         )
+    )
+    return [_refresh_attendance_record_from_policy(record) for record in records]
+
+
+def refresh_attendance_records_for_assignment_scopes(
+    tenant,
+    *scopes: dict,
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> list[AttendanceRecord]:
+    """Refresh unlocked records for employees affected by assignment scope changes."""
+    normalized_scopes = [scope for scope in scopes if scope]
+    scope_fields = [
+        "legal_entity_id",
+        "branch_id",
+        "location_id",
+        "department_id",
+        "grade_id",
+        "employment_type_id",
+    ]
+    employee_filter = Q()
+    refresh_entire_tenant = not normalized_scopes
+    for scope in normalized_scopes:
+        if scope.get("employee_id"):
+            employee_filter |= Q(employee_id=scope["employee_id"])
+            continue
+        scoped_filter = Q()
+        has_organization_scope = False
+        for field_name in scope_fields:
+            if scope.get(field_name):
+                scoped_filter &= Q(**{f"employee__{field_name}": scope[field_name]})
+                has_organization_scope = True
+        if has_organization_scope:
+            employee_filter |= scoped_filter
+        else:
+            refresh_entire_tenant = True
+
+    today = timezone.localdate()
+    from_date = from_date or today.replace(day=1)
+    to_date = to_date or today
+    records = AttendanceRecord.objects.filter(
+        tenant=tenant,
+        attendance_date__gte=from_date,
+        attendance_date__lte=to_date,
+        is_locked=False,
+        is_regularized=False,
+    ).exclude(source=AttendanceSource.MANUAL)
+    if not refresh_entire_tenant:
+        records = records.filter(employee_filter)
+    records = records.select_related(
+        "employee",
+        "employee__tenant",
+        "employee__legal_entity",
+        "employee__branch",
+        "employee__location",
+        "employee__department",
+        "employee__grade",
+        "employee__employment_type",
+        "shift",
+        "holiday",
     )
     return [_refresh_attendance_record_from_policy(record) for record in records]
 

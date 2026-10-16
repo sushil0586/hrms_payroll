@@ -1,13 +1,23 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { getDialogWithText } from "../helpers/modal-stability";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
+import { gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
+let hrAdmin: Persona;
+let employee: Persona;
+let payrollEmployeeCode: string;
 
 function uniqueCode(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
 }
-
-const payrollEmployeeCode = process.env.PLAYWRIGHT_PAYROLL_STAGE_EMPLOYEE_CODE ?? "EMP-0042";
 
 function form(page: Page, testId: string) {
   return page.getByTestId(testId);
@@ -53,10 +63,22 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 }
 
 test.describe("Phase 5F disposable payroll close browser flow", () => {
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+    hrAdmin = workspacePersona(workspace, "hr_admin");
+    employee = workspacePersona(workspace, "employee");
+    payrollEmployeeCode = workspace.manifest.credentials.employee.employee_code;
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test("creates disposable run, publishes outputs, generates handoff evidence, and proves ESS payslip access", async ({ page }) => {
     test.setTimeout(180_000);
+    const startedAt = Date.now();
+    const mark = (phase: string) => console.log(`[P3-0634] ${phase}: ${Date.now() - startedAt}ms`);
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions", hrAdmin);
     await expectPageReady(page, "Payroll Statutory");
+    await page.getByRole("button", { name: /^Catalog\b/ }).click();
 
     const statutoryPackForm = form(page, "statutory-pack-form");
     const statutoryComponentForm = form(page, "statutory-component-form");
@@ -68,7 +90,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
 
     const statutoryPackResult = await submitAndCapture<{ id: string; code: string }>(
       page,
-      /\/api\/hr-admin\/payroll-statutory-packs$/,
+      /\/api\/hr-admin\/payroll-statutory-packs\/?$/,
       "POST",
       async () => {
         await field(statutoryPackForm, "Code").fill(statutoryPackCode);
@@ -89,7 +111,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
 
     const statutoryComponentResult = await submitAndCapture<{ id: string; code: string }>(
       page,
-      /\/api\/hr-admin\/payroll-statutory-components$/,
+      /\/api\/hr-admin\/payroll-statutory-components\/?$/,
       "POST",
       async () => {
         await field(statutoryComponentForm, "Statutory pack").selectOption(statutoryPackResult.payload.id);
@@ -112,9 +134,11 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(statutoryComponentResult.ok).toBeTruthy();
 
+    await page.getByRole("button", { name: /^Compliance\b/ }).click();
+
     const statutoryRegistrationResult = await submitAndCapture<{ id: string; registration_number: string }>(
       page,
-      /\/api\/hr-admin\/payroll-statutory-employer-registrations$/,
+      /\/api\/hr-admin\/payroll-statutory-employer-registrations\/?$/,
       "POST",
       async () => {
         await field(statutoryRegistrationForm, "Statutory pack").selectOption(statutoryPackResult.payload.id);
@@ -141,7 +165,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
 
     const statutoryFilingResult = await submitAndCapture<{ id: string; code: string }>(
       page,
-      /\/api\/hr-admin\/payroll-statutory-filing-calendars$/,
+      /\/api\/hr-admin\/payroll-statutory-filing-calendars\/?$/,
       "POST",
       async () => {
         await field(statutoryFilingForm, "Statutory pack").selectOption(statutoryPackResult.payload.id);
@@ -153,10 +177,10 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
         await field(statutoryFilingForm, "Filing frequency").selectOption("monthly");
         await field(statutoryFilingForm, "Period start").fill("2026-01-01");
         await field(statutoryFilingForm, "Period end").fill("2026-12-31");
-        await field(statutoryFilingForm, "Due date").fill("2026-07-15");
-        await field(statutoryFilingForm, "Grace due date").fill("2026-07-20");
-        await field(statutoryFilingForm, "Filing window start").fill("2026-07-01");
-        await field(statutoryFilingForm, "Filing window end").fill("2026-07-15");
+        await field(statutoryFilingForm, "Due date").fill("2027-01-15");
+        await field(statutoryFilingForm, "Grace due date").fill("2027-01-20");
+        await field(statutoryFilingForm, "Filing window start").fill("2027-01-01");
+        await field(statutoryFilingForm, "Filing window end").fill("2027-01-15");
         await field(statutoryFilingForm, "Status").selectOption("due");
         await field(statutoryFilingForm, "Filing authority reference").fill("income_tax_department");
         await field(statutoryFilingForm, "Provider reference").fill("payroll.provider.tds.fvu.phase5q");
@@ -167,13 +191,17 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       },
     );
     expect(statutoryFilingResult.ok).toBeTruthy();
+    mark("statutory complete");
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions", hrAdmin);
+    await page.goto("/hr-admin/payroll-rules?tab=actions", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Rules");
 
     const ruleDefinitionForm = form(page, "payroll-rule-definition-form");
     const ruleVersionForm = form(page, "payroll-rule-version-form");
+    const ruleActionTabs = page.getByRole("navigation", { name: "Payroll rule action groups" });
+    await ruleActionTabs.getByRole("button", { name: /^Definitions\b/ }).click();
     await expectFields(ruleDefinitionForm, ["Code", "Name", "Rule type", "Description", "Tags JSON", "Config profile reference"]);
+    await ruleActionTabs.getByRole("button", { name: /^Versions\b/ }).click();
     await expectFields(ruleVersionForm, [
       "Rule",
       "Version",
@@ -189,10 +217,11 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     ]);
 
     const ruleCode = uniqueCode("BASIC_RULE");
+    await ruleActionTabs.getByRole("button", { name: /^Definitions\b/ }).click();
     await ruleDefinitionForm.getByRole("button", { name: "New" }).click();
     const ruleResult = await submitAndCapture<{ id: string; code: string }>(
       page,
-      /\/api\/hr-admin\/payroll-rule-definitions$/,
+      /\/api\/hr-admin\/payroll-rule-definitions\/?$/,
       "POST",
       async () => {
         await field(ruleDefinitionForm, "Code").fill(ruleCode);
@@ -207,10 +236,11 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(ruleResult.ok).toBeTruthy();
     await expect(page.getByText(ruleCode).first()).toBeVisible();
 
+    await ruleActionTabs.getByRole("button", { name: /^Versions\b/ }).click();
     await ruleVersionForm.getByRole("button", { name: "New" }).click();
     const ruleVersionResult = await submitAndCapture<{ id: string; status: string }>(
       page,
-      /\/api\/hr-admin\/payroll-rule-versions$/,
+      /\/api\/hr-admin\/payroll-rule-versions\/?$/,
       "POST",
       async () => {
         await field(ruleVersionForm, "Rule").selectOption(ruleResult.payload.id);
@@ -234,13 +264,15 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       },
     );
     expect(ruleVersionResult.ok).toBeTruthy();
+    mark("rules complete");
     await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
 
+    await ruleActionTabs.getByRole("button", { name: /^Definitions\b/ }).click();
     await ruleDefinitionForm.getByRole("button", { name: "New" }).click();
     const taxRuleCode = uniqueCode("TDS_RULE");
     const taxRuleResult = await submitAndCapture<{ id: string; code: string }>(
       page,
-      /\/api\/hr-admin\/payroll-rule-definitions$/,
+      /\/api\/hr-admin\/payroll-rule-definitions\/?$/,
       "POST",
       async () => {
         await field(ruleDefinitionForm, "Code").fill(taxRuleCode);
@@ -255,10 +287,11 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(taxRuleResult.ok).toBeTruthy();
     await expect(page.getByText(taxRuleCode).first()).toBeVisible();
 
+    await ruleActionTabs.getByRole("button", { name: /^Versions\b/ }).click();
     await ruleVersionForm.getByRole("button", { name: "New" }).click();
     const taxRuleVersionResult = await submitAndCapture<{ id: string; status: string }>(
       page,
-      /\/api\/hr-admin\/payroll-rule-versions$/,
+      /\/api\/hr-admin\/payroll-rule-versions\/?$/,
       "POST",
       async () => {
         await field(ruleVersionForm, "Rule").selectOption(taxRuleResult.payload.id);
@@ -291,16 +324,19 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(taxRuleVersionResult.ok).toBeTruthy();
     await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
+    await page.goto("/hr-admin/payroll-setup?tab=actions", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Setup");
     const calendarForm = form(page, "payroll-calendar-form");
     const periodForm = form(page, "payroll-period-form");
+    const setupActionTabs = page.getByRole("navigation", { name: "Payroll setup action groups" });
+    await expect(setupActionTabs).toBeVisible();
     const calendarCode = uniqueCode("PAY_CAL");
     const periodCode = uniqueCode("PAY_PERIOD");
 
+    await setupActionTabs.getByRole("button", { name: /^Calendars\b/ }).click();
     const calendarResult = await submitAndCapture<{ id: string; code: string }>(
       page,
-      /\/api\/hr-admin\/payroll-calendars$/,
+      /\/api\/hr-admin\/payroll-calendars\/?$/,
       "POST",
       async () => {
         await field(calendarForm, "Code").fill(calendarCode);
@@ -314,14 +350,15 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
         await calendarForm.getByRole("button", { name: "Create calendar" }).click();
       },
     );
-    expect(calendarResult.ok).toBeTruthy();
+    expect(calendarResult.ok, JSON.stringify(calendarResult.payload)).toBeTruthy();
 
+    await setupActionTabs.getByRole("button", { name: /^Periods\b/ }).click();
     const periodResult = await submitAndCapture<{ id: string; code: string }>(
       page,
-      /\/api\/hr-admin\/payroll-periods$/,
+      /\/api\/hr-admin\/payroll-periods\/?$/,
       "POST",
       async () => {
-        await field(periodForm, "Calendar").selectOption(calendarResult.payload.id);
+        await field(periodForm, "Calendar").selectOption(workspace.manifest.payroll.calendar_id);
         await field(periodForm, "Code").fill(periodCode);
         await field(periodForm, "Name").fill(`Browser ${periodCode}`);
         await field(periodForm, "Start date").fill("2026-01-01");
@@ -334,14 +371,20 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(periodResult.ok).toBeTruthy();
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+    mark("payroll setup complete");
+
+    await page.goto("/hr-admin/payroll-inputs?tab=actions", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Inputs");
+    mark("payroll inputs ready");
 
     await expect(page.getByRole("heading", { name: "Payroll input operations" })).toBeVisible();
     const runForm = form(page, "payroll-run-form");
     const snapshotForm = form(page, "payroll-input-snapshot-form");
     const lockForm = form(page, "payroll-input-lock-form");
+    const inputOperationSteps = page.getByRole("navigation", { name: "Payroll input operation steps" });
+    await expect(inputOperationSteps).toBeVisible();
 
+    await inputOperationSteps.getByRole("button", { name: /Payroll run\b/ }).click();
     await expectFields(runForm, ["Period", "Pay group", "Code", "Name", "Status", "Input profile ref", "Snapshot schema ref", "Config profile reference"]);
     await expectSelectOptions(runForm, "Period");
     await expectSelectOptions(runForm, "Status");
@@ -352,10 +395,11 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     await runForm.getByRole("button", { name: "New" }).click();
     const runResult = await submitAndCapture<{ id: string; code: string; name: string }>(
       page,
-      /\/api\/hr-admin\/payroll-runs$/,
+      /\/api\/hr-admin\/payroll-runs\/?$/,
       "POST",
       async () => {
-        await field(runForm, "Period").selectOption(periodResult.payload.id);
+        await field(runForm, "Period").selectOption(workspace.manifest.payroll.period_id);
+        await field(runForm, "Pay group").selectOption(workspace.manifest.payroll.pay_group_id);
         await field(runForm, "Code").fill(runCode);
         await field(runForm, "Name").fill(`Browser disposable ${runCode}`);
         await field(runForm, "Status").selectOption("collecting_inputs");
@@ -368,6 +412,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(runResult.ok).toBeTruthy();
     await expect(page.getByText(runCode).first()).toBeVisible();
 
+    await inputOperationSteps.getByRole("button", { name: /Input snapshot\b/ }).click();
     await expectFields(snapshotForm, [
       "Payroll run",
       "Employee",
@@ -381,16 +426,18 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       "Validation snapshot JSON",
     ]);
     await expectSelectOptions(snapshotForm, "Payroll run");
-    await expectSelectOptions(snapshotForm, "Employee");
     await expectSelectOptions(snapshotForm, "Snapshot status");
 
     await snapshotForm.getByRole("button", { name: "New" }).click();
+    await field(snapshotForm, "Payroll run").selectOption(runResult.payload.id);
+    await field(snapshotForm, "Find person").fill(payrollEmployeeCode);
+    await expect(field(snapshotForm, "Employee").locator("option").filter({ hasText: payrollEmployeeCode })).toHaveCount(1);
+    await expectSelectOptions(snapshotForm, "Employee");
     const snapshotResult = await submitAndCapture<{ id: string; employee_name: string; snapshot_status: string }>(
       page,
-      /\/api\/hr-admin\/payroll-input-snapshots$/,
+      /\/api\/hr-admin\/payroll-input-snapshots\/?$/,
       "POST",
       async () => {
-        await field(snapshotForm, "Payroll run").selectOption(runResult.payload.id);
         await selectOptionContaining(field(snapshotForm, "Employee"), payrollEmployeeCode);
         await field(snapshotForm, "Snapshot status").selectOption("ready");
         await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.phase5c.v1");
@@ -419,6 +466,9 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(updateResult.ok).toBeTruthy();
     await expect(field(snapshotForm, "Attendance snapshot JSON")).toHaveValue(/"lop_days":1/);
 
+    await page.goto(`/hr-admin/payroll-inputs?tab=actions&runId=${runResult.payload.id}`, { waitUntil: "domcontentloaded" });
+    await expectPageReady(page, "Payroll Inputs");
+    await inputOperationSteps.getByRole("button", { name: /Lock gate\b/ }).click();
     await expect(lockForm.getByRole("heading", { name: "Input lock" })).toBeVisible();
     await expect(lockForm.getByRole("button", { name: "Lock selected run inputs" })).toBeEnabled();
     const lockResult = await submitAndCapture<{ detail: string; locked_count: number }>(
@@ -429,21 +479,25 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
         await lockForm.getByRole("button", { name: "Lock selected run inputs" }).click();
       },
     );
-    expect(lockResult.ok).toBeTruthy();
+    expect(lockResult.ok, `${lockResult.status}: ${JSON.stringify(lockResult.payload)}`).toBeTruthy();
     expect(lockResult.payload.locked_count).toBeGreaterThanOrEqual(1);
     await expect(page.getByText("Payroll input snapshots locked for calculation.").first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${runResult.payload.id}`, hrAdmin);
+    await page.goto(`/hr-admin/payroll-calculations?runId=${runResult.payload.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Calculations");
-    await expect(page.getByRole("heading", { name: "Calculation controls" })).toBeVisible();
+    const calculationControls = page.getByRole("region", { name: "Calculation controls" });
+    await expect(calculationControls.getByRole("heading", { name: "Calculation controls" })).toBeVisible();
     const calculateResponse = await submitAndCapture<{ calculation: { id: string }; detail?: string }>(
       page,
       new RegExp(`/api/hr-admin/payroll-runs/${runResult.payload.id}/calculate-draft$`),
       "POST",
       async () => {
-        await page.getByLabel("Calculation controls").getByLabel("Calculation profile ref").fill("tenant.payroll.calc.phase5c.v1");
-        await page.getByLabel("Calculation controls").getByRole("button", { name: "Calculate draft" }).click();
+        const profile = calculationControls.getByLabel("Calculation profile ref");
+        await profile.fill("tenant.payroll.calc.phase5c.v1");
+        await profile.blur();
+        await expect(profile).toHaveValue("tenant.payroll.calc.phase5c.v1");
+        await calculationControls.getByRole("button", { name: "Calculate draft" }).click();
       },
     );
     expect(calculateResponse.ok).toBeTruthy();
@@ -462,7 +516,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(reviewResponse.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Payroll review opened/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${reviewResponse.payload.review.id}`, hrAdmin);
+    await page.goto(`/hr-admin/payroll-review?reviewId=${reviewResponse.payload.review.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Review");
     const reviewPanel = page.getByLabel("Review controls");
     await expect(reviewPanel.getByRole("button", { name: "Submit review" })).toBeEnabled();
@@ -483,6 +537,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       "POST",
       async () => {
         await reviewPanel.getByLabel("Approval profile ref").fill("tenant.payroll.approval.phase5e.v1");
+        await reviewPanel.getByLabel("Approval comment").fill("Approved after reviewing the disposable payroll evidence.");
         await reviewPanel.getByRole("button", { name: "Approve review" }).click();
       },
     );
@@ -500,7 +555,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(lockResponse.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Payroll run final locked/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${runResult.payload.id}`, hrAdmin);
+    await page.goto(`/hr-admin/payroll-calculations?runId=${runResult.payload.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Calculations");
     const calculationPanelAfterLock = page.getByLabel("Calculation controls");
     const reopenLockedReviewResponse = await submitAndCapture<{ detail?: string }>(
@@ -514,7 +569,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(reopenLockedReviewResponse.status).toBe(400);
     await expect(page.getByRole("alert").first()).toContainText(/Final locked payroll runs cannot be reopened for review/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${runResult.payload.id}`, hrAdmin);
+    await page.goto(`/hr-admin/payroll-inputs?runId=${runResult.payload.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Inputs");
     const lockedRunForm = form(page, "payroll-run-form");
     const editLockedRunResponse = await submitAndCapture<{ detail?: string }>(
@@ -529,7 +584,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(editLockedRunResponse.status).toBe(400);
     await expect(page.getByRole("alert").first()).toContainText(/Final locked payroll runs cannot be edited/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${reviewResponse.payload.review.id}`, hrAdmin);
+    await page.goto(`/hr-admin/payroll-review?reviewId=${reviewResponse.payload.review.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Review");
 
     const outputResponse = await submitAndCapture<{ output_batch: { id: string }; detail?: string }>(
@@ -537,14 +592,17 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       new RegExp(`/api/hr-admin/payroll-reviews/${reviewResponse.payload.review.id}/generate-outputs$`),
       "POST",
       async () => {
-        await reviewPanel.getByLabel("Output profile ref").fill("tenant.payroll.outputs.phase5e.v1");
+        const outputProfile = reviewPanel.getByLabel("Output profile ref");
+        await outputProfile.fill("tenant.payroll.outputs.phase5e.v1");
+        await outputProfile.blur();
+        await expect(outputProfile).toHaveValue("tenant.payroll.outputs.phase5e.v1");
         await reviewPanel.getByRole("button", { name: "Generate outputs" }).click();
       },
     );
     expect(outputResponse.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Payroll outputs generated/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${outputResponse.payload.output_batch.id}`, hrAdmin);
+    await page.goto(`/hr-admin/payroll-outputs?batchId=${outputResponse.payload.output_batch.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Outputs");
     const outputPanel = page.getByLabel("Output controls");
     await expect(outputPanel.getByRole("button", { name: "Publish outputs" })).toBeEnabled();
@@ -566,17 +624,25 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       new RegExp(`/api/hr-admin/payroll-output-batches/${outputResponse.payload.output_batch.id}/generate-finance-handoff$`),
       "POST",
       async () => {
-        await outputPanel.getByLabel("Handoff profile ref").fill("tenant.payroll.handoff.phase5f.v1");
+        const handoffProfile = outputPanel.getByLabel("Handoff profile ref");
+        await handoffProfile.fill("tenant.payroll.handoff.phase5f.v1");
+        await handoffProfile.blur();
+        await expect(handoffProfile).toHaveValue("tenant.payroll.handoff.phase5f.v1");
         await outputPanel.getByRole("button", { name: "Generate handoff" }).click();
       },
     );
     expect(handoffResponse.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff generated/);
 
-    await gotoAuthenticated(page, "/hr-admin/reports/statutory-deductions", hrAdmin);
+    await page.goto("/hr-admin/reports/statutory-deductions", { waitUntil: "domcontentloaded" });
+    await expectPageReady(page, "Statutory Deduction Summary");
+    await page.reload({ waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Statutory Deduction Summary");
     const statutoryReport = page.getByTestId("statutory-deductions-report");
-    await statutoryReport.getByPlaceholder("Search component, employee, provider, hash").fill(statutoryComponentCode);
+    const statutorySearch = statutoryReport.getByPlaceholder("Search component, employee, provider, hash");
+    await statutorySearch.fill(statutoryComponentCode);
+    await statutorySearch.blur();
+    await expect(statutorySearch).toHaveValue(statutoryComponentCode);
     const mappedTdsRow = statutoryReport.locator("tbody tr").filter({ hasText: statutoryComponentCode }).first();
     await expect(mappedTdsRow).toBeVisible();
     await expect(mappedTdsRow).toContainText("Tax Deducted At Source");
@@ -586,7 +652,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     await expect(mappedTdsRow.locator("code").last()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, hrAdmin);
+    await page.goto(`/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Handoff");
     const handoffPanel = page.getByLabel("Handoff controls");
     const transmitButton = handoffPanel.getByRole("button", { name: "Transmit handoff" });
@@ -602,7 +668,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       expect(transmitResponse.ok).toBeTruthy();
       await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff transmitted/);
 
-      await gotoAuthenticated(page, "/hr-admin/reports/statutory-deductions", hrAdmin);
+      await page.goto("/hr-admin/reports/statutory-deductions", { waitUntil: "domcontentloaded" });
       await expectPageReady(page, "Statutory Deduction Summary");
       const transmittedStatutoryReport = page.getByTestId("statutory-deductions-report");
       await transmittedStatutoryReport.getByPlaceholder("Search component, employee, provider, hash").fill(statutoryComponentCode);
@@ -614,7 +680,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       const statutoryExportResponse = await page.request.get(statutoryExportHref ?? "");
       expect(statutoryExportResponse.status()).toBe(200);
       expect(statutoryExportResponse.headers()["x-payroll-artifact-checksum"]).toBeTruthy();
-      await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, hrAdmin);
+      await page.goto(`/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, { waitUntil: "domcontentloaded" });
       await expectPageReady(page, "Payroll Handoff");
     } else {
       await expect(transmitButton).toBeDisabled();
@@ -661,9 +727,10 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     await expect(page.getByRole("heading", { name: "Published payslips" })).toBeVisible();
     await expect(page.getByText(runCode).first()).toBeVisible();
     await page.getByRole("button", { name: "Review payslip" }).first().click();
-    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Download payslip" }).first()).toHaveAttribute("href", /\/api\/me\/payroll-payslips\/.+\/download/);
-    await expect(page.getByText("Source hash").first()).toBeVisible();
+    const payslipDialog = getDialogWithText(page, /Payslip detail|Payment summary/);
+    await expect(payslipDialog).toBeVisible();
+    await expect(payslipDialog.getByRole("link", { name: "Download payslip" })).toHaveAttribute("href", /\/api\/me\/payroll-payslips\/.+\/download/);
+    await expect(payslipDialog.getByText("Source hash", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

@@ -490,7 +490,7 @@
 }
 
 .workspace-tone--manager .workspace-search__input {
-  min-height: 24px;
+  min-height: 28px;
   font-size: 12px;
 }
 
@@ -885,6 +885,10 @@ a {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     0 10px 20px -18px rgba(220, 38, 38, 0.45);
+}
+
+.button--pending-stable {
+  min-inline-size: 132px;
 }
 
 .button:focus-visible,
@@ -3140,14 +3144,18 @@ select.input-control {
   }
 
   .workspace-tone--hr .app-topbar--workspace {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     min-height: auto;
     height: auto;
   }
 
-  .workspace-tone--hr .topbar-context,
-  .workspace-tone--hr .topbar-actions--workspace {
+  .workspace-tone--hr .topbar-context {
     display: none;
+  }
+
+  .workspace-tone--hr .topbar-actions--workspace {
+    display: flex;
+    justify-content: flex-end;
   }
 
   .workspace-tone--hr .workspace-search {
@@ -3577,7 +3585,7 @@ select.input-control {
 }
 
 .workspace-tone--employee .workspace-search__input {
-  min-height: 24px;
+  min-height: 28px;
   font-size: 12px;
 }
 
@@ -4239,6 +4247,7 @@ select.input-control {
 .workspace-tone--hr .document-table-title-button {
   display: grid;
   min-width: 0;
+  min-height: 32px;
   border: 0;
   padding: 0;
   background: transparent;
@@ -4471,6 +4480,12 @@ select.input-control {
   min-width: 0;
   border-radius: 7px;
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.workspace-tone--hr .employee-directory-layout,
+.workspace-tone--hr .employee-directory-layout > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .workspace-tone--hr .attendance-directory-table-wrap {
@@ -4750,6 +4765,9 @@ select.input-control {
   .workspace-tone--hr .attendance-detail-drawer .record-card__actions {
     align-items: stretch;
     flex-direction: column;
+    justify-self: stretch;
+    max-width: 100%;
+    margin-left: 0;
   }
 
   .workspace-tone--hr .document-toolbar-actions,
@@ -4858,7 +4876,7 @@ select.input-control {
 .workspace-tone--hr .app-content--workspace > .shell:not(.hr-employee-workbench) .page-intro__actions .button,
 .workspace-tone--hr .queue-toolbar .button,
 .workspace-tone--hr .workspace-data-panel .button {
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 10px;
   border-radius: 7px;
   font-size: 12px;
@@ -5679,7 +5697,9 @@ select.input-control {
 
 .queue-layout {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  min-width: 0;
 }
 
 .queue-toolbar {
@@ -5903,6 +5923,8 @@ select.input-control {
 .record-card__title {
   display: flex;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 10px;
 }
@@ -5915,7 +5937,10 @@ select.input-control {
 }
 
 .record-card__title h2 {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-sans);
   font-size: 17px;
   font-weight: 700;
@@ -6605,7 +6630,7 @@ select.input-control {
   display: none;
 }
 
-.workspace-filter-disclosure:not([open]) > :not(summary) {
+details.workspace-filter-disclosure:not([open]) > :not(summary) {
   display: none !important;
 }
 
@@ -11587,6 +11612,19 @@ select.input-control {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .loading-card::after {
+    animation: none;
+    transform: none;
+  }
+
+  .button,
+  .action-toast {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .form-layout-modern {
   display: grid;
   gap: var(--space-5);
@@ -13004,6 +13042,8 @@ select.input-control {
 }
 
 .platform-guided-checklist__content small {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: #64748b;
   font-size: 12px;
   line-height: 1.4;
@@ -13079,6 +13119,7 @@ select.input-control {
 
 .platform-gate-checklist__item small {
   margin-top: 3px;
+  overflow-wrap: anywhere;
   color: #64748b;
   font-size: 12px;
   line-height: 1.35;
@@ -14010,6 +14051,18 @@ select.input-control {
 }
 
 @media (max-width: 900px) {
+  .platform-permission-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .platform-permission-filters__actions {
+    justify-content: stretch;
+  }
+
+  .platform-permission-filters__actions .button {
+    flex: 1 1 140px;
+  }
+
   .platform-admin-shell .page-header-surface,
   .platform-admin-shell .platform-panel-guide,
   .platform-admin-shell .platform-control-center,
@@ -19742,6 +19795,13 @@ select.input-control {
   overflow-x: clip;
 }
 
+.app-main--workspace:has(.shell--payroll-setup),
+.app-content--workspace:has(.shell--payroll-setup) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 :where(
   .shell--payroll-setup,
   .shell--salary-setup,
@@ -21247,9 +21307,26 @@ a.payroll-setup-mini-card {
   align-content: start;
 }
 
+.payroll-input-detail-panel .payroll-input-source-card,
+.payroll-input-detail-panel .payroll-input-source-list,
+.payroll-input-detail-panel .detail-row,
+.payroll-input-detail-panel .detail-label,
+.payroll-input-detail-panel .detail-value {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.payroll-input-detail-panel .payroll-input-source-card,
+.payroll-input-detail-panel .payroll-input-source-list {
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
 .payroll-input-hash-block {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .payroll-input-source-grid {
@@ -21700,11 +21777,20 @@ a.payroll-setup-mini-card {
 
 .payroll-calc-workspace {
   align-items: start;
+  min-width: 0;
 }
 
 .payroll-calc-run-rail,
 .payroll-calc-detail-panel {
   align-content: start;
+  min-width: 0;
+}
+
+.payroll-calc-workspace .payroll-setup-main-panel,
+.payroll-calc-workspace .payroll-setup-assignment-panel,
+.payroll-calc-workspace .payroll-table-scroll {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .payroll-calc-run-rail .payroll-setup-pagination {
@@ -23817,7 +23903,7 @@ a.payroll-setup-mini-card {
 }
 
 .launch-remediation-toolbar .queue-toolbar__grid {
-  grid-template-columns: minmax(240px, 1.35fr) repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
 }
 
 .launch-remediation-toolbar .queue-toolbar__grid label {
@@ -29803,7 +29889,7 @@ body {
   --hr-admin-compact-font: 12px;
   --hr-admin-compact-small: 11px;
   --hr-admin-compact-label: 10px;
-  --hr-admin-compact-control: 30px;
+  --hr-admin-compact-control: 32px;
   --hr-admin-compact-radius: 8px;
   --hr-admin-compact-gap: 8px;
   gap: var(--hr-admin-compact-gap);
@@ -31355,14 +31441,18 @@ body {
   }
 
   .workspace-tone--hr .app-topbar--workspace {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     min-height: auto;
     height: auto;
   }
 
-  .workspace-tone--hr .topbar-context,
-  .workspace-tone--hr .topbar-actions--workspace {
+  .workspace-tone--hr .topbar-context {
     display: none;
+  }
+
+  .workspace-tone--hr .topbar-actions--workspace {
+    display: flex;
+    justify-content: flex-end;
   }
 
   .workspace-tone--hr .workspace-search {

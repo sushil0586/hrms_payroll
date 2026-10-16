@@ -4,7 +4,7 @@ import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady } from ".
 import { employee, hrAdmin, manager, tenantAdmin, gotoAuthenticated } from "../helpers/staging-auth";
 
 async function expectWorkspaceLoaded(page: Page, text: string | RegExp) {
-  await expect(page.locator("main").getByText(text).first()).toBeVisible();
+  await expect(page.locator("main").getByText(text).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText(/Demo .*mode|seeded demo data/i)).toHaveCount(0);
   await expectNoAppError(page);
   await expectNoHorizontalOverflow(page);
@@ -21,7 +21,7 @@ test.describe.serial("deployed read-only auth routing proof", () => {
   test("HR admin opens HR workspace", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin", hrAdmin);
     await expectPageReady(page, /Control Center|Control center/i);
-    await expectWorkspaceLoaded(page, /People Operations|People operations|HR Admin/i);
+    await expectWorkspaceLoaded(page, /HR Control Center|HR control center/i);
   });
 
   test("employee opens ESS and is redirected away from HR admin", async ({ page }) => {

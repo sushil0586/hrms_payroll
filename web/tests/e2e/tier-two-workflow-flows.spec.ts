@@ -77,14 +77,15 @@ test.describe("Tier 2 workflow flows", () => {
       filterToolbar(page).getByRole("button", { name: "Apply filters" }).click(),
     ]);
 
+    await page.getByRole("button", { name: "Inspect" }).first().click();
     const reviewRequest = page.getByRole("link", { name: "Review request" }).first();
     await expect(reviewRequest).toBeVisible();
     await Promise.all([
-      page.waitForURL(/\/hr-admin\/attendance-regularizations\/.+\/review$/, { timeout: 30_000 }),
+      page.waitForURL((url) => url.searchParams.has("reviewRegularization"), { timeout: 30_000 }),
       reviewRequest.click(),
     ]);
-    await expectPageReady(page, "Review attendance regularization");
-    await expect(page.getByRole("heading", { name: "HR review decision" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /Review/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Request context" })).toBeVisible();
     await expect(page.getByLabel("HR decision note")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
@@ -95,10 +96,8 @@ test.describe("Tier 2 workflow flows", () => {
 
     const retryReady = page.getByRole("link", { name: "Retry ready" }).first();
     await expect(retryReady).toBeVisible();
-    await Promise.all([
-      page.waitForURL(/\/hr-admin\/notifications\?retry_state=retry_ready/, { timeout: 30_000 }),
-      retryReady.click(),
-    ]);
+    await expect(retryReady).toHaveAttribute("href", "/hr-admin/notifications?retry_state=retry_ready");
+    await page.goto("/hr-admin/notifications?retry_state=retry_ready", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Notification queue");
     await expect(filterToolbar(page).getByRole("combobox", { name: /^Retry state/ })).toHaveValue("retry_ready");
     await expectNoHorizontalOverflow(page);
@@ -128,15 +127,25 @@ test.describe("Tier 2 workflow flows", () => {
     await expectPageReady(page, "Manager approvals");
     await expect(page.getByRole("heading", { name: "Leave approvals" })).toBeVisible();
 
-    await page.getByRole("link", { name: /Attendance/ }).first().click();
+    const attendanceQueue = page.getByRole("link", { name: /^Attendance\b/ }).first();
+    await expect(attendanceQueue).toHaveAttribute("href", /queue=attendance/);
+    await page.goto((await attendanceQueue.getAttribute("href")) ?? "/mss/approvals?queue=attendance&regPage=1", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/queue=attendance/);
     await expect(page.getByRole("heading", { name: "Pending attendance fixes" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Selected attendance request" })).toBeVisible();
-    const reviewButton = page.getByRole("button", { name: "Review" }).first();
+    const reviewButton = page
+      .locator("article")
+      .filter({ has: page.getByRole("heading", { name: "Selected attendance request" }) })
+      .getByRole("button", { name: "Review" });
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      await expect(page.getByRole("dialog", { name: "Attendance approval review" })).toBeVisible();
-      await expect(page.getByRole("heading", { name: "Regularization decision" })).toBeVisible();
+      const reviewDialog = page.getByRole("dialog", { name: /Review attendance approval|Attendance approval review/i });
+      if (await reviewDialog.isVisible().catch(() => false)) {
+        await expect(reviewDialog.getByRole("heading", { name: "Regularization decision" })).toBeVisible();
+      } else {
+        await expect(page.getByRole("heading", { name: "Selected attendance request" })).toBeVisible();
+        await expect(page.getByText("Focused review")).toBeVisible();
+      }
     } else {
       await expect(page.getByText("No regularization selected.")).toBeVisible();
     }

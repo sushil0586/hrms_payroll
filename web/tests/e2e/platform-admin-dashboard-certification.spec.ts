@@ -90,7 +90,7 @@ async function expectShortcutButtonsFit(page: Page) {
   const gridBox = await shortcutGrid.boundingBox();
   expect(gridBox, "shortcut grid bounds").toBeTruthy();
   const buttons = shortcutGrid.getByRole("link");
-  await expect(buttons).toHaveCount(6);
+  await expect(buttons).toHaveCount(7);
   const boxes = [];
   for (let index = 0; index < 6; index += 1) {
     const button = buttons.nth(index);
@@ -193,7 +193,7 @@ test.describe("Platform admin dashboard certification", () => {
     await expect(blockers.locator(".record-chip").first()).toHaveText(`${summary.stale_onboarding_tenants.length} shown`);
     if (summary.stale_onboarding_tenants.length) {
       const tenant = summary.stale_onboarding_tenants[0];
-      await expect(blockers.getByText(tenant.name, { exact: true })).toBeVisible();
+      await expect(blockers.getByText(tenant.name, { exact: true }).first()).toBeVisible();
       await blockers.getByRole("link", { name: "Review" }).first().click();
       await expect(page).toHaveURL(new RegExp(`/platform-admin/onboarding\\?tenantId=${tenant.id}`));
       await expect(page.getByTestId("platform-admin-onboarding-panel")).toBeVisible();
@@ -229,7 +229,7 @@ test.describe("Platform admin dashboard certification", () => {
     await expect(page.getByTestId("platform-admin-leads-panel")).toBeVisible();
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("platform-admin-leads-panel")).toBeVisible();
-    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await page.getByRole("banner").getByRole("link", { name: "Dashboard", exact: true }).click();
     await expect(page.getByTestId("platform-admin-control-center")).toBeVisible();
 
     const evidenceTrail = card(page, "Evidence trail");

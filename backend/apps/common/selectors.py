@@ -10,7 +10,8 @@ from datetime import date, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.text import slugify
@@ -703,16 +704,27 @@ def _commercial_enforcement_scopes(profile: dict) -> tuple[bool, list[dict]]:
 
 def describe_saas_commercial_control(tenant, *, dashboard: dict | None = None, include_history: bool = True) -> dict:
     profile, profile_source = _resolve_saas_commercial_profile(tenant)
-    dashboard = dashboard or get_hr_admin_dashboard_for_tenant(tenant, include_launch_audit=False)
     plan_ref = tenant.subscription_plan or ""
     plans = profile.get("plans") if isinstance(profile.get("plans"), dict) else {}
     plan = plans.get(plan_ref, {}) if isinstance(plans.get(plan_ref), dict) else {}
     entitlements = plan.get("entitlements") if isinstance(plan.get("entitlements"), dict) else {}
     usage_limits = plan.get("usage_limits") if isinstance(plan.get("usage_limits"), dict) else {}
     current_month_start = timezone.localdate().replace(day=1)
+    if dashboard is None:
+        active_employees = Employee.objects.filter(
+            tenant=tenant,
+            employment_status__in=[EmploymentStatus.ACTIVE, EmploymentStatus.ON_NOTICE],
+        ).count()
+        active_memberships = TenantMembership.objects.filter(
+            tenant=tenant,
+            status=MembershipStatus.ACTIVE,
+        ).count()
+    else:
+        active_employees = dashboard["overview"]["active_employees"]
+        active_memberships = dashboard["overview"]["active_memberships"]
     usage = {
-        "active_employees": dashboard["overview"]["active_employees"],
-        "active_memberships": dashboard["overview"]["active_memberships"],
+        "active_employees": active_employees,
+        "active_memberships": active_memberships,
         "payroll_runs_per_month": PayrollRun.objects.filter(tenant=tenant, created_at__date__gte=current_month_start).count(),
         "provider_connections": PayrollProviderConnection.objects.filter(tenant=tenant).count(),
     }
@@ -3572,15 +3584,16 @@ def get_default_membership_for_user(user) -> TenantMembership | None:
             status=MembershipStatus.ACTIVE,
         )
         .select_related("tenant")
+        .prefetch_related("membership_roles__role__permissions")
         .order_by("-is_default", "created_at")
     )
     return memberships.first()
 
 
-def get_employee_for_user(user) -> Employee | None:
+def get_employee_for_user(user, *, membership: TenantMembership | None = None) -> Employee | None:
     """Returns the employee linked to the user's active membership."""
 
-    membership = get_default_membership_for_user(user)
+    membership = membership or get_default_membership_for_user(user)
     if not membership:
         return None
     return (
@@ -3708,32 +3721,31 @@ def get_employee_attendance_summary(employee: Employee) -> dict:
 def get_manager_team_summary(manager: Employee) -> dict:
     """Builds a manager summary for MSS dashboards."""
 
-    team = Employee.objects.filter(reporting_manager=manager)
-    team_ids = list(team.values_list("id", flat=True))
+    team = Employee.objects.filter(reporting_manager=manager).order_by()
     today = timezone.localdate()
 
     employees_on_leave = LeaveRequest.objects.filter(
-        employee_id__in=team_ids,
+        employee__reporting_manager=manager,
         status=LeaveRequestStatus.APPROVED,
         start_date__lte=today,
         end_date__gte=today,
     ).count()
     pending_leave_approvals = LeaveRequest.objects.filter(
-        employee_id__in=team_ids,
+        employee__reporting_manager=manager,
         status=LeaveRequestStatus.PENDING,
     ).count()
     pending_regularizations = AttendanceRegularization.objects.filter(
-        employee_id__in=team_ids,
+        employee__reporting_manager=manager,
         status=RegularizationStatus.PENDING,
     ).count()
     attendance_exceptions = AttendanceRecord.objects.filter(
-        employee_id__in=team_ids,
+        employee__reporting_manager=manager,
         attendance_date=today,
         status__in=[AttendanceStatus.ABSENT, AttendanceStatus.HALF_DAY, AttendanceStatus.LATE, AttendanceStatus.UNKNOWN],
     ).count()
 
     return {
-        "team_size": len(team_ids),
+        "team_size": team.count(),
         "employees_on_leave_today": employees_on_leave,
         "pending_leave_approvals_count": pending_leave_approvals,
         "pending_attendance_regularizations_count": pending_regularizations,
@@ -5520,6 +5532,7 @@ def get_hr_admin_workforce_export(employee: Employee) -> list[dict]:
             "location",
             "department",
             "business_unit",
+            "cost_center",
             "designation",
             "grade",
             "employment_type",
@@ -6183,7 +6196,9 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
 def get_manager_leave_request_detail(manager: Employee, request_id) -> dict | None:
     """Returns a workflow-assigned leave approval detail payload."""
 
-    assigned_workflow_ids = set(_get_pending_workflow_instance_ids_for_actor(manager, subject_type="leave_request"))
+    assigned_workflow_ids = {
+        str(item) for item in _get_pending_workflow_instance_ids_for_actor(manager, subject_type="leave_request")
+    }
     request = (
         LeaveRequest.objects.filter(
             id=request_id,
@@ -6340,10 +6355,10 @@ def get_manager_attendance_regularization_detail(manager: Employee, regularizati
     }
 
 
-def get_hr_admin_employee_list(employee: Employee) -> list[dict]:
-    """Returns tenant-wide employee list for HR admin web surfaces."""
+def get_hr_admin_employee_queryset(employee: Employee):
+    """Returns the tenant-scoped employee queryset shared by list surfaces."""
 
-    queryset = (
+    return (
         Employee.objects.filter(tenant=employee.tenant)
         .select_related(
             "legal_entity",
@@ -6351,6 +6366,7 @@ def get_hr_admin_employee_list(employee: Employee) -> list[dict]:
             "location",
             "department",
             "business_unit",
+            "cost_center",
             "designation",
             "grade",
             "employment_type",
@@ -6358,38 +6374,252 @@ def get_hr_admin_employee_list(employee: Employee) -> list[dict]:
             "membership",
         )
         .annotate(
-            assigned_role_count=Count("membership__membership_roles", distinct=True),
-            direct_reports_count=Count("direct_reports", distinct=True),
+            assigned_role_exists=Exists(MembershipRole.objects.filter(membership_id=OuterRef("membership_id"))),
+            direct_reports_exist=Exists(Employee.objects.filter(reporting_manager_id=OuterRef("pk"))),
         )
         .order_by("employee_code")
     )
 
-    return [
-        {
-            "id": item.id,
-            "employee_code": item.employee_code,
-            "full_name": _employee_display_name(item),
-            "work_email": item.work_email,
-            "phone_number": item.phone_number,
-            "employment_status": item.employment_status,
-            "date_of_joining": item.date_of_joining,
-            "department": item.department.name if item.department else None,
-            "business_unit": item.business_unit.name if item.business_unit else None,
-            "legal_entity": item.legal_entity.name if item.legal_entity else None,
-            "cost_center": item.cost_center.name if item.cost_center else None,
-            "designation": item.designation.name if item.designation else None,
-            "grade": item.grade.name if item.grade else None,
-            "employment_type": item.employment_type.name if item.employment_type else None,
-            "branch": item.branch.name if item.branch else None,
-            "location": item.location.name if item.location else None,
-            "reporting_manager": _employee_display_name(item.reporting_manager) if item.reporting_manager else None,
-            "has_access": bool(item.membership_id),
-            "membership_status": item.membership.status if item.membership else "",
-            "assigned_role_count": item.assigned_role_count,
-            "direct_reports_count": item.direct_reports_count,
-        }
-        for item in queryset
-    ]
+
+def _with_hr_admin_employee_counts(queryset):
+    assigned_role_count = (
+        MembershipRole.objects.filter(membership_id=OuterRef("membership_id"))
+        .order_by()
+        .values("membership_id")
+        .annotate(total=Count("id"))
+        .values("total")[:1]
+    )
+    direct_reports_count = (
+        Employee.objects.filter(reporting_manager_id=OuterRef("pk"))
+        .order_by()
+        .values("reporting_manager_id")
+        .annotate(total=Count("id"))
+        .values("total")[:1]
+    )
+
+    return queryset.annotate(
+            assigned_role_count=Coalesce(Subquery(assigned_role_count, output_field=IntegerField()), Value(0)),
+            direct_reports_count=Coalesce(Subquery(direct_reports_count, output_field=IntegerField()), Value(0)),
+    )
+
+
+def _hr_admin_employee_list_item(item: Employee) -> dict:
+    return {
+        "id": item.id,
+        "employee_code": item.employee_code,
+        "full_name": _employee_display_name(item),
+        "work_email": item.work_email,
+        "phone_number": item.phone_number,
+        "employment_status": item.employment_status,
+        "date_of_joining": item.date_of_joining,
+        "department": item.department.name if item.department else None,
+        "business_unit": item.business_unit.name if item.business_unit else None,
+        "legal_entity": item.legal_entity.name if item.legal_entity else None,
+        "cost_center": item.cost_center.name if item.cost_center else None,
+        "designation": item.designation.name if item.designation else None,
+        "grade": item.grade.name if item.grade else None,
+        "employment_type": item.employment_type.name if item.employment_type else None,
+        "branch": item.branch.name if item.branch else None,
+        "location": item.location.name if item.location else None,
+        "reporting_manager": _employee_display_name(item.reporting_manager) if item.reporting_manager else None,
+        "has_access": bool(item.membership_id),
+        "membership_status": item.membership.status if item.membership else "",
+        "assigned_role_count": item.assigned_role_count,
+        "direct_reports_count": item.direct_reports_count,
+    }
+
+
+def get_hr_admin_employee_list(employee: Employee) -> list[dict]:
+    """Returns the complete tenant employee list for legacy and export consumers."""
+
+    rows = _with_hr_admin_employee_counts(get_hr_admin_employee_queryset(employee)).values(
+        "id",
+        "employee_code",
+        "first_name",
+        "last_name",
+        "work_email",
+        "phone_number",
+        "employment_status",
+        "date_of_joining",
+        "department__name",
+        "business_unit__name",
+        "legal_entity__name",
+        "cost_center__name",
+        "designation__name",
+        "grade__name",
+        "employment_type__name",
+        "branch__name",
+        "location__name",
+        "reporting_manager__first_name",
+        "reporting_manager__last_name",
+        "membership_id",
+        "membership__status",
+        "assigned_role_count",
+        "direct_reports_count",
+    )
+    payload = []
+    for item in rows:
+        full_name = " ".join(part for part in [item["first_name"], item["last_name"]] if part)
+        manager_name = " ".join(
+            part
+            for part in [
+                item["reporting_manager__first_name"],
+                item["reporting_manager__last_name"],
+            ]
+            if part
+        )
+        payload.append(
+            {
+                "id": item["id"],
+                "employee_code": item["employee_code"],
+                "full_name": full_name,
+                "work_email": item["work_email"],
+                "phone_number": item["phone_number"],
+                "employment_status": item["employment_status"],
+                "date_of_joining": item["date_of_joining"],
+                "department": item["department__name"],
+                "business_unit": item["business_unit__name"],
+                "legal_entity": item["legal_entity__name"],
+                "cost_center": item["cost_center__name"],
+                "designation": item["designation__name"],
+                "grade": item["grade__name"],
+                "employment_type": item["employment_type__name"],
+                "branch": item["branch__name"],
+                "location": item["location__name"],
+                "reporting_manager": manager_name or None,
+                "has_access": bool(item["membership_id"]),
+                "membership_status": item["membership__status"] or "",
+                "assigned_role_count": item["assigned_role_count"],
+                "direct_reports_count": item["direct_reports_count"],
+            }
+        )
+    return payload
+
+
+def get_hr_admin_employee_list_page(
+    employee: Employee,
+    *,
+    page: int,
+    page_size: int,
+    query: str = "",
+    employment_status: str = "all",
+    department: str = "all",
+    manager_view: str = "all",
+    readiness: str = "all",
+    sort: str = "employee_code",
+) -> dict:
+    """Returns a bounded page without evaluating the complete tenant queryset."""
+
+    queryset = get_hr_admin_employee_queryset(employee)
+    active_statuses = [EmploymentStatus.ACTIVE, EmploymentStatus.ON_NOTICE]
+    inactive_statuses = [EmploymentStatus.INACTIVE, EmploymentStatus.EXITED]
+    structural_warning = (
+        Q(department__isnull=True)
+        | Q(designation__isnull=True)
+        | Q(branch__isnull=True)
+        | Q(location__isnull=True)
+    )
+    access_warning = (
+        (Q(employment_status__in=active_statuses) & Q(membership__isnull=True))
+        | (Q(employment_status__in=active_statuses) & ~Q(membership__status=MembershipStatus.ACTIVE))
+        | (Q(membership__isnull=False) & Q(assigned_role_exists=False))
+        | (Q(direct_reports_exist=True) & (Q(membership__isnull=True) | ~Q(membership__status=MembershipStatus.ACTIVE)))
+        | (~Q(employment_status__in=active_statuses) & Q(membership__isnull=False))
+    )
+    manager_warning = Q(direct_reports_exist=True, employment_status__in=inactive_statuses)
+    any_warning = structural_warning | access_warning | manager_warning
+    summary = queryset.aggregate(
+        total_count=Count("id", distinct=True),
+        access_review_count=Count("id", filter=access_warning, distinct=True),
+        records_needing_review=Count("id", filter=any_warning, distinct=True),
+        draft_count=Count("id", filter=Q(employment_status=EmploymentStatus.DRAFT), distinct=True),
+        active_count=Count("id", filter=Q(employment_status=EmploymentStatus.ACTIVE), distinct=True),
+        on_notice_count=Count("id", filter=Q(employment_status=EmploymentStatus.ON_NOTICE), distinct=True),
+        inactive_count=Count("id", filter=Q(employment_status=EmploymentStatus.INACTIVE), distinct=True),
+        exited_count=Count("id", filter=Q(employment_status=EmploymentStatus.EXITED), distinct=True),
+    )
+    department_options = list(
+        Employee.objects.filter(tenant=employee.tenant, department__isnull=False)
+        .values_list("department__name", flat=True)
+        .distinct()
+        .order_by("department__name")
+    )
+    if query:
+        queryset = queryset.filter(
+            Q(employee_code__icontains=query)
+            | Q(first_name__icontains=query)
+            | Q(middle_name__icontains=query)
+            | Q(last_name__icontains=query)
+            | Q(work_email__icontains=query)
+            | Q(department__name__icontains=query)
+            | Q(business_unit__name__icontains=query)
+            | Q(legal_entity__name__icontains=query)
+            | Q(cost_center__name__icontains=query)
+            | Q(designation__name__icontains=query)
+            | Q(grade__name__icontains=query)
+            | Q(employment_type__name__icontains=query)
+            | Q(branch__name__icontains=query)
+            | Q(location__name__icontains=query)
+            | Q(reporting_manager__first_name__icontains=query)
+            | Q(reporting_manager__last_name__icontains=query)
+        )
+    if employment_status and employment_status != "all":
+        queryset = queryset.filter(employment_status=employment_status)
+    if department and department != "all":
+        queryset = queryset.filter(department__name=department)
+    if manager_view == "managers":
+        queryset = queryset.filter(direct_reports_exist=True)
+    elif manager_view == "needs_reassignment":
+        queryset = queryset.filter(
+            direct_reports_exist=True,
+            employment_status__in=inactive_statuses,
+        )
+    if readiness == "access_review":
+        queryset = queryset.filter(access_warning)
+    elif readiness == "structure_review":
+        queryset = queryset.filter(structural_warning)
+    elif readiness == "manager_review":
+        queryset = queryset.filter(manager_warning)
+    elif readiness == "ready":
+        queryset = queryset.exclude(any_warning)
+
+    sort_fields = {
+        "employee_code": "employee_code",
+        "-employee_code": "-employee_code",
+        "date_of_joining": "date_of_joining",
+        "-date_of_joining": "-date_of_joining",
+        "name": "first_name",
+        "-name": "-first_name",
+    }
+    queryset = queryset.order_by(sort_fields.get(sort, "employee_code"), "id")
+    total_count = queryset.count()
+    total_pages = max(1, (total_count + page_size - 1) // page_size)
+    safe_page = min(page, total_pages)
+    offset = (safe_page - 1) * page_size
+    return {
+        "items": [_hr_admin_employee_list_item(item) for item in _with_hr_admin_employee_counts(queryset[offset : offset + page_size])],
+        "total_count": total_count,
+        "page": safe_page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "has_next": safe_page < total_pages,
+        "has_previous": safe_page > 1,
+        "summary": {
+            "total_count": summary["total_count"],
+            "access_ready_count": summary["total_count"] - summary["access_review_count"],
+            "access_review_count": summary["access_review_count"],
+            "records_needing_review": summary["records_needing_review"],
+            "status_counts": {
+                "all": summary["total_count"],
+                "draft": summary["draft_count"],
+                "active": summary["active_count"],
+                "on_notice": summary["on_notice_count"],
+                "inactive": summary["inactive_count"],
+                "exited": summary["exited_count"],
+            },
+            "department_options": department_options,
+        },
+    }
 
 
 def get_hr_admin_payroll_readiness(

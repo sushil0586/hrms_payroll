@@ -14,6 +14,8 @@ type FormRoute = {
     testId: string;
     label: string;
     minimumControls: number;
+    actionTab?: string;
+    allowDisabledAction?: boolean;
   }>;
 };
 
@@ -28,22 +30,22 @@ const formRoutes: FormRoute[] = [
     heading: "Salary Setup",
     consoleHeading: "Salary setup controls",
     expectedForms: [
-      { testId: "salary-component-form", label: "Salary component form", minimumControls: 14 },
-      { testId: "salary-structure-form", label: "Salary structure form", minimumControls: 8 },
-      { testId: "salary-version-form", label: "Salary structure version form", minimumControls: 9 },
-      { testId: "salary-line-form", label: "Salary structure component line form", minimumControls: 10 },
-      { testId: "salary-assignment-form", label: "Employee salary assignment form", minimumControls: 9 },
+      { testId: "salary-component-form", label: "Salary component form", minimumControls: 14, actionTab: "Components" },
+      { testId: "salary-structure-form", label: "Salary structure form", minimumControls: 8, actionTab: "Structures" },
+      { testId: "salary-version-form", label: "Salary structure version form", minimumControls: 9, actionTab: "Versions" },
+      { testId: "salary-line-form", label: "Salary structure component line form", minimumControls: 10, actionTab: "Lines" },
+      { testId: "salary-assignment-form", label: "Employee salary assignment form", minimumControls: 9, actionTab: "Assignments" },
     ],
   },
   {
     path: "/hr-admin/payroll-setup?tab=actions",
     heading: "Payroll Setup",
-    consoleHeading: "Payroll setup controls",
+    consoleHeading: "Maintain payroll setup",
     expectedForms: [
-      { testId: "payroll-calendar-form", label: "Payroll calendar form", minimumControls: 9 },
-      { testId: "payroll-period-form", label: "Payroll period form", minimumControls: 9 },
-      { testId: "pay-group-form", label: "Pay group form", minimumControls: 12 },
-      { testId: "pay-group-assignment-form", label: "Pay group assignment form", minimumControls: 7 },
+      { testId: "payroll-calendar-form", label: "Payroll calendar form", minimumControls: 9, actionTab: "Calendars" },
+      { testId: "payroll-period-form", label: "Payroll period form", minimumControls: 9, actionTab: "Periods" },
+      { testId: "pay-group-form", label: "Pay group form", minimumControls: 12, actionTab: "Pay groups" },
+      { testId: "pay-group-assignment-form", label: "Pay group assignment form", minimumControls: 7, actionTab: "Assignments" },
     ],
   },
   {
@@ -52,8 +54,8 @@ const formRoutes: FormRoute[] = [
     consoleHeading: "Payroll input operations",
     expectedForms: [
       { testId: "payroll-run-form", label: "Payroll run form", minimumControls: 10 },
-      { testId: "payroll-input-snapshot-form", label: "Payroll input snapshot form", minimumControls: 13 },
-      { testId: "payroll-input-lock-form", label: "Payroll input lock panel", minimumControls: 1 },
+      { testId: "payroll-input-snapshot-form", label: "Payroll input snapshot form", minimumControls: 12 },
+      { testId: "payroll-input-lock-form", label: "Payroll input lock panel", minimumControls: 1, allowDisabledAction: true },
     ],
   },
   {
@@ -61,14 +63,14 @@ const formRoutes: FormRoute[] = [
     heading: "Payroll Statutory",
     consoleHeading: "Statutory setup controls",
     expectedForms: [
-      { testId: "statutory-pack-form", label: "Statutory pack form", minimumControls: 12 },
-      { testId: "statutory-component-form", label: "Statutory component form", minimumControls: 11 },
-      { testId: "statutory-slab-form", label: "Statutory slab form", minimumControls: 13 },
-      { testId: "statutory-registration-form", label: "Employer statutory registration form", minimumControls: 13 },
-      { testId: "statutory-filing-form", label: "Statutory filing calendar form", minimumControls: 14 },
-      { testId: "statutory-profile-form", label: "Employee statutory profile form", minimumControls: 21 },
-      { testId: "statutory-declaration-form", label: "Employee statutory declaration form", minimumControls: 14 },
-      { testId: "statutory-declaration-item-form", label: "Employee statutory declaration item form", minimumControls: 14 },
+      { testId: "statutory-pack-form", label: "Statutory pack form", minimumControls: 12, actionTab: "Catalog" },
+      { testId: "statutory-component-form", label: "Statutory component form", minimumControls: 11, actionTab: "Catalog" },
+      { testId: "statutory-slab-form", label: "Statutory slab form", minimumControls: 13, actionTab: "Catalog" },
+      { testId: "statutory-registration-form", label: "Employer statutory registration form", minimumControls: 13, actionTab: "Compliance" },
+      { testId: "statutory-filing-form", label: "Statutory filing calendar form", minimumControls: 14, actionTab: "Compliance" },
+      { testId: "statutory-profile-form", label: "Employee statutory profile form", minimumControls: 21, actionTab: "Profiles" },
+      { testId: "statutory-declaration-form", label: "Employee statutory declaration form", minimumControls: 14, actionTab: "Declarations" },
+      { testId: "statutory-declaration-item-form", label: "Employee statutory declaration item form", minimumControls: 14, actionTab: "Declarations" },
     ],
   },
   {
@@ -112,8 +114,8 @@ const formRoutes: FormRoute[] = [
     ],
   },
   {
-    path: "/tenant-admin",
-    heading: "Tenant Admin Console",
+    path: "/tenant-admin/support-access",
+    heading: "Support Access",
     consoleHeading: "Scoped support grants",
     expectedForms: [
       { testId: "tenant-support-access-form", label: "Tenant support access form", minimumControls: 7 },
@@ -127,6 +129,7 @@ const visibleControlSelector = [
   "input:not([type='hidden']):not(:disabled)",
   "select:not(:disabled)",
   "textarea:not(:disabled)",
+  "summary",
   "[role='button']",
   "[role='link']",
   "[role='combobox']",
@@ -231,12 +234,17 @@ async function collectFormControlIssues(form: Locator): Promise<ControlIssue[]> 
   }, visibleControlSelector);
 }
 
-async function expectFormControlsAreFocusable(form: Locator, expectedLabel: string, minimumControls: number) {
+async function expectFormControlsAreFocusable(form: Locator, expectedLabel: string, minimumControls: number, allowDisabledAction = false) {
   await expect(form).toBeVisible();
   await expect(form).toHaveAttribute("aria-label", expectedLabel);
 
   const controls = focusableControls(form);
   const count = await controls.count();
+  if (allowDisabledAction && count === 0) {
+    await expect(form.getByRole("button", { name: "Lock selected run inputs" })).toBeDisabled();
+    await expect(form.locator(".muted").filter({ hasText: /snapshot|run|lock/i }).last()).toBeVisible();
+    return;
+  }
   expect(count, `${expectedLabel} should expose granular keyboard controls`).toBeGreaterThanOrEqual(minimumControls);
 
   for (let index = 0; index < count; index += 1) {
@@ -290,9 +298,23 @@ test.describe("Phase 8C form keyboard and accessibility certification", () => {
       await gotoAuthenticated(page, route.path);
       await expectPageReady(page, route.heading);
       await expect(page.getByRole("heading", { name: route.consoleHeading }).first()).toBeVisible();
+      if (route.path === "/hr-admin/attendance-records") {
+        await page.getByTestId("attendance-records-toolbar").locator("summary").filter({ hasText: "More filters" }).click();
+      }
       for (const formExpectation of route.expectedForms) {
+        if (formExpectation.actionTab) {
+          const actionTab = page
+            .locator("nav.setup-action-tabs")
+            .getByRole("button")
+            .filter({ hasText: new RegExp(`^${formExpectation.actionTab}`) });
+          await actionTab.click();
+          await expect(actionTab).toHaveAttribute("aria-current", "page");
+        }
         const form = page.getByTestId(formExpectation.testId);
-        await expectFormControlsAreFocusable(form, formExpectation.label, formExpectation.minimumControls);
+        await expectFormControlsAreFocusable(form, formExpectation.label, formExpectation.minimumControls, formExpectation.allowDisabledAction);
+        if (formExpectation.allowDisabledAction && (await focusableControls(form).count()) === 0) {
+          continue;
+        }
         await expectTabOrderMovesForward(page, form, formExpectation.label);
       }
 

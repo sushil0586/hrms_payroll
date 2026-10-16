@@ -1,14 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 function main(page: Page) {
   return page.locator("main").first();
-}
-
-function metric(page: Page, label: string) {
-  return main(page).locator("article").filter({ hasText: label }).first();
 }
 
 function table(page: Page, className: string) {
@@ -41,6 +37,7 @@ async function clickFirstMainLinkIfPresent(page: Page, hrefPattern: RegExp, expe
   const link = main(page).locator(`a[href="${href}"]`).first();
   await expect(link).toBeVisible();
   await page.goto(href, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await expect(page).toHaveURL(expectedUrl);
   await expectNoHorizontalOverflow(page);
   return true;
@@ -51,6 +48,7 @@ async function openLinkTarget(page: Page, link: Locator, expectedUrl: RegExp) {
   const href = await link.getAttribute("href");
   expect(href).toBeTruthy();
   await page.goto(href ?? "", { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await expect(page).toHaveURL(expectedUrl);
 }
 
@@ -66,7 +64,7 @@ test.describe("Phase 5A payroll control room certification", () => {
       ["Report", "/hr-admin/reports/payroll-close-readiness"],
     ]);
     for (const label of ["Employees in scope", "Ready", "Warnings", "Blocked", "Pending approvals"]) {
-      await expect(metric(page, label)).toBeVisible();
+      await expectCompactMetric(main(page), label);
     }
     await expect(main(page).getByText("Current decision")).toBeVisible();
     await expect(main(page).getByText("What to do next")).toBeVisible();
@@ -112,7 +110,7 @@ test.describe("Phase 5A payroll control room certification", () => {
       ["Salary Setup", "/hr-admin/salary-setup"],
     ]);
     for (const label of ["Calculable runs", "Calculations", "Lines", "Validation", "Latest net pay"]) {
-      await expect(metric(page, label)).toBeVisible();
+      await expectCompactMetric(main(page), label);
     }
     await expect(main(page).getByText("Calculation queue").first()).toBeVisible();
     await expect(main(page).getByText("Calculation attempts").first()).toBeVisible();
@@ -135,8 +133,8 @@ test.describe("Phase 5A payroll control room certification", () => {
       ["Payroll Setup", "/hr-admin/payroll-setup"],
       ["Outputs", "/hr-admin/payroll-outputs"],
     ]);
-    for (const label of ["Reviews", "Open reviews", "Open blockers", "Latest net pay"]) {
-      await expect(metric(page, label)).toBeVisible();
+    for (const label of ["Reviews", "open", "blockers", "Latest net pay"]) {
+      await expectCompactMetric(main(page), label);
     }
     await expect(main(page).getByText("Review queue").first()).toBeVisible();
     await expect(main(page).getByText("Final lock").first()).toBeVisible();
@@ -161,7 +159,7 @@ test.describe("Phase 5A payroll control room certification", () => {
       ["Payroll Setup", "/hr-admin/payroll-setup"],
     ]);
     for (const label of ["Output batches", "Artifacts", "Payslips", "Latest net pay"]) {
-      await expect(metric(page, label)).toBeVisible();
+      await expectCompactMetric(main(page), label);
     }
     await expect(main(page).getByText("Publish state")).toBeVisible();
     await expect(main(page).getByText("Generated").first()).toBeVisible();
@@ -185,7 +183,7 @@ test.describe("Phase 5A payroll control room certification", () => {
       ["Providers", "/hr-admin/payroll-providers"],
     ]);
     for (const label of ["Handoffs", "Finance artifacts", "Filing files", "Callbacks", "Retries", "Provider jobs", "Audit packs", "Reconciled", "Latest net pay"]) {
-      await expect(metric(page, label)).toBeVisible();
+      await expectCompactMetric(main(page), label);
     }
     await expect(main(page).getByText("Transmission state")).toBeVisible();
     for (const label of ["Bank advice", "Accounting net", "Statutory total", "Artifacts", "Filing files"]) {

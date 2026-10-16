@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { expectDialogStable } from "../helpers/modal-stability";
+import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectDialogLocatorStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("ESS Payslips launch certification", () => {
@@ -10,8 +10,8 @@ test.describe("ESS Payslips launch certification", () => {
     await gotoAuthenticated(page, "/ess/payslips", employee);
     await expectPageReady(page, "Payslips");
 
-    for (const metric of ["Published payslips", "Downloadable", "Latest net pay", "Latest pay date"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+    for (const metric of [/published payslips/i, /downloadable/i, /latest net pay/i, /latest pay date/i]) {
+      await expectCompactMetric(page, metric);
     }
 
     await expect(page.getByRole("heading", { name: /Published payslips|No payslip published/i }).first()).toBeVisible();
@@ -24,7 +24,7 @@ test.describe("ESS Payslips launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "Review payslip" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      const dialog = page.getByRole("dialog", { name: /Payslip detail|August|September|October|Payslip/i });
+      const dialog = page.getByRole("dialog").filter({ hasText: /Payslip detail|Payment summary/ }).first();
       await expect(dialog).toBeVisible();
       await expect(dialog.getByText("Payment summary")).toBeVisible();
       await expect(dialog.getByText("Access trail")).toBeVisible();
@@ -33,7 +33,7 @@ test.describe("ESS Payslips launch certification", () => {
       await expect(dialog.getByText("Tax sheet").first()).toBeVisible();
       await expect(dialog.getByText("Day-count basis")).toBeVisible();
       await expect(dialog.getByText("PDF readiness")).toBeVisible();
-      await expectDialogStable(page, "Payslip detail");
+      await expectDialogLocatorStable(page, dialog, /Payslip detail|Payment summary/);
       await page.keyboard.press("Escape");
       await expect(dialog).toHaveCount(0);
     }
@@ -46,7 +46,11 @@ test.describe("ESS Payslips launch certification", () => {
     const compactReviewButton = page.getByRole("button", { name: "Review payslip" }).first();
     if (await compactReviewButton.isVisible().catch(() => false)) {
       await compactReviewButton.click();
-      await expectDialogStable(page, "Payslip detail");
+      await expectDialogLocatorStable(
+        page,
+        page.getByRole("dialog").filter({ hasText: /Payslip detail|Payment summary/ }).first(),
+        /Payslip detail|Payment summary/,
+      );
     }
     await expectNoHorizontalOverflow(page);
   });
@@ -68,7 +72,7 @@ test.describe("ESS Payslips launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "Review payslip" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      const dialog = page.getByRole("dialog").filter({ hasText: "Payslip detail" });
+      const dialog = page.getByRole("dialog").filter({ hasText: /Payslip detail|Payment summary/ });
       await expect(dialog).toBeVisible();
 
       const markRead = dialog.getByRole("button", { name: "Mark as read" });
@@ -88,7 +92,7 @@ test.describe("ESS Payslips launch certification", () => {
         });
         await markRead.click();
         await expect(dialog.getByText("Read receipt service is temporarily unavailable.")).toBeVisible();
-        await expectDialogStable(page, "Payslip detail");
+        await expectDialogLocatorStable(page, dialog, /Payslip detail|Payment summary/);
         await markRead.click();
         await expect(dialog.getByText("Read receipt service is temporarily unavailable.")).toHaveCount(0);
       }
@@ -99,7 +103,7 @@ test.describe("ESS Payslips launch certification", () => {
       } else {
         await expect(dialog.getByText("Download blocked")).toBeVisible();
       }
-      await expectDialogStable(page, "Payslip detail");
+      await expectDialogLocatorStable(page, dialog, /Payslip detail|Payment summary/);
     }
   });
 });

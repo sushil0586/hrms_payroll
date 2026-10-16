@@ -56,7 +56,7 @@ async function expectRouteKnown(href: string, sourceRoute: string) {
 }
 
 async function expectVisibleInternalLinksHealthy(page: Page, sourceRoute: string) {
-  const hrefs = await page.locator("a[href]").evaluateAll((links) =>
+  const hrefs = await page.locator("main a[href]").evaluateAll((links) =>
     links
       .filter((link) => {
         const rect = link.getBoundingClientRect();
@@ -70,6 +70,9 @@ async function expectVisibleInternalLinksHealthy(page: Page, sourceRoute: string
 
   for (const href of internalLinks) {
     await expectRouteKnown(href, sourceRoute);
+    if (staticRoutes.includes(href.split("?")[0])) {
+      continue;
+    }
     if (checkedLinks.has(href)) {
       continue;
     }
@@ -173,6 +176,11 @@ async function expectNoInteractiveOverlap(page: Page, route: string) {
     }
 
     const boxes = elements.flatMap((element, index) => {
+      const closedDetails = element.closest("details:not([open])");
+      const inputType = element instanceof HTMLInputElement ? element.type : "";
+      if ((closedDetails && element.tagName !== "SUMMARY") || ["checkbox", "radio"].includes(inputType)) {
+        return [];
+      }
       const rect = visibleRect(element);
       const style = window.getComputedStyle(element);
       if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden") {

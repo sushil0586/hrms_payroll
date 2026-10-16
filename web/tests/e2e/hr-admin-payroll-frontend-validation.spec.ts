@@ -13,6 +13,16 @@ async function gotoHrAdminDemo(page: Page, path: string) {
     },
   });
   expect(response.ok(), await response.text()).toBeTruthy();
+  const entitlementResponse = await page.request.patch("/api/hr-admin/saas-control-plane", {
+    data: {
+      subscription_plan: "enterprise",
+      status: "active",
+      billing_provider_ref: "manual_billing.v1",
+      billing_account_ref: "browser-certification",
+      current_period_end: "2027-03-31",
+    },
+  });
+  expect(entitlementResponse.ok(), await entitlementResponse.text()).toBeTruthy();
   await page.goto(path, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle");
 }
@@ -411,14 +421,15 @@ test.describe("HR Admin payroll frontend validation", () => {
 
     const actions = page.getByLabel("Output controls");
     await expect(actions).toBeVisible();
-    await field(actions, "Handoff profile ref").fill("");
     const generateHandoff = actions.getByRole("button", { name: "Generate handoff" });
     if (await generateHandoff.isDisabled()) {
+      await expect(field(actions, "Handoff profile ref")).toBeDisabled();
       expect(apiCalls).toBe(0);
       await expectNoAppError(page);
       await expectNoHorizontalOverflow(page);
       return;
     }
+    await field(actions, "Handoff profile ref").fill("");
     await generateHandoff.click();
 
     await expect(actions.getByText(/handoff profile ref is required|profile ref is required/i).or(actions.getByRole("alert")).first()).toBeVisible();

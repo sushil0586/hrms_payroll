@@ -74,7 +74,7 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 }
 
 async function locatePilotRun(page: Page) {
-  const setup = await apiGet<CalculationSetup>(page, "/api/hr-admin/payroll-calculation-setup");
+  const setup = await apiGet<CalculationSetup>(page, "/api/hr-admin/payroll-calculation-setup?run_page_size=500");
   const run = setup.runs.find((item) => item.code === runCode);
   expect(run, `Missing ${runCode}. Run seed_pilot_100_calculation before this certification.`).toBeTruthy();
   expect(run?.status, `${runCode} must start inputs_locked for a repeatable browser run`).toBe("inputs_locked");
@@ -95,7 +95,7 @@ test.describe.serial("P100-6 payroll calculation and review certification", () =
 
     await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Calculations");
-    await expect(page.getByRole("heading", { name: `${prefix} Payroll Calculation - Review Gate` })).toBeVisible();
+    await expect(page.getByRole("heading", { name: `${prefix} Payroll Calculation - Review Gate` }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Calculation controls" })).toBeVisible();
 
     const controls = panel(page, "Calculation controls");
@@ -124,11 +124,11 @@ test.describe.serial("P100-6 payroll calculation and review certification", () =
     await expect(page.locator(".payroll-calc-attempt-table tr.is-selected")).toContainText("300");
     await expect(page.getByRole("heading", { name: "Issue register" })).toBeVisible();
     await expect(page.locator(".payroll-calc-line-table")).toBeVisible();
-    await expect(page.locator(".payroll-setup-count").filter({ hasText: "300 lines" })).toBeVisible();
+    await expect(page.locator(".payroll-setup-count").filter({ hasText: "10 lines" })).toBeVisible();
     await expect(page.locator("aside[aria-label$='calculation trace']").first()).toContainText(/Source|Result/);
     await expectNoHorizontalOverflow(page);
 
-    const refreshedCalculationSetup = await apiGet<CalculationSetup>(page, `/api/hr-admin/payroll-calculation-setup?run_id=${run.id}&calculation_id=${calculation.payload.calculation.id}`);
+    const refreshedCalculationSetup = await apiGet<CalculationSetup>(page, `/api/hr-admin/payroll-calculation-setup?run_id=${run.id}&calculation_id=${calculation.payload.calculation.id}&line_page_size=500`);
     const setupCalculation = refreshedCalculationSetup.calculations.find((item) => item.id === calculation.payload.calculation.id);
     expect(setupCalculation?.line_count).toBe(300);
     expect(refreshedCalculationSetup.lines.length).toBe(300);
@@ -152,7 +152,7 @@ test.describe.serial("P100-6 payroll calculation and review certification", () =
     await expect(page.getByRole("heading", { name: "Exception register" })).toBeVisible();
     await expect(page.getByText(/Accepted exception: missing primary bank account|Pending leave request overlaps payroll period|Lifecycle event requires payroll review/).first()).toBeVisible();
 
-    const reviewSetup = await apiGet<ReviewSetup>(page, `/api/hr-admin/payroll-review-setup?review_id=${review.payload.review.id}`);
+    const reviewSetup = await apiGet<ReviewSetup>(page, `/api/hr-admin/payroll-review-setup?review_id=${review.payload.review.id}&line_page_size=500`);
     expect(reviewSetup.lines.length).toBe(300);
     expect(new Set(reviewSetup.lines.map((line) => line.employee_code)).size).toBe(100);
     expect(reviewSetup.exceptions.filter((item) => item.severity === "warning").length).toBeGreaterThanOrEqual(17);
@@ -279,11 +279,12 @@ test.describe.serial("P100-6 payroll calculation and review certification", () =
 
   test("employee cannot access pilot calculation, review, or report evidence", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/payroll-calculations", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page).toHaveURL(/\/ess(?:$|[/?#])/);
+    await expectPageReady(page, "My workspace");
+    await expect(page.getByRole("heading", { name: "Payroll Calculations" })).toHaveCount(0);
 
     const calculationSetup = await page.request.get("/api/hr-admin/payroll-calculation-setup");
     expect([401, 403]).toContain(calculationSetup.status());

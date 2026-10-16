@@ -61,21 +61,21 @@ test.describe("Platform Admin launch blueprint certification", () => {
 
     await openLaunchBlueprint(page, tenantId);
     await expect(page.getByRole("link", { name: /Launch Blueprint/i }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /India Standard SME/i })).toBeVisible();
+    const defaultBlueprint = page.getByRole("button", { name: /India Standard SME Default/i });
+    await expect(defaultBlueprint).toBeVisible();
+    await defaultBlueprint.click();
     await expect(page.getByText("Tenant launch status")).toBeVisible();
 
     await page.getByRole("button", { name: "Preview launch plan" }).click();
-    await expect(page.getByText("Launch preview completed.")).toBeVisible();
-    await expect(page.getByText("Needs inputs", { exact: true }).first()).toBeVisible();
-    const missingInputs = page.locator(".platform-validation-strip").first();
-    await expect(missingInputs).toContainText("Registered Address");
-    await expect(missingInputs).toContainText("Default Branch");
+    await expect(page.getByRole("alert").getByText(/Fix the highlighted launch inputs/i)).toBeVisible();
+    await expect(page.getByRole("alert").getByText("Registered address is required.")).toBeVisible();
+    await expect(page.getByRole("alert").getByText("Default branch is required.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Apply safe launch setup" })).toBeDisabled();
 
     await page.getByLabel("Registered address").fill("Indiranagar, Bengaluru, Karnataka 560038");
     await page.getByLabel("Default branch").fill("Bengaluru");
     await page.getByRole("button", { name: "Preview launch plan" }).click();
-    await expect(page.getByText("Apply-ready")).toBeVisible();
+    await expect(page.getByText("Apply-ready", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Will configure now")).toBeVisible();
     await expect(page.getByText("Roles and Users", { exact: true })).toBeVisible();
     await expect(page.getByText("Document Requirements", { exact: true })).toBeVisible();
@@ -84,7 +84,7 @@ test.describe("Platform Admin launch blueprint certification", () => {
     await expect(page.getByText("Production payroll", { exact: true })).toBeVisible();
     await expect(page.getByText("Not live", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Apply safe launch setup" }).click();
+    await page.getByRole("button", { name: "Apply safe launch setup" }).first().click();
     await expect(page.getByText("Certified safe launch setup applied.")).toBeVisible();
     await expect(page.getByText("Apply - Succeeded")).toBeVisible();
     await expect(page.getByText(/Applied: .*roles_users/)).toBeVisible();
@@ -96,7 +96,7 @@ test.describe("Platform Admin launch blueprint certification", () => {
     await expect(page.getByText(/Applied: .*launch_checklist/)).toBeVisible();
 
     await page.getByRole("button", { name: "Complete customer handoff" }).click();
-    await expect(page.getByText("This field may not be blank.")).toBeVisible();
+    await expect(page.getByRole("alert").getByText("Handoff notes are required.")).toBeVisible();
     await page.getByLabel("Handoff notes").fill("Tenant admin briefed. Customer owns org masters, employee import, and gated payroll setup.");
     await page.getByRole("button", { name: "Complete customer handoff" }).click();
     await expect(page.locator(".platform-feedback").getByText("Customer handoff completed.", { exact: true })).toBeVisible();
@@ -104,10 +104,9 @@ test.describe("Platform Admin launch blueprint certification", () => {
 
     await page.getByLabel("Default branch").fill("Mumbai");
     await page.getByRole("button", { name: "Preview launch plan" }).click();
-    await expect(page.getByText(/A change reason is required after safe launch setup has been applied/)).toBeVisible();
+    await expect(page.getByRole("alert").getByText("Change reason is required after safe setup has already been applied.")).toBeVisible();
     await page.getByLabel("Change reason").fill("Customer changed the launch default branch before handoff.");
     await page.getByRole("button", { name: "Preview launch plan" }).click();
-    await expect(page.getByText("Launch preview completed.")).toBeVisible();
     await expect(page.getByText("Change control active")).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
@@ -126,13 +125,13 @@ test.describe("Platform Admin launch blueprint certification", () => {
 
     await openLaunchBlueprint(page, tenantId);
     await expect(page.getByText("Growth", { exact: true }).first()).toBeVisible();
-    await page.getByRole("button", { name: /India Standard SME/i }).click();
+    await page.getByRole("button", { name: /India Standard SME Default/i }).click();
 
     await page.getByLabel("Registered address").fill("HSR Layout, Bengaluru, Karnataka 560102");
     await page.getByLabel("Default branch").fill("Bengaluru");
     await page.getByRole("button", { name: "Preview launch plan" }).click();
 
-    await expect(page.getByText("Apply-ready")).toBeVisible();
+    await expect(page.getByText("Apply-ready", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Payroll Defaults", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Provider Placeholders", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Configuration only", { exact: true }).first()).toBeVisible();
@@ -143,7 +142,7 @@ test.describe("Platform Admin launch blueprint certification", () => {
     await expect(page.getByText(/No payroll runs or employee salary assignments are created/).first()).toBeVisible();
     await expect(page.getByText(/live submissions remain off/).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Apply safe launch setup" }).click();
+    await page.getByRole("button", { name: "Apply safe launch setup" }).first().click();
     await expect(page.getByText("Certified safe launch setup applied.")).toBeVisible();
     await expect(page.getByText("Apply - Succeeded")).toBeVisible();
     await expect(page.getByText(/Applied: .*payroll_defaults/)).toBeVisible();

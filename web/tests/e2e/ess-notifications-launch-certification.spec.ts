@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
@@ -24,8 +24,8 @@ test.describe("ESS Notifications launch certification", () => {
     await gotoAuthenticated(page, "/ess/notifications", employee);
     await expectPageReady(page, "Notifications");
 
-    for (const metric of ["Notifications", "Unread on page", "High priority", "Failed on page"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+    for (const metric of [/notifications/i, /unread on page/i, /high priority/i, /failed on page/i]) {
+      await expectCompactMetric(page, metric);
     }
 
     await expect(page.getByRole("heading", { name: "Inbox filters" })).toBeVisible();
@@ -34,7 +34,7 @@ test.describe("ESS Notifications launch certification", () => {
     await expect(page.locator(".user-notification-detail")).toHaveCount(0);
     await expect(page.locator(".user-notification-inline-guidance")).toBeVisible();
     await expect(page.locator(".user-notification-action-band")).toHaveCount(0);
-    await expect(page.locator(".user-notification-row--head")).toBeVisible();
+    await expect(page.getByRole("table", { name: "Notifications" }).getByRole("button", { name: "Review notification" }).first()).toBeVisible();
     await expect(async () => {
       const rows = await page.locator(".user-notification-filters .queue-toolbar__meta .queue-summary-chip").evaluateAll((chips) => {
         const tops = chips.map((chip) => Math.round(chip.getBoundingClientRect().top));

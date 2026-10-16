@@ -1,10 +1,17 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { expectDialogStable } from "../helpers/modal-stability";
+import {
+  expectDialogLocatorStable,
+  getDialog,
+  getDialogWithText,
+  mssAttendanceReviewDialogName,
+  mssLeaveReviewDialogName,
+} from "../helpers/modal-stability";
 import { employee, gotoAuthenticated, manager, type Persona } from "../helpers/staging-auth";
 
 type ModalCase = {
+  dialogLocator?: (page: Page) => Locator;
   dialogName: string | RegExp;
   heading: string | RegExp;
   name: string;
@@ -41,9 +48,9 @@ async function certifyModal(page: Page, item: ModalCase) {
   await trigger.scrollIntoViewIfNeeded();
   await trigger.click();
 
-  const dialog = page.getByRole("dialog", { name: item.dialogName });
+  const dialog = item.dialogLocator ? item.dialogLocator(page) : getDialog(page, item.dialogName);
   await expect(dialog, `${item.name} should open a dialog`).toBeVisible();
-  await expectDialogStable(page, item.dialogName);
+  await expectDialogLocatorStable(page, dialog, item.dialogName);
   if (item.verify) {
     await item.verify(dialog);
   }
@@ -105,6 +112,7 @@ const essModalCases: ModalCase[] = [
   },
   {
     dialogName: /Payslip detail/i,
+    dialogLocator: (page) => getDialogWithText(page, "Payslip detail"),
     heading: "Payslips",
     name: "ESS payslip detail",
     persona: employee,
@@ -152,36 +160,39 @@ const essModalCases: ModalCase[] = [
     },
   },
   {
-    dialogName: "Upload document",
+    dialogName: /Upload document|Replace document/,
+    dialogLocator: (page) => getDialogWithText(page, "Submit for review"),
     heading: "Documents",
     name: "ESS document upload",
     persona: employee,
     route: "/ess/documents",
-    trigger: (page) => page.getByRole("button", { name: "Upload document" }),
+    trigger: (page) => page.getByRole("button", { name: /^Upload$|^Replace$|^Upload document$/ }),
     verify: async (dialog) => {
       await expect(dialog.getByLabel("File")).toBeVisible();
       await expect(dialog.getByRole("button", { name: "Submit for review" })).toBeVisible();
     },
   },
   {
-    dialogName: "Required document detail",
+    dialogName: /Required document detail|Aadhaar Card|PAN Card|Cancelled Cheque/,
+    dialogLocator: (page) => getDialogWithText(page, "Current state"),
     heading: "Documents",
     name: "ESS required document detail",
     persona: employee,
     route: "/ess/documents",
-    trigger: (page) => page.getByRole("button", { name: "View" }),
+    trigger: (page) => page.getByRole("table", { name: "Required documents" }).getByRole("button", { name: "View" }),
     verify: async (dialog) => {
       await expect(dialog.getByText("Current state")).toBeVisible();
       await expect(dialog.getByText("Current file")).toBeVisible();
     },
   },
   {
-    dialogName: "Document detail",
+    dialogName: /Document detail|Riya Aadhaar Front and Back|Salary account proof/,
+    dialogLocator: (page) => getDialogWithText(page, "Audit trail"),
     heading: "Documents",
     name: "ESS document history detail",
     persona: employee,
     route: "/ess/documents",
-    trigger: (page) => page.getByRole("button", { name: "Review" }),
+    trigger: (page) => page.getByRole("table", { name: "Document history" }).getByRole("button", { name: "Review" }),
     verify: async (dialog) => {
       await expect(dialog.getByText("Review status")).toBeVisible();
       await expect(dialog.getByText("Audit trail")).toBeVisible();
@@ -195,15 +206,15 @@ const essModalCases: ModalCase[] = [
     route: "/ess/notifications",
     trigger: (page) => page.getByRole("button", { name: "Review notification" }),
     verify: async (dialog) => {
-      await expect(dialog.getByText("Message", { exact: true })).toBeVisible();
-      await expect(dialog.getByText("Delivery", { exact: true })).toBeVisible();
+      await expect(dialog.getByText("Message", { exact: true }).first()).toBeVisible();
+      await expect(dialog.getByText("Delivery", { exact: true }).first()).toBeVisible();
     },
   },
 ];
 
 const mssModalCases: ModalCase[] = [
   {
-    dialogName: "Leave approval review",
+    dialogName: mssLeaveReviewDialogName,
     heading: "Manager approvals",
     name: "MSS leave approval review",
     persona: manager,
@@ -215,7 +226,7 @@ const mssModalCases: ModalCase[] = [
     },
   },
   {
-    dialogName: "Attendance approval review",
+    dialogName: mssAttendanceReviewDialogName,
     heading: "Manager approvals",
     name: "MSS attendance approval review",
     persona: manager,
@@ -234,8 +245,8 @@ const mssModalCases: ModalCase[] = [
     route: "/mss/notifications",
     trigger: (page) => page.getByRole("button", { name: "Review notification" }),
     verify: async (dialog) => {
-      await expect(dialog.getByText("Message", { exact: true })).toBeVisible();
-      await expect(dialog.getByText("Delivery", { exact: true })).toBeVisible();
+      await expect(dialog.getByText("Message", { exact: true }).first()).toBeVisible();
+      await expect(dialog.getByText("Delivery", { exact: true }).first()).toBeVisible();
     },
   },
 ];

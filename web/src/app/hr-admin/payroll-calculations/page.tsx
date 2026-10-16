@@ -705,6 +705,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                 {
                   id: "calculate-draft",
                   label: "Calculate draft",
+                  background: true,
                   endpoint: selectedRun ? `/api/hr-admin/payroll-runs/${selectedRun.id}/calculate-draft` : "",
                   profileField: "calculation_profile_ref",
                   profileLabel: "Calculation profile ref",

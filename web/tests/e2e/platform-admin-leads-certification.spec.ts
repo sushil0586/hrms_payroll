@@ -155,6 +155,15 @@ async function expectApiDenied(response: APIResponse, text: RegExp) {
   expect(JSON.stringify(payload)).toMatch(text);
 }
 
+async function expectInvalidControl(control: Locator) {
+  await expect.poll(async () => {
+    return control.evaluate((element) => {
+      const input = element as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+      return input.getAttribute("aria-invalid") === "true" || !input.checkValidity();
+    });
+  }).toBeTruthy();
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("Platform admin Leads certification", () => {
@@ -267,7 +276,7 @@ test.describe("Platform admin Leads certification", () => {
 
     await leadRow.getByLabel("Tenant code").fill("");
     await leadRow.getByRole("button", { name: "Convert lead" }).click();
-    await expect(leadRow.getByLabel("Tenant code")).toBeFocused();
+    await expectInvalidControl(leadRow.getByLabel("Tenant code"));
 
     await leadRow.getByLabel("Tenant code").fill(tenantCode);
     await leadRow.getByLabel("Primary domain").fill(primaryDomain);

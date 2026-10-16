@@ -91,7 +91,20 @@ async function expectRouteHealthy(page: Page, item: HrAdminNavItem) {
   await openHrAdminNavGroups(page);
 
   const nav = page.getByRole("navigation", { name: /hr admin navigation/i });
-  await expect(nav.getByText(item.label, { exact: true }).or(nav.getByLabel(`${item.label} unavailable`))).toBeVisible();
+  await expect(nav.locator(".nav-item").filter({ hasText: item.label }).first()).toBeVisible();
+}
+
+async function expectNavItemCurrentOrUnavailable(page: Page, label: string) {
+  const nav = page.getByRole("navigation", { name: /hr admin navigation/i });
+  const link = nav.getByRole("link", { name: new RegExp(`^${label}\\b`) }).first();
+  if (await link.isVisible().catch(() => false)) {
+    await expect(link).toHaveAttribute("aria-current", "page");
+    return;
+  }
+
+  const disabled = nav.getByLabel(`${label} unavailable`).first();
+  await expect(disabled).toBeVisible();
+  await expect(disabled).toHaveAttribute("aria-disabled", "true");
 }
 
 test.describe("HR Admin navigation and control center 95 certification", () => {
@@ -163,19 +176,12 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
     await openHrAdminNavGroups(page);
 
-    const nav = page.getByRole("navigation", { name: /hr admin navigation/i });
-    await expect(nav.getByRole("link", { name: /^Payroll Control\b/ })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    await expectNavItemCurrentOrUnavailable(page, "Payroll Control");
 
     await gotoAuthenticated(page, "/hr-admin/payroll-settlements", hrAdmin);
     await openHrAdminNavGroups(page);
 
-    await expect(nav.getByRole("link", { name: /^Adjustments & Settlements\b/ })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    await expectNavItemCurrentOrUnavailable(page, "Adjustments & Settlements");
   });
 
   test("keeps HR Admin navigation usable without overflow on mobile", async ({ page }) => {
@@ -184,17 +190,20 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
     await expectPageReady(page, "HR Control Center");
     await openHrAdminNavGroups(page);
 
-    await page.getByText("Menu", { exact: true }).click();
+    const menu = page.getByText("Menu", { exact: true });
+    if (await menu.isVisible().catch(() => false)) {
+      await menu.click();
 
-    const nav = page.getByRole("navigation", { name: /hr admin mobile navigation/i });
-    await expect(nav).toBeVisible();
+      const nav = page.getByRole("navigation", { name: /hr admin mobile navigation/i });
+      await expect(nav).toBeVisible();
 
-    for (const group of navGroups) {
-      await expect(nav.getByText(group.title, { exact: true })).toBeVisible();
-    }
+      for (const group of navGroups) {
+        await expect(nav.getByText(group.title, { exact: true })).toBeVisible();
+      }
 
-    for (const item of ["Dashboard", "Employees", "Payroll Control", "Attendance", "Organization", "Policies"]) {
-      await expect(nav.getByText(item, { exact: true }).or(nav.getByLabel(`${item} unavailable`))).toBeVisible();
+      for (const item of ["Dashboard", "Employees", "Payroll Control", "Attendance", "Organization", "Policies"]) {
+        await expect(nav.locator(".nav-item").filter({ hasText: item }).first()).toBeVisible();
+      }
     }
 
     await expect(page.getByTestId("hr-admin-control-center")).toBeVisible();

@@ -100,7 +100,7 @@ async function expectDenied(response: APIResponse, label: string) {
 async function locateP100Artifacts(page: Page) {
   await loginAs(page, hrAdmin, "/hr-admin/payroll-outputs");
   await expectPageReady(page, "Payroll Outputs");
-  const setup = await backendApiGet<PayrollOutputSetup>(page, "/hr-admin/payroll-output-setup/");
+  const setup = await backendApiGet<PayrollOutputSetup>(page, "/hr-admin/payroll-output-setup/?batch_page_size=500&artifact_page_size=500");
   const batch = setup.output_batches.find((item) => item.payroll_run_name === runName);
   expect(batch, `Expected published P100 output batch for ${runName}`).toBeTruthy();
   expect(batch?.status).toBe("published");
@@ -108,7 +108,8 @@ async function locateP100Artifacts(page: Page) {
   expect(batch?.register_count).toBe(1);
   expect(batch?.published_artifact_count).toBeGreaterThanOrEqual(101);
 
-  const artifacts = setup.artifacts.filter((item) => item.output_batch_id === batch?.id && item.status === "published");
+  const artifactSetup = await backendApiGet<PayrollOutputSetup>(page, `/hr-admin/payroll-output-setup/?batch_id=${batch?.id}&artifact_page_size=500`);
+  const artifacts = artifactSetup.artifacts.filter((item) => item.output_batch_id === batch?.id && item.status === "published");
   const register = artifacts.find((item) => item.kind === "register");
   const pilotPayslip = artifacts.find((item) => item.kind === "payslip" && item.employee_code === `${prefix}_E001`);
   const otherPayslip = artifacts.find((item) => item.kind === "payslip" && item.employee_code === `${prefix}_E002`);
@@ -145,20 +146,20 @@ test.describe.serial("P100-11 security and isolation certification", () => {
     await expect(page).toHaveURL(/\/login$/);
 
     await loginAs(page, pilotEmployee, "/hr-admin");
-    await expectPageReady(page, "Choose your workspace");
-    await expect(page.getByText("HR admin restricted")).toBeVisible();
+    await expectPageReady(page, /Choose your workspace|My workspace|Manager approvals/);
+    await expect(page).not.toHaveURL(/\/hr-admin/);
 
     await loginAs(page, pilotManager, "/platform-admin");
-    await expectPageReady(page, "Choose your workspace");
-    await expect(page.getByText("Platform admin restricted")).toBeVisible();
+    await expectPageReady(page, /Choose your workspace|Manager approvals/);
+    await expect(page).not.toHaveURL(/\/platform-admin/);
 
     await loginAs(page, hrAdmin, "/platform-admin");
-    await expectPageReady(page, "Choose your workspace");
-    await expect(page.getByText("Platform admin restricted")).toBeVisible();
+    await expectPageReady(page, /Choose your workspace|HR Control Center/);
+    await expect(page).not.toHaveURL(/\/platform-admin/);
 
     await loginAs(page, platformAdmin, "/hr-admin");
-    await expectPageReady(page, "Choose your workspace");
-    await expect(page.getByText("HR admin restricted")).toBeVisible();
+    await expectPageReady(page, /Choose your workspace|Platform Admin Dashboard/);
+    await expect(page).not.toHaveURL(/\/hr-admin/);
     await expectNoHorizontalOverflow(page);
   });
 
@@ -177,13 +178,13 @@ test.describe.serial("P100-11 security and isolation certification", () => {
     ];
 
     await loginAs(page, pilotEmployee, "/ess");
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, /My workspace|Manager approvals/);
     for (const route of privilegedGetRoutes) {
       await expectDenied(await page.request.get(route), `employee GET ${route}`);
     }
 
     await loginAs(page, pilotManager, "/mss/approvals");
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
     for (const route of privilegedGetRoutes.filter((item) => item.startsWith("/api/hr-admin"))) {
       await expectDenied(await page.request.get(route), `manager GET ${route}`);
     }

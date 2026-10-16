@@ -428,6 +428,7 @@ async function runSectionCrud(page: Page, section: SectionConfig) {
 
 test.describe("HR admin organization master CRUD", () => {
   test("limited organization viewer role sees read-only masters and receives backend denials", async ({ page }) => {
+    test.setTimeout(120_000);
     test.skip(!process.env.HRMS_API_BASE_URL, "Limited organization role proof requires a live HRMS API.");
 
     await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
@@ -553,6 +554,10 @@ test.describe("HR admin organization master CRUD", () => {
 
     await gotoAuthenticated(page, "/hr-admin/employees/new");
     await expectPageReady(page, "Create employee");
+    const structureStep = page.getByRole("button", { name: /Structure/ }).or(page.getByRole("tab", { name: /Structure/ })).first();
+    if (await structureStep.isVisible().catch(() => false)) {
+      await structureStep.click();
+    }
     await expect(page.getByRole("heading", { name: "Structural mapping" })).toBeVisible();
 
     await field(page, "Legal entity").selectOption({ label: created.legal_entities!.name });

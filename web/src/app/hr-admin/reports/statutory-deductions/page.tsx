@@ -12,7 +12,7 @@ export default async function StatutoryDeductionsReportPage() {
 
   const [statutoryResult, handoffResult] = await Promise.all([
     getHrAdminPayrollStatutorySetup(),
-    getHrAdminPayrollFinanceHandoffSetup(),
+    getHrAdminPayrollFinanceHandoffSetup({ include_artifact_detail: true }),
   ]);
 
   return (

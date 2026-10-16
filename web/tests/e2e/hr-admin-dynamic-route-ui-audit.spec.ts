@@ -49,7 +49,7 @@ function normalizeHrAdminHref(rawHref: string) {
   if (url.pathname === "/hr-admin") {
     return null;
   }
-  if (staticRouteSet.has(url.pathname)) {
+  if (staticRouteSet.has(url.pathname) && !url.search) {
     return null;
   }
   return `${url.pathname}${url.search}`;
@@ -62,7 +62,17 @@ function dynamicSignature(href: string) {
 
 async function collectDynamicHrAdminLinks(page: Page, sourceRoute: string, candidates: Map<string, DynamicCandidate>) {
   await gotoDemoHrAdmin(page, sourceRoute);
-  const hrefs = await page.locator("a[href]").evaluateAll((links) => links.map((link) => (link as HTMLAnchorElement).href));
+  const collectHrefs = () => page.locator("a[href]").evaluateAll((links) => links.map((link) => (link as HTMLAnchorElement).href));
+  let hrefs = await collectHrefs();
+
+  if (!hrefs.some((href) => normalizeHrAdminHref(href))) {
+    const inspect = page.getByRole("button", { name: "Inspect", exact: true }).first();
+    if (await inspect.isVisible().catch(() => false)) {
+      await inspect.click();
+      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+      hrefs = [...hrefs, ...(await collectHrefs())];
+    }
+  }
 
   for (const rawHref of hrefs) {
     const href = normalizeHrAdminHref(rawHref);
@@ -90,14 +100,14 @@ test.describe("HR Admin dynamic route UI audit", () => {
 
       const candidates = new Map<string, DynamicCandidate>();
       for (const route of sourceRoutes) {
-        await collectDynamicHrAdminLinks(page, route, candidates);
+        await test.step(`discover ${route}`, async () => collectDynamicHrAdminLinks(page, route, candidates));
       }
 
       const dynamicRoutes = [...candidates.values()].sort((first, second) => first.href.localeCompare(second.href));
       expect(dynamicRoutes.length, `Record-list routes ${sourceRoutes.join(", ")} should expose edit/review/detail routes`).toBeGreaterThan(0);
 
       for (const candidate of dynamicRoutes) {
-        await auditHrAdminRoute(page, candidate.href);
+        await test.step(`audit ${candidate.href}`, async () => auditHrAdminRoute(page, candidate.href));
       }
     });
   }

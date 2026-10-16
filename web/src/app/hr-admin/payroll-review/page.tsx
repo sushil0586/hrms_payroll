@@ -528,6 +528,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                 {
                   id: "generate-outputs",
                   label: "Generate outputs",
+                  background: true,
                   endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/generate-outputs` : "",
                   profileField: "output_profile_ref",
                   profileLabel: "Output profile ref",

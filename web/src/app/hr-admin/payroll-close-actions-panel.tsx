@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type PayrollAction = {
@@ -16,10 +16,22 @@ type PayrollAction = {
   defaultComment?: string;
   disabled?: boolean;
   disabledReason?: string;
+  background?: boolean;
 };
 
 type ActionResult = {
   detail?: string;
+  job?: PayrollJob;
+};
+
+type PayrollJob = {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  stage: string;
+  total_items: number;
+  completed_items: number;
+  retryable: boolean;
+  error?: { code: string; message: string } | null;
 };
 
 type Props = {
@@ -43,8 +55,79 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
   const [comments, setComments] = useState<Record<string, string>>(initialComments);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<Record<string, PayrollJob>>({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let disposed = false;
+    const restored: Record<string, PayrollJob> = {};
+    for (const action of actions.filter((item) => item.background)) {
+      const raw = window.localStorage.getItem(`payroll-job:${action.endpoint}`);
+      if (!raw) continue;
+      try {
+        restored[action.id] = JSON.parse(raw) as PayrollJob;
+      } catch {
+        window.localStorage.removeItem(`payroll-job:${action.endpoint}`);
+      }
+    }
+    if (Object.keys(restored).length) {
+      queueMicrotask(() => {
+        if (!disposed) setJobs(restored);
+      });
+    }
+    return () => {
+      disposed = true;
+    };
+  }, [actions]);
+
+  useEffect(() => {
+    const active = actions.filter((action) => ["queued", "running"].includes(jobs[action.id]?.status ?? ""));
+    if (!active.length) return;
+    let disposed = false;
+    const poll = async () => {
+      await Promise.all(active.map(async (action) => {
+        const current = jobs[action.id];
+        if (!current) return;
+        const response = await fetch(`/api/hr-admin/payroll-jobs/${current.id}`, { cache: "no-store" }).catch(() => null);
+        if (!response?.ok) return;
+        const payload = await response.json() as { job?: PayrollJob };
+        if (!payload.job || disposed) return;
+        window.localStorage.setItem(`payroll-job:${action.endpoint}`, JSON.stringify(payload.job));
+        setJobs((value) => ({ ...value, [action.id]: payload.job! }));
+        if (payload.job.status === "succeeded") {
+          setError("");
+          setMessage(`${action.label} completed.`);
+          router.refresh();
+        } else if (payload.job.status === "failed") {
+          setMessage("");
+          setError(payload.job.error?.message || `${action.label} failed.`);
+        }
+      }));
+    };
+    const timer = window.setInterval(() => void poll(), 1500);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [actions, jobs, router]);
+
+  async function retryJob(action: PayrollAction, job: PayrollJob) {
+    setBusyAction(action.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/hr-admin/payroll-jobs/${job.id}/retry`, { method: "POST" });
+      const payload = await response.json().catch(() => ({})) as ActionResult;
+      if (!response.ok || !payload.job) throw new Error(payload.detail || "Payroll retry could not be queued.");
+      window.localStorage.setItem(`payroll-job:${action.endpoint}`, JSON.stringify(payload.job));
+      setJobs((value) => ({ ...value, [action.id]: payload.job! }));
+      setMessage(payload.detail || "Payroll retry queued.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Payroll retry could not be queued.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
 
   async function runAction(action: PayrollAction) {
     if (action.disabled || !action.endpoint) {
@@ -70,6 +153,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
     setFieldErrors({});
     setBusyAction(action.id);
     const body = {
+      ...(action.background ? { execution_mode: "async" } : {}),
       ...(action.profileField && profileRefs[action.id] ? { [action.profileField]: profileRefs[action.id] } : {}),
       ...(action.commentField && comments[action.id] ? { [action.commentField]: comments[action.id] } : {}),
     };
@@ -84,8 +168,12 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
       if (!response.ok) {
         throw new Error(payload.detail || "Payroll action failed.");
       }
+      if (action.background && payload.job) {
+        window.localStorage.setItem(`payroll-job:${action.endpoint}`, JSON.stringify(payload.job));
+        setJobs((value) => ({ ...value, [action.id]: payload.job! }));
+      }
       setMessage(payload.detail || `${action.label} completed.`);
-      router.refresh();
+      if (!payload.job || payload.job.status === "succeeded") router.refresh();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Payroll action failed.");
     } finally {
@@ -106,7 +194,9 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
 
       <div className="payroll-close-actions-grid">
         {actions.map((action) => {
-          const isDisabled = Boolean(action.disabled || busyAction);
+          const job = jobs[action.id];
+          const isJobActive = job?.status === "queued" || job?.status === "running";
+          const isDisabled = Boolean(action.disabled || busyAction || isJobActive);
           return (
             <article className={`payroll-close-action-card ${action.disabled ? "payroll-close-action-card--disabled" : ""}`} key={action.id}>
               <div className="payroll-close-action-card__header">
@@ -155,8 +245,20 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                 onClick={() => runAction(action)}
                 type="button"
               >
-                {busyAction === action.id ? "Working..." : action.label}
+                {busyAction === action.id || isJobActive ? "Working..." : action.label}
               </button>
+              {job ? (
+                <div className="form-status" role={job.status === "failed" ? "alert" : "status"} aria-live="polite">
+                  <strong>{job.status === "queued" ? "Queued" : job.status === "running" ? "Processing" : job.status === "succeeded" ? "Completed" : "Failed"}</strong>
+                  <span>{job.stage.replaceAll("_", " ")}</span>
+                  {job.total_items > 0 ? <span>{job.completed_items} of {job.total_items} items completed</span> : null}
+                  {job.status === "failed" && job.retryable ? (
+                    <button className="button button--secondary" disabled={Boolean(busyAction)} onClick={() => retryJob(action, job)} type="button">
+                      Retry
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               {action.disabled && action.disabledReason ? <span className="muted">{action.disabledReason}</span> : null}
             </article>
           );

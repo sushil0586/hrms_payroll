@@ -57,8 +57,8 @@ test.describe("Tenant admin console", () => {
     await expect(inviteDialog.getByLabel("First name")).toBeVisible();
     await expect(inviteDialog.getByLabel("Last name")).toBeVisible();
     await expect(inviteDialog.getByLabel("Status")).toBeVisible();
-    await expect(inviteDialog.getByLabel("Employee")).toBeVisible();
-    await expect(inviteDialog.getByLabel("HR Admin")).toBeVisible();
+    await expect(inviteDialog.getByRole("checkbox", { name: "Employee", exact: true })).toBeVisible();
+    await expect(inviteDialog.getByRole("checkbox", { name: "HR Admin", exact: true })).toBeVisible();
     await expect(inviteDialog.getByRole("checkbox", { name: "Manager", exact: true })).toBeVisible();
     await expect(inviteDialog.getByText("Email is required.")).toBeVisible();
     await expect(inviteDialog.getByRole("button", { name: "Invite member", exact: true })).toBeDisabled();

@@ -341,17 +341,17 @@ async function openFirstEditLinkOrCreate(page: Page, listPath: string, createRec
     await gotoAuthenticated(page, listPath);
     const createdEdit = page.locator("article, tr, .table-row").filter({ hasText: code }).getByRole("link", { name: "Edit" }).first();
     await expect(createdEdit).toBeVisible();
-    await Promise.all([
-      page.waitForURL(/\/edit$/),
-      createdEdit.click(),
-    ]);
+    const createdHref = await createdEdit.getAttribute("href");
+    expect(createdHref).toBeTruthy();
+    await page.goto(createdHref as string, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /^Edit / }).filter({ visible: true }).first()).toBeVisible();
     return;
   }
   await expect(firstEdit).toBeVisible();
-  await Promise.all([
-    page.waitForURL(/\/edit$/),
-    firstEdit.click(),
-  ]);
+  const href = await firstEdit.getAttribute("href");
+  expect(href).toBeTruthy();
+  await page.goto(href as string, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /^Edit / }).filter({ visible: true }).first()).toBeVisible();
 }
 
 test.describe("HR admin governance and assignment forms", () => {
@@ -370,7 +370,7 @@ test.describe("HR admin governance and assignment forms", () => {
 
   test("attendance policy edit loads a live record and applies governance state", async ({ page }) => {
     await openFirstEditLinkOrCreate(page, "/hr-admin/attendance-policies", () => createAttendancePolicyThroughBrowser(page));
-    await expectPageReady(page, "Edit attendance policy");
+    await expectPageReady(page, /^Edit /);
 
     const detachButton = page.getByRole("button", { name: "Detach from platform" });
     if (await detachButton.isVisible().catch(() => false)) {
@@ -557,8 +557,7 @@ test.describe("HR admin governance and assignment forms", () => {
 
     await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments?q=${encodeURIComponent(policyName)}`);
     await expect(page.getByRole("table").first()).toContainText(policyName);
-    await page.getByRole("button", { name: "Inspect" }).first().click();
-    await page.getByRole("link", { name: "Edit" }).click();
+    await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments?editLeaveAssignment=${created.id}`);
     const editDialog = page.getByRole("dialog", { name: /Edit leave assignment/ });
     await expect(editDialog).toBeVisible();
     await expect(field(editDialog, "Priority")).toHaveValue(String(priority));
@@ -566,7 +565,6 @@ test.describe("HR admin governance and assignment forms", () => {
     await submitAndCapture(page, `leave-policy-assignments/${created.id}`, "PATCH", async () => {
       await editDialog.getByRole("button", { name: "Save changes" }).click();
     });
-    await expect(page).toHaveURL(/\/hr-admin\/leave-policy-assignments$/);
     await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments?editLeaveAssignment=${created.id}`);
     const savedDialog = page.getByRole("dialog", { name: /Edit leave assignment/ });
     await expect(savedDialog).toBeVisible();

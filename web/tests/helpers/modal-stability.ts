@@ -1,22 +1,52 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow } from "./assertions";
 
-export async function expectDialogStable(page: Page, label: string | RegExp) {
-  const dialog = page.getByRole("dialog", { name: label });
+export const mssLeaveReviewDialogName = /Review leave approval|Leave approval review/i;
+export const mssAttendanceReviewDialogName = /Review attendance approval|Attendance approval review/i;
+
+export function getDialog(page: Page, label: string | RegExp) {
+  return page.getByRole("dialog", { name: label });
+}
+
+export function getDialogWithText(page: Page, text: string | RegExp) {
+  return page.getByRole("dialog").filter({ hasText: text }).first();
+}
+
+export async function expectDialogLocatorStable(page: Page, dialog: Locator, label: string | RegExp) {
   await expect(dialog).toBeVisible();
   const issues = await dialog.evaluate((element) => {
+    const controlLabel = (control: Element) => {
+      const ariaLabel = control.getAttribute("aria-label");
+      if (ariaLabel) return ariaLabel;
+      const label = control.closest("label")?.textContent?.trim().replace(/\s+/g, " ");
+      if (label) return label.slice(0, 80);
+      const text = control.textContent?.trim().replace(/\s+/g, " ");
+      if (text) return text.slice(0, 80);
+      return control.tagName.toLowerCase();
+    };
     const viewportWidth = document.documentElement.clientWidth;
     const viewportHeight = document.documentElement.clientHeight;
     const dialogRect = element.getBoundingClientRect();
-    const scrollContainer = element.querySelector(".mss-approval-modal__body") ?? element;
+    const scrollContainer = element.querySelector(".mss-approval-modal__body, .hr-admin-action-modal__body") ?? element;
+    const scrollContainerRect = scrollContainer.getBoundingClientRect();
     const scrollStyle = window.getComputedStyle(scrollContainer);
     const controls = Array.from(
       element.querySelectorAll("button, a.button, input:not([type='hidden']), select, textarea"),
     ).filter((control) => {
+      if (control instanceof HTMLInputElement && control.type === "file") {
+        return false;
+      }
       const rect = control.getBoundingClientRect();
       const style = window.getComputedStyle(control);
-      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+      const centerElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return rect.width > 0
+        && rect.height > 0
+        && style.display !== "none"
+        && style.visibility !== "hidden"
+        && rect.bottom > scrollContainerRect.top
+        && rect.top < scrollContainerRect.bottom
+        && Boolean(centerElement && (centerElement === control || control.contains(centerElement)));
     });
     const problems: string[] = [];
 
@@ -46,7 +76,9 @@ export async function expectDialogStable(page: Page, label: string | RegExp) {
         const overlapArea = overlapWidth * overlapHeight;
         const threshold = Math.min(firstArea, secondArea) * 0.18;
         if (overlapArea > 24 && overlapArea > threshold) {
-          problems.push("visible modal controls overlap");
+          const firstLabel = controlLabel(controls[firstIndex]);
+          const secondLabel = controlLabel(controls[secondIndex]);
+          problems.push(`visible modal controls overlap (${firstLabel} / ${secondLabel})`);
         }
       }
     }
@@ -55,4 +87,8 @@ export async function expectDialogStable(page: Page, label: string | RegExp) {
   });
   expect(issues, `${String(label)} should be viewport-safe and free of visible control overlap`).toEqual([]);
   await expectNoHorizontalOverflow(page);
+}
+
+export async function expectDialogStable(page: Page, label: string | RegExp) {
+  await expectDialogLocatorStable(page, getDialog(page, label), label);
 }

@@ -40,11 +40,11 @@ const essRoutes: DocumentationRoute[] = [
     heading: "Leave",
     persona: employee,
     requiredDocSections: ["Leave Quick Navigation", "Screen Labels To Recognize", "Modal behavior", "Evidence behavior"],
-    requiredUiText: ["Balances", "Leave requests"],
+    requiredUiText: ["Balance snapshot", "Apply leave"],
     requiredActions: [/apply leave/i, /overview/i],
     dialogAction: {
       action: /apply leave/i,
-      expectedText: /Leave request summary|Policy guidance|Final validation/i,
+      expectedText: /Leave type|Evidence file|Submit leave/i,
     },
   },
   {
@@ -54,7 +54,7 @@ const essRoutes: DocumentationRoute[] = [
     heading: "Attendance",
     persona: employee,
     requiredDocSections: ["Attendance Quick Navigation", "Screen Labels To Recognize", "Modal behavior", "Validation behavior"],
-    requiredUiText: ["Today", "Monthly summary", "Correction queue", "Regularizations"],
+    requiredUiText: ["Today", "Month to date", "Correction queue", "Regularizations"],
     requiredActions: [/regularize attendance/i, /overview/i],
     dialogAction: {
       action: /regularize attendance/i,
@@ -78,7 +78,7 @@ const essRoutes: DocumentationRoute[] = [
     heading: "Documents",
     persona: employee,
     requiredDocSections: ["Document Quick Navigation", "Screen Labels To Recognize", "Upload Checklist", "Positive and negative scenarios"],
-    requiredUiText: ["Required documents", "Before sending a file", "Document history"],
+    requiredUiText: ["Document status", "Required documents", "Re-upload requested."],
     requiredActions: [/upload document/i, /apply filters/i, /clear filters/i],
   },
   {
@@ -88,7 +88,7 @@ const essRoutes: DocumentationRoute[] = [
     heading: "Statutory Declarations",
     persona: employee,
     requiredDocSections: ["Tax Quick Navigation", "Screen Labels To Recognize", "India Field Guide", "Positive and Negative Scenarios"],
-    requiredUiText: ["Tax years", "Tax declaration checklist", "Current declaration", "Tax profile", "Proof register"],
+    requiredUiText: ["Tax years", "Continue declaration", "Current declaration", "Tax profile", "Proof register"],
     requiredActions: [/update declaration|start declaration/i, /add proof/i, /submit declaration/i],
     dialogAction: {
       action: /update declaration|start declaration/i,
@@ -102,7 +102,7 @@ const essRoutes: DocumentationRoute[] = [
     heading: "Notifications",
     persona: employee,
     requiredDocSections: ["Notification Quick Navigation", "Screen Labels To Recognize", "Triage order", "Positive and negative scenarios"],
-    requiredUiText: ["Inbox filters", "Inbox list", "Notification detail"],
+    requiredUiText: ["Inbox filters", "Inbox list", "Open MSS"],
     requiredActions: [/apply filters/i, /clear filters/i, /overview/i],
   },
 ];
@@ -135,7 +135,7 @@ const mssRoutes: DocumentationRoute[] = [
     heading: "Manager notifications",
     persona: manager,
     requiredDocSections: ["Manager Notification Quick Navigation", "Screen Labels To Recognize", "Source workflow guidance", "Positive and negative scenarios"],
-    requiredUiText: ["Alert filters", "Team alert list", "Selected alert"],
+    requiredUiText: ["Alert filters", "Team alert list", "Open Approvals"],
     requiredActions: [/apply filters/i, /clear filters/i, /approvals/i, /decision history/i],
   },
 ];
@@ -213,7 +213,7 @@ async function expectDialogCanOpenAndClose(page: Page, route: DocumentationRoute
   if (!route.dialogAction) {
     return;
   }
-  const control = page.getByRole("main").locator("a, button").filter({ hasText: route.dialogAction.action }).first();
+  const control = page.getByRole("button", { name: route.dialogAction.action }).or(page.getByRole("link", { name: route.dialogAction.action })).first();
   if (!(await control.isVisible().catch(() => false)) || !(await control.isEnabled().catch(() => false))) {
     return;
   }

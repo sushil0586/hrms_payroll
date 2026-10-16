@@ -202,8 +202,12 @@ test.describe("Tenant Admin documentation sync certification", () => {
     test.setTimeout(300_000);
     await page.setViewportSize({ width: 1440, height: 960 });
 
-    for (const route of routes) {
-      await gotoAuthenticated(page, route.route, tenantAdmin);
+    for (const [index, route] of routes.entries()) {
+      if (index === 0) {
+        await gotoAuthenticated(page, route.route, tenantAdmin);
+      } else {
+        await page.goto(route.route, { waitUntil: "domcontentloaded" });
+      }
       await suppressBrowserTestNoise(page);
       await expect(page.getByRole("main"), `${route.route} should expose a main landmark`).toBeVisible();
       await expect(page.getByRole("heading", { level: 1, name: route.heading }), `${route.route} should expose documented heading`).toBeVisible();

@@ -4,7 +4,16 @@ import { dirname } from "node:path";
 import { expect, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
+import { gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
+let hrAdmin: Persona;
 
 type PayrollOutputSetup = {
   artifacts: Array<{
@@ -16,13 +25,6 @@ type PayrollOutputSetup = {
     supports_signed_url: boolean;
   }>;
 };
-type PayrollInputSetup = {
-  options: {
-    periods: Array<{ id: string }>;
-    employees: Array<{ id: string; employee_code: string; name: string }>;
-  };
-};
-
 async function captureGrantStep(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`phase6c-signed-artifact-grants/${name}.png`);
   await mkdir(dirname(path), { recursive: true });
@@ -56,19 +58,18 @@ async function getJson<T>(page: Page, path: string) {
 
 async function postJson<T>(page: Page, path: string, data: Record<string, unknown>) {
   const response = await page.request.post(path, { data });
-  expect(response.ok()).toBeTruthy();
-  return (await response.json()) as T;
+  const payload = await response.json().catch(() => ({}));
+  expect(response.ok(), `POST ${path} failed with ${response.status()}: ${JSON.stringify(payload)}`).toBeTruthy();
+  return payload as T;
 }
 
 async function createDisposableSignedArtifact(page: Page) {
-  const setup = await getJson<PayrollInputSetup>(page, "/hr-admin/payroll-input-snapshot-setup/");
-  const period = setup.options.periods[0];
-  const employee = setup.options.employees.find((item) => item.employee_code === "EMP-0042") ?? setup.options.employees[0];
-  expect(period).toBeTruthy();
-  expect(employee).toBeTruthy();
+  const periodId = workspace.manifest.payroll.period_id;
+  const employeeId = workspace.manifest.credentials.employee.employee_id;
   const runRef = Date.now();
   const run = await postJson<{ id: string }>(page, "/api/hr-admin/payroll-runs", {
-    period_id: period.id,
+    period_id: periodId,
+    pay_group_id: workspace.manifest.payroll.pay_group_id,
     code: `PW_SIGNED_${runRef}`,
     name: `Browser signed grant ${runRef}`,
     status: "collecting_inputs",
@@ -88,7 +89,8 @@ async function createDisposableSignedArtifact(page: Page) {
   });
   await postJson<{ id: string }>(page, "/api/hr-admin/payroll-input-snapshots", {
     payroll_run_id: run.id,
-    employee_id: employee.id,
+    employee_id: employeeId,
+    salary_assignment_id: workspace.manifest.payroll.salary_assignment_id,
     snapshot_status: "ready",
     input_profile_ref: "tenant.payroll.input.phase6c.v1",
     config_profile_ref: "tenant.payroll.snapshot.phase6c.v1",
@@ -129,8 +131,18 @@ async function selectedSignedArtifact(page: Page) {
 }
 
 test.describe("Phase 6C signed payroll artifact grant certification", () => {
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+    hrAdmin = workspacePersona(workspace, "hr_admin");
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test("issues, uses, revokes, and blocks a signed HR artifact grant with visible access governance", async ({ page }, testInfo) => {
     await gotoAuthenticated(page, "/hr-admin/payroll-outputs", hrAdmin);
+    await expectPageReady(page, "Payroll Outputs");
+    const artifact = await selectedSignedArtifact(page);
+    await page.goto(`/hr-admin/payroll-outputs?artifactId=${artifact.id}`);
     await expectPageReady(page, "Payroll Outputs");
     await expect(page.getByText("Storage governance").first()).toBeVisible();
     await expect(page.getByText("Access governance").first()).toBeVisible();
@@ -148,7 +160,6 @@ test.describe("Phase 6C signed payroll artifact grant certification", () => {
       await expect(page.getByText(text).first()).toBeVisible();
     }
 
-    const artifact = await selectedSignedArtifact(page);
     const issueResponse = await page.request.post(`/api/hr-admin/payroll-output-artifacts/${artifact.id}/signed-access`, {
       data: {
         expires_in_seconds: 60,

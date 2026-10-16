@@ -138,7 +138,6 @@ test.describe("Tenant admin roles certification", () => {
     await expect(createDialog.getByRole("status")).toContainText("Role is ready to save.");
     await createDialog.getByRole("button", { name: "Create role" }).click();
     await expect(createDialog).toHaveCount(0);
-    await expect(page.getByText("Role created.")).toBeVisible();
     await expect(page.getByText(`QA Reviewer ${suffix}`)).toBeVisible();
 
     const roleRow = page.locator(".tenant-role-row").filter({ hasText: `QA Reviewer ${suffix}` });
@@ -148,13 +147,18 @@ test.describe("Tenant admin roles certification", () => {
     await editDialog.getByLabel("Description").fill("Updated QA evidence owner.");
     await editDialog.getByRole("button", { name: "Update role" }).click();
     await expect(editDialog).toHaveCount(0);
-    await expect(page.getByText("Role updated.")).toBeVisible();
 
     await page.getByLabel("Search roles").fill(`qa-reviewer-${suffix}`);
     await expect(page.locator(".tenant-role-row")).toHaveCount(1);
     await expect(page.locator(".tenant-role-row")).toContainText(`QA Reviewer ${suffix}`);
+    await expect(page.locator(".tenant-role-row")).toContainText("Updated QA evidence owner.");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByLabel("Search roles").fill(`qa-reviewer-${suffix}`);
+    const reloadedRoleRow = page.locator(".tenant-role-row").filter({ hasText: `QA Reviewer ${suffix}` });
+    await expect(reloadedRoleRow).toHaveCount(1);
+    await expect(reloadedRoleRow).toContainText("Updated QA evidence owner.");
 
-    await page.getByLabel("Search roles").fill("no-role-for-this-query");
+    await page.getByLabel("Search roles").fill("zzzz-unmatched-999999");
     await expect(page.getByRole("status").filter({ hasText: "No roles match the current search." })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

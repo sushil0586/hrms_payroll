@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import {
   employee,
   gotoAuthenticated,
@@ -102,7 +102,7 @@ test.describe("Employee self service control center certification", () => {
     await gotoAuthenticated(page, "/ess/statutory-declarations", employee);
     await expect(page).toHaveURL(/\/ess\/statutory-declarations/);
     await expectPageReady(page, "Statutory Declarations");
-    await expect(page.getByRole("heading", { name: /Continue declaration|Start declaration|Update declaration/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Review submitted declaration|Continue declaration|Start declaration|Update declaration/ })).toBeVisible();
 
     await gotoAuthenticated(page, "/ess", employee);
     await expect(page.getByRole("link", { name: "Notifications" }).first()).toHaveAttribute("href", /\/ess\/notifications/);
@@ -145,8 +145,9 @@ test.describe("Employee self service control center certification", () => {
     await gotoAuthenticated(page, "/ess/documents", employee);
     await expectPageReady(page, "Documents");
 
-    for (const metric of ["Required documents", "Missing now", "Expiring soon", "Expired"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+    const main = page.getByRole("main");
+    for (const metric of ["required", "missing", "expiring soon", "expired"]) {
+      await expectCompactMetric(main, metric);
     }
 
     await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
@@ -162,7 +163,7 @@ test.describe("Employee self service control center certification", () => {
       for (const label of ["Category", "Title", "Document number", "Issued on", "Expires on", "File"]) {
         await expect(uploadDialog.getByLabel(label).first(), `${label} should be available in the upload dialog`).toBeVisible();
       }
-      await uploadDialog.getByRole("button", { name: "Close" }).click();
+      await uploadDialog.getByRole("button", { name: /Close Upload document|Close Replace document|Close/ }).click();
     } else {
       await expect(uploadButton).toBeDisabled();
     }
@@ -186,11 +187,12 @@ test.describe("Employee self service control center certification", () => {
     await gotoAuthenticated(page, "/ess/notifications", employee);
     await expectPageReady(page, "Notifications");
 
-    for (const metric of ["Notifications", "Unread on page", "High priority", "Failed on page"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
-    }
-
     const main = page.getByRole("main");
+    const metrics = page.getByRole("region", { name: "Notification metrics" });
+    await expect(metrics).toBeVisible();
+    for (const metric of ["notifications", "unread on page", "high priority", "failed on page"]) {
+      await expectCompactMetric(metrics, metric);
+    }
     const filterSearch = main.getByRole("textbox", { name: "Search" });
     await expect(page.getByRole("heading", { name: "Inbox filters" })).toBeVisible();
     await expect(filterSearch).toBeVisible();

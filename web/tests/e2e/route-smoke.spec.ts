@@ -14,17 +14,12 @@ test.describe("tier 0 workspace routes", () => {
       }
       await expectPageReady(page, route.heading);
       if (route.path === "/hr-admin") {
-        await expect(page.getByRole("heading", { name: "hrms.saas_launch_audit.v1" })).toBeVisible();
-        await expect(page.getByText("SaaS launch audit")).toBeVisible();
-        await expect(page.getByText("open assignments")).toBeVisible();
-        await expect(page.getByRole("link", { name: "View assignments" })).toBeVisible();
-        await expect(page.getByRole("link", { name: "Download audit" })).toBeVisible();
-        await expect(page.getByText("Primary bank coverage")).toBeVisible();
-        await expect(page.getByRole("link", { name: "Review employees" }).first()).toBeVisible();
-        await expect(page.getByText("Employee master - hr-admin - 3d").first()).toBeVisible();
-        await expect(page.getByText("payroll.provider_launch_readiness.audit_pack.v1")).toBeVisible();
-        await expect(page.getByRole("heading", { name: "Production-safe settings" })).toBeVisible();
-        await expect(page.getByText("Payroll live rails")).toBeVisible();
+        await expect(page.getByTestId("hr-admin-control-center")).toBeVisible();
+        await expect(page.getByTestId("hr-admin-action-queue")).toBeVisible();
+        await expect(page.getByTestId("hr-admin-operational-readiness")).toBeVisible();
+        await expect(page.getByRole("link", { name: "Payroll blockers" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Employees", exact: true })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Reports", exact: true })).toBeVisible();
       }
     });
   }

@@ -166,7 +166,7 @@ test.describe("Production launch release gate proof", () => {
       "Provider package manifests",
       "Artifact policy readiness",
       "Storage and IAM",
-      "No raw secrets",
+      /credential refs?/i,
     ]);
     await captureLaunchGateStep(page, testInfo, "10b-provider-registry-readiness");
 

@@ -84,6 +84,7 @@ async function getCommercialAwareHrAdminNavigation(
 
 export default async function HrAdminLayout({ children }: { children: React.ReactNode }) {
   const sessionUser = await requireSessionPermission({
+    workspace: "hr_admin",
     permissionKeys: [
       "employees.view",
       "employees.create",

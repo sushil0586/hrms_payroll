@@ -16,6 +16,10 @@ function codeFor(prefix: string, intent = "main") {
   return `PW_TEST_${prefix}_${intent}_${runSuffix}`.toUpperCase();
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function field(scope: Page | Locator, label: string, index = 0) {
   const labelPattern = new RegExp(`^${label}(?: \\*)?$`);
   const accessibleControl = scope.getByRole("textbox", { name: labelPattern }).or(scope.getByRole("combobox", { name: labelPattern })).or(scope.getByRole("spinbutton", { name: labelPattern }));
@@ -36,7 +40,7 @@ function toggle(page: Page, label: string) {
 }
 
 function recordCard(page: Page, text: string) {
-  return page.locator("article.record-card, table.workspace-table tbody tr").filter({ hasText: text }).first();
+  return page.locator("table.workspace-table tbody tr, .employee-directory-item, article.record-card:not(:has(table))").filter({ hasText: text }).first();
 }
 
 async function filterListToRecord(page: Page, listPath: string, code: string) {
@@ -80,7 +84,7 @@ async function selectFirstNonEmptyOption(select: Locator) {
 }
 
 async function selectRecordOption(page: Page, label: string, record: CreatedRecord) {
-  await field(page, label).selectOption({ label: record.name });
+  await field(page, label).selectOption(record.id);
   await expect(field(page, label)).toHaveValue(record.id);
 }
 
@@ -111,7 +115,7 @@ async function openEditByCode(page: Page, listPath: string, code: string, headin
   } else {
     await expect(page.getByRole("dialog", { name: /Edit / })).toBeVisible();
   }
-  const id = href!.match(/\/([^/]+)\/edit$/)?.[1] ?? href!.match(/[?&](?:editLeaveType|editLeavePolicy|editPolicy|editCalendar)=([^&]+)/)?.[1] ?? "";
+  const id = href!.match(/\/([^/]+)\/edit$/)?.[1] ?? href!.match(/[?&]edit[A-Za-z]+(?:Id)?=([^&]+)/)?.[1] ?? "";
   expect(id).not.toBe("");
   return { href: href!, id };
 }
@@ -534,10 +538,12 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await expect(recordCard(page, code)).toBeVisible();
 
     await openEditByCode(page, "/hr-admin/attendance-policies", code, "Edit attendance policy");
-    await field(page, "Name").fill(`${name} Updated`);
-    await field(page, "Late mark after minutes").fill("20");
-    await field(page, "Status").selectOption("archived");
-    await page.getByRole("button", { name: "Save changes" }).click();
+    const editDialog = page.getByRole("dialog", { name: new RegExp(`^Edit ${escapeRegExp(name)}`) });
+    await expect(editDialog).toBeVisible();
+    await field(editDialog, "Name").fill(`${name} Updated`);
+    await field(editDialog, "Late mark after minutes").fill("20");
+    await field(editDialog, "Status").selectOption("archived");
+    await editDialog.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/attendance-policies");
     await expect(recordCard(page, code)).toContainText(/Archived/i);
 
@@ -641,7 +647,8 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await toggle(page, "Allow employee upload").uncheck();
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/document-categories");
-    await expect(recordCard(page, record.code)).toContainText("HR only");
+    await expect(recordCard(page, record.code)).toContainText(/Inactive/i);
+    await expect(recordCard(page, record.code)).not.toContainText("ESS upload");
   });
 
   test("document requirement page supports granular browser CRUD and scoped requirement controls", async ({ page }) => {
@@ -659,7 +666,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await expectToggles(page, ["Mandatory", "Active"]);
 
     await page.getByRole("button", { name: "Create requirement" }).click();
-    await expect(page.getByText("Save failed.")).toBeVisible();
+    await expectDuplicateSaveFails(page);
 
     await selectRecordOption(page, "Category", category);
     await field(page, "Legal entity").selectOption({ label: requirementScope.legalName });
@@ -686,7 +693,8 @@ test.describe("HR admin policy and governance master CRUD", () => {
     const editLink = recordCard(page, category.name).getByRole("link", { name: "Edit" }).first();
     await expect(editLink).toBeVisible();
     await editLink.click();
-    await expectPageReady(page, "Edit document requirement");
+    const editDialog = page.getByRole("dialog", { name: new RegExp(`^Edit ${escapeRegExp(category.name)}`) });
+    await expect(editDialog).toBeVisible();
     await expect(field(page, "Category")).toHaveValue(category.id);
     await field(page, "Required within joining days").fill("14");
     await field(page, "Priority").fill("88");

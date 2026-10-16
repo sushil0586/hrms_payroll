@@ -26,11 +26,13 @@ FROM node:24-slim AS runtime
 ENV NODE_ENV=production
 ENV HRMS_ENVIRONMENT=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_DIST_DIR=.next/build
 WORKDIR /app
-RUN corepack enable
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/web ./web
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/web/node_modules ./web/node_modules
+RUN mkdir -p /app/.hrms-data && chown -R node:node /app/.hrms-data
+USER node
 EXPOSE 3000
-CMD ["pnpm", "--dir", "web", "start"]
+CMD ["node", "web/node_modules/next/dist/bin/next", "start", "web"]

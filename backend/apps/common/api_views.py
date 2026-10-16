@@ -331,7 +331,7 @@ from apps.common.api_serializers import (
 )
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, ScopeType, TenantMembership, User
-from apps.iam.permission_checks import get_user_tenant_permission_keys, user_has_tenant_permission
+from apps.iam.permission_checks import get_membership_permission_keys, get_user_tenant_permission_keys
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
@@ -350,6 +350,9 @@ from apps.payroll.models import (
     PayrollCalculationLineStatus,
     PayrollCalculationStatus,
     PayrollApprovalStatus,
+    PayrollBackgroundJob,
+    PayrollBackgroundJobOperation,
+    PayrollBackgroundJobStatus,
     PayrollExceptionSeverity,
     PayrollExceptionStatus,
     PayrollFinanceHandoff,
@@ -450,6 +453,7 @@ from apps.common.selectors import (
     get_hr_admin_employee_access_options,
     get_hr_admin_employee_form_options,
     get_hr_admin_employee_list,
+    get_hr_admin_employee_list_page,
     get_hr_admin_lifecycle_queue_export,
     get_hr_admin_notification_queue_export,
     get_hr_admin_organization_form_options,
@@ -515,6 +519,7 @@ from apps.attendance.models import (
 )
 from apps.tenants.models import Tenant
 from apps.attendance.services import (
+    AttendanceDerivationContext,
     build_attendance_derivation_summary,
     evaluate_attendance_runtime,
     ensure_employee_attendance_records,
@@ -527,6 +532,7 @@ from apps.attendance.services import (
     preview_employee_shift_assignment_resolution,
     preview_shift_roster_template_rollout,
     refresh_attendance_records_for_employee,
+    refresh_attendance_records_for_assignment_scopes,
     refresh_attendance_records_for_tenant,
     get_shift_roster_rollout_employee_queryset,
     resolve_employee_work_schedule,
@@ -597,6 +603,11 @@ from apps.payroll.services import (
     submit_payroll_settlement,
     transmit_payroll_finance_handoff,
     validate_payroll_artifact_signed_access_grant,
+)
+from apps.payroll.background_jobs import (
+    enqueue_payroll_background_job,
+    payroll_background_job_payload,
+    retry_payroll_background_job,
 )
 from apps.payroll.providers import (
     describe_payroll_provider_launch_rehearsal,
@@ -1349,6 +1360,7 @@ def build_hr_admin_attendance_policy_payload(item: AttendancePolicy) -> dict:
 
 def save_hr_admin_attendance_policy(actor, validated_data, *, item=None):
     tenant = actor.tenant
+    is_new_policy = item is None
     if item is None:
         item = AttendancePolicy(tenant=tenant)
     else:
@@ -1390,7 +1402,8 @@ def save_hr_admin_attendance_policy(actor, validated_data, *, item=None):
         item.config_snapshot = normalize_attendance_policy_config(validated_data.get("config_snapshot"))
 
     item.save()
-    refresh_attendance_records_for_tenant(tenant)
+    if not is_new_policy and item.assignments.exists():
+        refresh_attendance_records_for_tenant(tenant)
     return item
 
 
@@ -1535,7 +1548,7 @@ def save_hr_admin_holiday_calendar(actor, validated_data, *, item=None):
     return item
 
 
-def build_hr_admin_attendance_record_payload(item: AttendanceRecord) -> dict:
+def build_hr_admin_attendance_record_payload(item: AttendanceRecord, *, derivation_context=None) -> dict:
     return {
         "id": item.id,
         "employee_id": item.employee_id,
@@ -1559,7 +1572,7 @@ def build_hr_admin_attendance_record_payload(item: AttendanceRecord) -> dict:
         "is_regularized": item.is_regularized,
         "is_locked": item.is_locked,
         "notes": item.notes,
-        "derivation_summary": build_attendance_derivation_summary(item),
+        "derivation_summary": build_attendance_derivation_summary(item, context=derivation_context),
     }
 
 
@@ -1739,6 +1752,7 @@ def build_hr_admin_leave_policy_payload(item: LeavePolicy) -> dict:
 
 def save_hr_admin_leave_policy(actor, validated_data, *, item=None):
     tenant = actor.tenant
+    is_create = item is None
     if item is None:
         item = LeavePolicy(tenant=tenant)
     else:
@@ -1793,7 +1807,29 @@ def save_hr_admin_leave_policy(actor, validated_data, *, item=None):
         if "leave_management_leavepolicy.tenant_id" in str(exc) and "leave_management_leavepolicy.code" in str(exc):
             raise serializers.ValidationError({"code": "A leave policy with this code already exists."}) from exc
         raise
-    ensure_leave_balances_for_policy(item)
+    balance_affecting_fields = {
+        "leave_type_id",
+        "status",
+        "effective_from",
+        "effective_to",
+        "accrual_frequency",
+        "annual_entitlement",
+        "max_carry_forward",
+        "max_consecutive_days",
+        "min_days_per_request",
+        "notice_days_required",
+        "allow_half_day",
+        "allow_backdated_application",
+        "allow_weekend_holiday_overlap",
+        "sandwich_rule_enabled",
+        "is_probation_eligible",
+        "gender_restriction",
+        "marital_status_restriction",
+        "minimum_service_days",
+        "config_snapshot",
+    }
+    if is_create or balance_affecting_fields.intersection(validated_data):
+        ensure_leave_balances_for_policy(item)
     return item
 
 
@@ -1997,6 +2033,22 @@ def save_hr_admin_attendance_policy_assignment(actor, validated_data, *, item=No
     tenant = actor.tenant
     if item is None:
         item = AttendancePolicyAssignment(tenant=tenant)
+    previous_scope = None
+    previous_is_active = False
+    if not item._state.adding:
+        previous_is_active = item.is_active
+        previous_scope = {
+            field_name: getattr(item, field_name)
+            for field_name in [
+                "legal_entity_id",
+                "branch_id",
+                "location_id",
+                "department_id",
+                "grade_id",
+                "employment_type_id",
+                "employee_id",
+            ]
+        }
 
     if "attendance_policy_id" in validated_data:
         attendance_policy = AttendancePolicy.objects.filter(tenant=tenant, id=validated_data["attendance_policy_id"]).first() if validated_data["attendance_policy_id"] else None
@@ -2059,7 +2111,25 @@ def save_hr_admin_attendance_policy_assignment(actor, validated_data, *, item=No
             }
         )
     item.save()
-    refresh_attendance_records_for_tenant(tenant)
+    current_scope = {
+        field_name: getattr(item, field_name)
+        for field_name in [
+            "legal_entity_id",
+            "branch_id",
+            "location_id",
+            "department_id",
+            "grade_id",
+            "employment_type_id",
+            "employee_id",
+        ]
+    }
+    refresh_scopes = []
+    if previous_is_active and previous_scope:
+        refresh_scopes.append(previous_scope)
+    if item.is_active:
+        refresh_scopes.append(current_scope)
+    if refresh_scopes:
+        refresh_attendance_records_for_assignment_scopes(tenant, *refresh_scopes)
     return item
 
 
@@ -6465,11 +6535,24 @@ class EmployeeContextMixin:
     permission_classes = [permissions.IsAuthenticated]
     workspace_role_codes: tuple[str, ...] = ()
 
+    def get_membership(self):
+        if not hasattr(self, "_request_membership"):
+            self._request_membership = get_default_membership_for_user(self.request.user)
+        return self._request_membership
+
+    def get_tenant_permission_keys(self, tenant):
+        membership = self.get_membership()
+        if not membership or membership.tenant_id != tenant.id:
+            return set()
+        if not hasattr(self, "_request_tenant_permission_keys"):
+            self._request_tenant_permission_keys = get_membership_permission_keys(membership)
+        return self._request_tenant_permission_keys
+
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if not self.workspace_role_codes:
             return
-        membership = get_default_membership_for_user(request.user)
+        membership = self.get_membership()
         if not membership:
             raise exceptions.PermissionDenied("No active tenant membership found.")
         allowed = membership.membership_roles.filter(
@@ -6480,18 +6563,21 @@ class EmployeeContextMixin:
             raise exceptions.PermissionDenied("You do not have access to this workspace.")
 
     def get_employee(self):
-        employee = get_employee_for_user(self.request.user)
+        if hasattr(self, "_request_employee"):
+            return self._request_employee
+        employee = get_employee_for_user(self.request.user, membership=self.get_membership())
         if not employee:
             return None
-        return employee
+        self._request_employee = employee
+        return self._request_employee
 
     def require_tenant_permission(self, tenant, permission_key: str):
-        if not user_has_tenant_permission(self.request.user, tenant, permission_key):
+        if permission_key not in self.get_tenant_permission_keys(tenant):
             raise exceptions.PermissionDenied(f"Missing tenant permission: {permission_key}.")
 
     def require_any_tenant_permission(self, tenant, primary_permission_key: str, *fallback_permission_keys: str):
         permission_keys = (primary_permission_key, *fallback_permission_keys)
-        if not any(user_has_tenant_permission(self.request.user, tenant, permission_key) for permission_key in permission_keys):
+        if not any(permission_key in self.get_tenant_permission_keys(tenant) for permission_key in permission_keys):
             raise exceptions.PermissionDenied(f"Missing tenant permission: {primary_permission_key}.")
 
     def build_profile_payload(self, employee):
@@ -6549,17 +6635,13 @@ class HrAdminContextMixin(EmployeeContextMixin):
 
     def initial(self, request, *args, **kwargs):
         APIView.initial(self, request, *args, **kwargs)
-        membership = get_default_membership_for_user(request.user)
+        membership = self.get_membership()
         if not membership:
             raise exceptions.PermissionDenied("No active tenant membership found.")
-        has_workspace_role = membership.membership_roles.filter(
-            role__code__in=self.legacy_workspace_role_codes,
-            role__is_active=True,
-        ).exists()
-        active_role_codes = set(
-            membership.membership_roles.filter(role__is_active=True).values_list("role__code", flat=True)
-        )
-        permission_keys = get_user_tenant_permission_keys(request.user, membership.tenant)
+        active_roles = [item.role for item in membership.membership_roles.all() if item.role.is_active]
+        active_role_codes = {role.code for role in active_roles}
+        has_workspace_role = bool(active_role_codes.intersection(self.legacy_workspace_role_codes))
+        permission_keys = self.get_tenant_permission_keys(membership.tenant)
         has_hr_permission = any(
             any(permission_key.startswith(prefix) for prefix in self.workspace_permission_prefixes)
             for permission_key in permission_keys
@@ -11422,7 +11504,7 @@ def build_hr_admin_payroll_validation_issue_payload(item: PayrollValidationIssue
     }
 
 
-def _payroll_setup_page_params(request, *, page_param: str, size_param: str, default_size: int = 25, max_size: int = 100) -> tuple[int, int]:
+def _payroll_setup_page_params(request, *, page_param: str, size_param: str, default_size: int = 25, max_size: int = 500) -> tuple[int, int]:
     if not request:
         return 1, default_size
     try:
@@ -11568,6 +11650,22 @@ class HrAdminPayrollCalculationSetupView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminPayrollCalculationSetupSerializer(get_hr_admin_payroll_calculation_setup_payload(employee, request)).data)
 
 
+def _payroll_action_request(request) -> tuple[dict, bool]:
+    data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data or {})
+    execution_mode = str(data.pop("execution_mode", "sync") or "sync").lower()
+    return data, execution_mode == "async"
+
+
+def _payroll_job_response(job: PayrollBackgroundJob, *, created: bool, label: str):
+    return response.Response(
+        {
+            "job": payroll_background_job_payload(job),
+            "detail": f"{label} queued." if created else f"{label} already queued or completed.",
+        },
+        status=status.HTTP_202_ACCEPTED,
+    )
+
+
 class HrAdminPayrollRunDraftCalculateView(HrAdminContextMixin, APIView):
     def post(self, request, item_id):
         employee = self.get_employee()
@@ -11577,8 +11675,19 @@ class HrAdminPayrollRunDraftCalculateView(HrAdminContextMixin, APIView):
         payroll_run = PayrollRun.objects.filter(tenant=employee.tenant, id=item_id).select_related("period__calendar", "pay_group").first()
         if not payroll_run:
             return response.Response({"detail": "Payroll run not found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = HrAdminPayrollDraftCalculateRequestSerializer(data=request.data)
+        request_data, async_requested = _payroll_action_request(request)
+        serializer = HrAdminPayrollDraftCalculateRequestSerializer(data=request_data)
         serializer.is_valid(raise_exception=True)
+        if async_requested:
+            job, created = enqueue_payroll_background_job(
+                tenant=employee.tenant,
+                operation=PayrollBackgroundJobOperation.CALCULATE,
+                target=payroll_run,
+                requested_by=request.user,
+                request_snapshot=serializer.validated_data,
+                client_key=request.headers.get("Idempotency-Key", ""),
+            )
+            return _payroll_job_response(job, created=created, label="Draft payroll calculation")
         try:
             calculation = calculate_draft_payroll_run(
                 payroll_run,
@@ -12154,8 +12263,19 @@ class HrAdminPayrollReviewGenerateOutputsView(HrAdminContextMixin, APIView):
         review = PayrollRunReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "calculation").first()
         if not review:
             return response.Response({"detail": "Payroll review not found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = HrAdminPayrollGenerateOutputsRequestSerializer(data=request.data)
+        request_data, async_requested = _payroll_action_request(request)
+        serializer = HrAdminPayrollGenerateOutputsRequestSerializer(data=request_data)
         serializer.is_valid(raise_exception=True)
+        if async_requested:
+            job, created = enqueue_payroll_background_job(
+                tenant=employee.tenant,
+                operation=PayrollBackgroundJobOperation.GENERATE_OUTPUTS,
+                target=review,
+                requested_by=request.user,
+                request_snapshot=serializer.validated_data,
+                client_key=request.headers.get("Idempotency-Key", ""),
+            )
+            return _payroll_job_response(job, created=created, label="Payroll output generation")
         try:
             batch = generate_payroll_outputs(
                 review,
@@ -12177,6 +12297,19 @@ class HrAdminPayrollOutputBatchPublishView(HrAdminContextMixin, APIView):
         batch = PayrollOutputBatch.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "review").first()
         if not batch:
             return response.Response({"detail": "Payroll output batch not found."}, status=status.HTTP_404_NOT_FOUND)
+        request_data, async_requested = _payroll_action_request(request)
+        if request_data:
+            return response.Response({"detail": "Payroll publication does not accept additional fields."}, status=status.HTTP_400_BAD_REQUEST)
+        if async_requested:
+            job, created = enqueue_payroll_background_job(
+                tenant=employee.tenant,
+                operation=PayrollBackgroundJobOperation.PUBLISH_OUTPUTS,
+                target=batch,
+                requested_by=request.user,
+                request_snapshot={},
+                client_key=request.headers.get("Idempotency-Key", ""),
+            )
+            return _payroll_job_response(job, created=created, label="Payroll output publication")
         try:
             batch = publish_payroll_output_batch(batch, published_by=request.user)
         except PayrollOutputError as exc:
@@ -12969,6 +13102,7 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor, request=None) -> d
     tenant = actor.tenant
     selected_handoff_id = (request.query_params.get("handoff_id") or "").strip() if request else ""
     include_payslip_detail = str(request.query_params.get("include_payslip_detail", "") if request else "").strip().lower() in {"1", "true", "yes"}
+    include_artifact_detail = str(request.query_params.get("include_artifact_detail", "") if request else "").strip().lower() in {"1", "true", "yes"}
     include_output_batches = str(request.query_params.get("include_output_batches", "true") if request else "true").strip().lower() not in {"0", "false", "no"}
     handoff_page, handoff_page_size = _payroll_setup_page_params(request, page_param="handoff_page", size_param="handoff_page_size")
     artifact_page, artifact_page_size = _payroll_setup_page_params(request, page_param="artifact_page", size_param="artifact_page_size", default_size=50)
@@ -13131,7 +13265,7 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor, request=None) -> d
         },
         "output_batches": [build_hr_admin_payroll_output_batch_payload(item) for item in batches[:50]] if include_output_batches else [],
         "handoffs": [build_hr_admin_payroll_finance_handoff_payload(item) for item in paged_handoffs],
-        "artifacts": [build_hr_admin_payroll_output_artifact_payload(item, include_detail=False) for item in paged_artifacts],
+        "artifacts": [build_hr_admin_payroll_output_artifact_payload(item, include_detail=include_artifact_detail) for item in paged_artifacts],
         "payslip_artifacts": [build_hr_admin_payroll_output_artifact_payload(item, include_detail=True) for item in paged_payslip_artifacts],
         "deliveries": [build_hr_admin_payroll_provider_delivery_payload(item, include_detail=False) for item in paged_deliveries],
         "callback_events": [build_hr_admin_payroll_provider_callback_event_payload(item, include_detail=False) for item in paged_callback_events],
@@ -13508,8 +13642,19 @@ class HrAdminPayrollOutputBatchGenerateFinanceHandoffView(HrAdminContextMixin, A
         batch = PayrollOutputBatch.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "review").first()
         if not batch:
             return response.Response({"detail": "Payroll output batch not found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = HrAdminPayrollGenerateFinanceHandoffRequestSerializer(data=request.data)
+        request_data, async_requested = _payroll_action_request(request)
+        serializer = HrAdminPayrollGenerateFinanceHandoffRequestSerializer(data=request_data)
         serializer.is_valid(raise_exception=True)
+        if async_requested:
+            job, created = enqueue_payroll_background_job(
+                tenant=employee.tenant,
+                operation=PayrollBackgroundJobOperation.GENERATE_FINANCE_HANDOFF,
+                target=batch,
+                requested_by=request.user,
+                request_snapshot=serializer.validated_data,
+                client_key=request.headers.get("Idempotency-Key", ""),
+            )
+            return _payroll_job_response(job, created=created, label="Payroll finance handoff generation")
         try:
             handoff = generate_payroll_finance_handoff(
                 batch,
@@ -13527,6 +13672,64 @@ class HrAdminPayrollOutputBatchGenerateFinanceHandoffView(HrAdminContextMixin, A
             "accepted_by",
         ).get(id=handoff.id)
         return response.Response(HrAdminPayrollFinanceHandoffActionResultSerializer(build_hr_admin_payroll_finance_handoff_action_payload(handoff, "Payroll finance handoff generated.")).data)
+
+
+PAYROLL_BACKGROUND_JOB_PERMISSIONS = {
+    PayrollBackgroundJobOperation.CALCULATE: "payroll.calculate",
+    PayrollBackgroundJobOperation.GENERATE_OUTPUTS: "payroll.publish",
+    PayrollBackgroundJobOperation.PUBLISH_OUTPUTS: "payroll.publish",
+    PayrollBackgroundJobOperation.GENERATE_FINANCE_HANDOFF: "finance.handoff.create",
+}
+
+
+class HrAdminPayrollBackgroundJobListView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        permission_keys = get_user_tenant_permission_keys(request.user, employee.tenant)
+        allowed_operations = [
+            operation for operation, permission in PAYROLL_BACKGROUND_JOB_PERMISSIONS.items()
+            if permission in permission_keys
+        ]
+        jobs = PayrollBackgroundJob.objects.filter(
+            tenant=employee.tenant,
+            operation__in=allowed_operations,
+        ).select_related("requested_by").order_by("-created_at")[:50]
+        return response.Response({"jobs": [payroll_background_job_payload(job) for job in jobs]})
+
+
+class HrAdminPayrollBackgroundJobDetailView(HrAdminContextMixin, APIView):
+    def _get_job(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return None, response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        job = PayrollBackgroundJob.objects.filter(tenant=employee.tenant, id=item_id).select_related("requested_by").first()
+        if not job:
+            return None, response.Response({"detail": "Payroll background job not found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, PAYROLL_BACKGROUND_JOB_PERMISSIONS[job.operation])
+        return job, None
+
+    def get(self, request, item_id):
+        job, error_response = self._get_job(request, item_id)
+        if error_response:
+            return error_response
+        return response.Response({"job": payroll_background_job_payload(job)})
+
+
+class HrAdminPayrollBackgroundJobRetryView(HrAdminPayrollBackgroundJobDetailView):
+    def post(self, request, item_id):
+        job, error_response = self._get_job(request, item_id)
+        if error_response:
+            return error_response
+        try:
+            job = retry_payroll_background_job(job)
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return response.Response(
+            {"job": payroll_background_job_payload(job), "detail": "Payroll job retry queued."},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class HrAdminPayrollFinanceHandoffTransmitView(HrAdminContextMixin, APIView):
@@ -14876,6 +15079,28 @@ class HrAdminEmployeeListView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "employees.view")
+        if request.query_params:
+            try:
+                page = max(int(request.query_params.get("page", 1) or 1), 1)
+                page_size = min(max(int(request.query_params.get("page_size", 25) or 25), 1), 100)
+            except (TypeError, ValueError):
+                return response.Response(
+                    {"detail": "page and page_size must be integers."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            payload = get_hr_admin_employee_list_page(
+                employee,
+                page=page,
+                page_size=page_size,
+                query=(request.query_params.get("q") or request.query_params.get("search") or "").strip(),
+                employment_status=(request.query_params.get("status") or "all").strip(),
+                department=(request.query_params.get("department") or "all").strip(),
+                manager_view=(request.query_params.get("manager_view") or request.query_params.get("managerView") or "all").strip(),
+                readiness=(request.query_params.get("readiness") or "all").strip(),
+                sort=(request.query_params.get("sort") or "employee_code").strip(),
+            )
+            payload["items"] = HrAdminEmployeeListItemSerializer(payload["items"], many=True).data
+            return response.Response(payload)
         payload = get_hr_admin_employee_list(employee)
         return response.Response(HrAdminEmployeeListItemSerializer(payload, many=True).data)
 
@@ -15199,6 +15424,13 @@ class HrAdminPolicyOptionsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            employee_limit = max(1, min(int(request.query_params.get("employee_limit") or 0), 500))
+        except (TypeError, ValueError):
+            employee_limit = 0
+        employee_queryset = Employee.objects.filter(tenant=employee.tenant).order_by("employee_code")
+        if employee_limit:
+            employee_queryset = employee_queryset[:employee_limit]
         payload = {
             "leave_categories": [{"value": value, "label": label} for value, label in LeaveCategory.choices],
             "leave_units": [{"value": value, "label": label} for value, label in LeaveUnit.choices],
@@ -15216,7 +15448,7 @@ class HrAdminPolicyOptionsView(HrAdminContextMixin, APIView):
             "departments": [_hr_admin_department_option_payload(item) for item in Department.objects.filter(tenant=employee.tenant, is_active=True).select_related("business_unit").order_by("name")],
             "grades": [{"id": item.id, "name": item.name} for item in Grade.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
             "employment_types": [{"id": item.id, "name": item.name} for item in EmploymentType.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
-            "employees": [{"id": item.id, "name": f"{item.first_name} {item.last_name}".strip() or item.employee_code, "employee_code": item.employee_code} for item in Employee.objects.filter(tenant=employee.tenant).order_by("employee_code")],
+            "employees": [{"id": item.id, "name": f"{item.first_name} {item.last_name}".strip() or item.employee_code, "employee_code": item.employee_code} for item in employee_queryset],
             "shifts": [{"id": shift.id, "name": shift.name} for shift in Shift.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
             "holiday_calendars": [{"id": calendar.id, "name": calendar.name} for calendar in HolidayCalendar.objects.filter(tenant=employee.tenant, is_active=True).order_by("name", "year")],
         }
@@ -15526,7 +15758,7 @@ class HrAdminAttendanceRecordListView(HrAdminContextMixin, APIView):
         except (TypeError, ValueError):
             page = 1
         try:
-            page_size = min(max(int(request.query_params.get("page_size", 25) or 25), 1), 100)
+            page_size = min(max(int(request.query_params.get("page_size", 25) or 25), 1), 500)
         except (TypeError, ValueError):
             page_size = 25
         search_value = (request.query_params.get("q") or "").strip()
@@ -15583,9 +15815,13 @@ class HrAdminAttendanceRecordListView(HrAdminContextMixin, APIView):
         queryset = queryset.order_by("-attendance_date", "employee__employee_code")
         total_count = queryset.count()
         offset = (page - 1) * page_size
-        items = queryset[offset : offset + page_size]
+        items = list(queryset[offset : offset + page_size])
+        derivation_context = AttendanceDerivationContext.for_records(items)
         payload = {
-            "items": [build_hr_admin_attendance_record_payload(item) for item in items],
+            "items": [
+                build_hr_admin_attendance_record_payload(item, derivation_context=derivation_context)
+                for item in items
+            ],
             "total_count": total_count,
             "page": page,
             "page_size": page_size,

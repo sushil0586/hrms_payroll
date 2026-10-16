@@ -1,7 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated } from "../helpers/staging-auth";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
+import { gotoAuthenticated, gotoWithinSession, type Persona } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
+let hrAdmin: Persona;
 
 const runSuffix = Date.now().toString(36).toUpperCase();
 
@@ -46,7 +55,7 @@ async function createDocumentRequirementScope(page: Page) {
   const branchCode = uniqueCode("DBR");
   const branchName = `Phase 9C Branch ${runSuffix}`;
 
-  await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+  await gotoWithinSession(page, "/hr-admin/organization/legal_entities/new");
   await expectPageReady(page, /Create Legal Entity/i);
   await pageField(page, "Code").fill(legalCode);
   await pageField(page, "Name").fill(legalName);
@@ -58,7 +67,7 @@ async function createDocumentRequirementScope(page: Page) {
   await page.getByRole("button", { name: "Create legal entity" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 20_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/locations/new");
+  await gotoWithinSession(page, "/hr-admin/organization/locations/new");
   await expectPageReady(page, /Create Location/i);
   await pageField(page, "Code").fill(locationCode);
   await pageField(page, "Name").fill(locationName);
@@ -70,7 +79,7 @@ async function createDocumentRequirementScope(page: Page) {
   await page.getByRole("button", { name: "Create location" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=locations/, { timeout: 20_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/branches/new");
+  await gotoWithinSession(page, "/hr-admin/organization/branches/new");
   await expectPageReady(page, /Create Branch/i);
   await pageField(page, "Code").fill(branchCode);
   await pageField(page, "Name").fill(branchName);
@@ -105,7 +114,7 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 
 async function createActiveShift(page: Page) {
   const code = uniqueCode("SHIFT");
-  await gotoAuthenticated(page, "/hr-admin/shifts/new");
+  await gotoWithinSession(page, "/hr-admin/shifts/new");
   await expectPageReady(page, "Create shift");
   await pageField(page, "Code").fill(code);
   await pageField(page, "Name").fill(`Phase 9C Shift ${runSuffix}`);
@@ -118,13 +127,13 @@ async function createActiveShift(page: Page) {
   await pageToggle(page, "Saturday").check();
   await pageToggle(page, "Sunday").check();
   await page.getByRole("button", { name: "Create shift" }).click();
-  await expect(page).toHaveURL(/\/hr-admin\/shifts$/);
-  await expect(page.locator("article.record-card").filter({ hasText: code }).first()).toBeVisible();
+  await page.waitForURL(/\/hr-admin\/shifts$/);
+  await expect(page.getByText(code, { exact: true }).first()).toBeVisible();
 }
 
 async function createActiveHolidayCalendar(page: Page) {
   const code = uniqueCode("HC");
-  await gotoAuthenticated(page, "/hr-admin/holiday-calendars/new");
+  await gotoWithinSession(page, "/hr-admin/holiday-calendars/new");
   await expectPageReady(page, "Create holiday calendar");
   await pageField(page, "Code").fill(code);
   await pageField(page, "Name").fill(`Phase 9C Holiday Calendar ${runSuffix}`);
@@ -134,13 +143,13 @@ async function createActiveHolidayCalendar(page: Page) {
   await pageField(page, "Name", 1).fill("Republic Day Phase 9C");
   await selectFirstNonEmptyOption(pageField(page, "Holiday type"));
   await page.getByRole("button", { name: "Create holiday calendar" }).click();
-  await expect(page).toHaveURL(/\/hr-admin\/holiday-calendars$/);
-  await expect(page.locator("article.record-card").filter({ hasText: code }).first()).toBeVisible();
+  await page.waitForURL(/\/hr-admin\/holiday-calendars$/);
+  await expect(page.getByText(code, { exact: true }).first()).toBeVisible();
 }
 
 async function createActiveAttendancePolicy(page: Page) {
   const code = uniqueCode("AP");
-  await gotoAuthenticated(page, "/hr-admin/attendance-policies/new");
+  await gotoWithinSession(page, "/hr-admin/attendance-policies/new");
   await expectPageReady(page, "Create attendance policy");
   await pageField(page, "Code").fill(code);
   await pageField(page, "Name").fill(`Phase 9C Attendance Policy ${runSuffix}`);
@@ -154,13 +163,13 @@ async function createActiveAttendancePolicy(page: Page) {
   await pageField(page, "Overtime threshold minutes").fill("45");
   await pageToggle(page, "Enable automatic derivation").check();
   await page.getByRole("button", { name: "Create attendance policy" }).click();
-  await expect(page).toHaveURL(/\/hr-admin\/attendance-policies$/);
-  await expect(page.locator("article.record-card").filter({ hasText: code }).first()).toBeVisible();
+  await page.waitForURL(/\/hr-admin\/attendance-policies$/);
+  await expect(page.getByText(code, { exact: true }).first()).toBeVisible();
 }
 
 async function createActiveWorkflowTemplate(page: Page) {
   const code = uniqueCode("WF");
-  await gotoAuthenticated(page, "/hr-admin/workflow-templates/new");
+  await gotoWithinSession(page, "/hr-admin/workflow-templates/new");
   await expectPageReady(page, "Create workflow template");
   await pageField(page, "Code").fill(code);
   await pageField(page, "Name").fill(`Phase 9C Workflow ${runSuffix}`);
@@ -171,26 +180,28 @@ async function createActiveWorkflowTemplate(page: Page) {
   await pageField(page, "Name", 1).fill("Manager approval");
   await pageField(page, "Condition snapshot JSON").fill("{}");
   await page.getByRole("button", { name: "Create workflow template" }).click();
-  await expect(page).toHaveURL(/\/hr-admin\/workflow-templates$/);
-  await expect(page.locator("article.record-card").filter({ hasText: code }).first()).toBeVisible();
+  await page.waitForURL(/\/hr-admin\/workflow-templates$/);
+  await expect(page.getByText(code, { exact: true }).first()).toBeVisible();
 }
 
 async function createActiveDocumentCategoryAndMandatoryRule(page: Page) {
   const scope = await createDocumentRequirementScope(page);
   const code = uniqueCode("DOC");
   const name = `Phase 9C Document Category ${runSuffix}`;
-  await gotoAuthenticated(page, "/hr-admin/document-categories/new");
+  await gotoWithinSession(page, "/hr-admin/document-categories/new");
   await expectPageReady(page, "Create document category");
   await pageField(page, "Code").fill(code);
   await pageField(page, "Name").fill(name);
   await pageField(page, "Description").fill("Phase 9C mandatory document category.");
   await pageField(page, "Visibility rules JSON").fill('{"visible_to":["hr_admin","employee"]}');
   await pageToggle(page, "Requires verification").check();
-  await page.getByRole("button", { name: "Create category" }).click();
-  await expect(page).toHaveURL(/\/hr-admin\/document-categories$/);
-  await expect(page.locator("article.record-card").filter({ hasText: code }).first()).toBeVisible();
+  const category = await submitAndCapture<{ code: string; name: string }>(page, "document-categories", "POST", async () => {
+    await page.getByRole("button", { name: "Create category" }).click();
+  });
+  await page.waitForURL(/\/hr-admin\/document-categories$/);
+  expect(category).toMatchObject({ code, name });
 
-  await gotoAuthenticated(page, "/hr-admin/document-requirements/new");
+  await gotoWithinSession(page, "/hr-admin/document-requirements/new");
   await expectPageReady(page, "Create document requirement");
   await pageField(page, "Category").selectOption({ label: name });
   await pageField(page, "Legal entity").selectOption({ label: scope.legalName });
@@ -203,12 +214,12 @@ async function createActiveDocumentCategoryAndMandatoryRule(page: Page) {
   await pageToggle(page, "Mandatory").check();
   await pageToggle(page, "Active").check();
   await page.getByRole("button", { name: "Create requirement" }).click();
-  await expect(page).toHaveURL(/\/hr-admin\/document-requirements$/);
-  await expect(page.locator("article.record-card").filter({ hasText: name }).first()).toContainText("Mandatory");
+  await page.waitForURL(/\/hr-admin\/document-requirements$/);
+  await expect(page.getByRole("row").filter({ hasText: name }).first()).toContainText("Mandatory");
 }
 
 async function createActiveSalaryConfiguration(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
+  await gotoWithinSession(page, "/hr-admin/salary-setup?tab=actions");
   await expectPageReady(page, "Salary Setup");
 
   const componentForm = page.getByTestId("salary-component-form");
@@ -216,6 +227,7 @@ async function createActiveSalaryConfiguration(page: Page) {
   const versionForm = page.getByTestId("salary-version-form");
   const lineForm = page.getByTestId("salary-line-form");
   const componentCode = uniqueCode("SAL_COMP");
+  await page.getByRole("button", { name: /^Components\b/ }).click();
   const component = await submitAndCapture<{ id: string }>(page, "salary-components", "POST", async () => {
     await field(componentForm, "Code").fill(componentCode);
     await field(componentForm, "Name").fill(`Phase 9C ${componentCode}`);
@@ -233,6 +245,7 @@ async function createActiveSalaryConfiguration(page: Page) {
   await expect(page.getByText(componentCode).first()).toBeVisible();
 
   const structureCode = uniqueCode("SAL_STRUCT");
+  await page.getByRole("button", { name: /^Structures\b/ }).click();
   const structure = await submitAndCapture<{ id: string }>(page, "salary-structures", "POST", async () => {
     await field(structureForm, "Code").fill(structureCode);
     await field(structureForm, "Name").fill(`Phase 9C ${structureCode}`);
@@ -245,6 +258,7 @@ async function createActiveSalaryConfiguration(page: Page) {
   });
   await expect(page.getByText(structureCode).first()).toBeVisible();
 
+  await page.getByRole("button", { name: /^Versions\b/ }).click();
   const version = await submitAndCapture<{ id: string; version: number }>(page, "salary-structure-versions", "POST", async () => {
     await field(versionForm, "Structure").selectOption(structure.id);
     await field(versionForm, "Version").fill("1");
@@ -258,6 +272,7 @@ async function createActiveSalaryConfiguration(page: Page) {
   });
   await expect(page.getByText(`Version ${version.version}`).first()).toBeVisible();
 
+  await page.getByRole("button", { name: /^Lines\b/ }).click();
   await submitAndCapture(page, "salary-structure-components", "POST", async () => {
     await field(lineForm, "Structure version").selectOption(version.id);
     await field(lineForm, "Component").selectOption(component.id);
@@ -273,13 +288,14 @@ async function createActiveSalaryConfiguration(page: Page) {
 }
 
 async function createActivePayrollRuleVersion(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions");
+  await gotoWithinSession(page, "/hr-admin/payroll-rules?tab=actions");
   await expectPageReady(page, "Payroll Rules");
 
   const definitionForm = page.getByTestId("payroll-rule-definition-form");
   const versionForm = page.getByTestId("payroll-rule-version-form");
   const ruleCode = uniqueCode("RULE");
 
+  await page.getByRole("button", { name: /^Definitions\b/ }).click();
   const rule = await submitAndCapture<{ id: string }>(page, "payroll-rule-definitions", "POST", async () => {
     await definitionForm.getByRole("button", { name: "New" }).click();
     await field(definitionForm, "Code").fill(ruleCode);
@@ -292,6 +308,7 @@ async function createActivePayrollRuleVersion(page: Page) {
   });
   await expect(page.getByText(ruleCode).first()).toBeVisible();
 
+  await page.getByRole("button", { name: /^Versions\b/ }).click();
   await submitAndCapture(page, "payroll-rule-versions", "POST", async () => {
     await versionForm.getByRole("button", { name: "New" }).click();
     await field(versionForm, "Rule").selectOption(rule.id);
@@ -314,10 +331,18 @@ async function createActivePayrollRuleVersion(page: Page) {
 }
 
 test.describe("Phase 9C launch audit blocker closure", () => {
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+    hrAdmin = workspacePersona(workspace, "hr_admin");
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test("HR admin closes launch audit master-data blockers through browser configuration", async ({ page }) => {
     test.skip(isRemoteApiRun(), "This blocker-closure spec performs many prerequisite mutations and is certified in local full-stack runs; staging uses launch remediation/release-gate proofs.");
     test.setTimeout(12 * 60 * 1000);
 
+    await gotoAuthenticated(page, "/hr-admin", hrAdmin);
     await createActiveShift(page);
     await createActiveHolidayCalendar(page);
     await createActiveAttendancePolicy(page);
@@ -326,7 +351,7 @@ test.describe("Phase 9C launch audit blocker closure", () => {
     await createActiveSalaryConfiguration(page);
     await createActivePayrollRuleVersion(page);
 
-    await gotoAuthenticated(page, "/hr-admin");
+    await gotoWithinSession(page, "/hr-admin");
     await expectPageReady(page, "Control center");
     await expectNoHorizontalOverflow(page);
 

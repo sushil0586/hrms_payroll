@@ -12,7 +12,7 @@ export function ActionToast({ message, title, tone }: ActionToastProps) {
   if (!message) return null;
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className={`action-toast action-toast--${tone}`} role={tone === "error" ? "alert" : "status"}>
+    <div aria-atomic="true" className={`action-toast action-toast--${tone}`} role={tone === "error" ? "alert" : "status"}>
       <strong>{title}</strong>
       <span>{message}</span>
     </div>,

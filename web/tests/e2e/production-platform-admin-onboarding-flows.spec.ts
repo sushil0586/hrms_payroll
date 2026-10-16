@@ -44,8 +44,24 @@ async function safeReload(page: Page) {
   }
 }
 
+async function openTenantPanel(page: Page, path: string, tenantId: string, tenantName: string) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await page.goto(`${path}?tenantId=${tenantId}`, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle");
+    if (await page.getByText(tenantName, { exact: true }).first().isVisible().catch(() => false)) return;
+  }
+  await expect(page.getByText(tenantName, { exact: true }).first()).toBeVisible();
+}
+
 async function openPlatformTab(page: Page, name: "Tenants" | "Launch Readiness" | "Admin Access" | "Setup Templates" | "Audit Logs") {
-  await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
+  const tab = page.getByRole("tab", { name: new RegExp(`^${name}`) });
+  const href = await tab.getAttribute("href");
+  expect(href).toBeTruthy();
+  await Promise.all([
+    page.waitForURL(new URL(href!, page.url()).toString()),
+    tab.click(),
+  ]);
+  await page.waitForLoadState("networkidle");
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
 
@@ -79,7 +95,7 @@ test.describe("Production platform admin onboarding proof", () => {
     await expect(notice(page).getByText("Policy pack created.", { exact: true })).toBeVisible();
     await safeReload(page);
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
-    await expect(page.getByText(packCode)).toBeVisible();
+    await expect(page.locator(".tenant-support-access-row").filter({ hasText: packCode })).toBeVisible();
     await page.locator(".tenant-support-access-row").filter({ hasText: packCode }).getByRole("button", { name: "Publish" }).click();
     const publishDialog = page.getByRole("dialog", { name: "Publish header-only setup template?" });
     await expect(publishDialog.getByText(/evidence-only baseline/i)).toBeVisible();
@@ -110,11 +126,16 @@ test.describe("Production platform admin onboarding proof", () => {
       await namedControl(createTenantCard, "timezone").fill("Asia/Kolkata");
       await namedControl(createTenantCard, "country_code").fill("IN");
       await namedControl(createTenantCard, "is_sandbox").setChecked(true);
-      await createTenantCard.getByRole("button", { name: "Create tenant" }).click();
+      const [createTenantResponse] = await Promise.all([
+        page.waitForResponse((response) => response.url().includes("/api/platform/tenants") && response.request().method() === "POST"),
+        createTenantCard.getByRole("button", { name: "Create tenant" }).click(),
+      ]);
+      expect(createTenantResponse.status()).toBe(201);
+      const createdTenant = (await createTenantResponse.json()) as { id: string };
       await expect(notice(page).getByText("Tenant created.", { exact: true })).toBeVisible();
-      await expect(page).toHaveURL(/tenantId=/);
+      await page.waitForURL(new RegExp(`tenantId=${createdTenant.id}`));
+      await openTenantPanel(page, "/platform-admin/onboarding", createdTenant.id, tenantName);
       await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
-      await expect(page.getByText(tenantName).first()).toBeVisible();
 
       const onboardingCard = card(page, "Onboarding metadata");
       await namedControl(onboardingCard, "owner_mode").selectOption(index === 3 ? "split_platform_roles" : "combined_platform_admin");
@@ -160,11 +181,21 @@ test.describe("Production platform admin onboarding proof", () => {
       ).toBeVisible();
 
       await openPlatformTab(page, "Setup Templates");
+      await safeReload(page);
+      await openPlatformTab(page, "Setup Templates");
       const adoptCard = card(page, "Apply setup template");
-      await namedControl(adoptCard, "policy_pack_id").selectOption({ label: `${packName} - ${packCode}` });
+      const policyPackSelect = namedControl(adoptCard, "policy_pack_id");
+      const policyPackValue = await policyPackSelect.evaluate((element, code) => (
+        Array.from((element as HTMLSelectElement).options).find((option) => option.textContent?.includes(String(code)))?.value ?? ""
+      ), packCode);
+      expect(policyPackValue, `Published setup template ${packCode} should be selectable`).toBeTruthy();
+      await policyPackSelect.selectOption(policyPackValue);
       await namedControl(adoptCard, "adoption_mode").selectOption("clone_to_tenant_records");
       await namedControl(adoptCard, "notes").fill(`Adopting ${packCode} for ${tenantCode}.`);
-      await adoptCard.getByRole("button", { name: "Apply template" }).click();
+      await adoptCard.getByRole("button", { name: "Preview impact" }).click();
+      const applyTemplate = adoptCard.getByRole("button", { name: "Apply template" });
+      await expect(applyTemplate).toBeEnabled();
+      await applyTemplate.click();
       await expect(notice(page).getByText("Policy pack adopted for tenant.", { exact: true })).toBeVisible();
       await safeReload(page);
       await openPlatformTab(page, "Launch Readiness");
@@ -180,8 +211,11 @@ test.describe("Production platform admin onboarding proof", () => {
       await expect(notice(page).getByText("Mark Handoff Ready", { exact: true })).toBeVisible();
       await safeReload(page);
       await card(page, "Launch readiness").getByRole("button", { name: "Activate tenant" }).click();
-      await page.getByRole("dialog", { name: "Activate tenant?" }).getByRole("button", { name: "Activate tenant" }).click();
-      await expect(notice(page).getByText("Activate", { exact: true })).toBeVisible();
+      const [activationResponse] = await Promise.all([
+        page.waitForResponse((response) => response.url().includes(`/platform/tenants/${createdTenant.id}/onboarding/activate`) && response.request().method() === "POST"),
+        page.getByRole("dialog", { name: "Activate tenant?" }).getByRole("button", { name: "Activate tenant" }).click(),
+      ]);
+      expect(activationResponse.status()).toBe(200);
       await safeReload(page);
       await expect(page.getByText("Active").first()).toBeVisible();
 
@@ -191,9 +225,9 @@ test.describe("Production platform admin onboarding proof", () => {
       await page.getByLabel("Username or email").fill(adminUsername);
       await page.getByLabel("Password").fill(adminPassword);
       await page.getByRole("button", { name: "Sign in" }).click();
-      await page.waitForURL(/\/tenant-admin$/, { timeout: 15_000 });
-      await expect(page.getByRole("heading", { name: "Tenant Admin Console" })).toBeVisible();
-      await expect(page.getByRole("heading", { name: tenantName })).toBeVisible();
+      await expect(page).toHaveURL(/\/tenant-admin$/);
+      await expect(page.getByRole("heading", { name: "Account Control Center", level: 1 })).toBeVisible();
+      await expect(page.locator("main").getByText(tenantName, { exact: true }).first()).toBeVisible();
 
       await page.request.post("/api/auth/logout").catch(() => null);
       await page.context().clearCookies();

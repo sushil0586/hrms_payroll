@@ -4585,8 +4585,9 @@ def open_payroll_run_review(
             },
         )
         if created:
+            auto_exceptions = []
             for line in calculation.lines.filter(status=PayrollCalculationLineStatus.ERROR).select_related("employee", "input_snapshot"):
-                PayrollRunException.objects.create(
+                auto_exceptions.append(PayrollRunException(
                     tenant=calculation.tenant,
                     review=review,
                     payroll_run=payroll_run,
@@ -4597,14 +4598,14 @@ def open_payroll_run_review(
                     title=f"{line.component_code} calculation failed",
                     detail=line.error_message or "Calculation line failed.",
                     config_snapshot={"source": "calculation_line"},
-                )
+                ))
             warning_count = 0
             for snapshot in payroll_run.input_snapshots.filter(validation_snapshot__isnull=False).select_related("employee"):
                 warnings = snapshot.validation_snapshot.get("warnings", []) if isinstance(snapshot.validation_snapshot, dict) else []
                 for warning in warnings:
                     if warning_count >= int(profile.get("max_auto_snapshot_warnings", 100)):
                         break
-                    PayrollRunException.objects.create(
+                    auto_exceptions.append(PayrollRunException(
                         tenant=calculation.tenant,
                         review=review,
                         payroll_run=payroll_run,
@@ -4616,8 +4617,9 @@ def open_payroll_run_review(
                         title="Input snapshot warning",
                         detail=str(warning),
                         config_snapshot={"source": "input_snapshot.validation_snapshot"},
-                    )
+                    ))
                     warning_count += 1
+            PayrollRunException.objects.bulk_create(auto_exceptions)
         payroll_run.status = PayrollRunStatus.REVIEW
         payroll_run.save()
         review = _sync_review_snapshots(review)

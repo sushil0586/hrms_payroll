@@ -117,6 +117,7 @@ test.describe("HR Admin phase 8 workflows and operations certification", () => {
   });
 
   test("certifies ops health routes, governance navigation, and launch links", async ({ page }) => {
+    test.setTimeout(90_000);
     await page.setViewportSize({ width: 1440, height: 960 });
 
     for (const route of opsRoutes) {

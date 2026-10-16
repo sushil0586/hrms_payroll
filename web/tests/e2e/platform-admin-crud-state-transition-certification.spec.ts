@@ -62,6 +62,14 @@ async function tenantByCode(page: Page, tenantCode: string): Promise<TenantListI
   return tenant as TenantListItem;
 }
 
+async function waitForTenantMutation(page: Page, method: "POST" | "PATCH") {
+  const mutation = await page.waitForResponse(
+    (response) => response.url().includes("/api/platform/tenants") && response.request().method() === method,
+  );
+  expect(mutation.ok(), `${method} tenant mutation`).toBeTruthy();
+  return (await mutation.json()) as TenantListItem;
+}
+
 async function onboardingPayload(page: Page, tenantId: string): Promise<OnboardingPayload> {
   const response = await page.request.get(`/api/platform/tenants/${tenantId}/onboarding`);
   expect(response.ok()).toBeTruthy();
@@ -104,10 +112,10 @@ test.describe("Platform admin CRUD and state transition certification", () => {
     await namedControl(createDialog, "seed_pack").selectOption("standard_office");
     await namedControl(createDialog, "timezone").fill("Asia/Kolkata");
     await namedControl(createDialog, "country_code").fill("IN");
+    const createResponse = waitForTenantMutation(page, "POST");
     await createDialog.getByRole("button", { name: "Create tenant" }).click();
-    await expect(notice(page).getByText("Tenant created.", { exact: true })).toBeVisible();
-
-    const createdTenant = await tenantByCode(page, tenantCode);
+    const createdTenant = await createResponse;
+    expect(createdTenant.code).toBe(tenantCode);
     await page.goto(`/platform-admin/onboarding?tenantId=${createdTenant.id}`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expectPageReady(page, "Launch Readiness");
@@ -124,7 +132,9 @@ test.describe("Platform admin CRUD and state transition certification", () => {
     await namedControl(setupCard, "primary_domain").fill(updatedDomain);
     await namedControl(setupCard, "timezone").fill("Asia/Kolkata");
     await namedControl(setupCard, "country_code").fill("IN");
+    const updateResponse = waitForTenantMutation(page, "PATCH");
     await setupCard.getByRole("button", { name: "Save tenant" }).click();
+    await updateResponse;
     await expect(notice(page).getByText("Tenant updated.", { exact: true })).toBeVisible();
 
     await page.reload();
@@ -166,7 +176,9 @@ test.describe("Platform admin CRUD and state transition certification", () => {
     await openPlatformTab(page, "Launch Readiness");
     const reactivateSetupCard = card(page, "Edit tenant setup");
     await namedControl(reactivateSetupCard, "status").selectOption("active");
+    const reactivateResponse = waitForTenantMutation(page, "PATCH");
     await reactivateSetupCard.getByRole("button", { name: "Save tenant" }).click();
+    await reactivateResponse;
     await expect(notice(page).getByText("Tenant updated.", { exact: true })).toBeVisible();
 
     updatedTenant = await tenantByCode(page, tenantCode);

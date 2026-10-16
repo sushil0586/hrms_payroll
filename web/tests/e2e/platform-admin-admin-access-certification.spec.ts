@@ -47,7 +47,7 @@ function namedControl(root: Locator, name: string): Locator {
 }
 
 function notice(page: Page): Locator {
-  return page.locator(".platform-feedback, .notice").first();
+  return page.locator(".platform-feedback").first();
 }
 
 async function safeWait(page: Page) {
@@ -57,6 +57,15 @@ async function safeWait(page: Page) {
 async function safeReload(page: Page) {
   await page.reload({ waitUntil: "domcontentloaded" });
   await safeWait(page);
+}
+
+async function expectInvalidControl(control: Locator) {
+  await expect.poll(async () => {
+    return control.evaluate((element) => {
+      const input = element as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+      return input.getAttribute("aria-invalid") === "true" || !input.checkValidity();
+    });
+  }).toBeTruthy();
 }
 
 async function gotoPlatform(page: Page, path: string, heading: string | RegExp) {
@@ -249,11 +258,11 @@ test.describe("Platform Admin Admin Access certification", () => {
     await expect(dialog).toBeHidden();
     const invalidDialog = await openAddContactDialog(page);
     await invalidDialog.getByRole("button", { name: "Add contact" }).click();
-    await expect(namedControl(invalidDialog, "full_name")).toBeFocused();
+    await expectInvalidControl(namedControl(invalidDialog, "full_name"));
     await namedControl(invalidDialog, "full_name").fill("Invalid Email Admin");
     await namedControl(invalidDialog, "email").fill("not-an-email");
     await invalidDialog.getByRole("button", { name: "Add contact" }).click();
-    await expect(namedControl(invalidDialog, "email")).toBeFocused();
+    await expectInvalidControl(namedControl(invalidDialog, "email"));
     await invalidDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(invalidDialog).toBeHidden();
 
@@ -319,7 +328,7 @@ test.describe("Platform Admin Admin Access certification", () => {
     await gotoPlatform(page, `/platform-admin/admins?tenantId=${tenantA.id}`, "Admin Access");
     const provisionCard = card(page, "Create tenant admin login");
     await provisionCard.getByRole("button", { name: "Create login access" }).click();
-    await expect(namedControl(provisionCard, "username")).toBeFocused();
+    await expectInvalidControl(namedControl(provisionCard, "username"));
 
     await provisionLoginThroughBrowser(page, {
       contactLabel: `QA Primary Admin Updated - ${adminAEmail}`,

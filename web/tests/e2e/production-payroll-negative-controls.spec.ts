@@ -58,15 +58,15 @@ test.describe("Production payroll negative controls", () => {
     await expectPageReady(page, "Payslips");
     await expectVisibleText(page, [
       "Published payslips",
-      "Published only",
+      "Published payslips only",
       "Employee scoped",
-      "Audit protected",
-      "Download tracked",
-      "Draft and generated payroll artifacts stay hidden until the output batch is published.",
-      "The API resolves files through the signed-in employee context and tenant boundary.",
+      "Secure download",
+      "every download is access tracked",
+      "Published files available to your employee account with access tracking.",
+      "Own employee record",
     ]);
     await page.getByRole("button", { name: "Review payslip" }).first().click();
-    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expect(page.getByRole("dialog").filter({ hasText: "Payslip detail" })).toBeVisible();
     await expectVisibleText(page, [
       "Download payslip",
       "Access trail",

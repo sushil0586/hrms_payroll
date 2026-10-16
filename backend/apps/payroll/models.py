@@ -211,6 +211,20 @@ class PayrollProviderJobStatus(models.TextChoices):
     CANCELED = "canceled", "Canceled"
 
 
+class PayrollBackgroundJobOperation(models.TextChoices):
+    CALCULATE = "calculate", "Calculate payroll"
+    GENERATE_OUTPUTS = "generate_outputs", "Generate payroll outputs"
+    PUBLISH_OUTPUTS = "publish_outputs", "Publish payroll outputs"
+    GENERATE_FINANCE_HANDOFF = "generate_finance_handoff", "Generate finance handoff"
+
+
+class PayrollBackgroundJobStatus(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    RUNNING = "running", "Running"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+
+
 class PayrollProviderLaunchRehearsalStatus(models.TextChoices):
     READY = "ready", "Ready"
     BLOCKED = "blocked", "Blocked"
@@ -4513,6 +4527,81 @@ class PayrollProviderCertificationRun(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.provider_ref}:{self.status}:{self.created_at}"
+
+
+class PayrollBackgroundJob(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Durable tenant-scoped execution record for long-running payroll operations."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_background_jobs")
+    operation = models.CharField(max_length=40, choices=PayrollBackgroundJobOperation.choices)
+    status = models.CharField(max_length=20, choices=PayrollBackgroundJobStatus.choices, default=PayrollBackgroundJobStatus.QUEUED)
+    idempotency_key = models.CharField(max_length=255)
+    celery_task_id = models.CharField(max_length=255, blank=True)
+    payroll_run = models.ForeignKey(
+        PayrollRun, on_delete=models.PROTECT, related_name="background_jobs", blank=True, null=True,
+    )
+    review = models.ForeignKey(
+        PayrollRunReview, on_delete=models.PROTECT, related_name="background_jobs", blank=True, null=True,
+    )
+    output_batch = models.ForeignKey(
+        PayrollOutputBatch, on_delete=models.PROTECT, related_name="background_jobs", blank=True, null=True,
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="requested_payroll_background_jobs", blank=True, null=True,
+    )
+    stage = models.CharField(max_length=80, default="queued")
+    total_items = models.PositiveIntegerField(default=0)
+    completed_items = models.PositiveIntegerField(default=0)
+    attempt_count = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=3)
+    retryable = models.BooleanField(default=False)
+    queued_at = models.DateTimeField(default=timezone.now)
+    started_at = models.DateTimeField(blank=True, null=True)
+    heartbeat_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    next_retry_at = models.DateTimeField(blank=True, null=True)
+    error_code = models.CharField(max_length=100, blank=True)
+    error_message = models.TextField(blank=True)
+    request_snapshot = models.JSONField(default=dict, blank=True)
+    result_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "idempotency_key"], name="uniq_payroll_background_job_key"),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "status", "created_at"], name="payroll_job_tenant_status_idx"),
+            models.Index(fields=["status", "next_retry_at"], name="payroll_job_retry_idx"),
+        ]
+
+    def clean(self):
+        errors = {}
+        targets = {
+            PayrollBackgroundJobOperation.CALCULATE: self.payroll_run,
+            PayrollBackgroundJobOperation.GENERATE_OUTPUTS: self.review,
+            PayrollBackgroundJobOperation.PUBLISH_OUTPUTS: self.output_batch,
+            PayrollBackgroundJobOperation.GENERATE_FINANCE_HANDOFF: self.output_batch,
+        }
+        target = targets.get(self.operation)
+        if not target:
+            errors["operation"] = "The selected payroll operation requires its matching target."
+        elif self.tenant_id and target.tenant_id != self.tenant_id:
+            errors["tenant"] = "Payroll background job target must belong to the same tenant."
+        if self.completed_items > self.total_items and self.total_items:
+            errors["completed_items"] = "Completed item count cannot exceed total item count."
+        if self.status in {PayrollBackgroundJobStatus.SUCCEEDED, PayrollBackgroundJobStatus.FAILED} and not self.completed_at:
+            errors["completed_at"] = "Terminal payroll jobs require a completion timestamp."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.idempotency_key = str(self.idempotency_key or "").strip()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.operation}:{self.idempotency_key}:{self.status}"
 
 
 class PayrollProviderJob(UUIDPrimaryKeyModel, TimeStampedModel):

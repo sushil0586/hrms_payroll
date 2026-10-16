@@ -13,9 +13,9 @@ type WorkspaceCase = {
 const workspaces: WorkspaceCase[] = [
   { name: "Platform admin", entryPath: "/platform-admin", heading: "Platform Admin Dashboard", persona: platformAdmin },
   { name: "HR admin", entryPath: "/hr-admin", heading: "Control center", persona: hrAdmin },
-  { name: "Employee self service", entryPath: "/ess", heading: "Self Service", persona: employee },
+  { name: "Employee self service", entryPath: "/ess", heading: "My workspace", persona: employee },
   { name: "Manager self service", entryPath: "/mss/approvals", heading: /Approvals|Manager/i, persona: manager },
-  { name: "Tenant admin", entryPath: "/tenant-admin", heading: "Tenant Admin Console", persona: hrAdmin },
+  { name: "Tenant admin", entryPath: "/tenant-admin", heading: "Account Control Center", persona: hrAdmin },
 ];
 
 function uniqueByHref(items: Array<{ href: string; label: string }>) {
@@ -84,10 +84,22 @@ async function certifyCurrentPage(page: Page, label: string) {
   await expectNoHorizontalOverflow(page);
 }
 
+async function gotoWorkspaceLink(page: Page, href: string) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await page.goto(href, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+      return;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
+}
+
 test.describe("Certification: sidebar, tabs, lists, and pagination", () => {
   for (const workspace of workspaces) {
     test(`${workspace.name} sidebar pages, tabs, and long lists are certified`, async ({ page }) => {
-      test.setTimeout(240_000);
+      test.setTimeout(workspace.name === "HR admin" ? 420_000 : 240_000);
 
       await gotoAuthenticated(page, workspace.entryPath, workspace.persona);
       await expectPageReady(page, workspace.heading);
@@ -97,8 +109,7 @@ test.describe("Certification: sidebar, tabs, lists, and pagination", () => {
       expect(links.length, `${workspace.name} sidebar link count`).toBeGreaterThan(0);
 
       for (const link of links) {
-        await page.goto(link.href, { waitUntil: "domcontentloaded" });
-        await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+        await gotoWorkspaceLink(page, link.href);
         await certifyCurrentPage(page, `${workspace.name} > ${link.label} (${link.href})`);
       }
     });

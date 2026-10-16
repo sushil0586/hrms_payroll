@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, fetchBrowserPath } from "../helpers/assertions";
 import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("HR Admin compliance and export audit UI polish certification", () => {
@@ -58,13 +58,13 @@ test.describe("HR Admin compliance and export audit UI polish certification", ()
       "/api/hr-admin/reports/provider-filing-receipts?sort=status&format=manifest",
       "/api/hr-admin/reports/statutory-filing-status?sort=due_status",
     ]) {
-      const response = await page.request.get(path, { failOnStatusCode: false });
+      const response = await fetchBrowserPath(page, path);
       if (process.env.HRMS_API_BASE_URL) {
-        expect(response.status()).toBe(200);
-        expect(response.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+        expect(response.status).toBe(200);
+        expect(response.headers["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
       } else {
-        expect([401, 403, 500]).toContain(response.status());
-        await expect(response.text()).resolves.not.toMatch(/Traceback|SECRET_KEY|DATABASE_URL|password/i);
+        expect([401, 403, 500]).toContain(response.status);
+        expect(response.body).not.toMatch(/Traceback|SECRET_KEY|DATABASE_URL|password/i);
       }
     }
 

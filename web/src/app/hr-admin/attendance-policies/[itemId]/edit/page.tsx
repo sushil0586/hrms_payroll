@@ -14,7 +14,7 @@ type PageProps = {
 export default async function HrAdminEditAttendancePolicyPage({ params }: PageProps) {
   await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-policies" });
   const { itemId } = await params;
-  const [itemResult, optionsResult] = await Promise.all([getHrAdminAttendancePolicy(itemId), getHrAdminPolicyOptions()]);
+  const [itemResult, optionsResult] = await Promise.all([getHrAdminAttendancePolicy(itemId), getHrAdminPolicyOptions({ employee_limit: 50 })]);
   if (!itemResult.data?.id) notFound();
 
   return (

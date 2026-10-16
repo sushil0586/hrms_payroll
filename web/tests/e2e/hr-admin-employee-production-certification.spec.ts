@@ -115,10 +115,15 @@ async function createEmployeeWithNetworkRecovery(page: Page, runRef: string): Pr
   const response = await responsePromise;
   const payload = (await response.json().catch(() => ({}))) as CreatedEmployee;
   expect(response.ok(), `Employee create failed after recovery: ${response.status()} ${JSON.stringify(payload)}`).toBeTruthy();
-  expect(payload.id).toBeTruthy();
-  await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${payload.id}`), { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/hr-admin\/employees\?employeeId=/, { timeout: 20_000 });
+  const redirectedId = new URL(page.url()).searchParams.get("employeeId");
+  const employeeId = payload.id || redirectedId;
+  expect(employeeId).toBeTruthy();
+  if (payload.id) {
+    expect(redirectedId).toBe(payload.id);
+  }
   await page.unroute("**/api/hr-admin/employees");
-  return payload;
+  return { ...payload, id: employeeId!, employee_code: payload.employee_code || code, work_email: payload.work_email || email };
 }
 
 test.describe("HR Admin Employee Directory production certification", () => {

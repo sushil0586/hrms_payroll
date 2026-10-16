@@ -21,9 +21,10 @@ test.describe("HR admin operational queue flows", () => {
     await expectPageReady(page, "Employees");
 
     await page.getByRole("textbox", { name: "Search" }).fill("Riya");
+    const directoryFilters = page.locator("form.directory-filter-bar");
     await Promise.all([
       page.waitForURL((url) => url.searchParams.get("q") === "Riya"),
-      page.getByRole("button", { name: "Apply" }).click(),
+      directoryFilters.getByRole("button", { name: "Apply", exact: true }).click(),
     ]);
 
     await expect(page.getByRole("link", { name: /Riya Sharma/ }).first()).toBeVisible();
@@ -42,9 +43,10 @@ test.describe("HR admin operational queue flows", () => {
     await expect(page).toHaveURL(/section=legal_entities/);
 
     await page.getByLabel("Status").selectOption("active");
+    const organizationFilters = page.locator("form.directory-filter-bar");
     await Promise.all([
       page.waitForURL((url) => url.searchParams.get("status") === "active"),
-      page.getByRole("button", { name: "Apply" }).click(),
+      organizationFilters.getByRole("button", { name: "Apply", exact: true }).click(),
     ]);
 
     await expect(page.getByText("Change carefully.").or(page.getByText("Low edit impact."))).toBeVisible();
@@ -60,7 +62,7 @@ test.describe("HR admin operational queue flows", () => {
     await expect(page).toHaveURL(/item_type=onboarding/);
     const openRecord = page.getByRole("link", { name: "Open record" }).first();
     if (await openRecord.isVisible().catch(() => false)) {
-      await expect(openRecord).toHaveAttribute("href", /onboardings/);
+      await expect(openRecord).toHaveAttribute("href", /item_type=onboarding.*record=onboarding/);
     }
 
     const selectPage = page.getByRole("button", { name: "Select page" });
@@ -77,6 +79,7 @@ test.describe("HR admin operational queue flows", () => {
     await gotoAuthenticated(page, "/hr-admin/employee-documents");
     await expectPageReady(page, /Employee document review/);
 
+    await filterToolbar(page).getByText("More filters", { exact: true }).click();
     await filterToolbar(page).getByLabel("Expiry focus").selectOption("expiring");
     await applyClientFilters(page);
     await expect(page).toHaveURL(/expiry_filter=expiring/);

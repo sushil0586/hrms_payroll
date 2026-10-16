@@ -189,10 +189,10 @@ test.describe("ESS Leave launch certification", () => {
       await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
     }
 
-    await page.getByText("Filters", { exact: true }).click();
-    await expect(page.getByLabel("Search leave history")).toBeVisible();
-    await expect(page.getByLabel("Type filter")).toBeVisible();
-    await expect(page.getByLabel("Period filter")).toBeVisible();
+    const leaveRequests = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "My leave requests" }) });
+    await expect(leaveRequests.getByLabel("Search")).toBeVisible();
+    await expect(leaveRequests.getByLabel("Type")).toBeVisible();
+    await expect(leaveRequests.getByLabel("Period")).toBeVisible();
     await expect(page.getByRole("link", { name: /pending/i }).first()).toBeVisible();
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
 

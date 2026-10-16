@@ -9,7 +9,12 @@ import { BankAdviceReportWorkspace } from "./bank-advice-report-workspace";
 export default async function BankAdviceReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const result = await getHrAdminPayrollFinanceHandoffSetup();
+  const result = await getHrAdminPayrollFinanceHandoffSetup({
+    handoff_page_size: 500,
+    artifact_page_size: 500,
+    delivery_page_size: 500,
+    include_output_batches: false,
+  });
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-handoff">

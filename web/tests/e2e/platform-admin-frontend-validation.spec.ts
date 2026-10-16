@@ -1,8 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady, suppressBrowserTestNoise } from "../helpers/assertions";
+import { gotoAuthenticated, platformAdmin } from "../helpers/staging-auth";
 
 async function gotoPlatformAdminDemo(page: Page, path: string) {
+  if (process.env.HRMS_API_BASE_URL) {
+    const tenantId = process.env.PLAYWRIGHT_PLATFORM_TENANT_ID;
+    const separator = path.includes("?") ? "&" : "?";
+    await gotoAuthenticated(page, tenantId ? `${path}${separator}tenantId=${tenantId}` : path, platformAdmin);
+    return;
+  }
+
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const origin = new URL(page.url()).origin;
   await page.context().addCookies([
@@ -17,6 +25,36 @@ async function gotoPlatformAdminDemo(page: Page, path: string) {
 
 function field(scope: Page | Locator, label: string) {
   return scope.locator(`label.form-field:has(span:text-is("${label.replaceAll('"', '\\"')}"))`).locator("input, select, textarea").first();
+}
+
+async function ensureAdminContactAvailable(page: Page) {
+  if (await page.getByRole("button", { name: "Edit" }).first().isVisible()) {
+    return;
+  }
+
+  const tenantHref = await page
+    .locator("a[href*='tenantId=']")
+    .first()
+    .getAttribute("href");
+  const tenantId = new URL(page.url()).searchParams.get("tenantId") ?? new URL(tenantHref ?? "", page.url()).searchParams.get("tenantId");
+  expect(tenantId, "Expected selected platform tenant for admin contact setup.").toBeTruthy();
+  const timestamp = Date.now();
+  const response = await page.request.post(`/api/platform/tenants/${tenantId}/admin-contacts`, {
+    data: {
+      full_name: "QA Platform Contact",
+      email: `qa.platform.contact.${timestamp}@example.com`,
+      phone_number: "",
+      job_title: "Tenant admin",
+      is_primary: true,
+      notes: "Created by Playwright validation setup.",
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  await expect(
+    response.ok(),
+    `Admin contact setup failed with status ${response.status()}: ${JSON.stringify(payload)}`,
+  ).toBeTruthy();
+  await page.reload({ waitUntil: "networkidle" });
 }
 
 const launchBlueprint = {
@@ -138,6 +176,67 @@ async function routeLaunchFixtures(page: Page, options: { hasApplyEvidence?: boo
 }
 
 test.describe("Platform admin frontend validation", () => {
+  test("tenant creation gives immediate feedback and recovers after a network failure", async ({ page }, testInfo) => {
+    let apiCalls = 0;
+    await page.route("**/api/platform/tenants", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      apiCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      if (apiCalls === 1) {
+        await route.abort("failed");
+        return;
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: "smoothness-proof-tenant", code: "smoothness-proof", name: "Smoothness Proof" }),
+      });
+    });
+
+    await gotoPlatformAdminDemo(page, "/platform-admin/tenants");
+    await suppressBrowserTestNoise(page);
+    await expectPageReady(page, "Tenants");
+
+    await page.getByRole("button", { name: "Create tenant" }).click();
+    const dialog = page.getByRole("dialog", { name: "Create platform tenant" });
+    await dialog.getByLabel("Code").fill("smoothness-proof");
+    await dialog.getByLabel("Name", { exact: true }).fill("Smoothness Proof");
+
+    const submit = dialog.getByRole("button", { name: "Create tenant" });
+    const idleBox = await submit.boundingBox();
+    const startedAt = Date.now();
+    await submit.click();
+    await expect(dialog.getByRole("button", { name: "Creating..." })).toBeDisabled();
+    const feedbackLatencyMs = Date.now() - startedAt;
+    expect(feedbackLatencyMs, "Pending feedback should appear without waiting for the API response.").toBeLessThan(500);
+    const pendingBox = await dialog.getByRole("button", { name: "Creating..." }).boundingBox();
+    const widthShiftPixels = Math.abs((pendingBox?.width ?? 0) - (idleBox?.width ?? 0));
+    const heightShiftPixels = Math.abs((pendingBox?.height ?? 0) - (idleBox?.height ?? 0));
+    expect(widthShiftPixels, "Pending label should not materially shift the action layout.").toBeLessThanOrEqual(8);
+    expect(heightShiftPixels, "Pending label should not shift the action layout.").toBeLessThanOrEqual(1);
+    await dialog.getByRole("button", { name: "Creating..." }).click({ force: true });
+
+    await expect(page.locator(".platform-feedback[role='alert']")).toContainText("Tenant creation failed. Check your connection and try again.");
+    await expect(submit).toBeEnabled();
+    await expect(dialog.getByLabel("Code")).toHaveValue("smoothness-proof");
+    await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("Smoothness Proof");
+    expect(apiCalls).toBe(1);
+
+    await submit.click();
+    await expect(dialog.getByRole("button", { name: "Creating..." })).toBeDisabled();
+    await expect(dialog).toBeHidden();
+    expect(apiCalls).toBe(2);
+
+    await testInfo.attach("interaction-metrics.json", {
+      body: JSON.stringify({ apiDelayMs: 750, feedbackLatencyMs, duplicateRequests: 0, widthShiftPixels, heightShiftPixels, recoveredAfterFailure: true, successfulRetry: true }, null, 2),
+      contentType: "application/json",
+    });
+    console.info("UI_SMOOTHNESS_METRICS", JSON.stringify({ apiDelayMs: 750, feedbackLatencyMs, duplicateRequests: 0, widthShiftPixels, heightShiftPixels }));
+  });
+
   test("tenant create dialog blocks required tenant fields before API", async ({ page }) => {
     let apiCalls = 0;
     await page.route("**/api/platform/tenants", async (route) => {
@@ -324,6 +423,7 @@ test.describe("Platform admin frontend validation", () => {
     await gotoPlatformAdminDemo(page, "/platform-admin/admins");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Admin Access");
+    await ensureAdminContactAvailable(page);
 
     await page.getByRole("button", { name: "Edit" }).first().click();
     const form = page.locator("form.platform-contact-edit-form");
@@ -353,6 +453,7 @@ test.describe("Platform admin frontend validation", () => {
     await gotoPlatformAdminDemo(page, "/platform-admin/admins");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Admin Access");
+    await ensureAdminContactAvailable(page);
 
     const form = page.locator("form.platform-admin-provision-form");
     await expect(form).toBeVisible();

@@ -122,9 +122,13 @@ export async function gotoAuthenticated(page: Page, path: string, persona = pers
   await loginIfRequired(page, persona, path);
 }
 
+export async function gotoWithinSession(page: Page, path: string) {
+  await gotoWithRetry(page, path);
+}
+
 export async function expectVisibleText(page: Page, patterns: (string | RegExp)[]) {
   for (const pattern of patterns) {
-    await expect(page.getByText(pattern).first()).toBeVisible();
+    await expect(page.getByText(pattern).filter({ visible: true }).first()).toBeVisible();
   }
 }
 

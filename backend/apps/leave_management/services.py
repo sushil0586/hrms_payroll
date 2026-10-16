@@ -2013,7 +2013,7 @@ def review_leave_balance_transaction(*, actor, transaction_item: LeaveBalanceTra
         raise ValidationError({"decision": "Unsupported review decision."})
 
     locked_transaction = (
-        LeaveBalanceTransaction.objects.select_for_update()
+        LeaveBalanceTransaction.objects.select_for_update(of=("self",))
         .select_related("employee", "leave_policy", "leave_balance", "performed_by")
         .filter(id=transaction_item.id, tenant=actor.tenant)
         .first()

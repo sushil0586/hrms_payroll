@@ -58,7 +58,7 @@ const staticRoutes = discoverHrAdminRoutes()
   .filter((route) => !excludedStaticRoutes.has(route))
   .map((route) => requiredFunctionality(route));
 
-const routeGroups = chunks(staticRoutes, 12);
+const routeGroups = chunks(staticRoutes, 4);
 
 test.describe("HR Admin unified design full static route certification", () => {
   for (const [groupIndex, routes] of routeGroups.entries()) {
@@ -91,10 +91,15 @@ test.describe("HR Admin unified design full static route certification", () => {
             "main .payroll-statutory-operations-grid",
             "main .saas-control-panel",
             "main .saas-usage-grid",
+            "main .attendance-operations-panel",
+            "main .hr-employee-workbench",
+            "main .hr-employee-health-panel",
+            "main .policy-command-grid",
+            "main .policy-card",
             "main table",
             "main .empty-state",
             "main .payroll-setup-empty-state",
-          ].join(", "));
+          ].join(", ")).filter({ visible: true });
           await expect(
             operationalSurface.first(),
             `${route.route} should expose filters, pagination, cards, table, or empty state`,

@@ -62,14 +62,14 @@ test.describe("Production storage governance proof", () => {
     await expectPageReady(page, "Payslips");
 
     await expectVisibleText(page, [
-      "Published only",
+      "Published payslips only",
       "Employee scoped",
-      "Download tracked",
+      "Secure download",
       "Published",
     ]);
 
     await page.getByRole("button", { name: "Review payslip" }).first().click();
-    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expect(page.getByRole("dialog").filter({ hasText: "Payslip detail" })).toBeVisible();
     await expectVisibleText(page, [
       "Download payslip",
       "Access trail",
@@ -80,10 +80,11 @@ test.describe("Production storage governance proof", () => {
       /payroll\.download\.[\w.-]+\.v1/,
       /payroll\.retention\.[\w.-]+\.v1/,
       "Checksum",
-      "Calculation lines",
+      "Source hash",
+      "PDF readiness",
     ]);
 
-    const download = page.getByRole("link", { name: "Download payslip" });
+    const download = page.getByRole("dialog").getByRole("link", { name: "Download payslip" });
     await expect(download).toBeVisible();
     await expect(download).toHaveAttribute("href", /\/api\/me\/payroll-payslips\/[^/]+\/download/);
 

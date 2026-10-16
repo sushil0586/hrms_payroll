@@ -1,7 +1,15 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
 import { gotoAuthenticated } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
 
 const runSuffix = Date.now().toString(36).toUpperCase();
 
@@ -20,15 +28,19 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 }
 
 test.describe("Phase 9E employee bank account readiness", () => {
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test("HR admin creates and edits employee primary bank accounts through browser UI", async ({ page }) => {
     test.setTimeout(8 * 60 * 1000);
 
-    await gotoAuthenticated(page, "/hr-admin/employees?status=active");
+    const employeeId = workspace.manifest.credentials.employee.employee_id;
+    await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employeeId}`, workspacePersona(workspace, "hr_admin"));
     await expectPageReady(page, "Employees");
-    const employeeHrefs = await page.locator("a.employee-directory-item").evaluateAll((items) =>
-      items.map((item) => (item as HTMLAnchorElement).href),
-    );
-    expect(employeeHrefs.length).toBeGreaterThan(0);
+    const employeeHrefs = [`/hr-admin/employees?employeeId=${employeeId}`];
 
     let editedCreatedAccount = false;
     for (const employeeHref of employeeHrefs.slice(0, 10)) {
@@ -38,16 +50,16 @@ test.describe("Phase 9E employee bank account readiness", () => {
       await expect(page.getByRole("link", { name: "Manage bank accounts" })).toBeVisible();
       await page.getByRole("link", { name: "Manage bank accounts" }).click();
 
-      await expectPageReady(page, /Bank accounts for/);
+      const bankDialog = page.getByRole("dialog", { name: "Manage bank accounts" });
+      await expect(bankDialog).toBeVisible();
       await expect(page.getByRole("heading", { name: "Bank accounts", exact: true })).toBeVisible();
-      await expect(page.getByRole("heading", { name: /Create bank account|Edit bank account/ })).toBeVisible();
       await expect(page.getByRole("button", { name: "New account" })).toBeVisible();
       await expect(page.getByRole("button", { name: /Create account|Save account/ })).toBeVisible();
       await expect(page.getByRole("button", { name: "Reset" })).toBeVisible();
 
       const records = page.locator("[aria-label='Employee bank account records']");
       const hasPrimary = await records.getByText("primary", { exact: true }).first().isVisible().catch(() => false);
-      const form = page.locator("form").filter({ has: page.getByRole("heading", { name: /Create bank account|Edit bank account/ }) }).first();
+      const form = bankDialog.locator("form").filter({ has: page.getByRole("button", { name: /Create account|Save account/ }) }).first();
       for (const label of ["Account holder name", "Bank name", "Account number", "IFSC code", "Branch name"]) {
         await expect(field(form, label), `${label} should be visible`).toBeVisible();
       }

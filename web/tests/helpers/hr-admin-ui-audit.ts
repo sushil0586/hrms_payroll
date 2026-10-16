@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "./assertions";
 
@@ -68,50 +68,49 @@ export async function gotoDemoHrAdmin(page: Page, route: string) {
     authenticatedPages.add(page);
   }
   await page.goto(route, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-}
-
-async function expectControlBoxHealthy(control: Locator, route: string) {
-  const box = await control.boundingBox();
-  if (!box) {
-    return;
-  }
-
-  const controlKind = await control.evaluate((element) => ({
-    isInlineTextLink: element.tagName === "A" && !element.classList.contains("button"),
-    isNativeChoiceInput: element.tagName === "INPUT" && ["checkbox", "radio"].includes((element as HTMLInputElement).type),
-  }));
-  const minimumWidth = controlKind.isInlineTextLink ? 12 : controlKind.isNativeChoiceInput ? 16 : 24;
-  const minimumHeight = controlKind.isInlineTextLink ? 14 : controlKind.isNativeChoiceInput ? 16 : 24;
-  expect(box.width, `${route} control should have visible width`).toBeGreaterThanOrEqual(minimumWidth);
-  expect(box.height, `${route} control should have visible height`).toBeGreaterThanOrEqual(minimumHeight);
-
-  const viewport = control.page().viewportSize();
-  if (viewport) {
-    expect(box.x, `${route} control should not start outside the viewport`).toBeGreaterThanOrEqual(-2);
-    expect(box.x + box.width, `${route} control should not be clipped past the viewport`).toBeLessThanOrEqual(viewport.width + 2);
-  }
-
-  const isButtonLike = await control.evaluate((element) => element.classList.contains("button") || element.tagName === "BUTTON");
-  if (isButtonLike) {
-    const hasTextClipping = await control.evaluate((element) => element.scrollWidth > element.clientWidth + 2);
-    expect(hasTextClipping, `${route} button text should not be clipped`).toBe(false);
-  }
 }
 
 export async function auditVisibleControls(page: Page, route: string, limit = 24) {
   const controls = page.locator("main a, main button, main summary, header a, header button, aside a, aside button");
-  const count = await controls.count();
+  const controlStates = await controls.evaluateAll((elements, maximum) =>
+    elements.slice(0, maximum).flatMap((element, index) => {
+      const style = window.getComputedStyle(element);
+      let rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || style.visibility === "hidden" || style.display === "none") {
+        return [];
+      }
+      element.scrollIntoView({ block: "nearest", inline: "nearest" });
+      rect = element.getBoundingClientRect();
+      const isInlineTextLink = element.tagName === "A" && !element.classList.contains("button");
+      const isNativeChoiceInput = element.tagName === "INPUT" && ["checkbox", "radio"].includes((element as HTMLInputElement).type);
+      return [{
+        index,
+        label: (element.getAttribute("aria-label") || element.textContent || element.tagName).trim().replace(/\s+/g, " ").slice(0, 120),
+        box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        minimumWidth: isInlineTextLink ? 12 : isNativeChoiceInput ? 16 : 24,
+        minimumHeight: isInlineTextLink ? 14 : isNativeChoiceInput ? 16 : 24,
+        isButtonLike: element.classList.contains("button") || element.tagName === "BUTTON",
+        hasTextClipping: element.scrollWidth > element.clientWidth + 2,
+        horizontalOverflow: Math.max(
+          document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          document.body.scrollWidth - document.body.clientWidth,
+        ),
+      }];
+    }), limit);
+  const viewport = page.viewportSize();
 
-  for (let index = 0; index < Math.min(count, limit); index += 1) {
-    const control = controls.nth(index);
-    if (!(await control.isVisible().catch(() => false))) {
-      continue;
+  for (const controlState of controlStates) {
+    const { box } = controlState;
+    expect(box.width, `${route} control should have visible width`).toBeGreaterThanOrEqual(controlState.minimumWidth);
+    expect(box.height, `${route} control should have visible height`).toBeGreaterThanOrEqual(controlState.minimumHeight);
+    if (viewport) {
+      expect(box.x, `${route} control "${controlState.label}" should not start outside the viewport`).toBeGreaterThanOrEqual(-2);
+      expect(box.x + box.width, `${route} control "${controlState.label}" should not be clipped past the viewport`).toBeLessThanOrEqual(viewport.width + 2);
     }
-    await control.scrollIntoViewIfNeeded().catch(() => undefined);
-    await expectControlBoxHealthy(control, route);
-    await control.hover({ timeout: 1_000 }).catch(() => undefined);
-    await expectNoHorizontalOverflow(page);
+    if (controlState.isButtonLike) {
+      expect(controlState.hasTextClipping, `${route} button text should not be clipped`).toBe(false);
+    }
+    expect(controlState.horizontalOverflow, `${route} should not overflow after revealing "${controlState.label}"`).toBeLessThanOrEqual(1);
   }
 }
 
@@ -124,11 +123,13 @@ async function auditDisclosureControls(page: Page, route: string) {
     if (!(await summary.isVisible().catch(() => false))) {
       continue;
     }
-    await summary.scrollIntoViewIfNeeded().catch(() => undefined);
-    await summary.click();
+    await summary.evaluate((element) => {
+      element.scrollIntoView({ behavior: "instant", block: "nearest", inline: "nearest" });
+      (element as HTMLElement).click();
+    });
     await expectNoHorizontalOverflow(page);
     await expectVisibleLinksAreReal(page, route);
-    await summary.click();
+    await summary.evaluate((element) => (element as HTMLElement).click());
   }
 }
 

@@ -37,7 +37,7 @@ test.describe("ESS real user demo certification", () => {
     await page.getByRole("button", { name: "Regularize attendance" }).click();
     await expect(page.getByRole("dialog", { name: "Regularize attendance" })).toBeVisible();
     await expect(page.getByLabel("Attendance record")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Submit regularization" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit correction" })).toBeVisible();
     await page.getByRole("button", { name: "Close" }).click();
 
     await gotoAuthenticated(page, "/ess/payslips", employee);
@@ -47,7 +47,7 @@ test.describe("ESS real user demo certification", () => {
     await gotoAuthenticated(page, "/ess/documents", employee);
     await expectRouteHealthy(page, "Documents");
     for (const text of ["PAN Card", "Aadhaar Card", "Bank Account Proof", "Address Proof"]) {
-      await expect(page.getByRole("heading", { name: text }).first(), `${text} should be visible in document center`).toBeVisible();
+      await expect(page.getByText(text, { exact: true }).first(), `${text} should be visible in document center`).toBeVisible();
     }
     await expect(page.getByText("Re-upload requested.").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Upload document" })).toBeVisible();
@@ -70,7 +70,8 @@ test.describe("ESS real user demo certification", () => {
     await page.setViewportSize({ width: 1280, height: 820 });
     await gotoAuthenticated(page, "/ess/statutory-declarations", employee);
     await expectRouteHealthy(page, "Statutory Declarations");
-    await expect(page.getByRole("heading", { name: /Start declaration|Update declaration/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Continue declaration" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Start declaration|Update declaration/ })).toBeVisible();
 
     await gotoAuthenticated(page, "/ess/notifications", employee);
     await expectRouteHealthy(page, /Notifications|Employee notifications/i);

@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { selectFirstAttendanceRecord } from "../helpers/attendance-records";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 type Persona = {
@@ -10,6 +11,16 @@ type Persona = {
 
 function uniqueRef(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
+}
+
+function apiBaseUrl() {
+  return process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+}
+
+async function backendAuthHeaders(page: Page) {
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
+  expect(token).toBeTruthy();
+  return { Authorization: `Token ${token}` };
 }
 
 function field(scope: Page | Locator, label: string, index = 0) {
@@ -25,8 +36,6 @@ function card(page: Page, text: string | RegExp) {
 }
 
 async function switchTo(page: Page, path: string, persona: Persona) {
-  await page.request.post("/api/auth/logout").catch(() => null);
-  await page.context().clearCookies();
   await gotoAuthenticated(page, path, persona);
 }
 
@@ -44,29 +53,23 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST", act
 }
 
 async function ensureFirstAttendanceRowSelected(page: Page) {
-  const firstRecord = page.locator("article.record-card").first();
-  await expect(firstRecord).toBeVisible();
-  const checkbox = firstRecord.locator("input[type='checkbox']");
-  if (!(await checkbox.isChecked())) {
-    await checkbox.check();
-  }
-  await expect(page.getByText("1 selected").first()).toBeVisible();
-  return firstRecord;
+  return selectFirstAttendanceRecord(page);
 }
 
 async function clearPendingEmployeeRegularization(page: Page) {
-  await switchTo(page, "/hr-admin/attendance-regularizations?status=pending&q=EMP-0042", hrAdmin);
-  await expectPageReady(page, "Regularizations");
-  const pendingCard = page.locator("article.record-card").first();
-  if ((await pendingCard.count()) === 0 || !(await pendingCard.getByRole("button", { name: "Reject" }).isEnabled().catch(() => false))) {
-    return;
+  await switchTo(page, "/hr-admin/attendance-regularizations", hrAdmin);
+  const headers = await backendAuthHeaders(page);
+  const response = await page.request.get(`${apiBaseUrl()}/hr-admin/attendance-regularizations/?status=pending&q=EMP-0042&page_size=100`, { headers });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const payload = await response.json();
+  const items = (Array.isArray(payload) ? payload : payload.items ?? payload.results ?? []) as Array<{ id: string; employee_code?: string }>;
+  for (const item of items.filter((entry) => entry.employee_code === "EMP-0042")) {
+    const rejection = await page.request.post(`${apiBaseUrl()}/hr-admin/attendance-regularizations/${item.id}/reject/`, {
+      headers,
+      data: { comment: uniqueRef("HR_REG_CLEANUP") },
+    });
+    expect([200, 404], await rejection.text()).toContain(rejection.status());
   }
-  await field(pendingCard, "Decision note").fill(uniqueRef("HR_REG_CLEANUP"));
-  await Promise.all([
-    page.waitForResponse((item) => item.url().includes("/api/hr-admin/attendance-regularizations/") && item.url().endsWith("/reject") && item.request().method() === "POST"),
-    pendingCard.getByRole("button", { name: "Reject" }).click(),
-  ]);
-  await expect(page.getByText("Regularization rejected.")).toBeVisible();
 }
 
 async function createAndApproveRegularization(page: Page, reason: string, note: string) {
@@ -112,9 +115,12 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
     await switchTo(page, "/hr-admin/attendance-records?page_size=10", hrAdmin);
     await expectPageReady(page, "Attendance records");
     const firstRecord = await ensureFirstAttendanceRowSelected(page);
-    const employeeCode = (await firstRecord.locator(".section-copy").first().textContent())?.split("•")[0]?.trim() ?? "";
-    const editHref = await firstRecord.getByRole("link", { name: "Edit record" }).getAttribute("href");
-    const recordId = editHref?.match(/attendance-records\/([^/]+)\/edit/)?.[1];
+    const employeeCode = (await firstRecord.locator("td").first().innerText()).split("\n").at(-1)?.trim() ?? "";
+    const checkboxName = await firstRecord.getByRole("checkbox").getAttribute("aria-label");
+    expect(checkboxName).toMatch(/^Select /);
+    await firstRecord.getByRole("button", { name: "Inspect" }).click();
+    const editHref = await page.getByRole("complementary", { name: "Attendance record detail" }).getByRole("link", { name: "Edit record" }).getAttribute("href");
+    const recordId = new URL(editHref!, "http://127.0.0.1").searchParams.get("editRecord");
     expect(recordId).toBeTruthy();
 
     const lockResult = await submitAndCapture<{ updated_count: number }>(
@@ -122,7 +128,7 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
       "/api/hr-admin/attendance-records/bulk-actions",
       "POST",
       async () => {
-        await page.getByRole("button", { name: /^Lock \(1\)$/ }).click();
+        await page.getByRole("button", { name: "Lock", exact: true }).click();
       },
     );
     expect(lockResult.ok).toBeTruthy();
@@ -149,7 +155,7 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
       "/api/hr-admin/attendance-records/bulk-actions",
       "POST",
       async () => {
-        await page.getByRole("button", { name: /^Unlock \(1\)$/ }).click();
+        await page.getByRole("button", { name: "Unlock", exact: true }).click();
       },
     );
     expect(unlockResult.ok).toBeTruthy();

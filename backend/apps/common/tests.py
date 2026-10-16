@@ -1,4 +1,8 @@
 from datetime import date
+from unittest.mock import patch
+
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from django.test import TestCase
@@ -6,11 +10,16 @@ from rest_framework.test import APIClient
 
 from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, AttendancePolicyStatus, EmployeeShiftAssignment, Shift
 from apps.common.management.commands.bootstrap_demo_workspace import Command as BootstrapDemoWorkspaceCommand
-from apps.common.selectors import evaluate_saas_commercial_access
+from apps.common.selectors import (
+    describe_saas_commercial_control,
+    evaluate_saas_commercial_access,
+    get_hr_admin_employee_list_page,
+    get_manager_team_summary,
+)
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, RolePermission, TenantMembership, User
 from apps.leave_management.models import AccrualFrequency, LeaveBalance, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType
-from apps.organizations.models import Branch, BusinessUnit, Department, LegalEntity, Location
+from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, LegalEntity, Location
 from apps.payroll.models import (
     PayrollCalculationStatus,
     PayrollCalendar,
@@ -55,14 +64,14 @@ class HrAdminOptionMetadataTests(TestCase):
             is_default=True,
             employee_code="EMP-0001",
         )
-        role = Role.objects.create(
+        self.role = Role.objects.create(
             tenant=self.tenant,
             code="hr-admin",
             name="HR Admin",
             is_system_role=True,
             is_active=True,
         )
-        MembershipRole.objects.create(membership=self.membership, role=role, is_primary=True)
+        MembershipRole.objects.create(membership=self.membership, role=self.role, is_primary=True)
         self.legal_entity = LegalEntity.objects.create(
             tenant=self.tenant,
             code="default-legal-entity",
@@ -131,6 +140,154 @@ class HrAdminOptionMetadataTests(TestCase):
 
     def test_document_options_include_branch_parent_metadata(self):
         self._assert_branch_metadata("/api/v1/hr-admin/document-options/")
+
+    def test_employee_list_paginates_filters_sorts_and_preserves_legacy_contract(self):
+        for index in range(2, 8):
+            Employee.objects.create(
+                tenant=self.tenant,
+                employee_code=f"EMP-{index:04d}",
+                first_name=f"Employee {index}",
+                work_email=f"employee-{index}@example.com",
+                employment_status=EmploymentStatus.ACTIVE if index % 2 == 0 else EmploymentStatus.INACTIVE,
+                department=self.department,
+            )
+
+        legacy_response = self.client.get("/api/v1/hr-admin/employees/")
+        first_page = self.client.get(
+            "/api/v1/hr-admin/employees/",
+            {"page": 1, "page_size": 2, "status": EmploymentStatus.ACTIVE, "sort": "-employee_code"},
+        )
+        second_page = self.client.get(
+            "/api/v1/hr-admin/employees/",
+            {"page": 2, "page_size": 2, "status": EmploymentStatus.ACTIVE, "sort": "-employee_code"},
+        )
+        search_response = self.client.get(
+            "/api/v1/hr-admin/employees/",
+            {"page_size": 10, "q": "employee-6@example.com"},
+        )
+
+        self.assertEqual(legacy_response.status_code, 200)
+        self.assertIsInstance(legacy_response.json(), list)
+        self.assertEqual(len(legacy_response.json()), 7)
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(first_page.json()["total_count"], 4)
+        self.assertEqual(first_page.json()["total_pages"], 2)
+        self.assertTrue(first_page.json()["has_next"])
+        self.assertEqual([item["employee_code"] for item in first_page.json()["items"]], ["EMP-0006", "EMP-0004"])
+        self.assertEqual([item["employee_code"] for item in second_page.json()["items"]], ["EMP-0002", "EMP-0001"])
+        self.assertEqual([item["employee_code"] for item in search_response.json()["items"]], ["EMP-0006"])
+        self.assertEqual(first_page.json()["summary"]["total_count"], 7)
+
+    def test_manager_team_summary_keeps_direct_report_filtering_in_database(self):
+        manager = self.membership.employee
+        Employee.objects.bulk_create(
+            [
+                Employee(
+                    tenant=self.tenant,
+                    employee_code=f"TEAM-{index:04d}",
+                    first_name=f"Report {index}",
+                    employment_status=EmploymentStatus.ACTIVE,
+                    reporting_manager=manager,
+                )
+                for index in range(1, 21)
+            ]
+        )
+
+        with CaptureQueriesContext(connection) as captured:
+            summary = get_manager_team_summary(manager)
+
+        self.assertEqual(summary["team_size"], 20)
+        self.assertEqual(summary["pending_leave_approvals_count"], 0)
+        direct_report_id_queries = [
+            query["sql"]
+            for query in captured.captured_queries
+            if 'SELECT "employees_employee"."id" FROM "employees_employee"' in query["sql"]
+            and '"reporting_manager_id"' in query["sql"]
+        ]
+        self.assertEqual(direct_report_id_queries, [])
+
+        with CaptureQueriesContext(connection) as employee_queries:
+            page = get_hr_admin_employee_list_page(manager, page=1, page_size=25)
+        manager_item = next(item for item in page["items"] if item["id"] == manager.id)
+        self.assertEqual(manager_item["direct_reports_count"], 20)
+        self.assertEqual(manager_item["assigned_role_count"], 1)
+        self.assertLessEqual(len(employee_queries), 5)
+
+    def test_employee_list_rejects_invalid_pagination_and_is_tenant_scoped(self):
+        other_tenant = Tenant.objects.create(
+            code="other-employees",
+            name="Other Employees",
+            legal_name="Other Employees Pvt Ltd",
+            status=TenantStatus.ACTIVE,
+            subscription_plan=SubscriptionPlan.ENTERPRISE,
+            country_code="IN",
+            timezone="Asia/Kolkata",
+        )
+        Employee.objects.create(
+            tenant=other_tenant,
+            employee_code="OTHER-0001",
+            first_name="Other",
+            work_email="other@example.com",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+
+        invalid_response = self.client.get("/api/v1/hr-admin/employees/", {"page_size": "invalid"})
+        scoped_response = self.client.get("/api/v1/hr-admin/employees/", {"page_size": 100})
+
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertEqual(scoped_response.status_code, 200)
+        self.assertNotIn("OTHER-0001", [item["employee_code"] for item in scoped_response.json()["items"]])
+
+    def test_employee_page_query_count_does_not_grow_with_page_rows(self):
+        cost_center = CostCenter.objects.create(
+            tenant=self.tenant,
+            legal_entity=self.legal_entity,
+            code="people-cost",
+            name="People Cost",
+        )
+        Employee.objects.filter(tenant=self.tenant).update(cost_center=cost_center)
+        for index in range(2, 52):
+            Employee.objects.create(
+                tenant=self.tenant,
+                employee_code=f"QUERY-{index:04d}",
+                first_name=f"Query {index}",
+                work_email=f"query-{index}@example.com",
+                employment_status=EmploymentStatus.ACTIVE,
+                department=self.department,
+                cost_center=cost_center,
+            )
+
+        employee = Employee.objects.get(employee_code="EMP-0001")
+        with self.assertNumQueries(5):
+            payload = get_hr_admin_employee_list_page(employee, page=1, page_size=50)
+
+        self.assertEqual(len(payload["items"]), 50)
+        self.assertEqual(payload["total_count"], 51)
+        self.assertTrue(all(item["cost_center"] == "People Cost" for item in payload["items"]))
+
+    def test_permission_snapshot_is_rebuilt_for_each_request(self):
+        allowed = self.client.get("/api/v1/hr-admin/employees/", {"page_size": 1})
+        RolePermission.objects.create(
+            role=self.role,
+            permission_key="leave.view",
+            description="Explicit permission replaces catalog defaults.",
+        )
+        denied = self.client.get("/api/v1/hr-admin/employees/", {"page_size": 1})
+        self.role.permissions.all().delete()
+        allowed_again = self.client.get("/api/v1/hr-admin/employees/", {"page_size": 1})
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(allowed_again.status_code, 200)
+
+    def test_commercial_usage_does_not_build_full_hr_dashboard(self):
+        with patch("apps.common.selectors.get_hr_admin_dashboard_for_tenant") as dashboard_builder:
+            control = describe_saas_commercial_control(self.tenant, include_history=False)
+
+        dashboard_builder.assert_not_called()
+        usage = {item["meter_ref"]: item["current_value"] for item in control["usage_limits"]}
+        self.assertEqual(usage["active_employees"], 1)
+        self.assertEqual(usage["active_memberships"], 1)
 
     def test_demo_workspace_pending_leave_seed_dates_skip_weekend(self):
         start_date, end_date = BootstrapDemoWorkspaceCommand._next_contiguous_working_range(
@@ -595,6 +752,118 @@ class HrAdminOptionMetadataTests(TestCase):
         policy.refresh_from_db()
         self.assertEqual(policy.status, LeavePolicyStatus.ARCHIVED)
 
+    def test_leave_balance_list_and_actions_enforce_tenant_scope(self):
+        role = self.membership.membership_roles.get(role__code="hr-admin").role
+        RolePermission.objects.create(
+            role=role,
+            permission_key="leave.view",
+            description="Leave balance read permission.",
+        )
+        RolePermission.objects.create(
+            role=role,
+            permission_key="leave.balances.manage",
+            description="Leave balance write permission.",
+        )
+        employee = Employee.objects.get(tenant=self.tenant, employee_code="EMP-0001")
+        leave_type = LeaveType.objects.create(tenant=self.tenant, code="tenant-leave", name="Tenant Leave")
+        policy = LeavePolicy.objects.create(
+            tenant=self.tenant,
+            leave_type=leave_type,
+            code="tenant-policy",
+            name="Tenant Policy",
+            status=LeavePolicyStatus.ACTIVE,
+            accrual_frequency=AccrualFrequency.YEARLY,
+            annual_entitlement="12.00",
+        )
+        own_balance = LeaveBalance.objects.create(
+            tenant=self.tenant,
+            employee=employee,
+            leave_policy=policy,
+            period_year=2026,
+            accrued_amount="12.00",
+            closing_balance="12.00",
+        )
+        other_tenant = Tenant.objects.create(
+            code="other-balance-co",
+            name="Other Balance Co",
+            legal_name="Other Balance Co Pvt Ltd",
+            status=TenantStatus.ACTIVE,
+            subscription_plan=SubscriptionPlan.ENTERPRISE,
+            country_code="IN",
+            timezone="Asia/Kolkata",
+        )
+        other_employee = Employee.objects.create(
+            tenant=other_tenant,
+            employee_code="OTHER-001",
+            first_name="Other",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+        other_type = LeaveType.objects.create(tenant=other_tenant, code="other-leave", name="Other Leave")
+        other_policy = LeavePolicy.objects.create(
+            tenant=other_tenant,
+            leave_type=other_type,
+            code="other-policy",
+            name="Other Policy",
+            status=LeavePolicyStatus.ACTIVE,
+        )
+        other_balance = LeaveBalance.objects.create(
+            tenant=other_tenant,
+            employee=other_employee,
+            leave_policy=other_policy,
+            period_year=2026,
+            closing_balance="20.00",
+        )
+
+        list_response = self.client.get("/api/v1/hr-admin/leave-balances/?page_size=50")
+        own_action = self.client.post(
+            "/api/v1/hr-admin/leave-balances/actions/",
+            {
+                "employee_id": str(employee.id),
+                "leave_policy_id": str(policy.id),
+                "action": "credit_adjustment",
+                "units": "1.00",
+                "effective_date": "2026-10-15",
+                "reason": "Tenant isolation regression",
+            },
+            format="json",
+        )
+        foreign_employee_action = self.client.post(
+            "/api/v1/hr-admin/leave-balances/actions/",
+            {
+                "employee_id": str(other_employee.id),
+                "leave_policy_id": str(policy.id),
+                "action": "credit_adjustment",
+                "units": "1.00",
+                "effective_date": "2026-10-15",
+                "reason": "Cross-tenant employee attempt",
+            },
+            format="json",
+        )
+        foreign_policy_action = self.client.post(
+            "/api/v1/hr-admin/leave-balances/actions/",
+            {
+                "employee_id": str(employee.id),
+                "leave_policy_id": str(other_policy.id),
+                "action": "credit_adjustment",
+                "units": "1.00",
+                "effective_date": "2026-10-15",
+                "reason": "Cross-tenant policy attempt",
+            },
+            format="json",
+        )
+
+        self.assertEqual(list_response.status_code, 200)
+        listed_ids = {item["id"] for item in list_response.json()["items"]}
+        self.assertIn(str(own_balance.id), listed_ids)
+        self.assertNotIn(str(other_balance.id), listed_ids)
+        self.assertEqual(own_action.status_code, 200)
+        self.assertEqual(foreign_employee_action.status_code, 400)
+        self.assertEqual(foreign_employee_action.json(), {"employee_id": ["Employee not found."]})
+        self.assertEqual(foreign_policy_action.status_code, 400)
+        self.assertEqual(foreign_policy_action.json(), {"leave_policy_id": ["Leave policy not found."]})
+        other_balance.refresh_from_db()
+        self.assertEqual(other_balance.closing_balance, 20)
+
     def test_duplicate_leave_policy_create_returns_field_validation_error(self):
         role = self.membership.membership_roles.get(role__code="hr-admin").role
         RolePermission.objects.create(
@@ -632,6 +901,40 @@ class HrAdminOptionMetadataTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["code"], "A leave policy with this code already exists.")
         self.assertEqual(LeavePolicy.objects.filter(tenant=self.tenant, code="duplicate-policy").count(), 1)
+
+    def test_leave_policy_metadata_update_skips_balance_refresh_but_entitlement_update_refreshes(self):
+        role = self.membership.membership_roles.get(role__code="hr-admin").role
+        RolePermission.objects.create(
+            role=role,
+            permission_key="leave.policies.manage",
+            description="Leave policy write permission.",
+        )
+        leave_type = LeaveType.objects.create(tenant=self.tenant, code="metadata-leave", name="Metadata Leave")
+        policy = LeavePolicy.objects.create(
+            tenant=self.tenant,
+            leave_type=leave_type,
+            code="metadata-policy",
+            name="Metadata Policy",
+            status=LeavePolicyStatus.ACTIVE,
+            annual_entitlement="12.00",
+        )
+
+        with patch("apps.common.api_views.ensure_leave_balances_for_policy") as refresh_balances:
+            metadata_response = self.client.patch(
+                f"/api/v1/hr-admin/leave-policies/{policy.id}/",
+                {"name": "Renamed Metadata Policy"},
+                format="json",
+            )
+            self.assertEqual(metadata_response.status_code, 200)
+            refresh_balances.assert_not_called()
+
+            entitlement_response = self.client.patch(
+                f"/api/v1/hr-admin/leave-policies/{policy.id}/",
+                {"annual_entitlement": "14.00"},
+                format="json",
+            )
+            self.assertEqual(entitlement_response.status_code, 200)
+            refresh_balances.assert_called_once()
 
     def test_payroll_output_setup_can_filter_register_artifact_beyond_first_page(self):
         role = self.membership.membership_roles.get(role__code="hr-admin").role

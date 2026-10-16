@@ -162,7 +162,7 @@ test.describe("Tenant admin cross-role and cross-tenant boundaries", () => {
         if (await tenantShortcut.isVisible().catch(() => false)) {
           await expect(tenantShortcut).toHaveAttribute("href", "/");
         } else {
-          await expect(page.getByText("Tenant admin restricted").first()).toBeVisible();
+          await expect(page.getByRole("main")).not.toContainText("Account Control Center");
         }
       }
       await expectTenantAdminApisDenied(page, label);

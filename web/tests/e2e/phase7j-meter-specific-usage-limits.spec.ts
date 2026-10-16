@@ -260,12 +260,13 @@ test.describe("Phase 7J meter-specific usage-limit gating", () => {
       expect(providerScope?.exceeded_usage_limits).toContain("provider_connections");
 
       await expect(page.getByText("SaaS Control Plane")).toBeVisible();
-      await expect(page.getByText("Usage exceptions")).toBeVisible();
+      await expect(page.getByText("usage exceptions", { exact: true })).toBeVisible();
       await expect(page.getByText("Limit exceeded", { exact: true })).toBeVisible();
       await expect(page.getByText("Payroll Runs Per Month").first()).toBeVisible();
       await expect(page.getByText("Provider Connections").first()).toBeVisible();
-      await expect(page.getByText("payroll_runs_per_month").first()).toBeVisible();
-      await expect(page.getByText("provider_connections").first()).toBeVisible();
+      const controlPlane = page.getByRole("main");
+      await expect(controlPlane.getByText("payroll_runs_per_month", { exact: true }).first()).toBeVisible();
+      await expect(controlPlane.getByText("provider_connections", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Payroll core").first()).toBeVisible();
       await expect(page.getByText("Payroll provider integrations").first()).toBeVisible();
       await expect(page.getByText("usage_limit_exceeded").first()).toBeVisible();

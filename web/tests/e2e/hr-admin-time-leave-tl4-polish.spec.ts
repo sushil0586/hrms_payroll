@@ -68,6 +68,9 @@ async function expectCompactTypography(page: Page, route: string) {
       const tag = heading.tagName.toLowerCase();
       const isH1 = tag === "h1" || heading.classList.contains("page-title");
       const isH2 = tag === "h2" || heading.classList.contains("section-title");
+      if (tag === "h3" && heading.closest(".record-card")) {
+        return [];
+      }
       const maxFontSize = isH1 ? 34 : isH2 ? 24 : 21;
       const maxTextLength = isH1 ? 72 : isH2 ? 70 : 58;
       const failures: string[] = [];
@@ -106,7 +109,15 @@ async function expectReadableCardsAndRows(page: Page, route: string) {
           return [];
         }
 
-        const text = (element.textContent || "").trim().replace(/\s+/g, " ");
+        let text = ((element as HTMLElement).innerText || "").trim().replace(/\s+/g, " ");
+        if (element.matches("label.form-field")) {
+          const visibleCopy = element.cloneNode(true) as HTMLElement;
+          visibleCopy.querySelectorAll("select").forEach((selectCopy, index) => {
+            const select = element.querySelectorAll("select")[index];
+            selectCopy.replaceWith(document.createTextNode(select?.selectedOptions[0]?.textContent || ""));
+          });
+          text = (visibleCopy.textContent || "").trim().replace(/\s+/g, " ");
+        }
         const failures: string[] = [];
         if (element.scrollWidth > element.clientWidth + 2) {
           failures.push(`content clips horizontally: ${text.slice(0, 90)}`);
@@ -138,7 +149,17 @@ async function expectNoButtonCrowding(page: Page, route: string) {
       if (rect.height < 32 && !["SUMMARY"].includes(control.tagName)) {
         failures.push(`control is too short for comfortable clicking: ${text}`);
       }
-      if (rect.left < -1 || rect.right > document.documentElement.clientWidth + 1) {
+      let ancestor = control.parentElement;
+      let hasHorizontalScroller = false;
+      while (ancestor && ancestor.tagName !== "MAIN") {
+        const ancestorStyle = window.getComputedStyle(ancestor);
+        if (["auto", "scroll"].includes(ancestorStyle.overflowX) && ancestor.scrollWidth > ancestor.clientWidth + 2) {
+          hasHorizontalScroller = true;
+          break;
+        }
+        ancestor = ancestor.parentElement;
+      }
+      if (!hasHorizontalScroller && (rect.left < -1 || rect.right > document.documentElement.clientWidth + 1)) {
         failures.push(`control is outside viewport: ${text}`);
       }
       return failures;

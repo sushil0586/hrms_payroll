@@ -9,7 +9,7 @@ import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 export default async function HrAdminAttendancePoliciesPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin" });
   const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
-  const [result, optionsResult] = await Promise.all([getHrAdminAttendancePolicies(), getHrAdminPolicyOptions()]);
+  const [result, optionsResult] = await Promise.all([getHrAdminAttendancePolicies(), getHrAdminPolicyOptions({ employee_limit: 50 })]);
   const activeCount = result.data.filter((item) => item.status === "active").length;
 
   return (

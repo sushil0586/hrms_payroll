@@ -1,7 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
+import { gotoAuthenticated, gotoWithinSession, type Persona } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
+let hrAdmin: Persona;
 
 type PhaseResult = {
   phase: string;
@@ -75,6 +84,15 @@ async function optionCount(select: Locator) {
   );
 }
 
+async function openActionForm(page: Page, navigationName: string, tabName: RegExp, testId: string, current = "page") {
+  const button = page.getByRole("navigation", { name: navigationName }).getByRole("button", { name: tabName });
+  await expect(async () => {
+    await button.click();
+    await expect(button).toHaveAttribute("aria-current", current);
+  }).toPass();
+  await expect(page.getByTestId(testId)).toBeVisible();
+}
+
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => routePattern.test(item.url()) && item.request().method() === method, { timeout: 30_000 }),
@@ -106,10 +124,21 @@ async function selectOptionByText(select: Locator, text: string | RegExp) {
   return value;
 }
 
+async function selectEmployeeByCode(scope: Locator, employeeCode: string) {
+  const select = field(scope, "Employee");
+  await scope.getByRole("searchbox", { name: "Find person" }).fill(employeeCode);
+  await expect.poll(async () => {
+    return select.locator("option").allTextContents();
+  }).toContainEqual(expect.stringContaining(employeeCode));
+  return selectOptionByText(select, employeeCode);
+}
+
 async function baselineCounts(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/employees/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/employees/new");
   await assertPageShell(page, "Create employee");
   const employeeMain = page.locator("main");
+  await employeeMain.getByRole("button", { name: /^3\.\s*Structure$/ }).click();
+  await expect(field(employeeMain, "Legal entity")).toBeVisible();
   const structuralCounts = {
     legalEntities: await optionCount(field(employeeMain, "Legal entity")),
     branches: await optionCount(field(employeeMain, "Branch")),
@@ -123,35 +152,50 @@ async function baselineCounts(page: Page) {
     managers: await optionCount(field(employeeMain, "Reporting manager")),
   };
 
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/payroll-setup?tab=actions");
   await assertPageShell(page, "Payroll Setup");
   const payrollSetup = page.locator("main");
+  await openActionForm(page, "Payroll setup action groups", /^Periods\b/, "payroll-period-form");
+  const calendars = await optionCount(field(payrollSetup.getByTestId("payroll-period-form"), "Calendar"));
+  await openActionForm(page, "Payroll setup action groups", /^Pay groups\b/i, "pay-group-form");
+  const periods = await optionCount(field(payrollSetup.getByTestId("pay-group-form"), "Calendar"));
+  await openActionForm(page, "Payroll setup action groups", /^Assignments\b/, "pay-group-assignment-form");
   const payrollCounts = {
-    calendars: await optionCount(field(payrollSetup.getByTestId("payroll-period-form"), "Calendar")),
-    periods: await optionCount(field(payrollSetup.getByTestId("pay-group-form"), "Calendar")),
+    calendars,
+    periods,
     payGroups: await optionCount(field(payrollSetup.getByTestId("pay-group-assignment-form"), "Pay group")),
     assignmentEmployees: await optionCount(field(payrollSetup.getByTestId("pay-group-assignment-form"), "Employee")),
   };
 
-  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/salary-setup?tab=actions");
   await assertPageShell(page, "Salary Setup");
   const salarySetup = page.locator("main");
+  await openActionForm(page, "Salary setup action groups", /^Versions\b/, "salary-version-form");
+  const structures = await optionCount(field(salarySetup.getByTestId("salary-version-form"), "Structure"));
+  await openActionForm(page, "Salary setup action groups", /^Assignments\b/, "salary-assignment-form");
   const salaryCounts = {
-    structures: await optionCount(field(salarySetup.getByTestId("salary-version-form"), "Structure")),
+    structures,
     versions: await optionCount(field(salarySetup.getByTestId("salary-assignment-form"), "Structure version")),
     salaryEmployees: await optionCount(field(salarySetup.getByTestId("salary-assignment-form"), "Employee")),
   };
 
-  await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/payroll-statutory");
   await assertPageShell(page, "Payroll Statutory");
 
-  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/payroll-inputs");
   await assertPageShell(page, "Payroll Inputs");
   const inputs = page.locator("main");
+  await openActionForm(page, "Payroll input operation steps", /Payroll run\b/, "payroll-run-form", "step");
+  const runPeriods = await optionCount(field(inputs.getByTestId("payroll-run-form"), "Period"));
+  const runStatuses = await optionCount(field(inputs.getByTestId("payroll-run-form"), "Status"));
+  await openActionForm(page, "Payroll input operation steps", /Input snapshot\b/, "payroll-input-snapshot-form", "step");
+  const snapshotEmployeeSelect = field(inputs.getByTestId("payroll-input-snapshot-form"), "Employee");
+  await snapshotEmployeeSelect.focus();
+  await expect.poll(() => optionCount(snapshotEmployeeSelect)).toBeGreaterThan(0);
   const inputCounts = {
-    runPeriods: await optionCount(field(inputs.getByTestId("payroll-run-form"), "Period")),
-    runStatuses: await optionCount(field(inputs.getByTestId("payroll-run-form"), "Status")),
-    snapshotEmployees: await optionCount(field(inputs.getByTestId("payroll-input-snapshot-form"), "Employee")),
+    runPeriods,
+    runStatuses,
+    snapshotEmployees: await optionCount(snapshotEmployeeSelect),
   };
 
   const allCounts = { ...structuralCounts, ...payrollCounts, ...salaryCounts, ...inputCounts };
@@ -181,7 +225,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
     employmentTypeName: `Full Time ${suffix}`,
   };
 
-  await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/legal_entities/new");
   await assertPageShell(page, /Create Legal Entity/i);
   await field(page.locator("main"), "Code").fill(created.legalEntityCode);
   await field(page.locator("main"), "Name").fill(created.legalEntityName);
@@ -194,7 +238,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create legal entity" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/locations/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/locations/new");
   await assertPageShell(page, /Create Location/i);
   await field(page.locator("main"), "Code").fill(created.locationCode);
   await field(page.locator("main"), "Name").fill(created.locationName);
@@ -208,7 +252,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create location" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=locations/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/branches/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/branches/new");
   await assertPageShell(page, /Create Branch/i);
   await field(page.locator("main"), "Code").fill(created.branchCode);
   await field(page.locator("main"), "Name").fill(created.branchName);
@@ -219,7 +263,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create branch" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=branches/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/business_units/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/business_units/new");
   await assertPageShell(page, /Create Business Unit/i);
   await field(page.locator("main"), "Code").fill(created.businessUnitCode);
   await field(page.locator("main"), "Name").fill(created.businessUnitName);
@@ -227,7 +271,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create business unit" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=business_units/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/departments/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/departments/new");
   await assertPageShell(page, /Create Department/i);
   await field(page.locator("main"), "Code").fill(created.departmentCode);
   await field(page.locator("main"), "Name").fill(created.departmentName);
@@ -236,7 +280,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create department" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=departments/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/employment_types/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/employment_types/new");
   await assertPageShell(page, /Create Employment Type/i);
   await field(page.locator("main"), "Code").fill(created.employmentTypeCode);
   await field(page.locator("main"), "Name").fill(created.employmentTypeName);
@@ -246,7 +290,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create employment type" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=employment_types/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/cost_centers/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/cost_centers/new");
   await assertPageShell(page, /Create Cost Center/i);
   await field(page.locator("main"), "Code").fill(`CC-IN-${suffix}`);
   await field(page.locator("main"), "Name").fill(`India Payroll Cost Center ${suffix}`);
@@ -255,7 +299,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create cost center" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=cost_centers/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/grades/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/grades/new");
   await assertPageShell(page, /Create Grade/i);
   await field(page.locator("main"), "Code").fill(`GR-L3-${suffix}`);
   await field(page.locator("main"), "Name").fill(`Level 3 ${suffix}`);
@@ -264,7 +308,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
   await page.getByRole("button", { name: "Create grade" }).click();
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=grades/, { timeout: 30_000 });
 
-  await gotoAuthenticated(page, "/hr-admin/organization/designations/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/organization/designations/new");
   await assertPageShell(page, /Create Designation/i);
   await field(page.locator("main"), "Code").fill(`DES-HR-${suffix}`);
   await field(page.locator("main"), "Name").fill(`People Operations Specialist ${suffix}`);
@@ -282,7 +326,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
 }
 
 async function createPayrollAndSalaryPrerequisites(page: Page, suffix: string) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/payroll-setup?tab=actions");
   await assertPageShell(page, "Payroll Setup");
   const calendarForm = page.getByTestId("payroll-calendar-form");
   const periodForm = page.getByTestId("payroll-period-form");
@@ -307,6 +351,7 @@ async function createPayrollAndSalaryPrerequisites(page: Page, suffix: string) {
   );
   expect(calendar.ok).toBeTruthy();
 
+  await openActionForm(page, "Payroll setup action groups", /^Periods\b/, "payroll-period-form");
   const periodCode = `SEP-2026-${suffix}`;
   const period = await submitAndCapture<{ id: string; code: string }>(
     page,
@@ -326,6 +371,7 @@ async function createPayrollAndSalaryPrerequisites(page: Page, suffix: string) {
   );
   expect(period.ok).toBeTruthy();
 
+  await openActionForm(page, "Payroll setup action groups", /^Pay groups\b/i, "pay-group-form");
   const payGroupCode = `PG-IN-${suffix}`;
   const payGroup = await submitAndCapture<{ id: string; code: string }>(
     page,
@@ -343,8 +389,9 @@ async function createPayrollAndSalaryPrerequisites(page: Page, suffix: string) {
   );
   expect(payGroup.ok).toBeTruthy();
 
-  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/salary-setup?tab=actions");
   await assertPageShell(page, "Salary Setup");
+  await openActionForm(page, "Salary setup action groups", /^Structures\b/, "salary-structure-form");
   const structureForm = page.getByTestId("salary-structure-form");
   const versionForm = page.getByTestId("salary-version-form");
 
@@ -366,6 +413,7 @@ async function createPayrollAndSalaryPrerequisites(page: Page, suffix: string) {
   );
   expect(structure.ok).toBeTruthy();
 
+  await openActionForm(page, "Salary setup action groups", /^Versions\b/, "salary-version-form");
   const version = await submitAndCapture<{ id: string; version: number }>(
     page,
     /\/api\/hr-admin\/salary-structure-versions$/,
@@ -517,7 +565,7 @@ async function createScenarioEmployee(
   employee: ScenarioEmployee,
   org: Awaited<ReturnType<typeof createOrganizationPrerequisites>>,
 ) {
-  await gotoAuthenticated(page, "/hr-admin/employees/new", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/employees/new");
   await assertPageShell(page, "Create employee");
   const main = page.locator("main");
 
@@ -526,6 +574,9 @@ async function createScenarioEmployee(
   await field(main, "First name").fill(employee.firstName);
   await field(main, "Last name").fill(employee.lastName);
   await field(main, "Preferred name").fill(employee.preferredName);
+  console.log(`[P3-0001] ${employee.code} identity complete`);
+
+  await main.getByRole("button", { name: /^2\.\s*Contact$/ }).click();
   await field(main, "Work email").fill(employee.workEmail);
   await field(main, "Personal email").fill(employee.personalEmail);
   await field(main, "Phone number").fill(employee.phone);
@@ -533,7 +584,9 @@ async function createScenarioEmployee(
   await field(main, "Date of joining").fill(employee.joiningDate);
   await field(main, "Probation end date").fill(employee.probationEndDate);
   await field(main, "Confirmation date").fill(employee.confirmationDate);
+  console.log(`[P3-0001] ${employee.code} contact complete`);
 
+  await main.getByRole("button", { name: /^3\.\s*Structure$/ }).click();
   await selectOptionByText(field(main, "Legal entity"), org.legalEntityName);
   await selectOptionByText(field(main, "Branch"), org.branchName);
   await expect(field(main, "Location")).not.toHaveValue("");
@@ -544,7 +597,10 @@ async function createScenarioEmployee(
   await expect(field(main, "Grade")).not.toHaveValue("");
   await selectOptionByText(field(main, "Employment type"), org.employmentTypeName);
   await selectFirstNonEmptyOption(field(main, "Reporting manager"));
+  console.log(`[P3-0001] ${employee.code} structure complete`);
 
+  await main.getByRole("button", { name: /^4\.\s*Review$/ }).click();
+  console.log(`[P3-0001] ${employee.code} review ready`);
   const createResult = await submitAndCapture<{ id: string; employee_code: string }>(
     page,
     /\/api\/hr-admin\/employees$/,
@@ -554,13 +610,16 @@ async function createScenarioEmployee(
     },
   );
   expect(createResult.ok).toBeTruthy();
-  await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}`), { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/hr-admin\/employees\?employeeId=[^&]+/, { timeout: 30_000 });
+  const employeeId = new URL(page.url()).searchParams.get("employeeId");
+  expect(employeeId).toBeTruthy();
   await expect(page.getByText(employee.code).first()).toBeVisible();
-  return { ...employee, id: createResult.payload.id };
+  console.log(`[P3-0001] ${employee.code} persisted`);
+  return { ...employee, id: employeeId! };
 }
 
 async function addPrimaryBankAccount(page: Page, employee: CreatedEmployee) {
-  await gotoAuthenticated(page, `/hr-admin/employees/${employee.id}/bank-accounts`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/employees/${employee.id}/bank-accounts`);
   await assertPageShell(page, /Bank accounts/i);
   const main = page.locator("main");
   await field(main, "Account holder name").fill(`${employee.firstName} ${employee.lastName}`);
@@ -585,8 +644,9 @@ async function assignPayrollAndSalary(
   employee: CreatedEmployee,
   payroll: Awaited<ReturnType<typeof createPayrollAndSalaryPrerequisites>>,
 ) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/payroll-setup?tab=actions");
   await assertPageShell(page, "Payroll Setup");
+  await openActionForm(page, "Payroll setup action groups", /^Assignments\b/, "pay-group-assignment-form");
   const payGroupAssignmentForm = page.getByTestId("pay-group-assignment-form");
   const payGroupAssignment = await submitAndCapture<{ id: string }>(
     page,
@@ -604,8 +664,9 @@ async function assignPayrollAndSalary(
   );
   expect(payGroupAssignment.ok).toBeTruthy();
 
-  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/salary-setup?tab=actions");
   await assertPageShell(page, "Salary Setup");
+  await openActionForm(page, "Salary setup action groups", /^Assignments\b/, "salary-assignment-form");
   const salaryAssignmentForm = page.getByTestId("salary-assignment-form");
   const salaryAssignment = await submitAndCapture<{ id: string }>(
     page,
@@ -645,6 +706,7 @@ async function createPayrollRuleVersion(
     extraConfig?: Record<string, unknown>;
   },
 ) {
+  await openActionForm(page, "Payroll rule action groups", /^Definitions\b/, "payroll-rule-definition-form");
   await definitionForm.getByRole("button", { name: "New" }).click();
   const definition = await submitAndCapture<{ id: string; code: string }>(
     page,
@@ -663,6 +725,7 @@ async function createPayrollRuleVersion(
   expect(definition.ok).toBeTruthy();
   await expect(page.getByText(rule.code).first()).toBeVisible();
 
+  await openActionForm(page, "Payroll rule action groups", /^Versions\b/, "payroll-rule-version-form");
   await versionForm.getByRole("button", { name: "New" }).click();
   const version = await submitAndCapture<{ id: string; status: string }>(
     page,
@@ -696,7 +759,7 @@ async function createPayrollRuleVersion(
 }
 
 async function createScenarioPayrollRules(page: Page, suffix: string): Promise<PayrollRules> {
-  await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/payroll-rules?tab=actions");
   await assertPageShell(page, "Payroll Rules");
   const definitionForm = page.getByTestId("payroll-rule-definition-form");
   const versionForm = page.getByTestId("payroll-rule-version-form");
@@ -881,7 +944,7 @@ async function createPayrollRunAndSnapshots(
   payroll: Awaited<ReturnType<typeof createPayrollAndSalaryPrerequisites>>,
   employees: CreatedEmployee[],
 ) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+  await gotoWithinSession(page, "/hr-admin/payroll-inputs");
   await assertPageShell(page, "Payroll Inputs");
   const runForm = page.getByTestId("payroll-run-form");
   const snapshotForm = page.getByTestId("payroll-input-snapshot-form");
@@ -908,6 +971,7 @@ async function createPayrollRunAndSnapshots(
   expect(run.ok).toBeTruthy();
   await expect(page.getByText(runCode).first()).toBeVisible();
 
+  await openActionForm(page, "Payroll input operation steps", /Input snapshot\b/, "payroll-input-snapshot-form", "step");
   const snapshotIds: string[] = [];
   for (const employee of employees) {
     const snapshot = payrollSnapshot(employee, org);
@@ -918,7 +982,7 @@ async function createPayrollRunAndSnapshots(
       "POST",
       async () => {
         await field(snapshotForm, "Payroll run").selectOption(run.payload.id);
-        await selectOptionByText(field(snapshotForm, "Employee"), employee.code);
+        await selectEmployeeByCode(snapshotForm, employee.code);
         await field(snapshotForm, "Snapshot status").selectOption("ready");
         await field(snapshotForm, "Input profile ref").fill(`accerio.payroll.input.${employee.key}.${suffix}.v1`);
         await field(snapshotForm, "Config profile reference").fill(`accerio.payroll.snapshot.${employee.key}.${suffix}.v1`);
@@ -935,8 +999,9 @@ async function createPayrollRunAndSnapshots(
     await expect(page.getByText("Payroll input snapshot saved.").first()).toBeVisible();
   }
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}`);
   await assertPageShell(page, "Payroll Inputs");
+  await openActionForm(page, "Payroll input operation steps", /Lock gate\b/, "payroll-input-lock-form", "step");
   const lock = await submitAndCapture<{ detail: string; locked_count: number }>(
     page,
     new RegExp(`/api/hr-admin/payroll-runs/${run.payload.id}/lock-inputs$`),
@@ -954,7 +1019,7 @@ async function createPayrollRunAndSnapshots(
 }
 
 async function closePayrollRun(page: Page, runId: string, suffix: string): Promise<ScenarioPayrollRun> {
-  await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${runId}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/payroll-calculations?runId=${runId}`);
   await assertPageShell(page, "Payroll Calculations");
   const calculationPanel = page.getByLabel("Calculation controls");
   const calculation = await submitAndCapture<{ calculation: { id: string; status: string; line_count: number }; detail?: string }>(
@@ -983,7 +1048,7 @@ async function closePayrollRun(page: Page, runId: string, suffix: string): Promi
   expect(review.ok).toBeTruthy();
   await expect(page.getByRole("status").first()).toContainText(/Payroll review opened/);
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${review.payload.review.id}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/payroll-review?reviewId=${review.payload.review.id}`);
   await assertPageShell(page, "Payroll Review");
   const reviewPanel = page.getByLabel("Review controls");
   const submitted = await submitAndCapture<{ review: { status: string }; detail?: string }>(
@@ -1042,7 +1107,7 @@ async function closePayrollRun(page: Page, runId: string, suffix: string): Promi
   expect(outputs.payload.output_batch.register_count).toBeGreaterThanOrEqual(1);
   await expect(page.getByRole("status").first()).toContainText(/Payroll outputs generated/);
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${outputs.payload.output_batch.id}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/payroll-outputs?batchId=${outputs.payload.output_batch.id}`);
   await assertPageShell(page, "Payroll Outputs");
   const outputPanel = page.getByLabel("Output controls");
   const published = await submitAndCapture<{
@@ -1073,7 +1138,7 @@ async function closePayrollRun(page: Page, runId: string, suffix: string): Promi
   expect(handoff.ok).toBeTruthy();
   await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff generated/);
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.payload.handoff.id}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/payroll-handoff?handoffId=${handoff.payload.handoff.id}`);
   await assertPageShell(page, "Payroll Handoff");
   const handoffPanel = page.getByLabel("Handoff controls");
   const transmitButton = handoffPanel.getByRole("button", { name: "Transmit handoff" });
@@ -1142,7 +1207,7 @@ async function closePayrollRun(page: Page, runId: string, suffix: string): Promi
 }
 
 async function validatePayrollOutputs(page: Page, runCode: string, closeResult: ScenarioPayrollRun, employees: CreatedEmployee[]) {
-  await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${closeResult.outputBatchId}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/payroll-outputs?batchId=${closeResult.outputBatchId}`);
   await assertPageShell(page, "Payroll Outputs");
   await expect(page.getByText(runCode).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Artifact register" })).toBeVisible();
@@ -1153,35 +1218,51 @@ async function validatePayrollOutputs(page: Page, runCode: string, closeResult: 
     .locator("a")
     .first();
   await expect(publishedPayslipLink).toBeVisible();
-  await publishedPayslipLink.click();
+  const publishedPayslipHref = await publishedPayslipLink.getAttribute("href");
+  expect(publishedPayslipHref).toMatch(/\/hr-admin\/payroll-outputs\?.*artifactId=/);
+  await gotoWithinSession(page, publishedPayslipHref!);
   await assertPageShell(page, "Payroll Outputs");
-  await expect(page.getByRole("link", { name: /Download file|Download/i }).first()).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/.+\/download/);
+  const artifactDetail = page.getByRole("complementary", { name: /output artifact/i });
+  await expect(artifactDetail.getByRole("link", { name: "Download file" })).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/.+\/download/);
 
-  await gotoAuthenticated(page, `/hr-admin/reports/payroll-register?q=${encodeURIComponent(runCode)}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/reports/payroll-register?q=${encodeURIComponent(runCode)}`);
   await assertPageShell(page, "Payroll Register Report");
   const payrollRegister = page.getByTestId("payroll-register-report");
   await expect(payrollRegister.getByText(runCode).first()).toBeVisible();
   await expect(payrollRegister.getByRole("link", { name: /Open/i }).first()).toHaveAttribute("href", /\/hr-admin\/payroll-outputs\?batchId=.+artifactId=/);
 
-  await gotoAuthenticated(page, `/hr-admin/reports/bank-advice?q=${encodeURIComponent(runCode)}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/reports/bank-advice?q=${encodeURIComponent(runCode)}`);
   await assertPageShell(page, "Bank Advice Report");
   await expect(page.getByTestId("bank-advice-report").getByText(runCode).first()).toBeVisible();
 
-  await gotoAuthenticated(page, `/hr-admin/reports/payslip-publication?q=${encodeURIComponent(runCode)}`, hrAdmin);
+  await gotoWithinSession(page, `/hr-admin/reports/payslip-publication?q=${encodeURIComponent(runCode)}`);
   await assertPageShell(page, "Payslip Publication Report");
   const payslipReport = page.getByTestId("payslip-publication-report");
   await expect(payslipReport.getByText(runCode).first()).toBeVisible();
   await expect(payslipReport.getByText(employees[0].code).first()).toBeVisible();
 
-  const registerExport = await page.request.get(`/api/hr-admin/reports/payroll-register?q=${encodeURIComponent(runCode)}&format=manifest`);
-  expect(registerExport.status()).toBe(200);
-  expect(registerExport.headers()["x-hrms-report-key"]).toBe("payroll-register");
-  const bankExport = await page.request.get(`/api/hr-admin/reports/bank-advice?q=${encodeURIComponent(runCode)}&format=manifest`);
-  expect(bankExport.status()).toBe(200);
-  expect(bankExport.headers()["x-hrms-report-key"]).toBe("bank-advice");
+  const exportEvidence = await page.evaluate(async ({ payrollRunCode }) => {
+    const load = async (reportKey: string) => {
+      const response = await fetch(`/api/hr-admin/reports/${reportKey}?q=${encodeURIComponent(payrollRunCode)}&format=manifest`);
+      return { status: response.status, reportKey: response.headers.get("x-hrms-report-key") };
+    };
+    return {
+      register: await load("payroll-register"),
+      bank: await load("bank-advice"),
+    };
+  }, { payrollRunCode: runCode });
+  expect(exportEvidence.register).toEqual({ status: 200, reportKey: "payroll-register" });
+  expect(exportEvidence.bank).toEqual({ status: 200, reportKey: "bank-advice" });
 }
 
 test.describe("Accerio September payroll real scenario certification", () => {
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+    hrAdmin = workspacePersona(workspace, "hr_admin");
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test.afterAll(() => {
     console.log("Accerio September payroll phase summary");
     for (const result of phaseResults) {
@@ -1195,7 +1276,7 @@ test.describe("Accerio September payroll real scenario certification", () => {
     test.setTimeout(1_200_000);
 
     await gotoAuthenticated(page, "/hr-admin", hrAdmin);
-    await assertPageShell(page, /People Operations Control Center|HR admin could not load/i);
+    await assertPageShell(page, /HR Control Center|HR admin could not load/i);
     await expect(page.getByText("HR Admin").first()).toBeVisible();
 
     const initialBaseline = await baselineCounts(page);
@@ -1241,7 +1322,8 @@ test.describe("Accerio September payroll real scenario certification", () => {
     });
     expect(postSetupBaseline.blockingMissing).toEqual([]);
 
-    await gotoAuthenticated(page, "/hr-admin/employees/new", hrAdmin);
+    await gotoWithinSession(page, "/hr-admin/employees/new");
+    await page.locator("main").getByRole("button", { name: /^3\.\s*Structure$/ }).click();
     await field(page.locator("main"), "Legal entity").selectOption({ index: 1 });
     const selectedLegalEntity = await selectedOptionText(field(page.locator("main"), "Legal entity"));
     recordPhase({

@@ -7,5 +7,6 @@ export async function GET(request: NextRequest) {
     request,
     method: "GET",
     upstreamPath: "/hr-admin/payroll-input-snapshot-setup/",
+    upstreamSearch: request.nextUrl.search,
   });
 }

@@ -512,6 +512,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                 {
                   id: "publish-outputs",
                   label: "Publish outputs",
+                  background: true,
                   endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/publish` : "",
                   disabled: !canPublishOutputs || !canPublishSelectedBatch || reconciliationBlocksAction,
                   disabledReason: !canPublishOutputs
@@ -525,6 +526,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                 {
                   id: "generate-finance-handoff",
                   label: "Generate handoff",
+                  background: true,
                   endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/generate-finance-handoff` : "",
                   profileField: "handoff_profile_ref",
                   profileLabel: "Handoff profile ref",

@@ -14,7 +14,7 @@ const tenantRoutes: TenantRoute[] = [
   {
     path: "/tenant-admin",
     heading: "Account Control Center",
-    requiredText: ["Tenant Status", "Items that need your attention", "User Management", "Access design"],
+    requiredText: ["Tenant Status", "Items that need your attention", "User access", "Access design"],
   },
   {
     path: "/tenant-admin/users",

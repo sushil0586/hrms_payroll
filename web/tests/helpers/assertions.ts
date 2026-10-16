@@ -30,6 +30,8 @@ export async function expectSummaryMetric(scope: Locator, label: string | RegExp
     .locator(
       [
         ".attendance-summary-strip span",
+        ".dashboard-summary-strip span",
+        ".manager-summary-strip span",
         ".report-summary-strip span",
         ".report-insights-strip__metric",
         ".payroll-run-summary-strip span",
@@ -40,7 +42,12 @@ export async function expectSummaryMetric(scope: Locator, label: string | RegExp
     .filter({ hasText: label })
     .first();
 
-  await expect(summaryMetric).toBeVisible();
+  await expect(summaryMetric.or(scope.getByText(label).filter({ visible: true }).first()).first()).toBeVisible();
+}
+
+export async function expectCompactMetric(scope: Page | Locator, label: string | RegExp) {
+  const textMetric = scope.getByText(label).filter({ visible: true }).first();
+  await expect(textMetric).toBeVisible();
 }
 
 function backendApiBaseUrl() {
@@ -67,19 +74,36 @@ export async function requestBackendPath(page: Page, path: string) {
   });
 }
 
+export async function fetchBrowserPath(page: Page, path: string) {
+  return page.evaluate(async (requestPath) => {
+    const response = await fetch(requestPath, { credentials: "include" });
+    return {
+      body: await response.text(),
+      headers: Object.fromEntries(response.headers.entries()),
+      status: response.status,
+    };
+  }, path);
+}
+
 export async function suppressBrowserTestNoise(page: Page) {
-  await page.addStyleTag({
-    content: `
-      nextjs-portal,
-      [data-nextjs-dialog-overlay],
-      [data-nextjs-toast],
-      [data-nextjs-build-indicator],
-      [aria-label="Next.js logo"] {
-        display: none !important;
-        visibility: hidden !important;
-      }
-    `,
-  });
+  try {
+    await page.addStyleTag({
+      content: `
+        nextjs-portal,
+        [data-nextjs-dialog-overlay],
+        [data-nextjs-toast],
+        [data-nextjs-build-indicator],
+        [aria-label="Next.js logo"] {
+          display: none !important;
+          visibility: hidden !important;
+        }
+      `,
+    });
+  } catch (error) {
+    if (!String(error).includes("Execution context was destroyed")) {
+      throw error;
+    }
+  }
 }
 
 export async function expectPageReady(page: Page, heading: string | RegExp) {

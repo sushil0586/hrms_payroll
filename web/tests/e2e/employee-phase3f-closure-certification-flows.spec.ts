@@ -53,6 +53,10 @@ async function selectOptionContaining(locator: Locator, text: string) {
   return value;
 }
 
+async function waitForDocumentFormHydration(page: Page | Locator) {
+  await expect(page.locator(".document-child-form[data-hydrated='true']").first()).toBeVisible();
+}
+
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => item.url().includes(`/api/hr-admin/${path}`) && item.request().method() === method),
@@ -78,11 +82,13 @@ async function createEmployee(page: Page, input: {
   await field(page, "First name").fill(input.firstName);
   await field(page, "Last name").fill(input.lastName);
   await field(page, "Preferred name").fill(`${input.firstName} ${input.lastName}`);
+  await page.getByRole("button", { name: "Continue" }).click();
   await field(page, "Work email").fill(`${input.code.toLowerCase()}@example.test`);
   await field(page, "Date of birth").fill("1994-01-01");
   await field(page, "Date of joining").fill("2026-01-01");
   await field(page, "Probation end date").fill("2026-06-30");
   await field(page, "Confirmation date").fill("2026-07-01");
+  await page.getByRole("button", { name: "Continue" }).click();
   await selectFirstNonEmptyOption(field(page, "Legal entity"));
   await selectFirstNonEmptyOption(field(page, "Branch"));
   await selectFirstNonEmptyOption(field(page, "Department"));
@@ -94,6 +100,7 @@ async function createEmployee(page: Page, input: {
   } else {
     await selectFirstNonEmptyOption(field(page, "Reporting manager"));
   }
+  await page.getByRole("button", { name: "Continue" }).click();
   const result = await submitAndCapture<{ id: string }>(page, "employees", "POST", async () => {
     await page.getByRole("button", { name: "Create employee" }).click();
   });
@@ -113,12 +120,14 @@ async function createReviewedDocument(page: Page, note: string) {
     },
   });
   expect(employeeResponse.ok()).toBeTruthy();
-  await createDocumentCategory(page, "AUD_DOC_CAT");
+  const categoryCode = await createDocumentCategory(page, "AUD_DOC_CAT");
   const title = uniqueRef("AUD_DOC");
   await gotoAuthenticated(page, "/hr-admin/employee-documents/new");
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expectPageReady(page, "Upload employee document");
+  await waitForDocumentFormHydration(page);
   await selectOptionContaining(field(page, "Employee"), employeeCode);
-  await selectFirstNonEmptyOption(field(page, "Category"));
+  await selectOptionContaining(field(page, "Category"), categoryCode);
   await field(page, "Title").fill(title);
   await field(page, "Document number").fill(`${title}-NO`);
   await field(page, "File").setInputFiles({
@@ -129,17 +138,27 @@ async function createReviewedDocument(page: Page, note: string) {
   const createResult = await submitAndCapture<{ id: string }>(page, "employee-documents", "POST", async () => {
     await page.getByRole("button", { name: "Upload document" }).click();
   });
-  expect(createResult.ok).toBeTruthy();
-  await card(page, title).getByRole("link", { name: "Review", exact: true }).click();
-  await expectPageReady(page, "Review employee document");
-  await page.waitForLoadState("networkidle");
-  await field(page, "Verification status").selectOption("rejected");
-  await expect(field(page, "Verification status")).toHaveValue("rejected");
-  await field(page, "Rejection reason or review note").fill(note);
-  await expect(field(page, "Verification status")).toHaveValue("rejected");
+  expect(createResult.ok, `Document upload failed: ${createResult.status} ${JSON.stringify(createResult.payload)}`).toBeTruthy();
+  await expect(page).toHaveURL(/\/hr-admin\/employee-documents$/);
+  await expectPageReady(page, /Employee document review/);
+  await field(page, "Search").fill(title);
+  await Promise.all([
+    page.waitForURL((url) => url.searchParams.get("q") === title),
+    page.getByRole("button", { name: "Apply filters" }).click(),
+  ]);
+  await expect(page.getByRole("table").first()).toContainText(title);
+  await page.getByRole("button", { name: "Review", exact: true }).first().click();
+  await expect(page).toHaveURL(/reviewDocument=/);
+  const reviewDialog = page.getByRole("dialog", { name: new RegExp(`Review ${title}`) });
+  await expect(reviewDialog).toBeVisible();
+  await waitForDocumentFormHydration(reviewDialog);
+  await field(reviewDialog, "Verification status").selectOption("rejected");
+  await expect(field(reviewDialog, "Verification status")).toHaveValue("rejected");
+  await field(reviewDialog, "Rejection reason or review note").fill(note);
+  await expect(field(reviewDialog, "Verification status")).toHaveValue("rejected");
   await expect
     .poll(async () => (
-      await page.locator("form").evaluate((form) => Object.fromEntries(new FormData(form as HTMLFormElement).entries()))
+      await reviewDialog.locator("form").evaluate((form) => Object.fromEntries(new FormData(form as HTMLFormElement).entries()))
     ).verification_status)
     .toBe("rejected");
   const reviewResult = await submitAndCapture<{ verification_status: string; review_history: Array<{ comment: string; new_status: string }> }>(
@@ -147,7 +166,7 @@ async function createReviewedDocument(page: Page, note: string) {
     `employee-documents/${createResult.payload.id}`,
     "PATCH",
     async () => {
-      await page.getByRole("button", { name: "Save review" }).click();
+      await reviewDialog.getByRole("button", { name: "Save review" }).click();
     },
   );
   expect(reviewResult.ok).toBeTruthy();
@@ -194,7 +213,13 @@ test.describe("Phase 3F closure certification", () => {
     });
     expect(movementResult.ok).toBeTruthy();
     await expect(page).toHaveURL(/\/hr-admin\/movements$/);
-    await expect(card(page, workflowRef)).toBeVisible();
+    await field(page, "Search").fill(workflowRef);
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get("q") === workflowRef),
+      page.getByRole("button", { name: "Apply filters" }).click(),
+    ]);
+    await expectPageReady(page, "Movement operations");
+    await expect(page.getByRole("table", { name: "Movement records" }).getByRole("row", { name: new RegExp(workflowRef) })).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employeeId}`);
     await expectPageReady(page, "Employees");

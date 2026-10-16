@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "../helpers/assertions";
 import { auditVisibleControls, expectVisibleLinksAreReal } from "../helpers/hr-admin-ui-audit";
+import { mssLeaveReviewDialogName } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated, hrAdmin, manager, type Persona } from "../helpers/staging-auth";
 
 const viewports = [
@@ -37,8 +38,17 @@ async function expectNoControlIssues(page: Page, context: string) {
       }
       const label = (element.textContent || element.getAttribute("aria-label") || element.getAttribute("name") || element.tagName).trim();
       const outsideX = rect.left < -2 || rect.right > document.documentElement.clientWidth + 2;
+      let parent = element.parentElement;
+      let insideHorizontalScroller = false;
+      while (parent && parent !== document.body) {
+        if (/(auto|scroll)/.test(window.getComputedStyle(parent).overflowX)) {
+          insideHorizontalScroller = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
       const clippedText = (element.classList.contains("button") || element.tagName === "BUTTON") && element.scrollWidth > element.clientWidth + 2;
-      return outsideX || clippedText ? [`${label || element.tagName} is clipped`] : [];
+      return (outsideX && !insideHorizontalScroller) || clippedText ? [`${label || element.tagName} is clipped`] : [];
     }),
   );
   expect(clippedControls, `${context} should not clip visible controls`).toEqual([]);
@@ -79,7 +89,7 @@ test.describe("Leave attendance documents notifications responsive UX audit", ()
       await openIfVisible(page, "Regularize attendance", "Regularize attendance", `ESS attendance ${viewport.name}`);
 
       await gotoAuthenticated(page, "/mss/approvals", manager);
-      await openIfVisible(page, "Review", /Leave approval review|Attendance approval review/, `MSS approval ${viewport.name}`);
+      await openIfVisible(page, "Review", mssLeaveReviewDialogName, `MSS approval ${viewport.name}`);
     });
   }
 });

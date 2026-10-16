@@ -11,6 +11,21 @@ function field(scope: Page | Locator, label: string) {
   return scope.locator("label.form-field").filter({ hasText: label }).locator("input, select, textarea").first();
 }
 
+async function openFirstRemoveDialog(page: Page) {
+  let removeButton = page.getByRole("button", { name: "Remove" }).first();
+  if (!(await removeButton.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Inspect" }).first().click();
+    const detailDialog = page.getByRole("dialog").first();
+    await expect(detailDialog).toBeVisible();
+    removeButton = detailDialog.getByRole("button", { name: "Remove" }).first();
+  }
+  await expect(removeButton).toBeVisible();
+  await removeButton.click();
+  const dialog = page.getByRole("dialog").first();
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 test.describe("HR Admin setup and policy frontend validation", () => {
   test("attendance policy blocks required and numeric rule errors before calling the API", async ({ page }) => {
     let apiCalls = 0;
@@ -70,13 +85,10 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Leave types");
 
-    const removeButton = page.getByRole("button", { name: "Remove" }).first();
-    await expect(removeButton).toBeVisible();
-    await removeButton.click();
-    await expect(page.getByRole("dialog", { name: /Remove / })).toBeVisible();
-    await expect(page.getByText("Leave type removal check")).toBeVisible();
+    const dialog = await openFirstRemoveDialog(page);
+    await expect(dialog.getByText(/Leave type removal check|Deactivate|Delete/).first()).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: /Remove / })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);
   });
@@ -108,10 +120,11 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await expect(field(form, "Marital status restriction")).toHaveValue("unmarried");
 
     await form.getByRole("button", { name: "Preview policy" }).click();
-    await expect(page.getByRole("dialog", { name: "Preview leave policy" })).toBeVisible();
-    await expect(page.getByText("Test entitlement, service tiers, evidence rules, and approval routing")).toBeVisible();
+    const previewDialog = page.getByRole("dialog", { name: /Draft leave policy|Preview leave policy|Earned Leave Standard/ });
+    await expect(previewDialog).toBeVisible();
+    await expect(previewDialog.getByText("Test entitlement, service tiers, evidence rules, and approval routing")).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: "Preview leave policy" })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await entitlementSection.getByText("Advanced entitlement and carry-forward rules").click();
     await expect(entitlementSection).toHaveAttribute("open", "");
@@ -136,17 +149,20 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Leave policies");
 
-    const filters = page.locator(".queue-toolbar").filter({ hasText: "Policy filters" });
+    const filters = page.getByRole("main");
     await expect(filters).toBeVisible();
     await expect(field(filters, "Search")).toBeVisible();
     await expect(field(filters, "Status")).toBeVisible();
     await expect(field(filters, "Leave type")).toBeVisible();
+    await filters.locator("details").filter({ hasText: "More filters" }).evaluateAll((elements) => {
+      elements.forEach((element) => element.setAttribute("open", ""));
+    });
     await expect(field(filters, "Accrual frequency")).toBeVisible();
 
     await field(filters, "Search").fill("no-policy-should-match-this");
     await expect(page.getByText("No leave policies match the current filters.")).toBeVisible();
 
-    await filters.getByRole("button", { name: "Clear filters" }).click();
+    await filters.getByRole("button", { name: /Clear filters|Clear/ }).click();
     await expect(page.getByText("No leave policies match the current filters.")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Remove" }).first()).toBeVisible();
     await expectNoAppError(page);
@@ -158,13 +174,10 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Leave assignments");
 
-    const removeButton = page.getByRole("button", { name: "Remove" }).first();
-    await expect(removeButton).toBeVisible();
-    await removeButton.click();
-    await expect(page.getByRole("dialog", { name: /Remove .* assignment/ })).toBeVisible();
-    await expect(page.getByText("Assignment removal")).toBeVisible();
+    const dialog = await openFirstRemoveDialog(page);
+    await expect(dialog.getByText(/Assignment removal|Deactivate|Delete/).first()).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: /Remove .* assignment/ })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);
   });

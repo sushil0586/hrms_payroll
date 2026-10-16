@@ -41,6 +41,7 @@ import {
   getHrAdminPayrollAdjustmentSetup,
   getHrAdminPayrollFinanceHandoffSetup,
   getHrAdminPayrollInputSnapshotSetup,
+  getHrAdminPayrollInputSnapshots,
   getHrAdminPayrollOutputSetup,
   getHrAdminPayrollReviewSetup,
   getHrAdminPayrollSettlementSetup,
@@ -1135,7 +1136,10 @@ function baselineNetPayForLines(lines: HrAdminPayrollCalculationLineListItem[]) 
 async function getSalaryVarianceExportRows(reportKey: string, token: string) {
   if (reportKey !== "salary-variance") return null;
 
-  const reviewResult = await upstreamJson<HrAdminPayrollReviewSetupResponse>("/hr-admin/payroll-review-setup/", token);
+  const reviewResult = await upstreamJson<HrAdminPayrollReviewSetupResponse>(
+    "/hr-admin/payroll-review-setup/?review_page_size=500&line_page_size=1000",
+    token,
+  );
   if (!reviewResult.ok) return { error: reviewResult };
 
   const reviewSetup = reviewResult.data;
@@ -1199,7 +1203,10 @@ async function getSalaryVarianceExportRows(reportKey: string, token: string) {
 async function getBankAdviceExportRows(reportKey: string, token: string) {
   if (reportKey !== "bank-advice") return null;
 
-  const handoffResult = await upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>("/hr-admin/payroll-finance-handoff-setup/", token);
+  const handoffResult = await upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>(
+    "/hr-admin/payroll-finance-handoff-setup/?handoff_page_size=500&artifact_page_size=500&delivery_page_size=500&callback_page_size=500&retry_page_size=500&job_page_size=500&include_output_batches=false",
+    token,
+  );
   if (!handoffResult.ok) return { error: handoffResult };
 
   const handoffSetup = handoffResult.data;
@@ -1411,7 +1418,10 @@ function financeHandoffExceptionRows(handoffSetup: HrAdminPayrollFinanceHandoffS
 async function getFinanceHandoffExceptionExportRows(reportKey: string, token: string) {
   if (reportKey !== "finance-handoff-exceptions") return null;
 
-  const handoffResult = await upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>("/hr-admin/payroll-finance-handoff-setup/", token);
+  const handoffResult = await upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>(
+    "/hr-admin/payroll-finance-handoff-setup/?handoff_page_size=500&artifact_page_size=500&delivery_page_size=500&callback_page_size=500&retry_page_size=500&job_page_size=500&include_output_batches=false",
+    token,
+  );
   if (!handoffResult.ok) return { error: handoffResult };
 
   const handoffSetup = handoffResult.data;
@@ -1663,10 +1673,18 @@ function attendancePayrollReadiness(item: {
   return "Ready";
 }
 
-async function getAttendanceRegisterExportRows(reportKey: string, token: string) {
+async function getAttendanceRegisterExportRows(reportKey: string, token: string, filters: ExportFilters) {
   if (reportKey !== "attendance-register") return null;
 
-  const attendanceResult = await upstreamJson<HrAdminAttendanceRecordListResponse>("/hr-admin/attendance-records/?page=1&page_size=500", token);
+  const params = new URLSearchParams({ page: "1", page_size: "500" });
+  if (filters.q) params.set("q", filters.q);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.source) params.set("source", filters.source);
+  if (filters.lock_state) params.set("lock_state", filters.lock_state);
+  if (filters.regularized_state === "regularized") params.set("regularized_state", "regularized");
+  if (filters.regularized_state === "pending") params.set("regularized_state", "not_regularized");
+
+  const attendanceResult = await upstreamJson<HrAdminAttendanceRecordListResponse>(`/hr-admin/attendance-records/?${params.toString()}`, token);
   if (!attendanceResult.ok) return { error: attendanceResult };
 
   const attendance = attendanceResult.data;
@@ -2016,15 +2034,20 @@ function snapshotMetric(snapshot: { reconciliation_summary?: { metrics?: Record<
 async function getPayrollInputExceptionsExportRows(reportKey: string, token: string) {
   if (reportKey !== "payroll-input-exceptions") return null;
 
-  const inputResult = await upstreamJson<HrAdminPayrollInputSnapshotSetupResponse>("/hr-admin/payroll-input-snapshot-setup/", token);
+  const [inputResult, snapshotResult] = await Promise.all([
+    upstreamJson<HrAdminPayrollInputSnapshotSetupResponse>("/hr-admin/payroll-input-snapshot-setup/?snapshot_page_size=500", token),
+    upstreamJson<HrAdminPayrollInputSnapshot[]>("/hr-admin/payroll-input-snapshots/", token),
+  ]);
   if (!inputResult.ok) return { error: inputResult };
+  if (!snapshotResult.ok) return { error: snapshotResult };
 
   const inputSetup = inputResult.data;
-  if (!inputSetup) return { error: { ok: false, status: 502, data: null, detail: "Live payroll input exception source data is unavailable." } };
+  const snapshots = snapshotResult.data;
+  if (!inputSetup || !snapshots) return { error: { ok: false, status: 502, data: null, detail: "Live payroll input exception source data is unavailable." } };
 
   const runsById = new Map(inputSetup.runs.map((run) => [run.id, run]));
   return {
-    rows: inputSetup.snapshots.map((snapshot) => {
+    rows: snapshots.map((snapshot) => {
       const run = runsById.get(snapshot.payroll_run_id);
       const issueType = snapshotIssueType(snapshot);
       const attendancePresentDays = snapshotMetric(snapshot, "attendance_present_days");
@@ -2705,9 +2728,12 @@ async function getDemoRows(reportKey: string) {
       return leaveAttendanceCollisionRows(result.data);
     }
     case "payroll-input-exceptions": {
-      const result = await getHrAdminPayrollInputSnapshotSetup();
+      const [result, snapshotsResult] = await Promise.all([
+        getHrAdminPayrollInputSnapshotSetup({ snapshot_page_size: 500 }),
+        getHrAdminPayrollInputSnapshots(),
+      ]);
       const runsById = new Map(result.data.runs.map((run) => [run.id, run]));
-      return result.data.snapshots.map((snapshot) => {
+      return snapshotsResult.data.map((snapshot) => {
         const run = runsById.get(snapshot.payroll_run_id);
         const issueType = snapshotIssueType(snapshot);
         const attendancePresentDays = snapshotMetric(snapshot, "attendance_present_days");
@@ -2927,7 +2953,7 @@ export async function GET(request: NextRequest, { params }: Props) {
       return exportResponse(request, reportKey, applyExportFilters(reportKey, lifecycleQueueExport.rows, filters), filters, auditContext);
     }
 
-    const attendanceRegisterExport = await getAttendanceRegisterExportRows(reportKey, token);
+    const attendanceRegisterExport = await getAttendanceRegisterExportRows(reportKey, token, filters);
     if (attendanceRegisterExport) {
       if ("error" in attendanceRegisterExport) {
         const exportError = attendanceRegisterExport.error;

@@ -41,6 +41,12 @@ type LeaveBalanceItem = {
   leave_policy_name: string;
 };
 
+type EssLeaveTypeItem = {
+  id: string;
+  name: string;
+  code?: string;
+};
+
 const customPassword = "Password@123";
 
 function apiBaseUrl() {
@@ -62,7 +68,7 @@ function field(scope: Page | Locator, label: string, index = 0) {
 }
 
 function card(page: Page, text: string | RegExp) {
-  return page.locator("article.record-card, a.tableish__row").filter({ hasText: text }).first();
+  return page.locator("article.record-card, a.tableish__row, tr").filter({ hasText: text }).first();
 }
 
 function isoDateFromToday(days: number) {
@@ -76,12 +82,55 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST", act
     page.waitForResponse((item) => item.url().includes(path) && item.request().method() === method),
     action(),
   ]);
+  let requestBody: unknown = undefined;
+  try {
+    requestBody = response.request().postDataJSON() as unknown;
+  } catch {
+    requestBody = response.request().postData() ?? undefined;
+  }
   return {
     ok: response.ok(),
     status: response.status(),
-    requestBody: response.request().postDataJSON() as unknown,
+    requestBody,
     payload: (await response.json().catch(() => ({}))) as T,
   };
+}
+
+async function createEmployeeLeaveRequest(page: Page, reason: string): Promise<{ id: string; status: string }> {
+  await gotoAuthenticated(page, "/ess", employee);
+  const response = await page.request.get("/api/me/leave-types");
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const payload = (await response.json()) as EssLeaveTypeItem[] | { items?: EssLeaveTypeItem[]; results?: EssLeaveTypeItem[] };
+  const leaveTypes = Array.isArray(payload) ? payload : payload.items ?? payload.results ?? [];
+  const leaveType = leaveTypes.find((item) => /casual|CL Standard/i.test(`${item.name} ${item.code ?? ""}`));
+  expect(leaveType, "Expected a submittable casual leave type for MSS RBAC proof").toBeTruthy();
+  let lastPayload: unknown = undefined;
+  const candidateOffsets = Array.from({ length: 60 }, (_, index) => index + 1);
+  for (const offset of candidateOffsets) {
+    const startDate = isoDateFromToday(offset);
+    const createResponse = await page.request.post("/api/me/leave-requests", {
+      data: {
+        leave_type_id: leaveType!.id,
+        start_date: startDate,
+        end_date: startDate,
+        start_day_portion: "full_day",
+        end_day_portion: "full_day",
+        reason,
+      },
+    });
+    const createPayload = (await createResponse.json().catch(() => ({}))) as { id: string; status: string; start_date?: string[] };
+    if (createResponse.ok()) {
+      expect(createPayload.status).toBe("pending");
+      return createPayload;
+    }
+    lastPayload = createPayload;
+    const payloadText = JSON.stringify(createPayload);
+    if (!/overlap|working leave days/i.test(payloadText)) {
+      break;
+    }
+  }
+  expect(false, `Expected to create a pending leave request without date overlap: ${JSON.stringify(lastPayload)}`).toBeTruthy();
+  throw new Error(`Expected to create a pending leave request without date overlap: ${JSON.stringify(lastPayload)}`);
 }
 
 async function createCustomLeaveApproverRole(page: Page, suffix: string) {
@@ -174,21 +223,22 @@ async function topUpRiyaLeaveBalance(page: Page) {
   await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
   const response = await page.request.get("/api/hr-admin/leave-balances/?q=EMP-0042");
   expect(response.ok(), await response.text()).toBeTruthy();
-  const balances = (await response.json()) as LeaveBalanceItem[];
-  const balance =
-    balances.find((item) => item.employee_code === "EMP-0042" && /CL|Casual/i.test(item.leave_policy_name)) ??
-    balances.find((item) => item.employee_code === "EMP-0042");
-  expect(balance, "Expected Riya to have a leave balance for custom MSS proof").toBeTruthy();
-  const creditResponse = await page.request.post("/api/hr-admin/leave-balances/actions/", {
-    data: {
-      employee_id: balance!.employee_id,
-      leave_policy_id: balance!.leave_policy_id,
-      action: "credit_adjustment",
-      units: "20.00",
-      reason: "Playwright MSS RBAC certification balance top-up.",
-    },
-  });
-  expect(creditResponse.ok(), await creditResponse.text()).toBeTruthy();
+  const balancePayload = (await response.json()) as LeaveBalanceItem[] | { items?: LeaveBalanceItem[]; results?: LeaveBalanceItem[] };
+  const balances = Array.isArray(balancePayload) ? balancePayload : balancePayload.items ?? balancePayload.results ?? [];
+  const riyaBalances = balances.filter((item) => item.employee_code === "EMP-0042");
+  expect(riyaBalances.length, "Expected Riya to have leave balances for custom MSS proof").toBeGreaterThan(0);
+  for (const balance of riyaBalances) {
+    const creditResponse = await page.request.post("/api/hr-admin/leave-balances/actions/", {
+      data: {
+        employee_id: balance.employee_id,
+        leave_policy_id: balance.leave_policy_id,
+        action: "credit_adjustment",
+        units: "20.00",
+        reason: "Playwright MSS RBAC certification balance top-up.",
+      },
+    });
+    expect(creditResponse.ok(), await creditResponse.text()).toBeTruthy();
+  }
 }
 
 async function clearRiyaPendingRegularizations(page: Page) {
@@ -227,7 +277,23 @@ async function selectRegularizableAttendanceRecord(page: Page) {
   );
   const record = records.find((item) => !item.is_locked && !pendingRecordIds.has(item.id));
   expect(record, "Expected at least one unlocked attendance record without pending regularization.").toBeTruthy();
-  await field(page, "Attendance record").selectOption(record!.id);
+  return record!;
+}
+
+async function createEmployeeRegularization(page: Page, reason: string) {
+  await gotoAuthenticated(page, "/ess", employee);
+  const record = await selectRegularizableAttendanceRecord(page);
+  const response = await page.request.post("/api/me/attendance-regularizations", {
+    data: {
+      attendance_record_id: record.id,
+      requested_status: "remote",
+      reason,
+    },
+  });
+  const payload = (await response.json().catch(() => ({}))) as { id: string; status: string };
+  expect(response.ok(), JSON.stringify(payload)).toBeTruthy();
+  expect(payload.status).toBe("pending");
+  return payload;
 }
 
 test.describe("MSS RBAC approver certification", () => {
@@ -251,25 +317,10 @@ test.describe("MSS RBAC approver certification", () => {
       });
       expect(managerPatch.ok()).toBeTruthy();
 
-      await gotoAuthenticated(page, "/ess", employee);
-      await expectPageReady(page, "Self service");
-      const startDate = isoDateFromToday(85);
-      await field(page, "Start date").fill(startDate);
-      await field(page, "End date").fill(startDate);
-      await field(page, "Reason").fill(reason);
-      const leaveResult = await submitAndCapture<{ id: string; status: string }>(
-        page,
-        "/api/me/leave-requests",
-        "POST",
-        async () => {
-          await page.getByRole("button", { name: "Submit leave" }).click();
-        },
-      );
-      expect(leaveResult.ok, JSON.stringify(leaveResult.payload)).toBeTruthy();
-      expect(leaveResult.payload.status).toBe("pending");
+      const leaveResult = await createEmployeeLeaveRequest(page, reason);
 
-      await gotoAuthenticated(page, `/mss/approvals?queue=leave&leaveId=${leaveResult.payload.id}`, approver);
-      await expectPageReady(page, "Manager inbox");
+      await gotoAuthenticated(page, `/mss/approvals?queue=leave&leaveId=${leaveResult.id}`, approver);
+      await expectPageReady(page, "Manager approvals");
       await expect(page.getByRole("heading", { name: "Leave approvals" })).toBeVisible();
       await expect(card(page, reason)).toBeVisible();
       await expect(card(page, reason)).toContainText("pending");
@@ -280,19 +331,22 @@ test.describe("MSS RBAC approver certification", () => {
       expect(hrDenied.status()).toBe(403);
       expect(JSON.stringify(await hrDenied.json())).toContain("employees.view");
 
-      await field(page, "Decision note").fill(decisionNote);
+      await page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Selected leave request" }) }).getByRole("button", { name: "Review" }).click();
+      const leaveReviewDialog = page.getByRole("dialog", { name: "Review leave approval" });
+      await expect(leaveReviewDialog).toBeVisible();
+      await field(leaveReviewDialog, "Decision note").fill(decisionNote);
       const approvalResult = await submitAndCapture<{ id: string; status: string }>(
         page,
-        `/api/manager/leave-requests/${leaveResult.payload.id}/approve`,
+        `/api/manager/leave-requests/${leaveResult.id}/approve`,
         "POST",
         async () => {
-          await page.getByRole("button", { name: "Approve request" }).click();
+          await leaveReviewDialog.getByRole("button", { name: "Approve request" }).click();
         },
       );
       expect(approvalResult.ok).toBeTruthy();
       expect(approvalResult.requestBody).toMatchObject({ comment: decisionNote });
       expect(approvalResult.payload.status).toBe("approved");
-      await expect(page.getByText("Request approved.")).toBeVisible();
+      await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Pending leave requests" }) })).toContainText("No pending leave approvals.");
       await expectNoHorizontalOverflow(page);
     } finally {
       await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
@@ -320,30 +374,18 @@ test.describe("MSS RBAC approver certification", () => {
       });
       expect(managerPatch.ok()).toBeTruthy();
 
-      await gotoAuthenticated(page, "/ess", employee);
-      await expectPageReady(page, "Self service");
-      await selectRegularizableAttendanceRecord(page);
-      await field(page, "Requested status").selectOption("remote");
-      await field(page, "Reason", 1).fill(reason);
-      const regularizationResult = await submitAndCapture<{ id: string; status: string }>(
-        page,
-        "/api/me/attendance-regularizations",
-        "POST",
-        async () => {
-          await page.getByRole("button", { name: "Submit regularization" }).click();
-        },
-      );
-      expect(regularizationResult.ok, JSON.stringify(regularizationResult.payload)).toBeTruthy();
-      expect(regularizationResult.payload.status).toBe("pending");
+      const regularizationResult = await createEmployeeRegularization(page, reason);
 
       await gotoAuthenticated(page, "/mss", reviewer);
-      await expectPageReady(page, "Manager control center");
-      await expect(page.getByRole("link", { name: "Attendance queue" })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Leave queue" })).toHaveCount(0);
+      await expectPageReady(page, "Manager dashboard");
+      await expect(page.getByRole("link", { name: "Attendance approvals" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Review attendance" })).toBeVisible();
+      await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Coverage context" }) })).toContainText("Leave queue rows");
+      await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Coverage context" }) })).toContainText("Hidden");
 
-      await gotoAuthenticated(page, `/mss/approvals?queue=attendance&regId=${regularizationResult.payload.id}`, reviewer);
-      await expectPageReady(page, "Manager inbox");
-      await expect(page.getByRole("heading", { name: "Attendance regularizations" })).toBeVisible();
+      await gotoAuthenticated(page, `/mss/approvals?queue=attendance&regId=${regularizationResult.id}`, reviewer);
+      await expectPageReady(page, "Manager approvals");
+      await expect(page.getByRole("heading", { name: "Pending attendance fixes" })).toBeVisible();
       await expect(card(page, reason)).toBeVisible();
       await expect(card(page, reason)).toContainText("pending");
 
@@ -353,19 +395,22 @@ test.describe("MSS RBAC approver certification", () => {
       expect(leaveDenied.status()).toBe(403);
       expect(JSON.stringify(await leaveDenied.json())).toContain("leave.view");
 
-      await field(page, "Decision note").fill(decisionNote);
+      await page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Selected attendance request" }) }).getByRole("button", { name: "Review" }).click();
+      const attendanceReviewDialog = page.getByRole("dialog", { name: "Review attendance approval" });
+      await expect(attendanceReviewDialog).toBeVisible();
+      await field(attendanceReviewDialog, "Decision note").fill(decisionNote);
       const approvalResult = await submitAndCapture<{ id: string; status: string }>(
         page,
-        `/api/manager/attendance-regularizations/${regularizationResult.payload.id}/approve`,
+        `/api/manager/attendance-regularizations/${regularizationResult.id}/approve`,
         "POST",
         async () => {
-          await page.getByRole("button", { name: "Approve request" }).click();
+          await attendanceReviewDialog.getByRole("button", { name: "Approve request" }).click();
         },
       );
       expect(approvalResult.ok).toBeTruthy();
       expect(approvalResult.requestBody).toMatchObject({ comment: decisionNote });
       expect(approvalResult.payload.status).toBe("approved");
-      await expect(page.getByText("Request approved.")).toBeVisible();
+      await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Pending attendance fixes" }) })).toContainText("No pending regularizations.");
       await expectNoHorizontalOverflow(page);
     } finally {
       await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);

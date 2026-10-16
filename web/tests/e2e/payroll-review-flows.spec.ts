@@ -40,7 +40,8 @@ test.describe("HR admin payroll review flows", () => {
         exceptionLink.click(),
       ]);
       await expect(page).toHaveURL(/exceptionId=/);
-      await expect(page.getByText("Approval").or(page.getByText("Source")).or(page.getByText("Exception")).first()).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Exception actions" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Approval trail" })).toBeVisible();
     }
 
     await expectNoHorizontalOverflow(page);

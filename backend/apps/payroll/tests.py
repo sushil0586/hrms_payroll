@@ -1,11 +1,17 @@
 from types import SimpleNamespace
-from datetime import date
+from datetime import date, timedelta
+from unittest.mock import patch
 
+from django.db import OperationalError
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from apps.employees.models import Employee, EmploymentStatus
 from apps.payroll.models import (
     PayrollCalendar,
+    PayrollBackgroundJob,
+    PayrollBackgroundJobOperation,
+    PayrollBackgroundJobStatus,
     PayrollCalculationLine,
     PayrollCalculationLineStatus,
     PayrollCalculationStatus,
@@ -36,6 +42,12 @@ from apps.payroll.services import (
     publish_payroll_output_batch,
     PayrollFinanceHandoffError,
     PayrollOutputError,
+)
+from apps.payroll.background_jobs import (
+    RetryablePayrollBackgroundJobError,
+    execute_payroll_background_job,
+    recover_stale_payroll_background_jobs,
+    retry_payroll_background_job,
 )
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
 
@@ -179,6 +191,90 @@ class PayrollScheduleSpineCalculationTests(TestCase):
         self.assertEqual(line.context_snapshot["attendance"]["schedule_spine"]["working_days"], 23)
         self.payroll_run.refresh_from_db()
         self.assertEqual(self.payroll_run.status, PayrollRunStatus.CALCULATED)
+
+    def test_background_job_records_retryable_failure_and_supports_controlled_retry(self):
+        job = PayrollBackgroundJob.objects.create(
+            tenant=self.tenant,
+            operation=PayrollBackgroundJobOperation.CALCULATE,
+            payroll_run=self.payroll_run,
+            idempotency_key="retryable-calculation",
+            max_attempts=1,
+        )
+        with patch("apps.payroll.background_jobs._execute_operation", side_effect=OperationalError("database unavailable")):
+            job = execute_payroll_background_job(job.id, task_id="failed-task")
+
+        self.assertEqual(job.status, PayrollBackgroundJobStatus.FAILED)
+        self.assertTrue(job.retryable)
+        self.assertEqual(job.error_code, "transient_execution_error")
+        with patch("apps.payroll.background_jobs.dispatch_payroll_background_job", return_value=True):
+            job = retry_payroll_background_job(job)
+        self.assertEqual(job.status, PayrollBackgroundJobStatus.QUEUED)
+
+    def test_background_job_recovers_stale_running_execution(self):
+        job = PayrollBackgroundJob.objects.create(
+            tenant=self.tenant,
+            operation=PayrollBackgroundJobOperation.CALCULATE,
+            payroll_run=self.payroll_run,
+            idempotency_key="stale-calculation",
+            status=PayrollBackgroundJobStatus.RUNNING,
+            stage="calculate:processing",
+            started_at=timezone.now() - timedelta(minutes=10),
+            heartbeat_at=timezone.now() - timedelta(minutes=10),
+        )
+        result = {"calculation_id": "recovered", "status": "completed", "line_count": 1, "totals": {}}
+        with patch("apps.payroll.background_jobs._execute_operation", return_value=result):
+            job = execute_payroll_background_job(job.id, task_id="recovery-task")
+
+        self.assertEqual(job.status, PayrollBackgroundJobStatus.SUCCEEDED)
+        self.assertEqual(job.attempt_count, 1)
+        self.assertEqual(job.result_snapshot, result)
+
+    def test_stale_worker_recovery_requeues_unfinished_job_for_dispatch(self):
+        job = PayrollBackgroundJob.objects.create(
+            tenant=self.tenant,
+            operation=PayrollBackgroundJobOperation.CALCULATE,
+            payroll_run=self.payroll_run,
+            idempotency_key="stale-worker-calculation",
+            status=PayrollBackgroundJobStatus.RUNNING,
+            stage="calculate:processing",
+            celery_task_id="lost-worker-task",
+            started_at=timezone.now() - timedelta(minutes=10),
+            heartbeat_at=timezone.now() - timedelta(minutes=10),
+        )
+
+        self.assertEqual(recover_stale_payroll_background_jobs(), 1)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, PayrollBackgroundJobStatus.QUEUED)
+        self.assertEqual(job.stage, "queued")
+        self.assertEqual(job.celery_task_id, "")
+        self.assertTrue(job.retryable)
+        self.assertEqual(job.error_code, "worker_heartbeat_stale")
+
+    def test_retryable_worker_failure_rolls_back_partial_payroll_mutation(self):
+        job = PayrollBackgroundJob.objects.create(
+            tenant=self.tenant,
+            operation=PayrollBackgroundJobOperation.CALCULATE,
+            payroll_run=self.payroll_run,
+            idempotency_key="atomic-calculation",
+            max_attempts=2,
+        )
+
+        def partial_failure(_job):
+            PayrollRun.objects.filter(id=self.payroll_run.id).update(status=PayrollRunStatus.CALCULATED)
+            raise OperationalError("worker connection lost")
+
+        with patch("apps.payroll.background_jobs._execute_operation", side_effect=partial_failure):
+            with self.assertRaises(RetryablePayrollBackgroundJobError):
+                execute_payroll_background_job(job.id, task_id="retry-task")
+
+        self.payroll_run.refresh_from_db()
+        job.refresh_from_db()
+        self.assertEqual(self.payroll_run.status, PayrollRunStatus.INPUTS_LOCKED)
+        self.assertEqual(job.status, PayrollBackgroundJobStatus.QUEUED)
+        self.assertEqual(job.stage, "retry_scheduled")
+        self.assertEqual(job.attempt_count, 1)
+        self.assertEqual(job.celery_task_id, "retry-task")
 
 
 class FakeArtifactQuerySet(list):

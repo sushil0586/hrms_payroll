@@ -27,6 +27,13 @@ function directoryItem(page: Page, code: string): Locator {
   return page.locator(".employee-directory-item").filter({ hasText: code }).first();
 }
 
+async function persistedItemId(item: Locator) {
+  const href = await item.getByRole("link", { name: "Edit" }).getAttribute("href");
+  const itemId = href?.match(/\/([^/]+)\/edit$/)?.[1];
+  expect(itemId).toBeTruthy();
+  return itemId!;
+}
+
 async function createBusinessUnitThroughBrowser(page: Page, runRef: string): Promise<OrganizationItem> {
   const code = `pc-bu-${runRef}`;
   const name = `PC Business Unit ${runRef}`;
@@ -43,13 +50,14 @@ async function createBusinessUnitThroughBrowser(page: Page, runRef: string): Pro
   const response = await responsePromise;
   const payload = await response.json().catch(() => ({}));
   expect(response.ok(), `Business unit create failed: ${response.status()} ${JSON.stringify(payload)}`).toBeTruthy();
-  expect(payload.id).toBeTruthy();
 
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=business_units/, { timeout: 20_000 });
   await gotoAuthenticated(page, `/hr-admin/organization?section=business_units&q=${encodeURIComponent(code)}&status=all`);
-  await expect(directoryItem(page, code)).toBeVisible();
+  const item = directoryItem(page, code);
+  await expect(item).toBeVisible();
   await expect(page.getByRole("heading", { name: `${name} detail` })).toBeVisible();
-  return { id: payload.id as string, code, name };
+  const itemId = (payload as { id?: string }).id || await persistedItemId(item);
+  return { id: itemId, code, name };
 }
 
 async function createDepartmentWithRecoverableFailure(page: Page, runRef: string, businessUnit: OrganizationItem): Promise<OrganizationItem> {
@@ -86,15 +94,16 @@ async function createDepartmentWithRecoverableFailure(page: Page, runRef: string
   const response = await responsePromise;
   const payload = await response.json().catch(() => ({}));
   expect(response.ok(), `Department create failed after network recovery: ${response.status()} ${JSON.stringify(payload)}`).toBeTruthy();
-  expect(payload.id).toBeTruthy();
 
   await expect(page).toHaveURL(/\/hr-admin\/organization\?section=departments/, { timeout: 20_000 });
   await page.unroute("**/api/hr-admin/organization/departments");
   await gotoAuthenticated(page, `/hr-admin/organization?section=departments&q=${encodeURIComponent(code)}&status=all`);
-  await expect(directoryItem(page, code)).toBeVisible();
+  const item = directoryItem(page, code);
+  await expect(item).toBeVisible();
   await expect(page.getByRole("heading", { name: `${name} detail` })).toBeVisible();
   await expect(page.locator(".detail-row").filter({ hasText: "Business Unit" }).filter({ hasText: businessUnit.name })).toBeVisible();
-  return { id: payload.id as string, code, name };
+  const itemId = (payload as { id?: string }).id || await persistedItemId(item);
+  return { id: itemId, code, name };
 }
 
 test.describe("HR Admin Organization Masters production certification", () => {

@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady, suppressBrowserTestNoise } from "../helpers/assertions";
-import { gotoAuthenticated, platformAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, gotoWithinSession, platformAdmin } from "../helpers/staging-auth";
 
 const platformRoutes = [
   { path: "/platform-admin", heading: "Platform Admin Dashboard", tab: "Control" },
@@ -20,21 +20,33 @@ const viewports = [
 ] as const;
 
 async function attachScreenshot(page: Page, name: string) {
-  const image = await page.screenshot({ fullPage: true, animations: "disabled" });
+  const image = await page.screenshot({ fullPage: true, animations: "disabled", type: "jpeg", quality: 80 });
   expect(image.length).toBeGreaterThan(1000);
   await test.info().attach(name, {
     body: image,
-    contentType: "image/png",
+    contentType: "image/jpeg",
   });
 }
 
 test.describe("Platform admin visual and accessibility certification", () => {
   test("all platform admin routes render cleanly on desktop and mobile", async ({ page }) => {
+    let hasAuthenticated = false;
     for (const viewport of viewports) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
       for (const route of platformRoutes) {
-        await gotoAuthenticated(page, route.path, platformAdmin);
+        const destinationTab = route.tab
+          ? page.getByRole("tab", { name: new RegExp(`^${route.tab}`) })
+          : null;
+        if (hasAuthenticated && destinationTab && (await destinationTab.count()) > 0) {
+          await destinationTab.click();
+          await expect.poll(() => new URL(page.url()).pathname).toBe(route.path);
+        } else if (hasAuthenticated) {
+          await gotoWithinSession(page, route.path);
+        } else {
+          await gotoAuthenticated(page, route.path, platformAdmin);
+          hasAuthenticated = true;
+        }
         if (route.tab) {
           await expectPageReady(page, route.heading);
         } else {

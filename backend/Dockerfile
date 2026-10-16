@@ -18,6 +18,12 @@ COPY backend .
 
 RUN python manage.py collectstatic --noinput
 
+RUN groupadd --system hrms \
+    && useradd --system --gid hrms --home-dir /app --no-create-home hrms \
+    && chown -R hrms:hrms /app
+
+USER hrms
+
 EXPOSE 8000
 
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "60"]

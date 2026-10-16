@@ -40,6 +40,17 @@ export type HrAdminEmployeeListItem = {
   direct_reports_count: number;
 };
 
+export type HrAdminEmployeeListResponse = PaginatedListResponse<HrAdminEmployeeListItem> & {
+  summary: {
+    total_count: number;
+    access_ready_count: number;
+    access_review_count: number;
+    records_needing_review: number;
+    status_counts: Record<string, number>;
+    department_options: string[];
+  };
+};
+
 export type HrAdminEmployeeDetail = {
   id: string;
   employee_code: string;

@@ -18,7 +18,7 @@ from apps.attendance.models import (
     Shift,
 )
 from apps.common.api_views import save_hr_admin_leave_policy_assignment
-from apps.common.selectors import get_employee_leave_requests, get_manager_pending_leave_requests
+from apps.common.selectors import get_employee_leave_requests, get_manager_leave_request_detail, get_manager_pending_leave_requests
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
 from apps.leave_management.models import LeaveBalance, LeaveBalanceTransaction, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType, LeaveRequestStatus
@@ -484,11 +484,12 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         self.assertEqual(leave_request.metadata["unit_breakdown"]["requested_units"], "4.00")
 
     def test_friday_to_monday_excludes_weekend_when_policy_disallows_overlap(self):
+        friday = _next_weekday(4)
         leave_request = submit_leave_request(
             employee=self.employee,
             leave_type=self.leave_type,
-            start_date=date(2026, 10, 9),
-            end_date=date(2026, 10, 12),
+            start_date=friday,
+            end_date=friday + timedelta(days=3),
             start_day_portion="full_day",
             end_day_portion="full_day",
             reason="Long weekend without sandwich rule",
@@ -500,10 +501,10 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         self.assertEqual(
             [(item["date"], item["counted"], item["reason"], item["units"]) for item in breakdown["days"]],
             [
-                ("2026-10-09", True, "working_day", "1.00"),
-                ("2026-10-10", False, "weekly_off", "0.00"),
-                ("2026-10-11", False, "weekly_off", "0.00"),
-                ("2026-10-12", True, "working_day", "1.00"),
+                (friday.isoformat(), True, "working_day", "1.00"),
+                ((friday + timedelta(days=1)).isoformat(), False, "weekly_off", "0.00"),
+                ((friday + timedelta(days=2)).isoformat(), False, "weekly_off", "0.00"),
+                ((friday + timedelta(days=3)).isoformat(), True, "working_day", "1.00"),
             ],
         )
 
@@ -776,6 +777,88 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         self.assertEqual(balance.carry_forward_amount, 0)
         self.assertEqual(balance.closing_balance, 20)
 
+    def test_balance_refresh_is_idempotent_with_one_row_per_policy_period(self):
+        first = ensure_employee_leave_balances(self.employee, as_of=date(2026, 10, 15))[0]
+        second = ensure_employee_leave_balances(self.employee, as_of=date(2026, 10, 15))[0]
+
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(
+            LeaveBalance.objects.filter(
+                tenant=self.tenant,
+                employee=self.employee,
+                leave_policy=self.leave_policy,
+                period_year=2026,
+            ).count(),
+            1,
+        )
+
+    def test_balance_adjustment_targets_effective_policy_period(self):
+        self.leave_policy.annual_entitlement = "12.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.config_snapshot = {"entitlement": {"grant_mode": "upfront"}}
+        self.leave_policy.save(
+            update_fields=["annual_entitlement", "accrual_frequency", "config_snapshot", "updated_at"]
+        )
+        prior_balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 10, 15))[0]
+
+        result = apply_leave_balance_admin_action(
+            actor=self.manager,
+            employee=self.employee,
+            leave_policy=self.leave_policy,
+            action="credit_adjustment",
+            units=2,
+            effective_date=date(2027, 2, 1),
+            reason="Period-specific correction",
+        )
+
+        prior_balance.refresh_from_db()
+        self.assertEqual(prior_balance.period_year, 2026)
+        self.assertEqual(prior_balance.adjustment_amount, 0)
+        self.assertEqual(result["balance"].period_year, 2027)
+        self.assertEqual(result["balance"].adjustment_amount, 2)
+        self.assertEqual(result["transaction"].metadata["period_year"], 2027)
+
+    def test_rejected_leave_releases_only_the_selected_period_reservation(self):
+        self.leave_policy.annual_entitlement = "12.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.config_snapshot = {
+            "approval": {"default_route": "manager_only"},
+            "entitlement": {"grant_mode": "upfront"},
+        }
+        self.leave_policy.save(
+            update_fields=["annual_entitlement", "accrual_frequency", "config_snapshot", "updated_at"]
+        )
+        prior_balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 10, 15))[0]
+        request_date = date(2027, 2, 1)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=request_date,
+            end_date=request_date,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Period restoration regression",
+        )
+        selected_balance = LeaveBalance.objects.get(
+            employee=self.employee,
+            leave_policy=self.leave_policy,
+            period_year=2027,
+        )
+        self.assertEqual(selected_balance.reserved_amount, 1)
+
+        resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.manager,
+            approve=False,
+            comment="Not approved",
+        )
+
+        prior_balance.refresh_from_db()
+        selected_balance.refresh_from_db()
+        self.assertEqual(prior_balance.reserved_amount, 0)
+        self.assertEqual(selected_balance.reserved_amount, 0)
+        self.assertEqual(selected_balance.closing_balance, 12)
+
     def test_encashment_is_blocked_when_policy_disallows_it(self):
         balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 1, 1))[0]
 
@@ -957,6 +1040,7 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
 
         first_level_items = get_manager_pending_leave_requests(self.manager)
         self.assertEqual([str(item["id"]) for item in first_level_items], [str(leave_request.id)])
+        self.assertEqual(get_manager_leave_request_detail(self.manager, leave_request.id)["id"], leave_request.id)
 
         leave_request = resolve_leave_request(
             leave_request=leave_request,

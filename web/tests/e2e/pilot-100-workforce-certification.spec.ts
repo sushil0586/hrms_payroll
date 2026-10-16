@@ -20,7 +20,11 @@ function directoryPanel(page: Page) {
 }
 
 function directoryItems(page: Page) {
-  return page.locator(".employee-directory-item");
+  return directoryPanel(page).getByRole("link").filter({ hasText: seedPrefix });
+}
+
+function directoryRows(page: Page) {
+  return directoryPanel(page).getByRole("table").getByRole("row").filter({ hasText: seedPrefix });
 }
 
 function pagination(page: Page) {
@@ -44,20 +48,25 @@ test.describe("P100-3 pilot 100 workforce certification", () => {
     await expect(pagination(page).getByText("of 100")).toBeVisible();
     await expect(directoryItems(page)).toHaveCount(50);
 
-    await pagination(page).getByRole("link", { name: "Next" }).click();
-    await expect(page).toHaveURL(/page=2/);
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get("page") === "2"),
+      pagination(page).getByRole("link", { name: "Next" }).click(),
+    ]);
     await expect(pagination(page).getByText("51-100")).toBeVisible();
     await expect(directoryItems(page)).toHaveCount(50);
 
-    await field(directoryPanel(page), "Manager review").selectOption("managers");
+    await directoryPanel(page).locator("summary").filter({ hasText: "More filters" }).click();
+    const managerReview = field(directoryPanel(page), "Manager review");
+    await managerReview.selectOption("managers");
     await Promise.all([
-      page.waitForURL((url) => url.searchParams.get("managerView") === "managers"),
-      directoryPanel(page).getByRole("button", { name: "Apply" }).click(),
+      page.waitForURL((url) => url.searchParams.get("managerView") === "managers", { waitUntil: "commit" }),
+      managerReview.press("Enter"),
     ]);
     await expect(pagination(page).getByText("of 10")).toBeVisible();
     await expect(directoryItems(page)).toHaveCount(10);
-    await expect(directoryItems(page).first()).toContainText(`${seedPrefix}_E001`);
-    await expect(directoryItems(page).first()).toContainText("Access provisioned");
+    await expect(directoryRows(page)).toHaveCount(10);
+    await expect(directoryRows(page).first()).toContainText(`${seedPrefix}_E001`);
+    await expect(directoryRows(page).first()).toContainText("Provisioned");
     await expectNoHorizontalOverflow(page);
   });
 
@@ -65,15 +74,17 @@ test.describe("P100-3 pilot 100 workforce certification", () => {
     test.setTimeout(5 * 60 * 1000);
 
     await loginAsSeededUser(page, `${usernamePrefix}.e011`, "/ess");
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
     await expect(page.getByText(`${seedPrefix}_E011`).first()).toBeVisible();
-    await expect(page.getByText(/Reporting manager: Aarav Sharma001/).first()).toBeVisible();
+    const profile = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "My profile" }) });
+    await expect(profile.getByText("Manager", { exact: true })).toBeVisible();
+    await expect(profile.getByText("Aarav Sharma001", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await loginAsSeededUser(page, `${usernamePrefix}.e001`, "/mss/approvals");
-    await expectPageReady(page, "Manager inbox");
-    await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: "Team members" }).first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Approval queues" })).toBeVisible();
+    await expectPageReady(page, "Manager approvals");
+    await expect(page.getByRole("region", { name: "Manager approval metrics" })).toContainText("team members");
+    await expect(page.getByRole("heading", { name: "Approval views" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Leave approvals" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

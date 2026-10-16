@@ -28,10 +28,27 @@ def get_role_permission_keys(role: Role) -> set[str]:
     work during the RBAC rollout.
     """
 
-    explicit_keys = set(role.permissions.values_list("permission_key", flat=True))
+    prefetched_permissions = getattr(role, "_prefetched_objects_cache", {}).get("permissions")
+    if prefetched_permissions is None:
+        explicit_keys = set(role.permissions.values_list("permission_key", flat=True))
+    else:
+        explicit_keys = {permission.permission_key for permission in prefetched_permissions}
     if explicit_keys:
         return explicit_keys
     return set(DEFAULT_PERMISSION_KEYS_BY_ROLE_CODE.get(role.code, set()))
+
+
+def get_membership_permission_keys(membership: TenantMembership | None) -> set[str]:
+    """Resolve permissions from an already tenant-scoped active membership."""
+
+    if not membership or membership.status != MembershipStatus.ACTIVE:
+        return set()
+    permission_keys: set[str] = set()
+    for membership_role in membership.membership_roles.all():
+        role = membership_role.role
+        if role.is_active:
+            permission_keys.update(get_role_permission_keys(role))
+    return permission_keys
 
 
 def get_user_tenant_permission_keys(user: User | AnonymousUser, tenant: Tenant) -> set[str]:
@@ -44,12 +61,7 @@ def get_user_tenant_permission_keys(user: User | AnonymousUser, tenant: Tenant) 
     )
     if not membership:
         return set()
-    permission_keys: set[str] = set()
-    for membership_role in membership.membership_roles.all():
-        role = membership_role.role
-        if role.is_active:
-            permission_keys.update(get_role_permission_keys(role))
-    return permission_keys
+    return get_membership_permission_keys(membership)
 
 
 def user_has_tenant_permission(user: User | AnonymousUser, tenant: Tenant, permission_key: str) -> bool:

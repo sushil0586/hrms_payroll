@@ -49,7 +49,7 @@ const matrix: MatrixPersona[] = [
     heading: "Platform Admin Dashboard",
     expectedAccess: { platform_admin: true },
     deniedPaths: [
-      { path: "/ess", deniedText: /Choose your workspace|Self Service/i },
+      { path: "/ess", deniedText: /Choose your workspace|Platform Admin Dashboard/i },
     ],
   },
   {
@@ -60,31 +60,31 @@ const matrix: MatrixPersona[] = [
     expectedAccess: { hr_admin: true, tenant_admin: true },
     expectedRoles: ["hr-admin"],
     deniedPaths: [
-      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace/i },
+      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace|HR Control Center|Sign in/i },
     ],
   },
   {
     label: "Manager",
     persona: manager,
     landingPath: "/mss/approvals",
-    heading: "Manager inbox",
+    heading: "Manager approvals",
     expectedAccess: { mss: true },
     expectedRoles: ["manager"],
     deniedPaths: [
-      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace/i },
-      { path: "/hr-admin", deniedText: /HR admin restricted|Choose your workspace/i },
+      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace|Manager approvals/i },
+      { path: "/hr-admin", deniedText: /HR admin restricted|Choose your workspace|Manager approvals/i },
     ],
   },
   {
     label: "Seed employee",
     persona: employee,
     landingPath: "/ess",
-    heading: "Self Service",
+    heading: "My workspace",
     expectedAccess: { ess: true },
     expectedRoles: ["employee"],
     deniedPaths: [
-      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace/i },
-      { path: "/hr-admin", deniedText: /HR admin restricted|Choose your workspace/i },
+      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace|My workspace/i },
+      { path: "/hr-admin", deniedText: /HR admin restricted|Choose your workspace|My workspace/i },
     ],
   },
   {
@@ -95,8 +95,8 @@ const matrix: MatrixPersona[] = [
     expectedAccess: { ess: true },
     expectedRoles: ["employee"],
     deniedPaths: [
-      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace/i },
-      { path: "/hr-admin/payroll-outputs", deniedText: /HR admin restricted|Choose your workspace/i },
+      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace|Payslips|My workspace/i },
+      { path: "/hr-admin/payroll-outputs", deniedText: /HR admin restricted|Choose your workspace|Payslips|My workspace/i },
     ],
   },
   {
@@ -107,7 +107,7 @@ const matrix: MatrixPersona[] = [
     expectedAccess: { hr_admin: true, tenant_admin: true },
     expectedRoles: ["hr-admin", "payroll-finance-manager"],
     deniedPaths: [
-      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace/i },
+      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace|Finance control center/i },
     ],
   },
   {
@@ -118,8 +118,8 @@ const matrix: MatrixPersona[] = [
     expectedAccess: {},
     expectedRoles: ["support-agent"],
     deniedPaths: [
-      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace/i },
-      { path: "/hr-admin", deniedText: /HR admin restricted|Choose your workspace/i },
+      { path: "/platform-admin", deniedText: /Platform admin restricted|Choose your workspace|Support Console|No workspace access is assigned/i },
+      { path: "/hr-admin", deniedText: /HR admin restricted|Choose your workspace|Support Console|No workspace access is assigned/i },
     ],
   },
 ];
@@ -264,7 +264,7 @@ test.describe.serial("Pilot credential matrix certification", () => {
     );
 
     await loginAs(page, manager, "/mss/approvals");
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
     await expectDeniedPayload(await page.request.get("/api/hr-admin/reports/finance-handoff-exceptions"), "manager finance handoff report");
     await expectDeniedPayload(await page.request.get("/api/platform-admin/tenants"), "manager platform tenant list");
   });

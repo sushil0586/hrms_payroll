@@ -135,7 +135,7 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 }
 
 async function locatePilotRun(page: Page) {
-  const setup = await apiGet<CalculationSetup>(page, "/api/hr-admin/payroll-calculation-setup");
+  const setup = await apiGet<CalculationSetup>(page, "/api/hr-admin/payroll-calculation-setup?run_page_size=500");
   const run = setup.runs.find((item) => item.code === runCode);
   expect(
     run,
@@ -294,7 +294,7 @@ test.describe.serial("P100-8 output, payslip, and ESS certification", () => {
     await expect(page.getByText(`${prefix} Output Payslip ESS Gate`).first()).toBeVisible();
     await expect(page.getByText(`${prefix}_E001`).first()).toBeVisible();
     await page.getByRole("button", { name: "Review payslip" }).first().click();
-    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expect(page.getByRole("dialog").filter({ hasText: "Payslip detail" })).toBeVisible();
     await expect(page.getByText("Source hash").first()).toBeVisible();
     await expect(page.getByText("Storage governance").first()).toBeVisible();
     await expect(page.getByText("Calculation lines").or(page.getByText("Payslip lines")).first()).toBeVisible();
@@ -315,7 +315,14 @@ test.describe.serial("P100-8 output, payslip, and ESS certification", () => {
 
     const markRead = page.getByRole("button", { name: /Mark as read|Read acknowledged/ }).first();
     if (await markRead.isEnabled().catch(() => false)) {
-      await markRead.click();
+      const readReceipt = await submitAndCapture<{ access_summary: { is_read_acknowledged: boolean } }>(
+        page,
+        new RegExp(`/api/me/payroll-payslips/${pilotEmployeeArtifact?.id}/read$`),
+        "POST",
+        async () => markRead.click(),
+      );
+      expect(readReceipt.ok).toBeTruthy();
+      expect(readReceipt.payload.access_summary.is_read_acknowledged).toBe(true);
       await expect(page.getByRole("button", { name: "Read acknowledged" }).first()).toBeVisible();
     }
 

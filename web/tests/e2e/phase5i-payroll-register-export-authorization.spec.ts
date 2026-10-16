@@ -13,6 +13,10 @@ test.describe("Phase 5I payroll register export authorization", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-outputs", hrAdmin);
     await expectPageReady(page, "Payroll Outputs");
 
+    const registerBatch = page.getByRole("link").filter({ hasText: /Output certification .*1 register/ }).first();
+    await expect(registerBatch).toBeVisible();
+    await registerBatch.click();
+
     const registerRowLink = page.getByRole("link").filter({ hasText: "Payroll Register" }).first();
     await expect(registerRowLink).toBeVisible();
     const registerHref = await registerRowLink.getAttribute("href");

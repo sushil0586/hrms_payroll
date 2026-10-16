@@ -1,7 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
+import { gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
+let hrAdmin: Persona;
 
 function uniqueCode(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
@@ -31,16 +40,12 @@ async function countNonEmptyOptions(select: Locator) {
   });
 }
 
-async function selectFirstPayrollEmployee(page: Page) {
-  const response = await page.request.get("/api/hr-admin/employees/option-search?q=EMP&limit=1");
-  expect(response.ok(), await response.text()).toBeTruthy();
-  const payload = (await response.json()) as { items?: Array<{ id: string; employee_code?: string; name?: string }> };
-  const employee = payload.items?.[0];
-  expect(employee, "Expected at least one employee option for negative-control fixture setup.").toBeTruthy();
-  await page.getByLabel("Find person").fill(employee!.employee_code || employee!.name || "");
+async function selectPayrollEmployee(page: Page) {
+  const employee = workspace.manifest.credentials.employee;
+  await page.getByLabel("Find person").fill(employee.employee_code);
   const employeeSelect = field(form(page, "payroll-input-snapshot-form"), "Employee");
   await expect.poll(async () => employeeSelect.locator("option").count(), { timeout: 15_000 }).toBeGreaterThan(1);
-  await employeeSelect.selectOption(employee!.id);
+  await employeeSelect.selectOption(employee.employee_id);
 }
 
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
@@ -141,7 +146,7 @@ async function createRunAndSnapshot(page: Page, snapshotStatus: "ready" | "block
     "POST",
     async () => {
       await field(snapshotForm, "Payroll run").selectOption(runResult.payload.id);
-      await selectFirstPayrollEmployee(page);
+      await selectPayrollEmployee(page);
       await field(snapshotForm, "Snapshot status").selectOption(snapshotStatus);
       await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.phase5g.v1");
       await field(snapshotForm, "Config profile reference").fill("tenant.payroll.snapshot.phase5g.v1");
@@ -159,17 +164,27 @@ async function createRunAndSnapshot(page: Page, snapshotStatus: "ready" | "block
 }
 
 test.describe("Phase 5G payroll negative controls", () => {
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+    hrAdmin = workspacePersona(workspace, "hr_admin");
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test("blocks close actions when source snapshots are blocked and protects locked snapshots from edits", async ({ page }) => {
     test.setTimeout(90_000);
     await ensurePayrollPeriodExists(page);
 
     const blocked = await createRunAndSnapshot(page, "blocked");
+    await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${blocked.runId}`, hrAdmin);
+    await expectPageReady(page, "Payroll Inputs");
+    await page.getByRole("button", { name: /3 Lock gate/ }).click();
     const lockPanel = form(page, "payroll-input-lock-form");
     await expect(lockPanel.getByLabel("Selected run lock readiness")).toContainText("Blocked");
     await expect(lockPanel.getByText("Lock blocked.")).toBeVisible();
     await expect(lockPanel.getByText("Missing approved attendance")).toBeVisible();
     await expect(lockPanel.getByRole("button", { name: "Lock selected run inputs" })).toBeDisabled();
-    await expect(lockPanel).toContainText("Resolve blocker snapshots before locking this payroll run.");
+    await expect(lockPanel).toContainText(/Missing approved attendance|Resolve blocker snapshots before locking this run/);
     const blockedLock = await page.request.post(`/api/hr-admin/payroll-runs/${blocked.runId}/lock-inputs`, { data: {} });
     expect(blockedLock.status()).toBe(400);
     const blockedLockPayload = (await blockedLock.json()) as { blocked_count?: number };
@@ -186,6 +201,9 @@ test.describe("Phase 5G payroll negative controls", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
     await expectPageReady(page, "Payroll Inputs");
     const ready = await createRunAndSnapshot(page, "ready");
+    await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${ready.runId}`, hrAdmin);
+    await expectPageReady(page, "Payroll Inputs");
+    await page.getByRole("button", { name: /3 Lock gate/ }).click();
     const readyLock = await submitAndCapture<{ locked_count: number }>(
       page,
       new RegExp(`/api/hr-admin/payroll-runs/${ready.runId}/lock-inputs$`),

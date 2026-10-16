@@ -152,7 +152,7 @@ test.describe("Production notification reliability proof", () => {
     ]);
 
     await page.getByRole("button", { name: "Review payslip" }).first().click();
-    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expect(page.getByRole("dialog").filter({ hasText: "Payslip detail" })).toBeVisible();
     await expectVisibleText(page, [
       "Download payslip",
       "Read receipt",

@@ -192,7 +192,7 @@ test.describe("HR Admin leave and attendance RBAC certification", () => {
 
     await gotoAuthenticated(page, "/hr-admin/leave-balances", persona);
     await expectPageReady(page, "Leave balances");
-    await expect(page.getByText("Read-only leave balance view.").first()).toBeVisible();
+    await expect(page.locator("form .notice").filter({ hasText: "Read-only leave balance view." })).toBeVisible();
     await expect(page.getByRole("button", { name: "Apply balance action" })).toBeDisabled();
 
     await expectForbiddenWithPermission(

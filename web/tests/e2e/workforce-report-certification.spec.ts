@@ -89,8 +89,10 @@ test.describe("Phase R2-A workforce report certification", () => {
 
     const openLink = report.getByRole("link", { name: "Open" }).first();
     await expect(openLink).toHaveAttribute("href", /\/hr-admin\/employees\?employeeId=/);
-    await openLink.click();
-    await expect(page).toHaveURL(/\/hr-admin\/employees\?employeeId=/);
+    await Promise.all([
+      page.waitForURL(/\/hr-admin\/employees\?employeeId=/, { timeout: 30_000 }),
+      openLink.click(),
+    ]);
     await expectPageReady(page, "Employees");
     await expectNoHorizontalOverflow(page);
   });

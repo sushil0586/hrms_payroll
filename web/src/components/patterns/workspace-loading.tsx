@@ -1,0 +1,54 @@
+type WorkspaceLoadingProps = {
+  label: string;
+};
+
+export function WorkspaceLoading({ label }: WorkspaceLoadingProps) {
+  return (
+    <main aria-busy="true" aria-label={label} className="shell app-loading-shell" role="status">
+      <span className="sr-only">{label}</span>
+      <section aria-hidden="true" className="page-header-surface page-header-surface--compact loading-card">
+        <div className="loading-line loading-line--eyebrow" />
+        <div className="loading-line loading-line--title" />
+        <div className="loading-line loading-line--copy" />
+        <div className="loading-actions">
+          <div className="loading-pill" />
+          <div className="loading-pill" />
+        </div>
+      </section>
+
+      <section aria-hidden="true" className="attendance-summary-strip payroll-run-summary-strip">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <article className="loading-card" key={index}>
+            <div className="loading-line loading-line--label" />
+            <div className="loading-line loading-line--metric" />
+            <div className="loading-line loading-line--tiny" />
+          </article>
+        ))}
+      </section>
+
+      <section aria-hidden="true" className="queue-layout">
+        <article className="queue-toolbar loading-card">
+          <div className="loading-line loading-line--label" />
+          <div className="loading-toolbar-grid">
+            <div className="loading-line loading-line--input" />
+            <div className="loading-line loading-line--input" />
+            <div className="loading-pill" />
+          </div>
+        </article>
+
+        <div className="queue-list">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <article className="record-card loading-card" key={index}>
+              <div className="loading-line loading-line--record-title" />
+              <div className="detail-grid">
+                <div className="loading-line loading-line--detail" />
+                <div className="loading-line loading-line--detail" />
+                <div className="loading-line loading-line--detail" />
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}

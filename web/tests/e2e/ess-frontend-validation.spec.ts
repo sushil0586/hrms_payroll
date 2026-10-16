@@ -1,12 +1,18 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady, suppressBrowserTestNoise } from "../helpers/assertions";
+import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
 function field(scope: Page | Locator, label: string) {
   return scope.locator("label.form-field").filter({ hasText: label }).locator("input, select, textarea").first();
 }
 
 async function gotoEssDemo(page: Page, path: string) {
+  if (process.env.HRMS_API_BASE_URL) {
+    await gotoAuthenticated(page, path, employee);
+    return;
+  }
+
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const origin = new URL(page.url()).origin;
   await page.context().addCookies([
@@ -127,13 +133,14 @@ test.describe("ESS frontend validation", () => {
     const declarationDialog = page.getByRole("dialog", { name: /Start declaration|Update declaration/ });
     await expect(declarationDialog).toBeVisible();
     await field(declarationDialog, "Financial year").fill("");
-    await declarationDialog.getByRole("button", { name: /Create declaration|Update declaration/ }).click();
+    await declarationDialog.getByRole("button", { name: /^(Create declaration|Update declaration)$/ }).click();
 
     await expect(declarationDialog.getByRole("alert").filter({ hasText: "Enter the financial year for this declaration." })).toBeVisible();
     await expect(field(declarationDialog, "Financial year")).toHaveAttribute("aria-invalid", "true");
     expect(declarationCalls).toBe(0);
 
-    await declarationDialog.getByRole("button", { name: "Close" }).click();
+    await declarationDialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(declarationDialog).toBeHidden();
     const addProof = page.getByRole("button", { name: "Add proof" });
     if (await addProof.isDisabled()) {
       await expectNoAppError(page);
@@ -144,7 +151,7 @@ test.describe("ESS frontend validation", () => {
     await addProof.click();
     const proofDialog = page.getByRole("dialog", { name: "Add proof" });
     await expect(proofDialog).toBeVisible();
-    await proofDialog.getByRole("button", { name: "Add proof" }).click();
+    await proofDialog.getByRole("button", { name: /^Add proof$/ }).click();
 
     await expect(proofDialog.getByRole("alert").filter({ hasText: "Enter a clear proof item name." })).toBeVisible();
     await expect(proofDialog.getByRole("alert").filter({ hasText: "Enter the declared amount for this proof item." })).toBeVisible();

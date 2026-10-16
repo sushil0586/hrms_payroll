@@ -36,7 +36,6 @@ async function switchPersona(page: Page, persona: Persona, path: string) {
   });
   expect(response.ok()).toBeTruthy();
   await page.goto(path, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
 }
 
 async function sessionUser(page: Page) {
@@ -76,18 +75,11 @@ test.describe("Phase 7A role and workspace access boundaries", () => {
 
   test("workspace chooser hides privileged links after low-privilege sign-in", async ({ page }, testInfo) => {
     await switchPersona(page, employee, "/");
-    await expectPageReady(page, "Choose your workspace");
+    await expect(page).toHaveURL(/\/ess$/);
+    await expectPageReady(page, "My workspace");
     const user = await sessionUser(page);
-    const expectedLabels = [
-      user.workspace_access.ess ? "Open ESS" : "ESS restricted",
-      user.default_membership?.role_codes?.includes("hr-admin") ? "Open HR admin" : "HR admin restricted",
-      user.workspace_access.platform_admin ? "Open platform console" : "Platform admin restricted",
-      user.workspace_access.tenant_admin ? "Open tenant console" : "Tenant admin restricted",
-      user.workspace_access.mss ? "Open MSS" : "Manager access required",
-    ];
-    for (const label of expectedLabels) {
-      await expect(page.getByText(label).first()).toBeVisible();
-    }
+    expect(user.workspace_access.ess).toBeTruthy();
+    await expect(page.getByRole("link", { name: /Platform Admin|Tenant Admin|HR Admin/ })).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
     await captureSecurityStep(page, testInfo, "02-employee-workspace-chooser-boundary");
   });
@@ -98,29 +90,29 @@ test.describe("Phase 7A role and workspace access boundaries", () => {
     if (employeeUser.default_membership?.role_codes?.includes("hr-admin")) {
       await expectPageReady(page, "HR Control Center");
     } else {
-      await expect(page).toHaveURL(/\/$/);
-      await expectPageReady(page, "Choose your workspace");
-      await expect(page.getByText("HR admin restricted")).toBeVisible();
+      await expect(page).toHaveURL(/\/ess$/);
+      await expectPageReady(page, "My workspace");
+      await expect(page.getByRole("heading", { name: "HR Control Center" })).toHaveCount(0);
     }
 
     await switchPersona(page, manager, "/platform-admin");
     const managerUser = await sessionUser(page);
     if (managerUser.workspace_access.platform_admin) {
-      await expectPageReady(page, "Platform Control Center");
+      await expectPageReady(page, "Platform Admin Dashboard");
     } else {
-      await expect(page).toHaveURL(/\/$/);
-      await expectPageReady(page, "Choose your workspace");
-      await expect(page.getByText("Platform admin restricted")).toBeVisible();
+      await expect(page).toHaveURL(/\/mss\/approvals$/);
+      await expectPageReady(page, "Manager approvals");
+      await expect(page.getByRole("heading", { name: "Platform Control Center" })).toHaveCount(0);
     }
 
     await switchPersona(page, hrAdmin, "/platform-admin");
     const hrUser = await sessionUser(page);
     if (hrUser.workspace_access.platform_admin) {
-      await expectPageReady(page, "Platform Control Center");
+      await expectPageReady(page, "Platform Admin Dashboard");
     } else {
-      await expect(page).toHaveURL(/\/$/);
-      await expectPageReady(page, "Choose your workspace");
-      await expect(page.getByText("Platform admin restricted")).toBeVisible();
+      await expect(page).toHaveURL(/\/hr-admin$/);
+      await expectPageReady(page, "HR Control Center");
+      await expect(page.getByRole("heading", { name: "Platform Control Center" })).toHaveCount(0);
     }
 
     await switchPersona(page, platformAdmin, "/hr-admin");
@@ -128,9 +120,9 @@ test.describe("Phase 7A role and workspace access boundaries", () => {
     if (platformUser.default_membership?.role_codes?.includes("hr-admin")) {
       await expectPageReady(page, "HR Control Center");
     } else {
-      await expect(page).toHaveURL(/\/$/);
-      await expectPageReady(page, "Choose your workspace");
-      await expect(page.getByText("HR admin restricted")).toBeVisible();
+      await expect(page).toHaveURL(/\/platform-admin$/);
+      await expectPageReady(page, "Platform Admin Dashboard");
+      await expect(page.getByRole("heading", { name: "HR Control Center" })).toHaveCount(0);
     }
     await expectNoHorizontalOverflow(page);
     await captureSecurityStep(page, testInfo, "03-cross-role-page-denials");
@@ -139,6 +131,7 @@ test.describe("Phase 7A role and workspace access boundaries", () => {
   test("sensitive payroll artifact and support routes deny wrong or missing sessions", async ({ page }, testInfo) => {
     await switchPersona(page, hrAdmin, "/hr-admin/payroll-outputs");
     await expectPageReady(page, "Payroll Outputs");
+    await page.locator("table.payroll-output-artifact-table").getByRole("row").filter({ hasText: "Published" }).first().getByRole("link").click();
     const downloadHref = await page.getByRole("link", { name: "Download file" }).first().getAttribute("href");
     expect(downloadHref).toMatch(/^\/api\/hr-admin\/payroll-output-artifacts\/[^/]+\/download/);
 

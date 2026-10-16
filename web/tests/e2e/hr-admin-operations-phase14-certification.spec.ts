@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "../helpers/assertions";
+import { expectCompactMetric, expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "../helpers/assertions";
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
 type OperationsRoute = {
@@ -158,7 +158,7 @@ test.describe("HR Admin operations phase 14 certification", () => {
 
     const workspace = page.getByTestId("import-history-workspace");
     await expect(workspace).toBeVisible();
-    await expect(workspace.locator(".metric-tile").filter({ hasText: "Import batches" })).toBeVisible();
+    await expectCompactMetric(workspace, "Import batches");
     await expect(workspace.getByPlaceholder("Search type, actor, file, hash")).toBeVisible();
     await expect(workspace.getByRole("combobox", { name: "Import type" })).toBeVisible();
     await expect(workspace.getByRole("combobox", { name: "Import status" })).toBeVisible();

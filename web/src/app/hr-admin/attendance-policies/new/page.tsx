@@ -8,7 +8,7 @@ import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewAttendancePolicyPage() {
   await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-policies" });
-  const optionsResult = await getHrAdminPolicyOptions();
+  const optionsResult = await getHrAdminPolicyOptions({ employee_limit: 50 });
   const defaultStatus = optionsResult.data.attendance_policy_statuses[0]?.value || "draft";
   const defaultUnit = optionsResult.data.attendance_units[0]?.value || "day";
 

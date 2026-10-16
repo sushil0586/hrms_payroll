@@ -23,40 +23,43 @@ test.describe.serial("User journey phase 4: manager workspace workflow", () => {
 
     await expectActualUserReadyPage(page, {
       path: "/mss",
-      heading: /Manager control center/i,
+      heading: /Manager dashboard/i,
       persona: manager,
-      requiredText: [/Team priorities|Work queue/i, /Team members/i, /Pending decisions/i],
+      requiredText: [/Manager actions|What to review next/i, /Team members/i, /Pending decisions/i],
     });
 
-    await expectLinkHref(page, /Open approvals/i, /\/mss\/approvals$/);
+    await expectLinkHref(page, /Leave approvals/i, /\/mss\/approvals\?queue=leave$/);
+    await expectLinkHref(page, /Attendance approvals/i, /\/mss\/approvals\?queue=attendance$/);
     await expectLinkHref(page, /^Notifications$/i, /\/mss\/notifications$/);
     await expectLinkHref(page, /Self service/i, /\/ess$/);
 
-    await page.getByRole("link", { name: /Open approvals/i }).first().click();
+    await page.getByRole("link", { name: /Leave approvals/i }).first().click();
     await expect(page).toHaveURL(/\/mss\/approvals/);
-    await expectPageReady(page, /Manager inbox/i);
+    await expectPageReady(page, /Manager approvals/i);
   });
 
   test("manager can review leave and attendance queues without layout or routing issues", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 960 });
 
-    await openManagerPage(page, "/mss/approvals", /Manager inbox/i);
-    await expect(page.getByText(/Approval queues/i).first()).toBeVisible();
+    await openManagerPage(page, "/mss/approvals", /Manager approvals/i);
+    await expect(page.getByText(/Approval views/i).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /Leave/i }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /Attendance/i }).first()).toBeVisible();
     await expect(page.getByText(/Leave approvals|No pending leave approvals/i).first()).toBeVisible();
-    await expect(page.getByText(/Leave approval detail|No leave approval selected/i).first()).toBeVisible();
+    await expect(page.getByText(/Selected leave request|No leave approval selected/i).first()).toBeVisible();
 
-    await page.getByRole("link", { name: /Attendance/i }).first().click();
+    const attendanceQueue = page.getByRole("link", { name: /^Attendance\b/ }).first();
+    await page.goto((await attendanceQueue.getAttribute("href")) ?? "/mss/approvals?queue=attendance&regPage=1", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/mss\/approvals\?.*queue=attendance/);
-    await expectPageReady(page, /Manager inbox/i);
-    await expect(page.getByText(/Attendance regularizations|No pending regularizations/i).first()).toBeVisible();
-    await expect(page.getByText(/Regularization detail|No regularization selected/i).first()).toBeVisible();
+    await expectPageReady(page, /Manager approvals/i);
+    await expect(page.getByText(/Attendance approvals|No pending regularizations/i).first()).toBeVisible();
+    await expect(page.getByText(/Selected attendance request|No regularization selected/i).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await page.getByRole("link", { name: /Leave/i }).first().click();
+    const leaveQueue = page.getByRole("link", { name: /^Leave\b/ }).first();
+    await page.goto((await leaveQueue.getAttribute("href")) ?? "/mss/approvals?queue=leave&leavePage=1", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/mss\/approvals\?.*queue=leave/);
-    await expectPageReady(page, /Manager inbox/i);
+    await expectPageReady(page, /Manager approvals/i);
     await expectNoHorizontalOverflow(page);
   });
 
@@ -76,7 +79,7 @@ test.describe.serial("User journey phase 4: manager workspace workflow", () => {
 
     await page.getByRole("link", { name: /^Approvals$/i }).first().click();
     await expect(page).toHaveURL(/\/mss\/approvals/);
-    await expectPageReady(page, /Manager inbox/i);
+    await expectPageReady(page, /Manager approvals/i);
   });
 
   test("manager account stays inside manager and employee workspaces", async ({ page }) => {

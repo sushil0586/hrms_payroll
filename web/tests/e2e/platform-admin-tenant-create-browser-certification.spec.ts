@@ -173,11 +173,9 @@ test.describe("Platform Admin tenant creation browser certification", () => {
     await indiaBlueprint.click();
 
     await page.getByRole("button", { name: "Preview launch plan" }).click();
-    await expect(page.getByText("Launch preview completed.")).toBeVisible();
-    await expect(page.getByText("Needs inputs", { exact: true }).first()).toBeVisible();
-    const missingInputs = page.locator(".platform-validation-strip").first();
-    await expect(missingInputs).toContainText("Registered address");
-    await expect(missingInputs).toContainText("Default branch");
+    await expect(page.getByRole("alert").getByText(/Fix the highlighted launch inputs/i)).toBeVisible();
+    await expect(page.getByRole("alert").getByText("Registered address is required.")).toBeVisible();
+    await expect(page.getByRole("alert").getByText("Default branch is required.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Apply safe launch setup" }).first()).toBeDisabled();
 
     await page.getByLabel("Registered address").fill("Bandra Kurla Complex, Mumbai, Maharashtra 400051");
@@ -187,7 +185,6 @@ test.describe("Platform Admin tenant creation browser certification", () => {
     await page.getByLabel("Jury duty leave").setChecked(true);
 
     await page.getByRole("button", { name: "Preview launch plan" }).click();
-    await expect(page.getByText("Launch preview completed.")).toBeVisible();
     await expect(page.getByText("Apply-ready", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Will configure now")).toBeVisible();
     await expect(page.getByText("Roles and Users", { exact: true })).toBeVisible();
@@ -283,10 +280,12 @@ test.describe("Platform Admin tenant creation browser certification", () => {
     await employeeFormControl(page, "Employment status").selectOption("active");
     await employeeFormControl(page, "First name").fill(employeeFirstName);
     await employeeFormControl(page, "Last name").fill(employeeLastName);
+    await page.getByRole("button", { name: "Continue" }).click();
     await employeeFormControl(page, "Work email").fill(employeeEmail);
     await employeeFormControl(page, "Phone number").fill("+91 90000 00789");
     await employeeFormControl(page, "Date of birth").fill("1995-01-15");
     await employeeFormControl(page, "Date of joining").fill("2026-10-01");
+    await page.getByRole("button", { name: "Continue" }).click();
     await employeeFormControl(page, "Legal entity").selectOption({ label: `${tenantName} Pvt Ltd` });
     await employeeFormControl(page, "Branch").selectOption({ label: "Mumbai" });
     await employeeFormControl(page, "Business unit").selectOption({ label: "Corporate" });
@@ -294,6 +293,7 @@ test.describe("Platform Admin tenant creation browser certification", () => {
     await employeeFormControl(page, "Grade").selectOption({ label: "G1 - Associate" });
     await employeeFormControl(page, "Designation").selectOption({ label: "Employee" });
     await employeeFormControl(page, "Employment type").selectOption({ label: "Full-time" });
+    await page.getByRole("button", { name: "Continue" }).click();
 
     const employeeCreateResponsePromise = page.waitForResponse(
       (response) => response.url().includes("/api/hr-admin/employees") && response.request().method() === "POST",
@@ -332,7 +332,7 @@ test.describe("Platform Admin tenant creation browser certification", () => {
     await page.goto("/ess/leave", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
     await expect(page.getByRole("heading", { level: 1, name: "Leave" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Balances" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Balance snapshot" })).toBeVisible();
     await expect(page.locator("main").getByText("Casual Leave").first()).toBeVisible();
     await expect(page.locator("main").getByText("Sick Leave").first()).toBeVisible();
     await expect(page.locator("main").getByText("Maternity Leave").first()).toBeVisible();
@@ -345,8 +345,8 @@ test.describe("Platform Admin tenant creation browser certification", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible();
     await expect(page.getByText("Today").first()).toBeVisible();
     await expect(page.getByText("General Shift").first()).toBeVisible();
-    await expect(page.getByText("Monthly summary").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Regularize attendance" })).toBeVisible();
+    await expect(page.getByText("Month to date").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Submit correction|Regularize attendance/ })).toBeVisible();
     await expect(page.getByText("Not assigned")).toHaveCount(0);
 
     await expectNoHorizontalOverflow(page);

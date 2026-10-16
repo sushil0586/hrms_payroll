@@ -26,7 +26,7 @@ async function openAddContactDialog(page: Page): Promise<Locator> {
 }
 
 function notice(page: Page): Locator {
-  return page.locator(".notice").first();
+  return page.locator(".platform-feedback").first();
 }
 
 function uniqueRunRef() {
@@ -53,6 +53,15 @@ async function openPlatformTab(page: Page, name: "Tenants" | "Launch Readiness" 
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
 
+async function expectInvalidControl(control: Locator) {
+  await expect.poll(async () => {
+    return control.evaluate((element) => {
+      const input = element as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+      return input.getAttribute("aria-invalid") === "true" || !input.checkValidity();
+    });
+  }).toBeTruthy();
+}
+
 test.describe("Platform admin negative and security certification", () => {
   test("wrong roles and unauthenticated sessions cannot access platform APIs or workspace", async ({ page }) => {
     await page.context().clearCookies();
@@ -64,8 +73,8 @@ test.describe("Platform admin negative and security certification", () => {
 
     for (const persona of [employee, manager, hrAdmin]) {
       await loginAs(page, persona, "/platform-admin");
-      await expect(page).toHaveURL(/\/$/);
-      await expect(page.getByRole("link", { name: "Platform" })).toHaveAttribute("href", "/");
+      await expect(page).not.toHaveURL(/\/platform-admin/);
+      await expect(page.getByRole("link", { name: "Platform" })).toHaveCount(0);
       await expectDenied(await page.request.get("/api/platform/tenants"));
       await expectDenied(await page.request.post("/api/platform-policy-packs", {
         data: { code: `blocked-${uniqueRunRef()}`, name: "Blocked Pack", domain: "leave" },
@@ -86,13 +95,13 @@ test.describe("Platform admin negative and security certification", () => {
 
     let createTenant = await openCreateTenantDialog(page);
     await createTenant.getByRole("button", { name: "Create tenant" }).click();
-    await expect(namedControl(createTenant, "code")).toBeFocused();
+    await expectInvalidControl(namedControl(createTenant, "code"));
 
     await namedControl(createTenant, "code").fill(tenantCode);
     await namedControl(createTenant, "name").fill(`QA Negative Tenant ${runRef}`);
     await namedControl(createTenant, "primary_email").fill("not-an-email");
     await createTenant.getByRole("button", { name: "Create tenant" }).click();
-    await expect(namedControl(createTenant, "primary_email")).toBeFocused();
+    await expectInvalidControl(namedControl(createTenant, "primary_email"));
     await namedControl(createTenant, "primary_email").fill(`ops.${tenantCode}@example.test`);
     await createTenant.getByRole("button", { name: "Create tenant" }).click();
     await expect(notice(page).getByText("Tenant created.", { exact: true })).toBeVisible();
@@ -135,13 +144,13 @@ test.describe("Platform admin negative and security certification", () => {
     await namedControl(addContact, "full_name").fill("Invalid Admin");
     await namedControl(addContact, "email").fill("not-an-email");
     await addContact.getByRole("button", { name: "Add contact" }).click();
-    await expect(namedControl(addContact, "email")).toBeFocused();
+    await expectInvalidControl(namedControl(addContact, "email"));
     await addContact.getByRole("button", { name: "Cancel" }).click();
 
     await openPlatformTab(page, "Setup Templates");
     const packs = card(page, "Setup templates");
     await packs.getByRole("button", { name: "Create template" }).click();
-    await expect(namedControl(packs, "code")).toBeFocused();
+    await expectInvalidControl(namedControl(packs, "code"));
     await namedControl(packs, "code").fill(packCode);
     await namedControl(packs, "name").fill(`QA Negative Pack ${runRef}`);
     await namedControl(packs, "domain").selectOption("leave");

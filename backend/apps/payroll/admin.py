@@ -12,6 +12,7 @@ from apps.payroll.models import (
     PayrollAdjustment,
     PayrollArtifactAccessEvent,
     PayrollArtifactSignedAccessGrant,
+    PayrollBackgroundJob,
     PayrollCalculationLine,
     PayrollFinanceHandoff,
     PayrollProviderCallbackEvent,
@@ -322,6 +323,13 @@ class PayrollProviderJobAdmin(admin.ModelAdmin):
     list_display = ("job_kind", "tenant", "status", "provider_ref", "queue_policy_ref", "attempt_count", "recovery_count", "scheduled_for", "leased_until", "heartbeat_at", "completed_at")
     list_filter = ("job_kind", "status", "queue_policy_ref", "worker_profile_ref")
     search_fields = ("idempotency_key", "provider_ref", "failure_code", "failure_reason")
+
+
+@admin.register(PayrollBackgroundJob)
+class PayrollBackgroundJobAdmin(admin.ModelAdmin):
+    list_display = ("operation", "tenant", "status", "stage", "completed_items", "total_items", "attempt_count", "requested_by", "queued_at", "completed_at")
+    list_filter = ("operation", "status", "retryable")
+    search_fields = ("idempotency_key", "celery_task_id", "error_code", "error_message")
 
 
 @admin.register(PayrollProviderLaunchRehearsal)

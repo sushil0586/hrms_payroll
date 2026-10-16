@@ -1,8 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady, suppressBrowserTestNoise } from "../helpers/assertions";
+import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
 
 async function gotoTenantAdminDemo(page: Page, path: string) {
+  if (process.env.HRMS_API_BASE_URL) {
+    await gotoAuthenticated(page, path, tenantAdmin);
+    return;
+  }
+
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const origin = new URL(page.url()).origin;
   await page.context().addCookies([

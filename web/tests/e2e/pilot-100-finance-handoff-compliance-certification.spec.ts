@@ -144,7 +144,7 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 }
 
 async function locatePublishedP100Batch(page: Page) {
-  const setup = await backendApiGet<PayrollOutputSetup>(page, "/hr-admin/payroll-output-setup/");
+  const setup = await backendApiGet<PayrollOutputSetup>(page, "/hr-admin/payroll-output-setup/?batch_page_size=500");
   const batch = setup.output_batches.find((item) => item.payroll_run_name === runName);
   expect(batch, `Missing published P100 output batch for ${runName}. Run P100-8 first.`).toBeTruthy();
   expect(batch?.status, `${runName} output batch must be published before finance handoff certification.`).toBe("published");
@@ -156,10 +156,20 @@ async function locatePublishedP100Batch(page: Page) {
 }
 
 async function locateHandoff(page: Page, outputBatchId: string) {
-  const setup = await backendApiGet<PayrollFinanceHandoffSetup>(page, "/hr-admin/payroll-finance-handoff-setup/");
+  const index = await backendApiGet<PayrollFinanceHandoffSetup>(
+    page,
+    "/hr-admin/payroll-finance-handoff-setup/?handoff_page_size=500&include_output_batches=false",
+  );
+  const handoff = index.handoffs.find((item) => item.output_batch_id === outputBatchId) ?? null;
+  const setup = handoff
+    ? await backendApiGet<PayrollFinanceHandoffSetup>(
+        page,
+        `/hr-admin/payroll-finance-handoff-setup/?handoff_id=${handoff.id}&artifact_page_size=500&delivery_page_size=500&callback_page_size=500&retry_page_size=500&job_page_size=500&include_output_batches=false`,
+      )
+    : index;
   return {
     setup,
-    handoff: setup.handoffs.find((item) => item.output_batch_id === outputBatchId) ?? null,
+    handoff,
   };
 }
 

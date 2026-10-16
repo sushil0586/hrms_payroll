@@ -23,7 +23,8 @@ async function expectFinanceManifest(
   const payload = await response.json();
   expect(payload.report_key).toBe(reportKey);
   expect(payload.export_schema_version).toBe("hrms.report.export.manifest.v1");
-  expect(payload.source_endpoints).toContain(expectedSource);
+  const sourcePathnames = (payload.source_endpoints as string[]).map((source) => new URL(source, "http://hrms.local").pathname);
+  expect(sourcePathnames).toContain(expectedSource);
   expect(payload.csv_checksum_sha256).toMatch(/^[a-f0-9]{64}$/);
   for (const column of expectedEvidence) {
     expect(payload.evidence_columns).toContain(column);

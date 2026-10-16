@@ -14,7 +14,7 @@ test.describe("Phase 7D roster rollout audit report certification", () => {
       await expect(report.getByRole("columnheader", { name: column })).toBeVisible();
     }
 
-    for (const metric of ["Rollouts", "Created assignments", "Skipped rows", "Medium/high risk"]) {
+    for (const metric of ["Rollouts", "Created", "Skipped", "Review risk"]) {
       await expectSummaryMetric(report, metric);
     }
 

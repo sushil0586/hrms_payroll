@@ -131,7 +131,7 @@ async function createAndPublishHeaderTemplate(page: Page, packCode: string, pack
   await namedControl(setupCard, "industry_tag").fill("qa");
   await namedControl(setupCard, "description").fill("Launch readiness certification baseline.");
   await setupCard.getByRole("button", { name: "Create template" }).click();
-  await expect(notice(page).getByText("Policy pack created.", { exact: true })).toBeVisible();
+  await expect(page.locator('[name="policy_pack_id"] option').filter({ hasText: packName })).toHaveCount(1);
 
   await safeReload(page);
   await namedControl(setupCard, "policy_pack_search").fill(packCode);

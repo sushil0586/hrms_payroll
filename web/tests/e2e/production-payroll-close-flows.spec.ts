@@ -4,12 +4,12 @@ import { dirname } from "node:path";
 import { expect, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, expectVisibleText, gotoAuthenticated, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
+import { employee, expectVisibleText, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
 
 async function captureCloseStep(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`production-payroll-close/${name}.png`);
   await mkdir(dirname(path), { recursive: true });
-  await page.screenshot({ path, fullPage: true });
+  await page.screenshot({ path });
 }
 
 test.describe("Production payroll close proof", () => {
@@ -27,8 +27,17 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "01-source-readiness");
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-inputs");
+    const inputSetupResponse = await page.request.get("/api/hr-admin/payroll-input-snapshot-setup?snapshot_page_size=1");
+    expect(inputSetupResponse.ok()).toBeTruthy();
+    const inputSetup = (await inputSetupResponse.json()) as {
+      snapshots: Array<{ id: string; payroll_run_id: string }>;
+    };
+    expect(inputSetup.snapshots.length).toBeGreaterThan(0);
+    const snapshot = inputSetup.snapshots[0];
+
+    await page.goto(`/hr-admin/payroll-inputs?runId=${snapshot.payroll_run_id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Inputs");
+    await page.locator(`a[href*="snapshotId=${snapshot.id}"]`).click();
     await expectVisibleText(page, [
       "Locked inputs",
       "Source hash",
@@ -38,9 +47,9 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "02-input-snapshots-locked");
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-rules");
+    await page.goto("/hr-admin/payroll-rules", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Rules");
-    await expect(page.getByRole("heading", { name: "Catalog" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rule engine summary" })).toBeVisible();
     await expectVisibleText(page, [
       "Safe expressions",
       "Dependencies",
@@ -48,7 +57,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "03-rule-engine-evidence");
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-calculations");
+    await page.goto("/hr-admin/payroll-calculations", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Calculations");
     await expectVisibleText(page, [
       "Issue register",
@@ -60,7 +69,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "04-draft-calculation-trace");
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-review");
+    await page.goto("/hr-admin/payroll-review", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Review");
     await expectVisibleText(page, [
       "Exception register",
@@ -72,7 +81,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "05-review-approval-final-lock");
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-outputs");
+    await page.goto("/hr-admin/payroll-outputs", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Outputs");
     await expectVisibleText(page, [
       "Published",
@@ -87,7 +96,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "06-published-output-governance");
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-handoff");
+    await page.goto("/hr-admin/payroll-handoff", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Handoff");
     await expectVisibleText(page, [
       "Finance artifacts",
@@ -103,18 +112,23 @@ test.describe("Production payroll close proof", () => {
     await expectPageReady(page, "Payslips");
     await expectVisibleText(page, [
       "Published payslips",
-      "Published only",
+      "Published payslips only",
     ]);
     await page.getByRole("button", { name: "Review payslip" }).first().click();
-    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
-    await expectVisibleText(page, [
+    const payslipDialog = page.getByRole("dialog").filter({ hasText: "Payslip detail" });
+    await expect(payslipDialog).toBeVisible();
+    for (const label of [
       "Access trail",
       "Payment summary",
       "Storage governance",
       "Source hash",
-      "Calculation lines",
+      "Payslip lines",
       "Download payslip",
-    ]);
+    ]) {
+      const section = payslipDialog.getByText(label, { exact: true }).first();
+      await section.scrollIntoViewIfNeeded();
+      await expect(section).toBeVisible();
+    }
 
     const isLiveEmployeePayroll = await page.getByText("Live employee payroll").first().isVisible().catch(() => false);
     const markAsRead = page.getByRole("button", { name: "Mark as read" }).first();

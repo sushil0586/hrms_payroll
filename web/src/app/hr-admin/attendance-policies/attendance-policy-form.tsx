@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -67,6 +67,9 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const submittingRef = useRef(false);
   const previewRef = useRef(false);
+  const shiftOptions = useMemo(() => selectOptions(options.shifts), [options.shifts]);
+  const holidayCalendarOptions = useMemo(() => selectOptions(options.holiday_calendars), [options.holiday_calendars]);
+  const employeeOptions = useMemo(() => selectOptions(options.employees), [options.employees]);
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
   const statusLocked = isGovernanceFieldLocked(item, "status");
@@ -163,7 +166,6 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
       return;
     }
     router.push(successHref);
-    router.refresh();
   }
 
   function handleCancel() {
@@ -254,8 +256,8 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
               <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.name)} className="input-control" disabled={nameLocked} required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}<GovernanceLockHint fieldPath="name" item={item} /></label>
               <label className="form-field"><span className="muted">Status</span><select className="input-control" disabled={statusLocked} value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.attendance_policy_statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><GovernanceLockHint fieldPath="status" item={item} /></label>
               <label className="form-field"><span className="muted">Attendance unit</span><select className="input-control" disabled={attendanceUnitLocked} value={formValue.attendance_unit} onChange={(e) => update("attendance_unit", e.target.value)}>{options.attendance_units.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><GovernanceLockHint fieldPath="attendance_unit" item={item} /></label>
-              <label className="form-field"><span className="muted">Default shift</span><select className="input-control" disabled={defaultShiftLocked} value={formValue.default_shift_id ?? ""} onChange={(e) => update("default_shift_id", e.target.value || null)}>{selectOptions(options.shifts)}</select><GovernanceLockHint fieldPath="default_shift_id" item={item} /></label>
-              <label className="form-field"><span className="muted">Holiday calendar</span><select className="input-control" disabled={holidayCalendarLocked} value={formValue.holiday_calendar_id ?? ""} onChange={(e) => update("holiday_calendar_id", e.target.value || null)}>{selectOptions(options.holiday_calendars)}</select><GovernanceLockHint fieldPath="holiday_calendar_id" item={item} /></label>
+              <label className="form-field"><span className="muted">Default shift</span><select className="input-control" disabled={defaultShiftLocked} value={formValue.default_shift_id ?? ""} onChange={(e) => update("default_shift_id", e.target.value || null)}>{shiftOptions}</select><GovernanceLockHint fieldPath="default_shift_id" item={item} /></label>
+              <label className="form-field"><span className="muted">Holiday calendar</span><select className="input-control" disabled={holidayCalendarLocked} value={formValue.holiday_calendar_id ?? ""} onChange={(e) => update("holiday_calendar_id", e.target.value || null)}>{holidayCalendarOptions}</select><GovernanceLockHint fieldPath="holiday_calendar_id" item={item} /></label>
             </div>
           </FormSection>
 
@@ -374,7 +376,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
               <label className="form-field">
                 <span className="muted">Employee</span>
                 <select className="input-control" value={previewEmployeeId} onChange={(e) => setPreviewEmployeeId(e.target.value)}>
-                  {selectOptions(options.employees)}
+                  {employeeOptions}
                 </select>
               </label>
               <label className="form-field">
@@ -384,7 +386,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
               <label className="form-field">
                 <span className="muted">Preview shift override</span>
                 <select className="input-control" value={previewShiftId} onChange={(e) => setPreviewShiftId(e.target.value)}>
-                  {selectOptions(options.shifts)}
+                  {shiftOptions}
                 </select>
               </label>
               <label className="form-field">

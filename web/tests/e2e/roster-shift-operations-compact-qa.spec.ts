@@ -36,8 +36,11 @@ test.describe("E90-6 roster and shift operations compact QA", () => {
     await page.setViewportSize({ width: 1440, height: 960 });
     await gotoAuthenticated(page, "/hr-admin/employee-shift-assignments?page_size=10", hrAdmin);
     await expectPageReady(page, "Shift assignments");
-    await expect(page.getByRole("form", { name: "Shift assignment filters" })).toBeVisible();
-    await expect(page.getByText(/matching/i).first()).toBeVisible();
+    const assignmentFilters = page.getByRole("region", { name: "Shift assignment filters" });
+    await expect(assignmentFilters).toBeVisible();
+    await assignmentFilters.getByText("More filters", { exact: true }).click();
+    await expect(assignmentFilters.getByRole("combobox", { name: "Primary state" })).toBeVisible();
+    await expect(assignmentFilters.getByText(/on this page/i).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     const assignmentResponse = await page.request.get("/api/hr-admin/employee-shift-assignments?page=1&page_size=3");
@@ -56,7 +59,7 @@ test.describe("E90-6 roster and shift operations compact QA", () => {
 
     await gotoAuthenticated(page, "/hr-admin/shift-roster-templates?page_size=10&rollout_page_size=3", hrAdmin);
     await expectPageReady(page, "Roster templates");
-    await expect(page.getByRole("form", { name: "Roster template filters" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Roster template filters" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Roster rollout" })).toBeVisible();
     await expect(page.getByLabel("Roster rollout history pagination")).toBeVisible();
     await expectNoHorizontalOverflow(page);

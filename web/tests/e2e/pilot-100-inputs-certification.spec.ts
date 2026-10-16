@@ -41,7 +41,8 @@ test.describe("P100-4 pilot payroll input certification", () => {
 
     await report.getByPlaceholder("Search employee, department, status, notes").fill(`${seedPrefix}_E056`);
     await report.getByLabel("Regularization").selectOption("Regularized");
-    await expect(report.getByText(/Regularized|Showing/).first()).toBeVisible();
+    await expect(report.getByRole("cell", { name: new RegExp(`${seedPrefix}_E056`) })).toBeVisible();
+    await expect(report.getByText("Showing 1-1 of 1")).toBeVisible();
     await expect(report.locator(".pagination-bar")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
@@ -67,7 +68,7 @@ test.describe("P100-4 pilot payroll input certification", () => {
     expect(manifest.evidence_columns).toContain("available_after_reserved");
 
     await loginAsSeededUser(page, `${usernamePrefix}.e051`, "/ess?leaveStatus=pending&leavePage=1");
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
     await expect(page.getByText(seedPrefix).first()).toBeVisible();
     await expect(page.getByText(/Pending/i).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -77,12 +78,12 @@ test.describe("P100-4 pilot payroll input certification", () => {
     test.setTimeout(5 * 60 * 1000);
 
     await loginAsSeededUser(page, `${usernamePrefix}.e001`, "/mss/approvals?queue=leave&leavePage=1");
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
     await expect(page.getByRole("heading", { name: "Leave approvals" })).toBeVisible();
     await expect(page.getByText(seedPrefix).first()).toBeVisible();
 
     await loginAsSeededUser(page, `${usernamePrefix}.e008`, "/mss/approvals?queue=attendance&regPage=1");
-    await expect(page.getByRole("heading", { name: "Attendance regularizations" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Attendance approvals" })).toBeVisible();
     await expect(page.getByText(seedPrefix).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

@@ -178,7 +178,8 @@ test.describe("Production live/disposable mutation readiness", () => {
     await gotoAuthenticated(page, "/hr-admin/notifications?retry_state=retry_ready");
     await expectPageReady(page, "Notification queue");
     await expect(page.getByRole("button", { name: /Retry selected/ })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Save review" }).first()).toBeVisible();
+    await page.getByRole("checkbox", { name: "Select", exact: true }).first().check();
+    await expect(page.getByRole("button", { name: /Retry selected/ })).toBeEnabled();
 
     await gotoAuthenticated(page, "/hr-admin/payroll-providers");
     await expectPageReady(page, "Payroll Providers");
@@ -186,7 +187,7 @@ test.describe("Production live/disposable mutation readiness", () => {
 
     await gotoAuthenticated(page, "/tenant-admin");
     await expectPageReady(page, "Account Control Center");
-    await expect(page.getByRole("link", { name: "Invite user" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Invite user", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Request account change" })).toBeVisible();
 
     await page.request.post("/api/auth/logout");
@@ -195,6 +196,8 @@ test.describe("Production live/disposable mutation readiness", () => {
     }
     await gotoAuthenticated(page, "/ess/payslips");
     await expectPageReady(page, "Payslips");
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByRole("button", { name: /Mark as read|Read acknowledged/ }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

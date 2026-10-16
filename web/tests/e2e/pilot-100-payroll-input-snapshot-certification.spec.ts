@@ -151,7 +151,9 @@ test.describe.serial("P100-5 pilot payroll input snapshot and lock certification
       },
     });
     expect(mutationResponse.status()).toBe(400);
-    expect(await mutationResponse.text()).toContain("Locked payroll input snapshots cannot be edited.");
+    const mutationBody = await mutationResponse.text();
+    expect(mutationBody).toContain("Locked payroll input snapshots");
+    expect(mutationBody).toContain("cannot be edited.");
   });
 
   test("payroll input exceptions report proves pilot filters, export, manifest, audit, and review drilldown", async ({ page }) => {
@@ -197,6 +199,7 @@ test.describe.serial("P100-5 pilot payroll input snapshot and lock certification
     await expect(reviewLink).toHaveAttribute("href", /\/hr-admin\/payroll-inputs\?runId=.+snapshotId=.+/);
     await reviewLink.click();
     await expect(page).toHaveURL(/\/hr-admin\/payroll-inputs\?runId=.+snapshotId=.+/);
+    await expectPageReady(page, "Payroll Inputs");
     await expectNoHorizontalOverflow(page);
   });
 

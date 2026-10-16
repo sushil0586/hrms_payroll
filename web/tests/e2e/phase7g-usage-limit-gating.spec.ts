@@ -211,7 +211,7 @@ test.describe("Phase 7G usage-limit gating", () => {
       expect(exceeded.enforcement.scopes.find((scope) => scope.scope_ref === "payroll_core")?.blocking_reasons).toContain("usage_limit_exceeded");
 
       await expect(page.getByText("SaaS Control Plane")).toBeVisible();
-      await expect(page.locator(".metric-tile__label").filter({ hasText: "Usage exceptions" })).toBeVisible();
+      await expect(page.getByText(/usage exceptions/i).first()).toBeVisible();
       await expect(page.getByText("Limit exceeded", { exact: true })).toBeVisible();
       await expect(page.getByText("Active Memberships").first()).toBeVisible();
       await expect(page.locator(".readiness-badge").filter({ hasText: "Exceeded" }).first()).toBeVisible();

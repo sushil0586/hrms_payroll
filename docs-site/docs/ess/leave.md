@@ -59,7 +59,7 @@ Employees use this page when they need time off or want to understand available 
 
 | Screen label | What it means |
 | --- | --- |
-| Balances | Available, used, pending, and reserved leave by type. |
+| Balance snapshot | Available, used, pending, and reserved leave by type. |
 | Leave requests | Request history with status tabs and pagination. |
 | Apply leave | Focused modal for creating a new leave request. |
 | Leave request summary | Estimated units, available balance, non-working days, and attachment rule. |

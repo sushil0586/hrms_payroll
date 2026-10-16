@@ -37,7 +37,7 @@ function normalizeComplianceProviderHref(rawHref: string, baseUrl: string) {
   return `${url.pathname}${url.search}`;
 }
 
-async function expectVisibleComplianceProviderLinksHealthy(page: Page, route: string) {
+async function expectVisibleComplianceProviderLinksHealthy(page: Page, route: string, checkedHrefs: Set<string>) {
   const hrefs = await page.locator("a[href]").evaluateAll((links) =>
     links
       .filter((link) => {
@@ -52,7 +52,9 @@ async function expectVisibleComplianceProviderLinksHealthy(page: Page, route: st
   ];
 
   for (const href of normalizedHrefs) {
-    const response = await page.request.get(href, { failOnStatusCode: false, maxRedirects: 2 });
+    if (checkedHrefs.has(href)) continue;
+    checkedHrefs.add(href);
+    const response = await page.request.get(href, { failOnStatusCode: false, maxRedirects: 2, timeout: 30_000 });
     expect(response.status(), `${route} exposes a compliance/provider link that does not open cleanly: ${href}`).toBeLessThan(400);
   }
 }
@@ -136,7 +138,7 @@ async function expectNoVisibleControlCollisions(page: Page, route: string) {
   expect(collisions, `${route} has clipped or overlapping compliance/provider controls`).toEqual([]);
 }
 
-async function auditComplianceProviderRoute(page: Page, route: string) {
+async function auditComplianceProviderRoute(page: Page, route: string, checkedHrefs: Set<string>) {
   await gotoAuthenticated(page, route);
   await suppressBrowserTestNoise(page);
   await expect(page.locator("main.shell:not(.app-loading-shell)").first()).toBeVisible();
@@ -146,16 +148,17 @@ async function auditComplianceProviderRoute(page: Page, route: string) {
   await auditVisibleControls(page, route, 56);
   await expectVisibleLinksAreReal(page, route);
   await expectNoVisibleControlCollisions(page, route);
-  await expectVisibleComplianceProviderLinksHealthy(page, route);
+  await expectVisibleComplianceProviderLinksHealthy(page, route, checkedHrefs);
 }
 
 test.describe("HR Admin compliance and provider UI audit", () => {
   test("certifies compliance/provider page layout, controls, and internal links", async ({ page }) => {
     test.setTimeout(420_000);
     await page.setViewportSize({ width: 1440, height: 960 });
+    const checkedHrefs = new Set<string>();
 
     for (const route of complianceProviderRoutes) {
-      await auditComplianceProviderRoute(page, route);
+      await auditComplianceProviderRoute(page, route, checkedHrefs);
     }
   });
 });

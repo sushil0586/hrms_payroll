@@ -141,6 +141,13 @@ function emailLooksValid(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function actionErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message.trim();
+  if (!message || /failed to fetch|networkerror|load failed/i.test(message)) return fallback;
+  return message;
+}
+
 function isWholeNumberAtLeast(value: string, min: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= min;
@@ -814,19 +821,22 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     setError("");
     setMessage("");
     setGeneratedPassword("");
-    const response = await fetch(path, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json().catch(() => ({}));
-    setBusyRef("");
-    if (!response.ok) {
-      throw new Error(apiErrorMessage(payload, "Platform action failed."));
+    try {
+      const response = await fetch(path, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(payload, "Platform action failed."));
+      }
+      setMessage(successMessage);
+      router.refresh();
+      return payload as T;
+    } finally {
+      setBusyRef("");
     }
-    setMessage(successMessage);
-    router.refresh();
-    return payload as T;
   }
 
   async function handleTenantCreate(event: React.FormEvent<HTMLFormElement>) {
@@ -841,6 +851,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       setFieldErrors(nextFieldErrors);
       setError("Fix the highlighted platform tenant fields before continuing.");
       setMessage("");
+      createTenantFirstFieldRef.current?.focus();
       return;
     }
     setFieldErrors({});
@@ -866,7 +877,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       setShowCreateTenantModal(false);
       router.push(buildPanelHref("onboarding", payload.id));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Tenant creation failed.");
+      setError(actionErrorMessage(nextError, "Tenant creation failed. Check your connection and try again."));
     }
   }
 
@@ -1018,6 +1029,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       setFieldErrors(nextFieldErrors);
       setError("Fix the highlighted admin contact fields before continuing.");
       setMessage("");
+      addContactFirstFieldRef.current?.focus();
       return;
     }
     setFieldErrors({});
@@ -1445,7 +1457,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   }
 
   return (
-    <main className={`shell platform-admin-shell platform-admin-shell--${initialPanel}`}>
+    <main aria-busy={Boolean(busyRef)} className={`shell platform-admin-shell platform-admin-shell--${initialPanel}`}>
       <PageIntro
         eyebrow="Live platform operations"
         title={pageTitle}
@@ -2845,7 +2857,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <label className="form-field"><span className="muted">Sandbox</span><input aria-label="Sandbox" name="is_sandbox" type="checkbox" defaultChecked /></label>
               <div className="tenant-modal__actions form-field--full">
                 <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Cancel</button>
-                <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">
+                <button className="button button--primary button--pending-stable" disabled={Boolean(busyRef)} type="submit">
                   {busyRef === "/api/platform/tenants" ? "Creating..." : "Create tenant"}
                 </button>
               </div>

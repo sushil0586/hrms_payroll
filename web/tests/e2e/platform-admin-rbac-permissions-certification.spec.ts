@@ -224,15 +224,15 @@ test.describe("Platform admin RBAC and permissions certification", () => {
 
     await page.goto(protectedRoute, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/(hr-admin)?$/);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/(hr-admin)?$/);
     await expect(page.locator('a[href^="/platform-admin"]')).toHaveCount(0);
 
     const secondPage = await page.context().newPage();
     await secondPage.goto("/platform-admin/audit-logs", { waitUntil: "domcontentloaded" });
     await secondPage.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-    await expect(secondPage).toHaveURL(/\/$/);
+    await expect(secondPage).toHaveURL(/\/(hr-admin)?$/);
     await expect(secondPage.locator('[data-testid^="platform-admin-"]')).toHaveCount(0);
     await secondPage.close();
 
@@ -243,7 +243,7 @@ test.describe("Platform admin RBAC and permissions certification", () => {
       await page.setViewportSize(viewport);
       await page.goto("/platform-admin/tenants", { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-      await expect(page).toHaveURL(/\/$/);
+      await expect(page).toHaveURL(/\/(hr-admin)?$/);
       await expect(page.locator('[data-testid^="platform-admin-"]')).toHaveCount(0);
       await expectNoHorizontalOverflow(page);
     }

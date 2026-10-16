@@ -113,6 +113,8 @@ DATABASES = {
         "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres"),
         "HOST": os.getenv("POSTGRES_HOST", "localhost"),
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
+        "CONN_MAX_AGE": env_int("DJANGO_DB_CONN_MAX_AGE", 0),
+        "CONN_HEALTH_CHECKS": env_bool("DJANGO_DB_CONN_HEALTH_CHECKS", False),
     }
 }
 
@@ -156,7 +158,13 @@ SPECTACULAR_SETTINGS = {
 
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
-CELERY_BEAT_SCHEDULE = {}
+CELERY_BEAT_SCHEDULE = {
+    "dispatch-pending-payroll-background-jobs": {
+        "task": "payroll.dispatch_pending_background_jobs",
+        "schedule": 2.0,
+        "kwargs": {"limit": 100},
+    },
+}
 
 # Email delivery is routed through Django's mail backend. Local and test
 # environments can keep console/locmem backends, while staging/production can

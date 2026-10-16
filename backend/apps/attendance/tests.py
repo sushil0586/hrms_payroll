@@ -1,8 +1,11 @@
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.attendance.models import (
@@ -20,6 +23,7 @@ from apps.attendance.models import (
     Shift,
 )
 from apps.attendance.services import (
+    AttendanceDerivationContext,
     build_attendance_derivation_summary,
     ensure_employee_attendance_records,
     evaluate_attendance_runtime,
@@ -216,6 +220,39 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
         self.assertIsNone(assignment.department_id)
         self.assertIsNone(assignment.grade_id)
         self.assertIsNone(assignment.employment_type_id)
+
+    @patch("apps.common.api_views.refresh_attendance_records_for_assignment_scopes")
+    def test_new_inactive_attendance_assignment_does_not_refresh_records(self, refresh_records):
+        actor = SimpleNamespace(tenant=self.tenant)
+
+        save_hr_admin_attendance_policy_assignment(
+            actor,
+            {
+                "attendance_policy_id": self.department_policy.id,
+                "employee_id": self.employee.id,
+                "priority": 100,
+                "is_active": False,
+            },
+        )
+
+        refresh_records.assert_not_called()
+
+    @patch("apps.common.api_views.refresh_attendance_records_for_assignment_scopes")
+    def test_deactivating_attendance_assignment_refreshes_previous_scope(self, refresh_records):
+        actor = SimpleNamespace(tenant=self.tenant)
+        assignment = AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.department_policy,
+            employee=self.employee,
+            priority=100,
+            is_active=True,
+        )
+
+        save_hr_admin_attendance_policy_assignment(actor, {"is_active": False}, item=assignment)
+
+        refresh_records.assert_called_once()
+        previous_scope = refresh_records.call_args.args[1]
+        self.assertEqual(previous_scope["employee_id"], self.employee.id)
 
     def test_attendance_policy_change_refreshes_current_unlocked_records(self):
         actor = SimpleNamespace(tenant=self.tenant)
@@ -479,6 +516,47 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
         self.assertEqual(summary["payroll_impact"]["payable_units"], "0.00")
         self.assertEqual(summary["payroll_impact"]["lop_units"], "1.00")
         self.assertTrue(summary["payroll_impact"]["payroll_impacting"])
+
+    def test_bulk_derivation_matches_single_record_resolution_with_bounded_queries(self):
+        shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="bulk-shift",
+            name="Bulk Shift",
+            start_time=time(22, 0),
+            end_time=time(6, 0),
+            working_hours=Decimal("8.00"),
+            weekly_off_days=["sunday"],
+            is_night_shift=True,
+            is_active=True,
+        )
+        self.default_policy.default_shift = shift
+        self.default_policy.save(update_fields=["default_shift", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+        records = [
+            AttendanceRecord.objects.create(
+                tenant=self.tenant,
+                employee=self.employee,
+                attendance_date=date(2028, 1, 1) + timedelta(days=index),
+                status=AttendanceStatus.PRESENT,
+                source=AttendanceSource.SYSTEM,
+                shift=shift,
+            )
+            for index in range(25)
+        ]
+        expected = build_attendance_derivation_summary(records[0])
+
+        with CaptureQueriesContext(connection) as captured:
+            context = AttendanceDerivationContext.for_records(records)
+            summaries = [build_attendance_derivation_summary(record, context=context) for record in records]
+
+        self.assertLessEqual(len(captured), 8)
+        self.assertEqual(summaries[0], expected)
+        self.assertTrue(summaries[0]["schedule_day_type"] in {"working_day", "weekly_off"})
 
     def test_leave_attendance_collision_summary_flags_approved_leave_with_payable_attendance(self):
         leave_type = LeaveType.objects.create(

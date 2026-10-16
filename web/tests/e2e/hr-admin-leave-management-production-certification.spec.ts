@@ -1,7 +1,19 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin, manager, type Persona } from "../helpers/staging-auth";
+import { getDialog, mssLeaveReviewDialogName } from "../helpers/modal-stability";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
+import { gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
+let hrAdmin: Persona;
+let manager: Persona;
+let employee: Persona;
 
 type EmployeeListItem = {
   id: string;
@@ -74,35 +86,21 @@ function field(scope: Page | Locator, label: string, index = 0) {
 }
 
 function card(page: Page, text: string | RegExp) {
-  return page.locator("article.record-card, a.tableish__row, button.leave-request-card").filter({ hasText: text }).first();
+  return page.locator("article.record-card, a.tableish__row, button.leave-request-card, tr, [role='dialog']").filter({ hasText: text }).first();
 }
 
-async function openManagerReviewForLeaveReason(page: Page, reason: string) {
-  for (let pageIndex = 0; pageIndex < 5; pageIndex += 1) {
-    const requestCard = page.locator("article.tableish__row").filter({ hasText: reason }).first();
-    if (await requestCard.isVisible().catch(() => false)) {
-      const reviewButton = requestCard.getByRole("button", { name: "Review" });
-      await expect(reviewButton).toBeVisible();
-      await expect(reviewButton).toBeEnabled();
-      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-      await page.waitForTimeout(300);
-      await reviewButton.click();
-      const reviewDialog = page.getByRole("dialog", { name: "Leave approval review" });
-      await expect(reviewDialog).toBeVisible();
-      return reviewDialog;
-    }
-    const nextLink = page.getByRole("link", { name: "Next" });
-    if (!(await nextLink.isVisible().catch(() => false)) || (await nextLink.getAttribute("aria-disabled")) === "true") {
-      break;
-    }
-    const nextHref = await nextLink.getAttribute("href");
-    if (!nextHref) {
-      break;
-    }
-    await page.goto(nextHref, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: "Manager approvals" })).toBeVisible();
-  }
-  throw new Error(`Could not find pending manager leave request for ${reason}.`);
+async function openManagerReviewForLeaveRequest(page: Page, requestId: string, reason: string) {
+  await page.goto(`/mss/approvals?queue=leave&leaveId=${requestId}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Manager approvals" })).toBeVisible();
+  const selected = page.locator(".mss-approval-detail-panel").filter({ hasText: reason });
+  await expect(selected).toBeVisible();
+  await page.waitForLoadState("networkidle").catch(() => undefined);
+  const reviewButton = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
+  await expect(reviewButton).toBeEnabled();
+  await reviewButton.click();
+  const reviewDialog = getDialog(page, mssLeaveReviewDialogName);
+  await expect(reviewDialog).toBeVisible();
+  return reviewDialog;
 }
 
 async function authenticateForSetup(page: Page, persona: Persona) {
@@ -158,10 +156,11 @@ async function getEmployeeByCode(page: Page, employeeCode: string) {
 }
 
 async function getBalances(page: Page, employeeId: string, leavePolicyId: string) {
-  return apiGet<LeaveBalanceItem[]>(
+  const payload = await apiGet<LeaveBalanceItem[] | { items?: LeaveBalanceItem[]; results?: LeaveBalanceItem[] }>(
     page,
     `/hr-admin/leave-balances/?employee_id=${encodeURIComponent(employeeId)}&leave_policy_id=${encodeURIComponent(leavePolicyId)}`,
   );
+  return Array.isArray(payload) ? payload : payload.items ?? payload.results ?? [];
 }
 
 async function clearGeneratedPendingLeaveRequests(page: Page) {
@@ -173,7 +172,7 @@ async function clearGeneratedPendingLeaveRequests(page: Page) {
   const payload = (await response.json()) as ManagerPendingLeaveList | ManagerPendingLeaveItem[];
   const items = Array.isArray(payload) ? payload : payload.items ?? [];
   for (const item of items.filter((entry) => (
-    entry.employee_code === "EMP-0042" && /^PW_LEAVE_(E2E|EVIDENCE)_/.test(entry.reason ?? "")
+    entry.employee_code === workspace.manifest.credentials.employee.employee_code && /^PW_LEAVE_(E2E|EVIDENCE)_/.test(entry.reason ?? "")
   ))) {
     const rejectResponse = await page.request.post(`${apiBaseUrl()}/manager/leave-requests/${item.id}/reject/`, {
       headers: await authHeaders(page),
@@ -186,8 +185,10 @@ async function clearGeneratedPendingLeaveRequests(page: Page) {
 async function setupDedicatedLeavePolicy(page: Page, options: { requiresAttachment?: boolean } = {}) {
   await clearGeneratedPendingLeaveRequests(page);
   await authenticateForSetup(page, hrAdmin);
-  const targetEmployee = await getEmployeeByCode(page, "EMP-0042");
-  const seedManager = await getEmployeeByCode(page, "EMP-0002");
+  const targetEmployee = await getEmployeeByCode(page, workspace.manifest.credentials.employee.employee_code);
+  expect(targetEmployee.id).toBe(workspace.manifest.credentials.employee.employee_id);
+  const seedManager = await getEmployeeByCode(page, workspace.manifest.credentials.manager.employee_code);
+  expect(seedManager.id).toBe(workspace.manifest.credentials.manager.employee_id);
 
   await apiPatch<EmployeeListItem>(page, `/hr-admin/employees/${targetEmployee.id}/`, {
     reporting_manager_id: seedManager.id,
@@ -260,6 +261,15 @@ test.describe("HR Admin Leave Management production certification", () => {
   test.setTimeout(5 * 60 * 1000);
   test.skip(!process.env.HRMS_API_BASE_URL, "Leave production certification requires a live HRMS API.");
 
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+    hrAdmin = workspacePersona(workspace, "hr_admin");
+    manager = workspacePersona(workspace, "manager");
+    employee = workspacePersona(workspace, "employee");
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test("certifies setup, assignment, ESS submission, MSS approval, balances, recovery, and responsive UX", async ({ page }) => {
     const { leaveType, leavePolicy, targetEmployee, suffix } = await setupDedicatedLeavePolicy(page);
     const reason = `PW_LEAVE_E2E_${suffix}`;
@@ -278,17 +288,18 @@ test.describe("HR Admin Leave Management production certification", () => {
     await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments?q=${encodeURIComponent(leavePolicy.name)}`, hrAdmin);
     await expectPageReady(page, "Leave assignments");
     await expect(page.getByText(leavePolicy.name).first()).toBeVisible();
-    await expect(page.getByText("Employee: EMP-0042").or(page.getByText("EMP-0042")).first()).toBeVisible();
+    await expect(page.getByText(`Employee: ${targetEmployee.employee_code}`).or(page.getByText(targetEmployee.employee_code)).first()).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/leave-balances?q=${encodeURIComponent(leaveType.name)}`, hrAdmin);
     await expectPageReady(page, "Leave balances");
-    await expect(page.getByText(leaveType.name).first()).toBeVisible();
-    await expect(page.getByText(targetEmployee.employee_code).first()).toBeVisible();
+    const balanceRow = page.getByRole("row").filter({ hasText: leaveType.name });
+    await expect(balanceRow).toBeVisible();
+    await expect(balanceRow).toContainText(targetEmployee.employee_code);
     await expectNoHorizontalOverflow(page);
 
     await gotoAuthenticated(page, "/ess/leave", employee);
     await expectPageReady(page, "Leave");
-    await expect(page.getByRole("heading", { name: "Balances" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Balance snapshot" })).toBeVisible();
     await expect(page.getByText(leaveType.name).first()).toBeVisible();
     await page.getByRole("button", { name: "Apply leave" }).first().click();
     const dialog = page.getByRole("dialog", { name: "Apply leave" });
@@ -309,7 +320,7 @@ test.describe("HR Admin Leave Management production certification", () => {
     expect(leaveResponse.status()).toBe(201);
     const leaveRequest = (await leaveResponse.json()) as LeaveRequestPayload;
     expect(leaveRequest.status).toBe("pending");
-    await expect(dialog.getByText("Submitted.", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("status")).toContainText("Submitted successfully.");
 
     await authenticateForSetup(page, hrAdmin);
     const reservedBalances = await getBalances(page, targetEmployee.id, leavePolicy.id);
@@ -339,10 +350,10 @@ test.describe("HR Admin Leave Management production certification", () => {
     await expectPageReady(page, "Leave");
     await expect(card(page, reason)).toBeVisible();
     await expect(card(page, reason)).toContainText("approved");
-    let detail = page.getByRole("dialog", { name: "Leave request detail" });
+    let detail = page.getByRole("dialog").filter({ hasText: reason }).first();
     if (!(await detail.isVisible().catch(() => false))) {
       await card(page, reason).click();
-      detail = page.getByRole("dialog", { name: "Leave request detail" });
+      detail = page.getByRole("dialog").filter({ hasText: reason }).first();
     }
     await expect(detail).toBeVisible();
     await expect(detail.getByText(leavePolicy.name).first()).toBeVisible();
@@ -387,10 +398,10 @@ test.describe("HR Admin Leave Management production certification", () => {
 
     await gotoAuthenticated(page, `/ess/leave?status=pending&requestId=${leaveRequest.id}`, employee);
     await expectPageReady(page, "Leave");
-    let detail = page.getByRole("dialog", { name: "Leave request detail" });
+    let detail = page.getByRole("dialog").filter({ hasText: reason }).first();
     if (!(await detail.isVisible().catch(() => false))) {
       await card(page, reason).click();
-      detail = page.getByRole("dialog", { name: "Leave request detail" });
+      detail = page.getByRole("dialog").filter({ hasText: reason }).first();
     }
     await expect(detail.getByText(fileName).first()).toBeVisible();
     const employeeDownload = detail.locator(`a[href*="/api/me/leave-requests/${leaveRequest.id}/attachments/"][href$="/download"]`).first();
@@ -401,7 +412,7 @@ test.describe("HR Admin Leave Management production certification", () => {
     await authenticateForSetup(page, manager);
     await page.goto("/mss/approvals?queue=leave&leavePage=1", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Manager approvals");
-    const reviewDialog = await openManagerReviewForLeaveReason(page, reason);
+    const reviewDialog = await openManagerReviewForLeaveRequest(page, leaveRequest.id, reason);
     await expect(reviewDialog.getByRole("heading", { name: "Evidence" })).toBeVisible();
     await expect(reviewDialog.getByText(fileName).first()).toBeVisible();
     const managerDownload = reviewDialog.locator(`a[href*="/api/manager/leave-requests/${leaveRequest.id}/attachments/"][href$="/download"]`).first();

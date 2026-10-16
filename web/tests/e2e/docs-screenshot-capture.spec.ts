@@ -156,7 +156,6 @@ test.describe("documentation screenshots", () => {
         state: "visible",
         timeout: 20_000,
       });
-      await page.waitForTimeout(500);
       await page.locator("main").screenshot({
         path: capture.file,
         animations: "disabled",
@@ -223,7 +222,6 @@ test.describe("tenant admin documentation screenshots", () => {
         state: "visible",
         timeout: 20_000,
       });
-      await page.waitForTimeout(500);
       await page.locator("main").screenshot({
         path: capture.file,
         animations: "disabled",
@@ -285,7 +283,6 @@ test.describe("platform admin documentation screenshots", () => {
         state: "visible",
         timeout: 20_000,
       });
-      await page.waitForTimeout(500);
       await page.locator("main").screenshot({
         path: capture.file,
         animations: "disabled",
@@ -342,7 +339,6 @@ test.describe("ess documentation screenshots", () => {
         state: "visible",
         timeout: 20_000,
       });
-      await page.waitForTimeout(500);
       await page.locator("main").screenshot({
         path: capture.file,
         animations: "disabled",
@@ -379,7 +375,6 @@ test.describe("mss documentation screenshots", () => {
         state: "visible",
         timeout: 20_000,
       });
-      await page.waitForTimeout(500);
       await page.locator("main").screenshot({
         path: capture.file,
         animations: "disabled",
@@ -406,7 +401,6 @@ test.describe("finance manager documentation screenshots", () => {
         state: "visible",
         timeout: 20_000,
       });
-      await page.waitForTimeout(500);
       await page.locator("main").screenshot({
         path: capture.file,
         animations: "disabled",

@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { expectDialogStable } from "../helpers/modal-stability";
+import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectDialogLocatorStable, expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
 function field(scope: Page | Locator, label: string) {
@@ -13,7 +13,7 @@ async function openUploadDialog(page: Page) {
   await expect(uploadButton).toBeVisible();
   test.skip(await uploadButton.isDisabled(), "No employee upload category is available in this tenant.");
   await uploadButton.click();
-  const dialog = page.getByRole("dialog", { name: "Upload document" });
+  const dialog = page.getByRole("dialog", { name: /Upload |Replace / });
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -24,8 +24,8 @@ test.describe("ESS Documents launch certification", () => {
     await gotoAuthenticated(page, "/ess/documents", employee);
     await expectPageReady(page, "Documents");
 
-    for (const metric of ["Required documents", "Missing now", "Expiring soon", "Expired"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+    for (const metric of [/required/i, /missing/i, /expiring soon/i, /expired/i]) {
+      await expectCompactMetric(page, metric);
     }
 
     await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
@@ -53,7 +53,7 @@ test.describe("ESS Documents launch certification", () => {
     await expectPageReady(page, "Documents");
 
     const dialog = await openUploadDialog(page);
-    await expectDialogStable(page, "Upload document");
+    await expectDialogLocatorStable(page, dialog, /Upload document|Replace document/);
     await expect(dialog.getByRole("button", { name: "Submit for review" })).toBeDisabled();
 
     await field(dialog, "Title").fill(`Playwright document ${Date.now()}`);
@@ -101,7 +101,7 @@ test.describe("ESS Documents launch certification", () => {
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog.getByText("Upload failed.")).toBeVisible();
     await expect(dialog.getByText("Uploaded file could not be scanned. Try another PDF.")).toBeVisible();
-    await expectDialogStable(page, "Upload document");
+    await expectDialogLocatorStable(page, dialog, /Upload document|Replace document/);
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("main").getByRole("status").filter({ hasText: "Document uploaded successfully." })).toBeVisible();
@@ -123,11 +123,11 @@ test.describe("ESS Documents launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "Review" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      const detail = page.getByRole("dialog", { name: "Document detail" });
+      const detail = page.getByRole("dialog", { name: /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement/ });
       await expect(detail).toBeVisible();
       await expect(detail.getByText("Review status")).toBeVisible();
       await expect(detail.getByText("Audit trail")).toBeVisible();
-      await expectDialogStable(page, "Document detail");
+      await expectDialogStable(page, /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement/);
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
     }
@@ -145,7 +145,7 @@ test.describe("ESS Documents launch certification", () => {
     await expectPageReady(page, "Documents");
 
     const uploadDialog = await openUploadDialog(page);
-    await expectDialogStable(page, "Upload document");
+    await expectDialogStable(page, /Upload |Replace /);
     await page.keyboard.press("Escape");
     await expect(uploadDialog).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
@@ -153,7 +153,7 @@ test.describe("ESS Documents launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "Review" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      await expectDialogStable(page, "Document detail");
+      await expectDialogStable(page, /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement/);
     }
   });
 });

@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
 
-  const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/employees/`, {
+  const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/employees/${request.nextUrl.search}`, {
     headers: {
       Authorization: `Token ${token}`,
     },

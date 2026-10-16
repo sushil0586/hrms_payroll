@@ -52,7 +52,7 @@ async function openAddContactDialog(page: Page): Promise<Locator> {
 }
 
 function notice(page: Page): Locator {
-  return page.locator(".notice").first();
+  return page.locator(".platform-feedback").first();
 }
 
 function uniqueRunRef() {
@@ -196,6 +196,8 @@ test.describe("Platform admin audit evidence certification", () => {
     await namedControl(onboardingCard, "setup_style").selectOption("platform_assisted");
     await namedControl(onboardingCard, "data_setup_style").selectOption("manual");
     await namedControl(onboardingCard, "policy_control_style").selectOption("mixed");
+    await namedControl(onboardingCard, "country_context").fill("IN");
+    await namedControl(onboardingCard, "industry_context").fill("Technology");
     await namedControl(onboardingCard, "notes").fill(`Audit notes for ${tenantCode}`);
     await onboardingCard.getByRole("button", { name: "Save onboarding" }).click();
     await expect(notice(page).getByText("Onboarding metadata updated.", { exact: true })).toBeVisible();

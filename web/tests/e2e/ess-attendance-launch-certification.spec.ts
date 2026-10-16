@@ -122,6 +122,7 @@ test.describe("ESS Attendance launch certification", () => {
     await field(dialog, "Requested check-out").fill("2026-10-02T19:00");
     await expect(submitCorrectionButton(dialog)).toBeEnabled();
     await expectDialogStable(page, "Regularize attendance");
+    page.once("dialog", (confirmDialog) => confirmDialog.accept());
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
   });

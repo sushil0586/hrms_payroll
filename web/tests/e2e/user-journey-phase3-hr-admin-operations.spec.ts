@@ -1,12 +1,19 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import {
+  cleanupIsolatedQaWorkspace,
+  provisionIsolatedQaWorkspace,
+  type IsolatedQaWorkspace,
+  workspacePersona,
+} from "../helpers/isolated-qa-workspace";
+import { gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+
+let workspace: IsolatedQaWorkspace;
+let hrAdmin: Persona;
 
 const runId = Date.now().toString(36).toUpperCase();
 const employeeEmail = process.env.PLAYWRIGHT_PHASE3_EMPLOYEE_EMAIL ?? `pw.hrms.phase3.${runId.toLowerCase()}@example.test`;
-const employeePassword = process.env.PLAYWRIGHT_PHASE3_EMPLOYEE_PASSWORD;
-const employeeLoginIdentifier = process.env.PLAYWRIGHT_PHASE3_EMPLOYEE_LOGIN ?? employeeEmail;
 
 function code(prefix: string) {
   return `PW_${prefix}_${runId}`;
@@ -96,47 +103,31 @@ async function selectStructureForReadyEmployee(page: Page) {
 async function expectEmployeeFormUsable(page: Page, mode: "create" | "edit") {
   await expectPageReady(page, mode === "create" ? "Create employee" : /Edit employee:/);
   await expect(page.getByRole("heading", { name: mode === "create" ? "Create employee master" : "Edit employee master" })).toBeVisible();
-  for (const heading of ["Identity and employment", "Contact and dates", "Structural mapping"]) {
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  const sections = [
+    { button: /^1\.\s*Identity$/, heading: "Identity and employment", fields: ["Employee code", "Employment status", "First name", "Last name", "Preferred name"] },
+    { button: /^2\.\s*Contact$/, heading: "Contact and dates", fields: ["Work email", "Personal email", "Phone number", "Date of birth", "Date of joining"] },
+    { button: /^3\.\s*Structure$/, heading: "Structural mapping", fields: ["Legal entity", "Branch", "Location", "Business unit", "Department", "Cost center", "Designation", "Grade", "Employment type", "Reporting manager"] },
+  ];
+  for (const section of sections) {
+    await page.getByRole("button", { name: section.button }).click();
+    await expect(page.getByRole("heading", { name: section.heading })).toBeVisible();
+    for (const label of section.fields) await expect(field(page, label), `${label} should stay visible and usable`).toBeVisible();
   }
-  for (const label of [
-    "Employee code",
-    "Employment status",
-    "First name",
-    "Last name",
-    "Preferred name",
-    "Work email",
-    "Personal email",
-    "Phone number",
-    "Date of birth",
-    "Date of joining",
-    "Legal entity",
-    "Branch",
-    "Location",
-    "Business unit",
-    "Department",
-    "Cost center",
-    "Designation",
-    "Grade",
-    "Employment type",
-    "Reporting manager",
-  ]) {
-    await expect(field(page, label), `${label} should stay visible and usable`).toBeVisible();
-  }
-  for (const label of ["Employment status", "Legal entity", "Branch", "Department", "Cost center", "Designation", "Employment type", "Reporting manager"]) {
-    await expectSelectHasOption(field(page, label));
-  }
+  for (const label of ["Legal entity", "Branch", "Department", "Cost center", "Designation", "Employment type", "Reporting manager"]) await expectSelectHasOption(field(page, label));
+  await page.getByRole("button", { name: /^4\.\s*Review$/ }).click();
   await expect(page.getByRole("button", { name: mode === "create" ? "Create employee" : "Save changes" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 }
 
 async function fillNewEmployee(page: Page) {
   const employeeCode = code("EMP_STAGE");
+  await page.getByRole("button", { name: /^1\.\s*Identity$/ }).click();
   await field(page, "Employee code").fill(employeeCode);
   await field(page, "Employment status").selectOption("active");
   await field(page, "First name").fill("Aadish");
   await field(page, "Last name").fill("Stage");
   await field(page, "Preferred name").fill("Aadish Stage");
+  await page.getByRole("button", { name: /^2\.\s*Contact$/ }).click();
   await field(page, "Work email").fill(employeeEmail);
   await field(page, "Personal email").fill(employeeEmail);
   await field(page, "Phone number").fill("+91 98765 43002");
@@ -144,7 +135,9 @@ async function fillNewEmployee(page: Page) {
   await field(page, "Date of joining").fill("2026-09-01");
   await field(page, "Probation end date").fill("2027-02-28");
   await field(page, "Confirmation date").fill("2027-03-01");
+  await page.getByRole("button", { name: /^3\.\s*Structure$/ }).click();
   await selectStructureForReadyEmployee(page);
+  await page.getByRole("button", { name: /^4\.\s*Review$/ }).click();
   return employeeCode;
 }
 
@@ -221,10 +214,7 @@ async function addPrimaryBankAccount(page: Page, employeeId: string) {
   await expectNoHorizontalOverflow(page);
 }
 
-async function loginAsCreatedEmployee(page: Page, loginName: string) {
-  const password = employeePassword;
-  test.skip(!password, "Set PLAYWRIGHT_PHASE3_EMPLOYEE_PASSWORD after the email password flow to verify ESS login.");
-  if (!password) return;
+async function loginAsCreatedEmployee(page: Page, loginName: string, password: string) {
   await page.request.post("/api/auth/logout").catch(() => null);
   await page.context().clearCookies();
   await gotoAuthenticated(page, "/ess", { username: loginName, password });
@@ -232,11 +222,7 @@ async function loginAsCreatedEmployee(page: Page, loginName: string) {
   await expectNoHorizontalOverflow(page);
 }
 
-async function expectEmployeeWorkspaceJourney(page: Page, loginName: string) {
-  const password = employeePassword;
-  test.skip(!password, "Set PLAYWRIGHT_PHASE3_EMPLOYEE_PASSWORD after the email password flow to verify ESS login.");
-  if (!password) return;
-
+async function expectEmployeeWorkspaceJourney(page: Page, loginName: string, password: string) {
   const persona = { username: loginName, password };
   const essRoutes = [
     { path: "/ess", heading: /My workspace|Self service|Employee/i, content: [/Leave|Attendance|Documents|Payslip/i] },
@@ -271,6 +257,13 @@ async function expectEmployeeWorkspaceJourney(page: Page, loginName: string) {
 }
 
 test.describe.serial("User journey phase 3: HR Admin operational workflow", () => {
+  test.beforeEach(async ({}, testInfo) => {
+    workspace = await provisionIsolatedQaWorkspace(testInfo);
+    hrAdmin = workspacePersona(workspace, "hr_admin");
+  });
+
+  test.afterEach(async () => cleanupIsolatedQaWorkspace(workspace));
+
   test("creates employee, edits profile, provisions ESS access, adds bank, and requests setup email", async ({ page }) => {
     test.setTimeout(8 * 60 * 1000);
     await page.setViewportSize({ width: 1440, height: 960 });
@@ -302,8 +295,11 @@ test.describe.serial("User journey phase 3: HR Admin operational workflow", () =
     await test.step("Edit employee profile and verify directory detail", async () => {
       await gotoAuthenticated(page, `/hr-admin/employees/${employeeId}/edit`, hrAdmin);
       await expectEmployeeFormUsable(page, "edit");
+      await page.getByRole("button", { name: /^1\.\s*Identity$/ }).click();
       await field(page, "Preferred name").fill("Aadish Stage Certified");
+      await page.getByRole("button", { name: /^2\.\s*Contact$/ }).click();
       await field(page, "Phone number").fill("+91 98765 43003");
+      await page.getByRole("button", { name: /^4\.\s*Review$/ }).click();
       await submitAndCapture(page, `/api/hr-admin/employees/${employeeId}`, "PATCH", async () => {
         await page.getByRole("button", { name: "Save changes" }).click();
       });
@@ -343,12 +339,14 @@ test.describe.serial("User journey phase 3: HR Admin operational workflow", () =
   test("verifies employee ESS login after email password setup", async ({ page }) => {
     test.setTimeout(3 * 60 * 1000);
     await page.setViewportSize({ width: 1440, height: 960 });
-    await loginAsCreatedEmployee(page, employeeLoginIdentifier);
+    const persona = workspacePersona(workspace, "employee");
+    await loginAsCreatedEmployee(page, persona.username, persona.password);
   });
 
   test("certifies employee ESS child pages and denies admin workspaces after password setup", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
     await page.setViewportSize({ width: 1440, height: 960 });
-    await expectEmployeeWorkspaceJourney(page, employeeLoginIdentifier);
+    const persona = workspacePersona(workspace, "employee");
+    await expectEmployeeWorkspaceJourney(page, persona.username, persona.password);
   });
 });

@@ -396,8 +396,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
     }
 
     const redirectId = payload.id || employeeId;
-    router.push(`/hr-admin/employees${redirectId ? `?employeeId=${redirectId}` : ""}`);
-    router.refresh();
+    window.location.assign(new URL(`/hr-admin/employees${redirectId ? `?employeeId=${redirectId}` : ""}`, window.location.origin));
   }
 
   return (

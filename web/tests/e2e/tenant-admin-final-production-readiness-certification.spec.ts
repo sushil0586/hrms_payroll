@@ -106,8 +106,8 @@ test.describe("Tenant Admin final production-readiness certification", () => {
     await expect(page.getByRole("main").getByText("Plan & Billing", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Items that need your attention" })).toBeVisible();
     await expect(page.getByTestId("tenant-next-action").getByRole("link").first()).toBeVisible();
-    await expect(page.getByTestId("tenant-setup-guide").getByRole("link", { name: "View all users" })).toBeVisible();
-    await expect(page.getByTestId("tenant-setup-guide").getByRole("link", { name: "Manage all roles" })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: /Open users/ })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: /Open roles/ })).toBeVisible();
     await testInfo.attach("tenant-admin-final-01-dashboard", {
       body: await page.screenshot({ fullPage: true }),
       contentType: "image/png",
@@ -154,7 +154,7 @@ test.describe("Tenant Admin final production-readiness certification", () => {
     const roleCreateResponse = page.waitForResponse((response) => response.url().includes("/api/tenant-admin/roles") && response.request().method() === "POST");
     await roleDialog.getByRole("button", { name: "Create role" }).click();
     await expect((await roleCreateResponse).ok()).toBeTruthy();
-    await expect(page.getByText("Role created.")).toBeVisible();
+    await expect(roleDialog).toBeHidden();
     await page.getByLabel("Search roles").fill(qaRoleCode);
     await expect(page.locator(".tenant-role-row")).toHaveCount(1);
     await expect(page.locator(".tenant-role-row")).toContainText(qaRoleName);

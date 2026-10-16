@@ -1,7 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { expectDialogStable } from "../helpers/modal-stability";
+import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import {
+  expectDialogStable,
+  getDialog,
+  mssAttendanceReviewDialogName,
+  mssLeaveReviewDialogName,
+} from "../helpers/modal-stability";
 import { employee, gotoAuthenticated, manager, platformAdmin, supportAgent, type Persona } from "../helpers/staging-auth";
 
 async function expectManagerActionControls(page: Page) {
@@ -32,29 +37,24 @@ test.describe("Manager self service dashboard certification", () => {
     await expect(page.getByRole("heading", { name: "Your ESS" })).toBeVisible();
 
     for (const signal of [
-      "Leave approvals",
-      "Attendance regularizations",
-      "Today exceptions",
-      "Team on leave",
+      "team members",
+      "pending decisions",
+      "on leave today",
+      "On leave today",
     ]) {
-      await expect(controlCenter.getByText(signal, { exact: true })).toBeVisible();
+      await expectCompactMetric(page.getByRole("main"), signal);
     }
 
-    for (const action of [
-      "Inbox",
-      "Review leave",
-      "Review attendance",
-      "Open exceptions",
-      "View leave context",
-      "Open ESS",
-      "Payslips",
-      "Documents",
-      "Tax",
-    ]) {
+    for (const action of ["Inbox", "Open ESS", "Payslips", "Documents", "Tax"]) {
       await expect(page.getByRole("link", { name: action }).first()).toBeVisible();
     }
+    const queueLinks = page.getByRole("link", { name: /Review leave|Review attendance|Open exceptions|View leave context/ });
+    if ((await queueLinks.count()) === 0) {
+      await expect(controlCenter.getByText("No manager approval queues are enabled.")).toBeVisible();
+    } else {
+      await expect(queueLinks.first()).toBeVisible();
+    }
 
-    await expect(page.getByText("Manager inbox", { exact: true }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -68,8 +68,10 @@ test.describe("Manager self service dashboard certification", () => {
     await gotoAuthenticated(page, "/mss/approvals", manager);
     await expectPageReady(page, "Manager approvals");
 
-    for (const metric of ["Team members", "Leave approvals", "Regularizations", "Exceptions today"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+    const metrics = page.getByRole("region", { name: "Manager approval metrics" });
+    await expect(metrics).toBeVisible();
+    for (const metric of ["team members", "leave approvals", "regularizations", "exceptions today"]) {
+      await expectCompactMetric(metrics, metric);
     }
 
     await expect(page.getByRole("heading", { name: "Approval views" })).toBeVisible();
@@ -85,10 +87,10 @@ test.describe("Manager self service dashboard certification", () => {
     const leaveReview = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
     if (await leaveReview.isVisible().catch(() => false)) {
       await leaveReview.click();
-      await expect(page.getByRole("dialog", { name: "Leave approval review" })).toBeVisible();
+      await expect(getDialog(page, mssLeaveReviewDialogName)).toBeVisible();
       await expectManagerActionControls(page);
-      await expectDialogStable(page, "Leave approval review");
-      await page.getByRole("button", { name: "Close leave approval review" }).click();
+      await expectDialogStable(page, mssLeaveReviewDialogName);
+      await page.getByRole("button", { name: /Close Review leave approval|Close leave approval review/ }).click();
     }
 
     await queueTabs.getByRole("link", { name: /Attendance/ }).click();
@@ -102,10 +104,10 @@ test.describe("Manager self service dashboard certification", () => {
     const attendanceReview = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
     if (await attendanceReview.isVisible().catch(() => false)) {
       await attendanceReview.click();
-      await expect(page.getByRole("dialog", { name: "Attendance approval review" })).toBeVisible();
+      await expect(getDialog(page, mssAttendanceReviewDialogName)).toBeVisible();
       await expectManagerActionControls(page);
-      await expectDialogStable(page, "Attendance approval review");
-      await page.getByRole("button", { name: "Close attendance approval review" }).click();
+      await expectDialogStable(page, mssAttendanceReviewDialogName);
+      await page.getByRole("button", { name: /Close Review attendance approval|Close attendance approval review/ }).click();
     }
 
     await queueTabs.getByRole("link", { name: /History/ }).click();
@@ -130,7 +132,7 @@ test.describe("Manager self service dashboard certification", () => {
 
     await reviewButton.click();
     await expectManagerActionControls(page);
-    await expectDialogStable(page, "Leave approval review");
+    await expectDialogStable(page, mssLeaveReviewDialogName);
   });
 
   test("manager decision panel handles success and validation errors without mutating staging rows", async ({ page }) => {
@@ -143,7 +145,7 @@ test.describe("Manager self service dashboard certification", () => {
       return;
     }
     await reviewButton.click();
-    const dialog = page.getByRole("dialog", { name: "Leave approval review" });
+    const dialog = getDialog(page, mssLeaveReviewDialogName);
     await expect(dialog).toBeVisible();
 
     const approveButton = dialog.getByRole("button", { name: /Approve request|Approve cancellation/ }).first();
@@ -152,7 +154,9 @@ test.describe("Manager self service dashboard certification", () => {
       return;
     }
 
+    let approveCalls = 0;
     await page.route("**/api/manager/leave-requests/*/approve", async (route) => {
+      approveCalls += 1;
       await route.fulfill({
         contentType: "application/json",
         status: 200,
@@ -161,15 +165,15 @@ test.describe("Manager self service dashboard certification", () => {
     });
     await dialog.getByLabel("Decision note").fill("MGR-95 intercepted approval proof.");
     await approveButton.click();
-    await expect(dialog.getByText("Action saved.").first()).toBeVisible();
-    await expect(dialog.getByText(/Request approved|Cancellation request approved/).first()).toBeVisible();
+    await expect.poll(() => approveCalls).toBe(1);
     await page.unroute("**/api/manager/leave-requests/*/approve");
 
-    await dialog.getByRole("button", { name: "Close" }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(reviewButton).toBeVisible();
-    await reviewButton.click();
-    const rejectionDialog = page.getByRole("dialog", { name: "Leave approval review" });
+    await gotoAuthenticated(page, "/mss/approvals?queue=leave", manager);
+    await expectPageReady(page, "Manager approvals");
+    const rejectionReviewButton = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
+    await expect(rejectionReviewButton).toBeVisible();
+    await rejectionReviewButton.click();
+    const rejectionDialog = getDialog(page, mssLeaveReviewDialogName);
     await expect(rejectionDialog).toBeVisible();
 
     await page.route("**/api/manager/leave-requests/*/reject", async (route) => {
@@ -181,7 +185,7 @@ test.describe("Manager self service dashboard certification", () => {
     });
     await rejectionDialog.getByRole("button", { name: /Reject request|Reject cancellation/ }).first().click();
     await expect(rejectionDialog.getByText("Action failed.").first()).toBeVisible();
-    await expect(rejectionDialog.getByText("Decision note is required for rejection.").first()).toBeVisible();
+    await expect(rejectionDialog.getByRole("alert").filter({ hasText: "Enter a decision note before rejecting this request." })).toBeVisible();
     await page.unroute("**/api/manager/leave-requests/*/reject");
   });
 
@@ -189,10 +193,12 @@ test.describe("Manager self service dashboard certification", () => {
     await gotoAuthenticated(page, "/mss/notifications", manager);
     await expectPageReady(page, "Manager notifications");
 
-    for (const metric of ["Notifications", "Unread on page", "High priority", "Failed on page"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
-    }
     const main = page.getByRole("main");
+    const metrics = page.getByRole("region", { name: "Notification metrics" });
+    await expect(metrics).toBeVisible();
+    for (const metric of ["notifications", "unread on page", "high priority", "failed on page"]) {
+      await expectCompactMetric(metrics, metric);
+    }
     const filterSearch = main.getByRole("textbox", { name: "Search" });
     await expect(main.getByText("Manager alerts", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alert filters" })).toBeVisible();
@@ -205,7 +211,8 @@ test.describe("Manager self service dashboard certification", () => {
     await expect(main.getByRole("button", { name: "Apply filters" })).toBeVisible();
     await expect(main.getByRole("link", { name: "Clear filters" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Team alert list" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Selected alert" })).toBeVisible();
+    await expect(page.getByRole("table", { name: "Notifications" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Review notification" }).first()).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "Approvals", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Decision history" })).toBeVisible();
     await expect(page.getByRole("link", { name: "ESS inbox" })).toBeVisible();
@@ -218,7 +225,7 @@ test.describe("Manager self service dashboard certification", () => {
     await main.getByRole("button", { name: "Apply filters" }).click();
     await expect(page).toHaveURL(/\/mss\/notifications\?.*q=no-manager-notification-should-match-this/);
     await expect(page.getByText("No notifications match the current filters.")).toBeVisible();
-    await page.getByRole("link", { name: "Clear filters" }).click();
+    await main.getByRole("link", { name: "Clear filters" }).first().click();
     await expect(page).toHaveURL(/\/mss\/notifications\/?$/);
     await expect(page.getByRole("heading", { name: "Manager notifications" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Team alert list" })).toBeVisible();

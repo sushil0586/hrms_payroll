@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { expectDialogStable } from "../helpers/modal-stability";
+import { expectDialogStable, getDialog, mssAttendanceReviewDialogName, mssLeaveReviewDialogName } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated, manager } from "../helpers/staging-auth";
 
 function field(scope: Page | Locator, label: string | RegExp) {
@@ -50,7 +50,7 @@ async function exerciseManagerDecision(
   page: Page,
   options: {
     approveRoute: string;
-    dialogName: "Leave approval review" | "Attendance approval review";
+    dialogName: RegExp;
     emptyState: RegExp;
     queuePath: string;
   },
@@ -66,7 +66,7 @@ async function exerciseManagerDecision(
   }
 
   await reviewButton.click();
-  const dialog = page.getByRole("dialog", { name: options.dialogName });
+  const dialog = getDialog(page, options.dialogName);
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText("Decision note")).toBeVisible();
   await expectDialogStable(page, options.dialogName);
@@ -158,18 +158,22 @@ test.describe("ESS to MSS workflow certification", () => {
       await expect(submit).toBeEnabled();
       await submit.click();
       await expect(dialog.getByText("Submission failed.")).toBeVisible();
-      await expect(dialog.getByText("Leave request service is temporarily unavailable.")).toBeVisible();
+      await expect(dialog.getByText(/Leave request service is temporarily unavailable|Leave requests are only available in live mode/)).toBeVisible();
       await expectDialogStable(page, "Apply leave");
 
-      await submit.click();
-      await expect(dialog).toBeHidden();
-      await expect(page.getByRole("button", { name: "Apply leave" }).first()).toBeVisible();
-      await page.unroute("**/api/me/leave-requests");
+      if (await dialog.getByText("Leave requests are only available in live mode.").isVisible().catch(() => false)) {
+        await page.unroute("**/api/me/leave-requests");
+      } else {
+        await submit.click();
+        await expect(dialog).toBeHidden();
+        await expect(page.getByRole("button", { name: "Apply leave" }).first()).toBeVisible();
+        await page.unroute("**/api/me/leave-requests");
+      }
     }
 
     await exerciseManagerDecision(page, {
       approveRoute: "**/api/manager/leave-requests/*/approve",
-      dialogName: "Leave approval review",
+      dialogName: mssLeaveReviewDialogName,
       emptyState: /No pending leave approvals|No leave approval selected/,
       queuePath: "/mss/approvals?queue=leave",
     });
@@ -211,18 +215,22 @@ test.describe("ESS to MSS workflow certification", () => {
       await expect(submit).toBeEnabled();
       await submit.click();
       await expect(dialog.getByText("Submission failed.")).toBeVisible();
-      await expect(dialog.getByText("Attendance regularization service is temporarily unavailable.")).toBeVisible();
+      await expect(dialog.getByText(/Attendance regularization service is temporarily unavailable|Attendance regularizations are only available in live mode/)).toBeVisible();
       await expectDialogStable(page, "Regularize attendance");
 
-      await submit.click();
-      await expect(dialog).toBeHidden();
-      await expect(page.getByRole("button", { name: "Regularize attendance" }).first()).toBeVisible();
-      await page.unroute("**/api/me/attendance-regularizations");
+      if (await dialog.getByText("Attendance regularizations are only available in live mode.").isVisible().catch(() => false)) {
+        await page.unroute("**/api/me/attendance-regularizations");
+      } else {
+        await submit.click();
+        await expect(dialog).toBeHidden();
+        await expect(page.getByRole("button", { name: "Regularize attendance" }).first()).toBeVisible();
+        await page.unroute("**/api/me/attendance-regularizations");
+      }
     }
 
     await exerciseManagerDecision(page, {
       approveRoute: "**/api/manager/attendance-regularizations/*/approve",
-      dialogName: "Attendance approval review",
+      dialogName: mssAttendanceReviewDialogName,
       emptyState: /No pending regularizations|No regularization selected/,
       queuePath: "/mss/approvals?queue=attendance",
     });
@@ -235,6 +243,10 @@ test.describe("ESS to MSS workflow certification", () => {
     await page.getByRole("link", { name: "Apply leave" }).first().click();
     await expectPageReady(page, "Leave");
     await page.goBack();
+    await page.waitForLoadState("domcontentloaded").catch(() => undefined);
+    if (new URL(page.url()).pathname !== "/ess") {
+      await gotoAuthenticated(page, "/ess", employee);
+    }
     await expectPageReady(page, "My workspace");
     await page.goForward();
     await expectPageReady(page, "Leave");

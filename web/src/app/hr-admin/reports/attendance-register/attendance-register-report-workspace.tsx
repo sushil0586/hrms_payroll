@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { HrAdminAttendanceRecord } from "@/lib/types";
 
@@ -72,6 +72,7 @@ function toReportRow(item: HrAdminAttendanceRecord): AttendanceReportRow {
 }
 
 export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAttendanceRecord[] }) {
+  const [serverItems, setServerItems] = useState(items);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All");
   const [source, setSource] = useState("All");
@@ -82,7 +83,36 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
   const [sortBy, setSortBy] = useState("date_desc");
   const [page, setPage] = useState(1);
 
-  const rows = useMemo(() => items.map(toReportRow), [items]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+    params.set("page", "1");
+    params.set("page_size", "500");
+    if (query.trim()) params.set("q", query.trim());
+    if (status !== "All") params.set("status", status);
+    if (source !== "All") params.set("source", source);
+    if (lockState !== "All") params.set("lock_state", lockState);
+    if (regularizedState === "regularized") params.set("regularized_state", "regularized");
+    if (regularizedState === "pending") params.set("regularized_state", "not_regularized");
+
+    fetch(`/api/hr-admin/attendance-records?${params.toString()}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload: { items?: HrAdminAttendanceRecord[] } | null) => {
+        if (payload?.items) {
+          setServerItems(payload.items);
+          setPage(1);
+        }
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError") {
+          setServerItems(items);
+        }
+      });
+
+    return () => controller.abort();
+  }, [items, lockState, query, regularizedState, source, status]);
+
+  const rows = useMemo(() => serverItems.map(toReportRow), [serverItems]);
   const statuses = useMemo(() => ["All", ...unique(rows.map((item) => item.status))], [rows]);
   const sources = useMemo(() => ["All", ...unique(rows.map((item) => item.source))], [rows]);
   const departments = useMemo(() => ["All", ...unique(rows.map((item) => item.department ?? ""))], [rows]);
@@ -184,7 +214,7 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
 
         <div className="attendance-summary-strip report-summary-strip" aria-label="Attendance register summary">
           <span><strong>{filteredRows.length}</strong> attendance rows</span>
-          <span><strong>{items.length}</strong> total records</span>
+          <span><strong>{serverItems.length}</strong> total records</span>
           <span><strong>{filteredRows.filter((item) => item.late_minutes > 0).length}</strong> late marks</span>
           <span><strong>{filteredRows.filter((item) => item.is_regularized).length}</strong> regularized</span>
           <span><strong>{filteredRows.filter((item) => item.payrollReadiness.startsWith("Ready")).length}</strong> payroll ready</span>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from unittest.mock import patch
 from datetime import datetime, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -84,6 +85,8 @@ from apps.payroll.models import (
     PayrollArtifactAccessEventType,
     PayrollArtifactSignedAccessGrant,
     PayrollArtifactSignedAccessGrantStatus,
+    PayrollBackgroundJob,
+    PayrollBackgroundJobStatus,
     PayrollCalculationLine,
     PayrollCalculationLineSource,
     PayrollCalculationStatus,
@@ -188,6 +191,7 @@ from apps.payroll.services import (
     heartbeat_payroll_provider_job,
     process_due_payroll_provider_jobs,
 )
+from apps.payroll.background_jobs import execute_payroll_background_job
 from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
 from apps.tenants.models import Tenant
 from apps.workflows.models import WorkflowAction, WorkflowActionLog, WorkflowActorType, WorkflowAssignment, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep, WorkflowStepInstance, WorkflowStatus, WorkflowTemplate
@@ -6100,6 +6104,40 @@ def test_hr_admin_payroll_draft_calculation_rerun_supersedes_prior_attempt(api_c
     assert second_response.json()["calculation"]["attempt_number"] == 2
     assert PayrollRunCalculation.objects.filter(payroll_run=payroll_run, status=PayrollCalculationStatus.SUPERSEDED).count() == 1
     assert PayrollRunCalculation.objects.filter(payroll_run=payroll_run, status=PayrollCalculationStatus.COMPLETED).count() == 1
+
+
+def test_hr_admin_payroll_async_calculation_is_durable_idempotent_and_permission_scoped(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    payroll_run, _snapshot = create_calculable_payroll_run(tenant=tenant, employee=employee)
+    payload = {"execution_mode": "async", "calculation_profile_ref": "phase5e.durable.v1"}
+
+    with patch("apps.payroll.background_jobs.dispatch_payroll_background_job", return_value=True):
+        first = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", payload, format="json")
+        second = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", payload, format="json")
+
+    assert first.status_code == 202, first.json()
+    assert second.status_code == 202, second.json()
+    assert first.json()["job"]["id"] == second.json()["job"]["id"]
+    assert PayrollBackgroundJob.objects.filter(tenant=tenant).count() == 1
+    job = PayrollBackgroundJob.objects.get(id=first.json()["job"]["id"])
+    assert job.status == PayrollBackgroundJobStatus.QUEUED
+
+    job = execute_payroll_background_job(job.id, task_id="phase5e-test-task")
+    assert job.status == PayrollBackgroundJobStatus.SUCCEEDED
+    assert job.completed_items == job.total_items == 1
+    assert PayrollRunCalculation.objects.filter(payroll_run=payroll_run, status=PayrollCalculationStatus.COMPLETED).count() == 1
+
+    status_response = api_client.get(f"/api/v1/hr-admin/payroll-jobs/{job.id}/")
+    assert status_response.status_code == 200
+    assert status_response.json()["job"]["result"]["calculation_id"]
+
+    employee_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
+    unauthorized = api_client.get(f"/api/v1/hr-admin/payroll-jobs/{job.id}/")
+    assert unauthorized.status_code == 403
 
 
 def test_hr_admin_payroll_review_approves_and_final_locks_run(api_client: APIClient, bootstrapped_workspace):

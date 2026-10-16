@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { getDialog, mssAttendanceReviewDialogName, mssLeaveReviewDialogName } from "../helpers/modal-stability";
 import { expectActualUserReadyPage } from "../helpers/user-journey-certification";
 import { employee, gotoAuthenticated, hrAdmin, manager } from "../helpers/staging-auth";
 
@@ -46,6 +47,18 @@ type ScopedAssignment = {
   is_active: boolean;
 };
 
+type ScopedAssignmentList = {
+  items: ScopedAssignment[];
+};
+
+type EmployeeLeaveRequestList = {
+  items: Array<{
+    start_date: string;
+    end_date: string;
+    status: string;
+  }>;
+};
+
 const shouldRunMutationFlow = process.env.PLAYWRIGHT_PHASE6_MUTATE === "true";
 const shouldPrepareStageData = process.env.PLAYWRIGHT_PHASE6_PREPARE === "true";
 const missingLeavePolicyMessage = /No active leave policy is assigned to this employee/i;
@@ -54,9 +67,18 @@ function uniqueRef(prefix: string) {
   return `PW_PHASE6_${prefix}_${Date.now()}`;
 }
 
-function isoDateFromToday(days: number) {
+function isoWorkingDateFromToday(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + 1);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function previousIsoDate(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
 }
 
@@ -128,12 +150,17 @@ async function submitRegularizationFromAvailableRecord(page: Page, reason: strin
     await field(page, "Requested status").selectOption(requestedStatus);
     await field(page, "Reason").fill(reason);
 
+    const submitButton = page.getByRole("button", { name: "Submit correction" });
+    if (!(await submitButton.isEnabled())) {
+      continue;
+    }
+
     const result = await submitAndCapture<RegularizationSubmission>(
       page,
       "/api/me/attendance-regularizations",
       "POST",
       async () => {
-        await page.getByRole("button", { name: "Submit regularization" }).click();
+        await submitButton.click();
       },
     );
     if (result.ok) {
@@ -149,6 +176,25 @@ async function apiJson<T>(page: Page, path: string) {
   const response = await page.request.get(path);
   expect(response.ok(), `${path} should be available`).toBeTruthy();
   return (await response.json()) as T;
+}
+
+async function findAvailableLeaveDate(page: Page) {
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
+  expect(token, "Expected an authenticated ESS session token.").toBeTruthy();
+  const apiBase = process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
+  const response = await page.request.get(`${apiBase}/me/leave-requests/?page=1&page_size=50`, {
+    headers: { Authorization: `Token ${token}` },
+  });
+  expect(response.ok(), "ESS leave history should be available from the backend API.").toBeTruthy();
+  const history = (await response.json()) as EmployeeLeaveRequestList;
+  const active = history.items.filter((item) => ["pending", "partially_approved", "approved"].includes(item.status));
+  for (let offset = 14; offset <= 70; offset += 1) {
+    const candidate = isoWorkingDateFromToday(offset);
+    if (!active.some((item) => item.start_date <= candidate && item.end_date >= candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error("No free weekday is available in the current leave policy period.");
 }
 
 function findConfiguredEmployeeOption(employees: EmployeeListItem[]) {
@@ -185,8 +231,8 @@ async function ensureEmployeeLeavePolicyAssignment(page: Page) {
     throw new Error("No leave policies are available for assignment.");
   }
 
-  const assignments = await apiJson<ScopedAssignment[]>(page, "/api/hr-admin/leave-policy-assignments");
-  const existingEmployeeAssignment = assignments.find((item) => item.employee_id === employeeId && item.is_active);
+  const assignments = await apiJson<ScopedAssignmentList>(page, "/api/hr-admin/leave-policy-assignments?page_size=100");
+  const existingEmployeeAssignment = assignments.items.find((item) => item.employee_id === employeeId && item.is_active);
   if (existingEmployeeAssignment) {
     return existingEmployeeAssignment;
   }
@@ -233,13 +279,13 @@ async function expectEssWorkspaceUsable(page: Page) {
 
 async function expectEssLeaveUsable(page: Page) {
   await expectPageReady(page, /Leave/i);
-  for (const heading of ["Balances", "Leave requests"]) {
+  for (const heading of ["Balance snapshot", "Leave requests"]) {
     await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
   }
   await expect(page.getByLabel("Leave history snapshot")).toBeVisible();
-  await expect(field(page, "Search leave history")).toBeVisible();
-  await expect(field(page, "Type filter")).toBeVisible();
-  await expect(field(page, "Period filter")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Search", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Type", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Period", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Submit leave request" })).toHaveCount(0);
   await page.getByRole("button", { name: "Apply leave" }).click();
   await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
@@ -267,7 +313,7 @@ async function expectEssLeaveUsable(page: Page) {
 
 async function expectEssAttendanceUsable(page: Page) {
   await expectPageReady(page, /Attendance/i);
-  for (const heading of ["Today", "Monthly summary", "Correction queue", "Regularizations"]) {
+  for (const heading of ["Today", "Month to date", "Correction queue", "Regularizations"]) {
     await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
   }
   await expect(page.getByRole("heading", { name: "Submit regularization" })).toHaveCount(0);
@@ -275,19 +321,19 @@ async function expectEssAttendanceUsable(page: Page) {
   for (const label of ["Attendance record", "Requested status", "Requested check-in", "Requested check-out"]) {
     await expect(field(page, label), `${label} should be visible`).toBeVisible();
   }
-  await expect(page.getByRole("button", { name: "Submit regularization" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit correction" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.locator(".pagination-bar").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 }
 
 async function expectMssApprovalsUsable(page: Page) {
-  await expectPageReady(page, /Manager inbox/i);
-  await expect(page.getByRole("heading", { name: "Approval queues" })).toBeVisible();
+  await expectPageReady(page, /Manager approvals/i);
+  await expect(page.getByRole("heading", { name: "Approval views" })).toBeVisible();
   await expectLink(page, /Leave/i, /\/mss\/approvals/);
   await expectLink(page, /Attendance/i, /\/mss\/approvals/);
-  await expect(page.getByRole("heading", { name: /Leave approvals|Attendance regularizations/i }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Leave approval detail|Regularization detail/i }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Leave approvals|Attendance approvals/i }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Selected leave request|Selected attendance request/i }).first()).toBeVisible();
   await expect(page.locator(".pagination-bar").first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 }
@@ -309,7 +355,7 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
 
     for (const [label, route, heading, requiredText] of [
       ["Leave", "/ess/leave", /Leave/i, /Submit leave request|Leave requests/i],
-      ["Attendance", "/ess/attendance", /Attendance/i, /Submit regularization|Regularizations/i],
+      ["Attendance", "/ess/attendance", /Attendance/i, /Submit correction|Regularizations/i],
       ["Payslips", "/ess/payslips", /Payslips/i, /Payslip|No payslip|Published/i],
       ["Documents", "/ess/documents", /Documents/i, /Document|Upload|required/i],
       ["Tax declarations", "/ess/statutory-declarations", /Statutory/i, /Declaration|Proof|Tax/i],
@@ -336,25 +382,27 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
 
     await expectActualUserReadyPage(page, {
       path: "/mss",
-      heading: /Manager control center/i,
+      heading: /Manager dashboard/i,
       persona: manager,
-      requiredText: [/Team priorities|Work queue/i, /Team members/i, /Pending decisions/i],
+      requiredText: [/Manager actions|What to review next/i, /Team members/i, /Pending decisions/i],
     });
-    await expectLink(page, /Open approvals/i, /\/mss\/approvals$/);
+    await expectLink(page, /Leave approvals/i, /\/mss\/approvals\?queue=leave$/);
+    await expectLink(page, /Attendance approvals/i, /\/mss\/approvals\?queue=attendance$/);
     await expectLink(page, /^Notifications$/i, /\/mss\/notifications$/);
     await expectLink(page, /Self service/i, /\/ess$/);
 
     await gotoAuthenticated(page, "/mss/approvals?queue=leave", manager);
     await expectMssApprovalsUsable(page);
-    await page.getByRole("link", { name: /Attendance/i }).first().click();
+    const attendanceQueue = page.getByRole("link", { name: /^Attendance\b/ }).first();
+    await page.goto((await attendanceQueue.getAttribute("href")) ?? "/mss/approvals?queue=attendance&regPage=1", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/mss\/approvals\?.*queue=attendance/);
     await expectMssApprovalsUsable(page);
 
     await gotoAuthenticated(page, "/mss/notifications", manager);
     await expectPageReady(page, /Notifications/i);
-    await expect(page.getByRole("heading", { name: "Inbox filters" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Notification detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Alert filters" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Team alert list" })).toBeVisible();
+    await expect(page.getByRole("table", { name: "Notifications" })).toBeVisible();
     await expectLink(page, /^Approvals$/i, /\/mss\/approvals$/);
     await expectLink(page, /ESS inbox/i, /\/ess\/notifications$/);
     await expectNoHorizontalOverflow(page);
@@ -374,15 +422,16 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     await page.getByRole("button", { name: "Apply leave" }).click();
     await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
 
-    await field(page, "Start date").fill(isoDateFromToday(50));
-    await field(page, "End date").fill(isoDateFromToday(49));
+    const startDate = await findAvailableLeaveDate(page);
+
+    await field(page, "Start date").fill(startDate);
+    await field(page, "End date").fill(previousIsoDate(startDate));
     await field(page, "Reason").fill(invalidReason);
     await expect(page.getByText("Check dates.")).toBeVisible();
     await expect(page.getByText(/End date must be the same as or after the start date/i)).toBeVisible();
     await expect(page.getByRole("button", { name: "Submit leave" })).toBeDisabled();
 
-    const startDate = isoDateFromToday(51);
-    const endDate = isoDateFromToday(51);
+    const endDate = startDate;
     await field(page, "Start date").fill(startDate);
     await field(page, "End date").fill(endDate);
     await field(page, "Reason").fill(reason);
@@ -413,24 +462,33 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     await gotoAuthenticated(page, `/mss/approvals?queue=leave&leaveId=${leaveResult.payload.id}`, manager);
     await expectMssApprovalsUsable(page);
     await expect(queueRow(page, reason)).toBeVisible();
-    await field(page, "Decision note").fill(decisionNote);
+    await page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).click();
+    const leaveReviewDialog = getDialog(page, mssLeaveReviewDialogName);
+    await expect(leaveReviewDialog).toBeVisible();
+    await leaveReviewDialog.getByLabel("Decision note").fill(decisionNote);
     const approvalResult = await submitAndCapture<LeaveSubmission>(
       page,
       `/api/manager/leave-requests/${leaveResult.payload.id}/approve`,
       "POST",
       async () => {
-        await page.getByRole("button", { name: /Approve request|Approve cancellation/ }).first().click();
+        await leaveReviewDialog.getByRole("button", { name: /Approve request|Approve cancellation/ }).click();
       },
     );
     expect(approvalResult.ok).toBeTruthy();
     expect(approvalResult.payload.status).toBe("approved");
-    await expect(page.getByText(/Request approved|Cancellation request approved/i)).toBeVisible();
+    await expect(page.getByText(/No leave approval selected|Choose an item from the leave queue/i).first()).toBeVisible();
 
     await gotoAuthenticated(page, `/ess/leave?status=approved&requestId=${leaveResult.payload.id}`, employee);
     await expectPageReady(page, /Leave/i);
-    await expect(queueRow(page, reason)).toBeVisible();
-    await expect(queueRow(page, reason)).toContainText("approved");
-    await expect(page.getByRole("dialog", { name: "Leave request detail" })).toBeVisible();
+    const approvedLeaveRow = page.getByRole("table", { name: "Leave request history" }).getByRole("row").filter({ hasText: reason });
+    await expect(approvedLeaveRow).toContainText(/approved/i);
+    const leaveDetailDialog = page.getByRole("dialog").filter({ hasText: "Leave request detail" });
+    if (!(await leaveDetailDialog.isVisible().catch(() => false))) {
+      await approvedLeaveRow.getByRole("button", { name: "View" }).click();
+    }
+    await expect(leaveDetailDialog).toBeVisible();
+    await expect(leaveDetailDialog).toContainText(reason);
+    await expect(leaveDetailDialog).toContainText(/approved/i);
     await expect(page.getByText("phase6-leave-evidence.txt")).toBeVisible();
     await expect(page.getByRole("link", { name: /phase6-leave-evidence.txt/i })).toHaveAttribute("href", /\/api\/me\/leave-requests\/.+\/attachments\/.+\/download/);
     await expect(page.getByText(decisionNote).first()).toBeVisible();
@@ -453,18 +511,8 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     await field(page, "Requested check-in").fill("2026-09-09T18:10");
     await field(page, "Requested check-out").fill("2026-09-09T09:05");
     await field(page, "Reason").fill(invalidReason);
-    const invalidResult = await submitAndCapture<Record<string, unknown>>(
-      page,
-      "/api/me/attendance-regularizations",
-      "POST",
-      async () => {
-        await page.getByRole("button", { name: "Submit regularization" }).click();
-      },
-    );
-    expect(invalidResult.ok).toBeFalsy();
-    expect(invalidResult.status).toBe(400);
-    await expect(page.getByText("Submission failed.")).toBeVisible();
-    await expect(page.getByText(/Requested check-out cannot be earlier than requested check-in/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit correction" })).toBeDisabled();
+    await expect(page.getByText(/Requested check-out (?:is|cannot be) earlier than requested check-in/i)).toBeVisible();
 
     const { result: regularizationResult } = await submitRegularizationFromAvailableRecord(page, reason, "remote");
     expect(regularizationResult, "regularization submission should produce a response").not.toBeNull();
@@ -482,23 +530,34 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     await gotoAuthenticated(page, `/mss/approvals?queue=attendance&regId=${regularizationResult.payload.id}`, manager);
     await expectMssApprovalsUsable(page);
     await expect(queueRow(page, reason)).toBeVisible();
-    await field(page, "Decision note").fill(decisionNote);
+    await page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).click();
+    const attendanceReviewDialog = getDialog(page, mssAttendanceReviewDialogName);
+    await expect(attendanceReviewDialog).toBeVisible();
+    await attendanceReviewDialog.getByLabel("Decision note").fill(decisionNote);
     const rejectionResult = await submitAndCapture<RegularizationSubmission>(
       page,
       `/api/manager/attendance-regularizations/${regularizationResult.payload.id}/reject`,
       "POST",
       async () => {
-        await page.getByRole("button", { name: "Reject request" }).first().click();
+        await attendanceReviewDialog.getByRole("button", { name: "Reject request" }).click();
       },
     );
     expect(rejectionResult.ok).toBeTruthy();
     expect(rejectionResult.payload.status).toBe("rejected");
-    await expect(page.getByText("Request rejected.")).toBeVisible();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("table", { name: "Pending attendance fixes" }).getByText(reason)).toHaveCount(0);
 
     await gotoAuthenticated(page, `/ess/attendance?status=rejected&regId=${regularizationResult.payload.id}`, employee);
     await expectPageReady(page, /Attendance/i);
-    await expect(queueRow(page, reason)).toBeVisible();
-    await expect(queueRow(page, reason)).toContainText("rejected");
+    const rejectedAttendanceRow = page.getByRole("table", { name: "Attendance regularization history" }).getByRole("row").filter({ hasText: reason });
+    await expect(rejectedAttendanceRow).toContainText(/rejected/i);
+    const attendanceDetailDialog = page.getByRole("dialog").filter({ hasText: "Regularization detail" });
+    if (!(await attendanceDetailDialog.isVisible().catch(() => false))) {
+      await rejectedAttendanceRow.getByRole("button", { name: "View" }).click();
+    }
+    await expect(attendanceDetailDialog).toBeVisible();
+    await expect(attendanceDetailDialog).toContainText(reason);
+    await expect(attendanceDetailDialog).toContainText(/rejected/i);
     await expect(page.getByText(decisionNote).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

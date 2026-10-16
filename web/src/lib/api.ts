@@ -29,6 +29,7 @@ import type {
   HrAdminEmployeeFormOptions,
   HrAdminGovernanceFields,
   HrAdminEmployeeListItem,
+  HrAdminEmployeeListResponse,
   HrAdminAttendancePolicy,
   HrAdminDocumentCategory,
   HrAdminDocumentOptions,
@@ -392,6 +393,19 @@ export async function getHrAdminEmployees() {
   return apiGet<HrAdminEmployeeListItem[]>("/hr-admin/employees/");
 }
 
+export async function getHrAdminEmployeePage(params: {
+  page?: number;
+  page_size?: number;
+  q?: string;
+  status?: string;
+  department?: string;
+  manager_view?: string;
+  readiness?: string;
+  sort?: string;
+}) {
+  return apiGet<HrAdminEmployeeListResponse>(`/hr-admin/employees/${buildQueryString(params)}`);
+}
+
 export async function getHrAdminDashboard() {
   return apiGet<HrAdminDashboard>("/hr-admin/dashboard/");
 }
@@ -636,6 +650,7 @@ export async function getHrAdminPayrollFinanceHandoffSetup(params?: {
   job_page_size?: string | number;
   include_output_batches?: string | boolean;
   include_payslip_detail?: string | boolean;
+  include_artifact_detail?: string | boolean;
 }) {
   return apiGet<HrAdminPayrollFinanceHandoffSetupResponse>(`/hr-admin/payroll-finance-handoff-setup/${buildQueryString(params ?? {})}`);
 }
@@ -686,8 +701,8 @@ export async function getHrAdminOrganizationItem(section: string, itemId: string
   return apiGet(`/hr-admin/organization/${section}/${itemId}/`);
 }
 
-export async function getHrAdminPolicyOptions() {
-  return apiGet<HrAdminPolicyOptions>("/hr-admin/policy-options/");
+export async function getHrAdminPolicyOptions(params?: { employee_limit?: number }) {
+  return apiGet<HrAdminPolicyOptions>(`/hr-admin/policy-options/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminPolicyWorkbenchOptions(params?: { include?: string[] }) {

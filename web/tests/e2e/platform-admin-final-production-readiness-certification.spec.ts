@@ -408,7 +408,7 @@ test.describe("Platform Admin final production-readiness certification", () => {
     expectNoSensitiveData(onboarding.recent_events);
 
     await loginAs(page, hrAdmin, "/platform-admin/tenants");
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/$|\/hr-admin$/);
     await expect(page.locator('a[href^="/platform-admin"]')).toHaveCount(0);
     await expectDenied(await page.request.get(`/api/platform/tenants/${tenantId}/onboarding`), "restricted launch readiness");
     await expectDenied(await page.request.get("/api/platform/permission-catalog"), "restricted permission catalog");

@@ -4,22 +4,22 @@ export type RouteExpectation = {
 };
 
 export const tierZeroRoutes: RouteExpectation[] = [
-  { path: "/", heading: "Choose your workspace" },
+  { path: "/", heading: /Run payroll, compliance, and employee operations/ },
   { path: "/login", heading: "Sign in" },
-  { path: "/platform-admin", heading: "Platform Admin Console" },
-  { path: "/hr-admin", heading: "Control center" },
+  { path: "/platform-admin", heading: "Platform Admin Dashboard" },
+  { path: "/hr-admin", heading: "HR Control Center" },
   { path: "/tenant-admin", heading: "Account Control Center" },
-  { path: "/ess", heading: /self service|overview/i },
-  { path: "/mss/approvals", heading: "Manager inbox" },
+  { path: "/ess", heading: "My workspace" },
+  { path: "/mss/approvals", heading: "Manager approvals" },
 ];
 
 export const tierOneRoutes: RouteExpectation[] = [
-  { path: "/platform-admin", heading: "Platform Admin Console" },
-  { path: "/hr-admin/organization", heading: /organization setup/i },
+  { path: "/platform-admin", heading: "Platform Admin Dashboard" },
+  { path: "/hr-admin/organization", heading: "Organization masters" },
   { path: "/hr-admin/policies", heading: "Policy control" },
   { path: "/hr-admin/attendance-operations", heading: "Attendance operations" },
   { path: "/hr-admin/lifecycle", heading: "Lifecycle" },
-  { path: "/hr-admin/launch-remediation", heading: "Launch Remediation" },
+  { path: "/hr-admin/launch-remediation", heading: "Launch Blockers" },
   { path: "/hr-admin/saas-control-plane", heading: "SaaS Control Plane" },
   { path: "/hr-admin/saas-operations", heading: "SaaS Operations" },
   { path: "/hr-admin/saas-resilience", heading: "SaaS Resilience" },
@@ -54,12 +54,12 @@ export const tierOneRoutes: RouteExpectation[] = [
 ];
 
 export const operationalVisualRoutes: RouteExpectation[] = [
-  { path: "/platform-admin", heading: "Platform Admin Console" },
-  { path: "/hr-admin/organization", heading: /organization setup/i },
+  { path: "/platform-admin", heading: "Platform Admin Dashboard" },
+  { path: "/hr-admin/organization", heading: "Organization masters" },
   { path: "/hr-admin/policies", heading: "Policy control" },
   { path: "/hr-admin/attendance-operations", heading: "Attendance operations" },
   { path: "/hr-admin/lifecycle", heading: "Lifecycle" },
-  { path: "/hr-admin/launch-remediation", heading: "Launch Remediation" },
+  { path: "/hr-admin/launch-remediation", heading: "Launch Blockers" },
   { path: "/hr-admin/saas-control-plane", heading: "SaaS Control Plane" },
   { path: "/hr-admin/saas-operations", heading: "SaaS Operations" },
   { path: "/hr-admin/saas-resilience", heading: "SaaS Resilience" },
@@ -122,9 +122,9 @@ export const workflowTraceVisualRoutes: RouteExpectation[] = [
 
 export const firstVisualRoutes: RouteExpectation[] = [
   { path: "/login", heading: "Sign in" },
-  { path: "/platform-admin", heading: "Platform Admin Console" },
-  { path: "/hr-admin", heading: "Control center" },
+  { path: "/platform-admin", heading: "Platform Admin Dashboard" },
+  { path: "/hr-admin", heading: "HR Control Center" },
   { path: "/hr-admin/employees", heading: /employee/i },
-  { path: "/ess", heading: /self service|overview/i },
-  { path: "/mss/approvals", heading: "Manager inbox" },
+  { path: "/ess", heading: "My workspace" },
+  { path: "/mss/approvals", heading: "Manager approvals" },
 ];

@@ -21,49 +21,49 @@ const timeLeaveConfigurationRoutes: RouteExpectation[] = [
     path: "/hr-admin/leave-policies",
     heading: "Leave policies",
     stripTitle: "Leave policy configuration",
-    visibleText: ["Policies", "Active policies"],
+    visibleText: ["policies", "active"],
   },
   {
     path: "/hr-admin/attendance-policies",
     heading: "Attendance policies",
     stripTitle: "Attendance policy configuration",
-    visibleText: ["Policies", "Active policies"],
+    visibleText: ["policies", "active"],
   },
   {
     path: "/hr-admin/leave-types",
     heading: "Leave types",
     stripTitle: "Leave type configuration",
-    visibleText: ["Leave types", "Active types"],
+    visibleText: ["leave types", "active"],
   },
   {
     path: "/hr-admin/shifts",
     heading: "Shifts",
     stripTitle: "Shift master configuration",
-    visibleText: ["Shift masters", "Active shifts"],
+    visibleText: ["shifts", "active"],
   },
   {
     path: "/hr-admin/shift-roster-templates",
     heading: "Roster templates",
     stripTitle: "Roster template rollout",
-    visibleText: ["Roster templates", "Published or locked"],
+    visibleText: ["templates", "rollout ready"],
   },
   {
     path: "/hr-admin/leave-policy-assignments",
     heading: "Leave assignments",
     stripTitle: "Leave assignment governance",
-    visibleText: ["Assignments", "Active assignments"],
+    visibleText: ["assignments", "blocking risks"],
   },
   {
     path: "/hr-admin/attendance-policy-assignments",
     heading: "Attendance assignments",
     stripTitle: "Attendance assignment governance",
-    visibleText: ["Assignments", "Active assignments"],
+    visibleText: ["assignments", "active"],
   },
   {
     path: "/hr-admin/employee-shift-assignments",
     heading: "Shift assignments",
     stripTitle: "Employee shift assignment governance",
-    visibleText: ["Assignments", "Primary assignments"],
+    visibleText: ["assignments", "primary"],
   },
 ];
 
@@ -104,11 +104,11 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
 
     const expectedLinks = [
       ["/hr-admin/shifts", "Manage shifts"],
-      ["/hr-admin/employee-shift-assignments", "Manage shift assignments"],
-      ["/hr-admin/shift-roster-templates", "Manage roster templates"],
+      ["/hr-admin/employee-shift-assignments", "Manage assignments"],
+      ["/hr-admin/shift-roster-templates", "Manage rosters"],
       ["/hr-admin/holiday-calendars", "Manage calendars"],
       ["/hr-admin/attendance-records", "Open records"],
-      ["/hr-admin/attendance-regularizations", "Open regularizations"],
+      ["/hr-admin/attendance-regularizations", "Open queue"],
     ] as const;
 
     for (const [href, label] of expectedLinks) {
@@ -130,8 +130,9 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
     await expect(toolbar.getByRole("textbox", { name: "Search" })).toBeVisible();
     await expect(toolbar.locator("label.form-field").filter({ hasText: "Status" }).locator("select").first()).toBeVisible();
     await expect(toolbar.locator("label.form-field").filter({ hasText: "Source" }).locator("select").first()).toBeVisible();
+    await toolbar.locator("summary", { hasText: "More filters" }).click();
     await expect(toolbar.locator("label.form-field").filter({ hasText: "Lock state" }).locator("select").first()).toBeVisible();
-    await expect(toolbar.locator("label.form-field").filter({ hasText: "Regularization state" }).locator("select").first()).toBeVisible();
+    await expect(toolbar.locator("label.form-field").filter({ hasText: "Regularization" }).locator("select").first()).toBeVisible();
 
     await toolbar.getByPlaceholder("Employee, code, shift, source, date").fill("zz-no-attendance-records-phase12");
     await toolbar.getByRole("button", { name: "Apply filters" }).click();
@@ -158,8 +159,9 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
     await expect(page.locator(".time-leave-strip").getByRole("heading", { name: "Attendance correction queue" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Search" })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Request status" })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Requested attendance status" })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Current attendance status" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Requested status" })).toBeVisible();
+    await page.locator("summary", { hasText: "More filters" }).click();
+    await expect(page.getByRole("combobox", { name: "Current status" })).toBeVisible();
 
     await page.getByPlaceholder("Employee, code, date, shift, reason").fill("zz-no-regularizations-phase12");
     await page.getByRole("button", { name: "Apply filters" }).click();
@@ -184,7 +186,7 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
     test.setTimeout(150_000);
     await page.setViewportSize({ width: 820, height: 1180 });
     for (const route of [
-      { path: "/hr-admin/attendance-operations", heading: "Attendance operations", stripTitle: "Attendance operations command", visibleText: ["Open records", "Open regularizations"] },
+      { path: "/hr-admin/attendance-operations", heading: "Attendance operations", stripTitle: "Attendance operations command", visibleText: ["Open records", "Open queue"] },
       timeLeaveConfigurationRoutes[0],
       timeLeaveConfigurationRoutes[1],
       timeLeaveConfigurationRoutes[4],

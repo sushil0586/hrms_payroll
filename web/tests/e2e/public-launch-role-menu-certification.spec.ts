@@ -52,7 +52,7 @@ const workspacePersonas: WorkspacePersona[] = [
     persona: payrollFinanceManager,
     landingPath: "/finance-manager",
     navLabel: /Payroll Finance navigation|Finance operations navigation/i,
-    expectedChrome: "Finance operations",
+    expectedChrome: "Finance control center",
     minimumMenuLinks: 4,
   },
   {
@@ -68,7 +68,7 @@ const workspacePersonas: WorkspacePersona[] = [
     persona: employee,
     landingPath: "/ess",
     navLabel: /Employee navigation/i,
-    expectedChrome: "Self service",
+    expectedChrome: "Nexora",
     minimumMenuLinks: 4,
   },
 ];
@@ -105,10 +105,11 @@ async function sidebarLinks(page: Page, navLabel: string | RegExp) {
 
 async function assertUsableWorkspacePage(page: Page, expectedChrome?: string | RegExp) {
   await suppressBrowserTestNoise(page);
+  await page.locator(".app-loading-shell").waitFor({ state: "detached" });
   await expect(page.locator("body")).toBeVisible();
   await expect(page.locator(".app-shell--workspace, main.shell--workspace").first()).toBeVisible();
   if (expectedChrome) {
-    await expect(page.getByText(expectedChrome).first()).toBeVisible();
+    await expect(page.getByText(expectedChrome).filter({ visible: true }).first()).toBeVisible();
   }
   await expectNoWorkspaceFailure(page);
   await expectNoHorizontalOverflow(page);
@@ -119,8 +120,11 @@ async function clickSidebarHref(page: Page, navLabel: string | RegExp, href: str
   const nav = page.getByRole("navigation", { name: navLabel });
   const link = nav.locator(`a.nav-item[href="${href}"]`).first();
   await expect(link).toBeVisible();
-  await link.click();
-  await page.waitForLoadState("domcontentloaded");
+  const escapedHref = href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await Promise.all([
+    page.waitForURL(new RegExp(`${escapedHref}$`)),
+    link.click(),
+  ]);
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
 }
 
