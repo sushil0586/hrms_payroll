@@ -1,4 +1,5 @@
 import { getPlatformPolicyPacks, getPlatformPublicLeads, getPlatformSummary, getPlatformTenant, getPlatformTenantOnboarding, getPlatformTenants } from "@/lib/api";
+import { DEMO_DATA_ENABLED } from "@/lib/runtime-flags";
 import type { PlatformPolicyPackListItem, PlatformPublicLead, PlatformSummary, PlatformTenantListItem, PlatformTenantOnboarding } from "@/lib/types";
 
 import { PlatformAdminConsole } from "./platform-admin-console";
@@ -174,10 +175,10 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
   const leads = listData<PlatformPublicLead>(leadResult.data);
   const tenants = listData<PlatformTenantListItem>(tenantResult.data);
   const policyPacks = listData<PlatformPolicyPackListItem>(policyPackResult.data);
-  const safeLeads = leads.length ? leads : [demoLead];
-  const safeTenants = tenants.length ? tenants : [demoTenant];
-  const safePolicyPacks = policyPacks.length ? policyPacks : [demoPolicyPack];
   const selectedTenantSeed = summary.first_tenant ? [summary.first_tenant] : [];
+  const safeLeads = leads.length ? leads : DEMO_DATA_ENABLED ? [demoLead] : [];
+  const safeTenants = tenants.length ? tenants : selectedTenantSeed.length ? selectedTenantSeed : DEMO_DATA_ENABLED ? [demoTenant] : [];
+  const safePolicyPacks = policyPacks.length ? policyPacks : DEMO_DATA_ENABLED ? [demoPolicyPack] : [];
   const selectedTenantId = resolveSelectedTenantId(params, [...safeTenants, ...selectedTenantSeed]);
   const shouldLoadSelectedTenant = Boolean(selectedTenantId && (needsSelectedTenant || requestedTenantId));
   const [selectedTenantResult, onboardingResult] = await Promise.all([
@@ -190,7 +191,7 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
       initialPanel={panel}
       initialMessage={normalizeParam(params.feedback) === "tenant-created" ? "Tenant created." : ""}
       leads={safeLeads}
-      onboarding={(onboardingResult?.data && "tenant_id" in onboardingResult.data ? onboardingResult.data : fallbackOnboarding())}
+      onboarding={(onboardingResult?.data && "tenant_id" in onboardingResult.data ? onboardingResult.data : DEMO_DATA_ENABLED ? fallbackOnboarding() : null)}
       policyPacks={safePolicyPacks}
       selectedTenant={(selectedTenantResult?.data && "id" in selectedTenantResult.data ? selectedTenantResult.data : safeTenants[0])}
       summary={summary}

@@ -1,0 +1,154 @@
+name: hrms-staging
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    env_file: .env.hrms
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 640m
+    cpus: 0.75
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "96mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 128m
+    cpus: 0.25
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    image: hrms-backend:${HRMS_RELEASE_COMMIT:?set HRMS_RELEASE_COMMIT}
+    restart: unless-stopped
+    env_file: .env.hrms
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose: ["8000"]
+    volumes:
+      - media-data:/app/media
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H 'X-Forwarded-Proto: https' http://localhost:8000/api/v1/health/ >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 12
+    mem_limit: 768m
+    cpus: 1.0
+
+  celery-worker:
+    image: hrms-backend:${HRMS_RELEASE_COMMIT:?set HRMS_RELEASE_COMMIT}
+    restart: unless-stopped
+    env_file: .env.hrms
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "false"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - media-data:/app/media
+    command: ["celery", "-A", "config", "worker", "-l", "INFO", "--concurrency", "1"]
+    mem_limit: 512m
+    cpus: 0.5
+
+  celery-beat:
+    image: hrms-backend:${HRMS_RELEASE_COMMIT:?set HRMS_RELEASE_COMMIT}
+    restart: unless-stopped
+    env_file: .env.hrms
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_NOTIFICATION_PROCESSOR_ENABLED: "true"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "false"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - media-data:/app/media
+    command: ["celery", "-A", "config", "beat", "-l", "INFO"]
+    mem_limit: 192m
+    cpus: 0.25
+
+  web:
+    build:
+      context: ../..
+      dockerfile: web/Dockerfile
+      args:
+        HRMS_API_BASE_URL: https://hrms.accerio.in/api/v1
+        HRMS_ENABLE_DEMO_DATA: "false"
+    image: hrms-web:${HRMS_RELEASE_COMMIT:?set HRMS_RELEASE_COMMIT}
+    restart: unless-stopped
+    env_file: .env.hrms
+    environment:
+      NODE_ENV: production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_API_BASE_URL: https://hrms.accerio.in/api/v1
+      HRMS_COOKIE_SECURE: "true"
+      HRMS_PUBLIC_APP_URL: https://hrms.accerio.in
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 20s
+      timeout: 8s
+      retries: 12
+    mem_limit: 768m
+    cpus: 1.0
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile.hrms:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    mem_limit: 128m
+    cpus: 0.25
+
+networks:
+  default:
+    name: hrms-staging-private
+
+volumes:
+  postgres-data:
+  redis-data:
+  media-data:
+  caddy-data:
+  caddy-config:

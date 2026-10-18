@@ -4,6 +4,7 @@ const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 const nextDistDir = process.env.NEXT_DIST_DIR ?? ".next/playwright";
 const skipWebServer = process.env.PLAYWRIGHT_SKIP_WEB_SERVER === "1";
+const browserChannel = process.env.PLAYWRIGHT_CHANNEL;
 const webServerEnv: Record<string, string> = {
   HRMS_ENABLE_DEMO_DATA: process.env.HRMS_ENABLE_DEMO_DATA ?? "true",
 };
@@ -53,6 +54,7 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
+        ...(browserChannel ? { channel: browserChannel } : {}),
         viewport: { width: 1280, height: 832 },
       },
     },

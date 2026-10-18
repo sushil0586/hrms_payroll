@@ -10,9 +10,13 @@ COPY packages packages
 RUN pnpm install --frozen-lockfile
 
 FROM node:24-slim AS builder
+ARG HRMS_API_BASE_URL
+ARG HRMS_ENABLE_DEMO_DATA=false
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV HRMS_API_BASE_URL=$HRMS_API_BASE_URL
+ENV HRMS_ENABLE_DEMO_DATA=$HRMS_ENABLE_DEMO_DATA
 WORKDIR /app
 RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
