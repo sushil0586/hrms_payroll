@@ -1,0 +1,12 @@
+{
+  "tenant_id": "ee693962-6641-4a0c-ad62-d211ee0531c1",
+  "employee_id": "3705dfac-0f19-44b7-8758-740ff3e1b12b",
+  "legal_entity_id": "d945bc65-e475-45be-b4cb-c97c40d55ee4",
+  "annual_policy_id": "97581d4b-6917-46b5-9d8d-fd126ecffd3b",
+  "source_period_id": "13667723-e836-4f0a-a95f-4e2a03e02bdf",
+  "target_period_id": "4c6dbabc-219e-47f1-8309-a06ebdffe568",
+  "calendar_policy_id": "76a6b1f3-26b5-4e59-a7b5-09b4d20eda5b",
+  "calendar_period_id": "3bdb4e49-86cb-4b54-b060-737fe43524ff",
+  "balance_id": "ea04d138-41b2-46cb-a1a5-8a5615b32803",
+  "opening_transaction_id": "48dd04cc-163c-47e4-bd7a-bb1a07399d5d"
+}

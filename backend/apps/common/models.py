@@ -43,6 +43,59 @@ class SoftDeleteModel(models.Model):
         self.save(update_fields=["is_active", "deleted_at"])
 
 
+class MutationIdempotencyStatus(models.TextChoices):
+    IN_PROGRESS = "in_progress", "In progress"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+
+
+class MutationIdempotencyRecord(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Canonical result for a client mutation retry.
+
+    Keys are globally unique so possession of a key created by another actor or
+    tenant can never create a second operation in a different scope.
+    """
+
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="mutation_idempotency_records",
+    )
+    actor = models.ForeignKey(
+        "iam.User",
+        on_delete=models.SET_NULL,
+        related_name="mutation_idempotency_records",
+        blank=True,
+        null=True,
+    )
+    actor_identifier = models.CharField(max_length=80)
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    action = models.CharField(max_length=120)
+    request_fingerprint = models.CharField(max_length=64)
+    status = models.CharField(
+        max_length=20,
+        choices=MutationIdempotencyStatus.choices,
+        default=MutationIdempotencyStatus.IN_PROGRESS,
+    )
+    response_status = models.PositiveSmallIntegerField(blank=True, null=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    resource_id = models.CharField(max_length=80, blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=1)
+    is_retryable = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "actor", "action", "-created_at"]),
+            models.Index(fields=["status", "expires_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.action}:{self.idempotency_key}:{self.status}"
+
+
 class HrmsLaunchRemediationStatus(models.TextChoices):
     OPEN = "open", "Open"
     CLOSED = "closed", "Closed"

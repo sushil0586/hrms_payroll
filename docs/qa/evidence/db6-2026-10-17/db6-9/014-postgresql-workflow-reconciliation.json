@@ -1,0 +1,81 @@
+{
+  "tenant_id": "82612ef9-6476-4b54-a409-4c2eee4e333e",
+  "employee_id": "dbebedc3-c554-4f94-a73b-695f422e93c8",
+  "current_manager_id": "c9f67039-99a2-458f-8e30-88b6688b0d16",
+  "leave_requests": [
+    {
+      "id": "2ab2e74f-115e-42d0-a69b-46d8c6092af3",
+      "status": "approved",
+      "reason": "PW_LEAVE_APPROVAL_1792244511865",
+      "workflow_reference": "db10727a-f5e8-4772-9166-e630a0c35fe2",
+      "approved_units": "1.00"
+    },
+    {
+      "id": "1700ca86-3159-44f6-a8bc-a1061de34672",
+      "status": "pending",
+      "reason": "Playwright manager queue",
+      "workflow_reference": "",
+      "approved_units": "0.00"
+    }
+  ],
+  "regularizations": [
+    {
+      "id": "1788dd0a-72d7-4b65-a4e0-bcca2033932e",
+      "status": "approved",
+      "attendance_record_id": "aae57341-7588-47a8-8a69-e5353dccbb89",
+      "requested_status": "remote",
+      "manager_comment": "PW_REG_APPROVAL_1792244535408_APPROVED"
+    },
+    {
+      "id": "bd384aca-1dd1-45d8-83de-95725673846e",
+      "status": "rejected",
+      "attendance_record_id": "ff4099ea-4927-4edc-85c1-f6685acef163",
+      "requested_status": "present",
+      "manager_comment": ""
+    }
+  ],
+  "ledger": [
+    {
+      "id": "4e387926-4327-43e3-8d05-8608ed18882b",
+      "action": "consumption",
+      "units": "1.00",
+      "delta_units": "-1.00",
+      "leave_request_id": "2ab2e74f-115e-42d0-a69b-46d8c6092af3",
+      "idempotency_key": "leave-request:2ab2e74f-115e-42d0-a69b-46d8c6092af3:consume:3b1222c6-2aef-4c6d-bea7-8140975fe65f"
+    },
+    {
+      "id": "25112ff1-a718-4661-9c53-b885efff39a2",
+      "action": "reservation_release",
+      "units": "1.00",
+      "delta_units": "1.00",
+      "leave_request_id": "2ab2e74f-115e-42d0-a69b-46d8c6092af3",
+      "idempotency_key": "leave-request:2ab2e74f-115e-42d0-a69b-46d8c6092af3:release:3b1222c6-2aef-4c6d-bea7-8140975fe65f"
+    },
+    {
+      "id": "af8fb4c4-06f8-4668-90c7-975ebe25e6ed",
+      "action": "reservation",
+      "units": "1.00",
+      "delta_units": "-1.00",
+      "leave_request_id": "2ab2e74f-115e-42d0-a69b-46d8c6092af3",
+      "idempotency_key": "leave-request:2ab2e74f-115e-42d0-a69b-46d8c6092af3:reserve:3b1222c6-2aef-4c6d-bea7-8140975fe65f"
+    },
+    {
+      "id": "07bffeee-563f-4efc-8c22-d5a33348c6ac",
+      "action": "accrual",
+      "units": "12.00",
+      "delta_units": "12.00",
+      "leave_request_id": null,
+      "idempotency_key": "accrual:06a720d3-aec2-4cd0-b66b-b58ea40742fb:2026-10-17"
+    },
+    {
+      "id": "2457afd1-4032-4280-9d37-99c64110b751",
+      "action": "opening",
+      "units": "12.00",
+      "delta_units": "12.00",
+      "leave_request_id": null,
+      "idempotency_key": "playwright:pw-qa-db69:leave-opening:QA-EMP-001:2026"
+    }
+  ],
+  "workflow_action_count": 4,
+  "open_assignment_count": 0
+}

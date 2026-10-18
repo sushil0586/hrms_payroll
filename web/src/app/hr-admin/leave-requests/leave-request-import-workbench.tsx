@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
-import type { HrAdminEmployeeOptionSearchResponse, HrAdminOptionItem, LeaveRequestItem } from "@/lib/types";
+import { submitImportRequest } from "@/lib/ui/import-request";
+import { useLatestEmployeeCodeResolution } from "@/lib/ui/use-latest-employee-code-resolution";
+import type { HrAdminOptionItem, LeaveRequestItem } from "@/lib/types";
 
 type Props = {
   requests: LeaveRequestItem[];
@@ -158,54 +161,18 @@ function sampleCsv(employees: HrAdminOptionItem[], leaveTypes: HrAdminOptionItem
   return `${headers.join(",")}\n${rows.map((row) => row.join(",")).join("\n")}`;
 }
 
-async function resolveEmployeesByCode(employeeCodes: string[]) {
-  const normalizedCodes = Array.from(new Set(employeeCodes.map(normalize).filter(Boolean)));
-  const prefix = normalizedCodes.reduce((left, right) => {
-    let index = 0;
-    while (index < left.length && left[index] === right[index]) index += 1;
-    return left.slice(0, index);
-  }, normalizedCodes[0] ?? "");
-  const lookup = new Map<string, HrAdminOptionItem>();
-  if (prefix.length >= 3) {
-    try {
-      const params = new URLSearchParams({ q: prefix, limit: "250" });
-      const response = await fetch(`/api/hr-admin/employees/option-search?${params.toString()}`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as HrAdminEmployeeOptionSearchResponse | { detail?: string } | null;
-      if (response.ok && payload && "items" in payload) {
-        for (const item of payload.items) lookup.set(normalize(item.employee_code ?? item.name), item);
-      }
-    } catch {
-      // Fall back to exact code lookups below.
-    }
-  }
-  const unresolvedCodes = normalizedCodes.filter((employeeCode) => !lookup.has(employeeCode));
-  const entries = await Promise.all(unresolvedCodes.map(async (employeeCode) => {
-    try {
-      const params = new URLSearchParams({ q: employeeCode, limit: "10" });
-      const response = await fetch(`/api/hr-admin/employees/option-search?${params.toString()}`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as HrAdminEmployeeOptionSearchResponse | { detail?: string } | null;
-      if (!response.ok || !payload || !("items" in payload)) return null;
-      const exactMatch = payload.items.find((item) => normalize(item.employee_code ?? item.name) === employeeCode);
-      return [employeeCode, exactMatch ?? payload.items[0] ?? null] as const;
-    } catch {
-      return null;
-    }
-  }));
-
-  for (const entry of entries) {
-    if (entry?.[1]) lookup.set(entry[0], entry[1]);
-  }
-  return lookup;
-}
-
 export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }: Props) {
+  const resolveLatestEmployeesByCode = useLatestEmployeeCodeResolution();
   const [csvText, setCsvText] = useState(templateCsv());
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [message, setMessage] = useState("");
+  const [lookupFailed, setLookupFailed] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const leaveTypesByName = useMemo(() => new Map(leaveTypes.map((leaveType) => [normalize(leaveType.name), leaveType])), [leaveTypes]);
   const readyCount = rows.filter((row) => row.status === "ready").length;
   const createdCount = rows.filter((row) => row.status === "created").length;
+  const hasFailedRows = rows.some((row) => row.status === "failed");
 
   async function preview() {
     const parsed = parseCsv(csvText);
@@ -214,10 +181,25 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
       setMessage(parsed.error);
       return;
     }
+    setIsPreviewing(true);
+    setLookupFailed(false);
+    setMessage("Resolving employee codes for preview...");
     const employeeCodes = Array.from(new Set(parsed.rows.map((row) => normalize(row.employee_code ?? "")).filter(Boolean)));
     const seededEmployeesByCode = new Map(employees.map((employee) => [normalize(employee.employee_code ?? employee.name), employee]));
     const missingEmployeeCodes = employeeCodes.filter((employeeCode) => !seededEmployeesByCode.has(employeeCode));
-    const resolvedEmployeesByCode = missingEmployeeCodes.length ? await resolveEmployeesByCode(missingEmployeeCodes) : new Map<string, HrAdminOptionItem>();
+    let resolvedEmployeesByCode: Map<string, HrAdminOptionItem> | null;
+    try {
+      resolvedEmployeesByCode = missingEmployeeCodes.length ? await resolveLatestEmployeesByCode(missingEmployeeCodes) : new Map<string, HrAdminOptionItem>();
+    } catch {
+      setIsPreviewing(false);
+      setLookupFailed(true);
+      setMessage("Employee lookup failed. Check your connection and preview the CSV again.");
+      return;
+    }
+    if (!resolvedEmployeesByCode) {
+      setIsPreviewing(false);
+      return;
+    }
     const resolvedEmployeeMap = new Map([...seededEmployeesByCode, ...resolvedEmployeesByCode]);
     const batchRanges = new Map<string, Array<{ start: string; end: string }>>();
     const nextRows = parsed.rows.map((row, index) => {
@@ -231,6 +213,7 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
       } satisfies ImportRow;
     });
     setRows(nextRows);
+    setIsPreviewing(false);
     setMessage("Preview ready. Commit ready leave requests after checking blocked rows.");
     await recordImportBatchAudit({
       import_type: "leave_requests",
@@ -247,15 +230,16 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
   }
 
   async function commitReadyRows() {
+    if (isCommitting) return;
     setIsCommitting(true);
     const nextRows = [...rows];
     const readyIndexes = nextRows.map((row, index) => ({ row, index })).filter(({ row }) => row.status === "ready" && row.payload).map(({ index }) => index);
-    const response = await fetch("/api/hr-admin/leave-requests/bulk-import", {
+    const response = await submitImportRequest("/api/hr-admin/leave-requests/bulk-import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rows: readyIndexes.map((index) => nextRows[index].payload) }),
     });
-    const payload = await response.json().catch(() => ({}));
+    const payload = response.payload;
     if (response.ok || response.status === 207) {
       const failedRows = new Map<number, string>((payload.errors ?? []).map((item: { row: number; message: unknown }) => [item.row, typeof item.message === "string" ? item.message : JSON.stringify(item.message)]));
       const createdRows = payload.created ?? [];
@@ -275,7 +259,9 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
     }
     setRows([...nextRows]);
     setIsCommitting(false);
-    setMessage("Commit complete. Open leave-attendance collisions or Time to Payroll to verify impact.");
+    setMessage(nextRows.some((row) => row.status === "failed")
+      ? "Some leave rows failed. Review the row messages, then preview the preserved CSV again."
+      : "Commit complete. Open leave-attendance collisions or Time to Payroll to verify impact.");
     await recordImportBatchAudit({
       import_type: "leave_requests",
       status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
@@ -322,13 +308,11 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
                 file.text().then(setCsvText);
               }} />
             </label>
-            <button className="button button--primary" type="button" onClick={preview}>Preview leave import</button>
-            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting} onClick={commitReadyRows}>
-              {isCommitting ? "Committing..." : "Commit ready leave rows"}
-            </button>
+            <AsyncActionButton className="button button--primary" type="button" pending={isPreviewing} pendingLabel="Resolving employee codes" onClick={preview}>Preview leave import</AsyncActionButton>
+            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount || isPreviewing} pending={isCommitting} pendingLabel="Committing leave rows" onClick={commitReadyRows}>Commit ready leave rows</AsyncActionButton>
           </div>
         </div>
-        {message ? <div className="notice notice--success" role="status"><strong>Leave import update completed.</strong><span>{message}</span></div> : null}
+        {message ? <div className={`notice${hasFailedRows || lookupFailed ? " notice--error" : " notice--success"}`} role={hasFailedRows || lookupFailed ? "alert" : "status"}><strong>{hasFailedRows || lookupFailed ? "Leave import needs attention." : "Leave import update completed."}</strong><span>{message}</span></div> : null}
         {rows.length ? (
           <div className="table-scroll">
             <table>

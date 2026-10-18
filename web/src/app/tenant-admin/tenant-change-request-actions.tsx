@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { performJsonMutation } from "@/lib/ui/json-mutation";
 import type { TenantAdminChangeRequestMutationResult, TenantAdminConsole } from "@/lib/types";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
@@ -134,6 +136,7 @@ export function TenantChangeRequestActions({
     !currentPayloadValidation.error;
 
   async function submitChangeRequest() {
+    if (busyRef) return;
     setBusyRef("create");
     setNotice("");
     const validation = validatePayloadText();
@@ -151,7 +154,7 @@ export function TenantChangeRequestActions({
       return;
     }
     setPayloadError("");
-    const response = await fetch("/api/tenant-admin/change-requests", {
+    const response = await performJsonMutation<TenantAdminChangeRequestMutationResult>("/api/tenant-admin/change-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -161,8 +164,8 @@ export function TenantChangeRequestActions({
         description: description.trim(),
         requested_payload: validation.payload,
       }),
-    });
-    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminChangeRequestMutationResult>;
+    }, "Unable to reach the change-request service. Check your connection and retry.");
+    const result = response.payload;
     setBusyRef("");
     if (!response.ok) {
       setNoticeTone("error");
@@ -180,17 +183,18 @@ export function TenantChangeRequestActions({
   }
 
   async function runRequestAction(requestId: string, action: "approve" | "reject" | "cancel" | "apply") {
+    if (busyRef) return;
     setBusyRef(`${requestId}:${action}`);
     setNotice("");
-    const response = await fetch(`/api/tenant-admin/change-requests/${requestId}`, {
+    const response = await performJsonMutation<TenantAdminChangeRequestMutationResult>(`/api/tenant-admin/change-requests/${requestId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action,
         decision_note: decisionNotes[requestId] ?? "",
       }),
-    });
-    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminChangeRequestMutationResult>;
+    }, "Unable to reach the change-request service. Check your connection and retry.");
+    const result = response.payload;
     setBusyRef("");
     if (!response.ok) {
       setNoticeTone("error");
@@ -288,9 +292,7 @@ export function TenantChangeRequestActions({
           </div>
         ) : null}
         <div className="tenant-membership-actions__footer">
-          <button className="button button--primary" disabled={!canSubmit} onClick={submitChangeRequest} type="button">
-            {busyRef === "create" ? "Submitting" : "Submit request"}
-          </button>
+          <AsyncActionButton className="button button--primary" disabled={!canSubmit} pending={busyRef === "create"} pendingLabel="Submitting change request" onClick={submitChangeRequest} type="button">Submit request</AsyncActionButton>
           {notice ? <span className={`tenant-inline-notice tenant-inline-notice--${noticeTone}`} role={noticeTone === "success" ? "status" : "alert"}>{notice}</span> : null}
         </div>
       </section>

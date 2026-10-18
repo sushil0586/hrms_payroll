@@ -1,0 +1,100 @@
+{
+  "tenant_id": "58f80ed2-bc61-4ebb-95c8-5c70e0938162",
+  "employee_id": "466e33e8-188b-4bfd-9d96-ad94b436b1a9",
+  "balance": {
+    "id": "b6fd901c-25c0-4869-ba44-169f1ba6d274",
+    "policy_period_id": "4113e913-c243-4850-883f-faf88e0e053e",
+    "opening_balance": "12.00",
+    "reserved_amount": "0.00",
+    "consumed_amount": "1.00",
+    "closing_balance": "23.00",
+    "ledger_version": "5",
+    "ledger_checksum": "ddfe7313220efcfc4075702cf37388a2f86308659a300a4dc312199f0d2593bc"
+  },
+  "leave_requests": [
+    {
+      "id": "b5bd41f7-a2c1-4248-a8be-27334cee6d0e",
+      "status": "approved",
+      "start_date": "2026-12-16",
+      "requested_units": "1.00",
+      "manager_comment": "PW_LEAVE_APPROVAL_1792243094193_APPROVED"
+    }
+  ],
+  "allocations": [
+    {
+      "leave_request_id": "b5bd41f7-a2c1-4248-a8be-27334cee6d0e",
+      "units": "1.00",
+      "status": "released",
+      "idempotency_key": "leave-request:b5bd41f7-a2c1-4248-a8be-27334cee6d0e:date:2026-12-16"
+    },
+    {
+      "leave_request_id": "b5bd41f7-a2c1-4248-a8be-27334cee6d0e",
+      "units": "1.00",
+      "status": "consumed",
+      "idempotency_key": "leave-request:b5bd41f7-a2c1-4248-a8be-27334cee6d0e:consume:4113e913-c243-4850-883f-faf88e0e053e:lot:077b16b5-aca7-4450-9788-4b8588abf27d"
+    }
+  ],
+  "ledger": [
+    {
+      "action": "consumption",
+      "units": "1.00",
+      "delta_units": "-1.00",
+      "leave_request_id": "b5bd41f7-a2c1-4248-a8be-27334cee6d0e",
+      "idempotency_key": "leave-request:b5bd41f7-a2c1-4248-a8be-27334cee6d0e:consume:4113e913-c243-4850-883f-faf88e0e053e",
+      "closing_balance_before": "24.00",
+      "closing_balance_after": "23.00"
+    },
+    {
+      "action": "reservation_release",
+      "units": "1.00",
+      "delta_units": "1.00",
+      "leave_request_id": "b5bd41f7-a2c1-4248-a8be-27334cee6d0e",
+      "idempotency_key": "leave-request:b5bd41f7-a2c1-4248-a8be-27334cee6d0e:release:4113e913-c243-4850-883f-faf88e0e053e",
+      "closing_balance_before": "23.00",
+      "closing_balance_after": "24.00"
+    },
+    {
+      "action": "reservation",
+      "units": "1.00",
+      "delta_units": "-1.00",
+      "leave_request_id": "b5bd41f7-a2c1-4248-a8be-27334cee6d0e",
+      "idempotency_key": "leave-request:b5bd41f7-a2c1-4248-a8be-27334cee6d0e:reserve:4113e913-c243-4850-883f-faf88e0e053e",
+      "closing_balance_before": "24.00",
+      "closing_balance_after": "23.00"
+    },
+    {
+      "action": "accrual",
+      "units": "12.00",
+      "delta_units": "12.00",
+      "leave_request_id": null,
+      "idempotency_key": "accrual:b6fd901c-25c0-4869-ba44-169f1ba6d274:2026-10-17",
+      "closing_balance_before": "12.00",
+      "closing_balance_after": "24.00"
+    },
+    {
+      "action": "opening",
+      "units": "12.00",
+      "delta_units": "12.00",
+      "leave_request_id": null,
+      "idempotency_key": "playwright:pw-qa-db68:leave-opening:QA-EMP-001:2026",
+      "closing_balance_before": "0.00",
+      "closing_balance_after": "12.00"
+    }
+  ],
+  "regularizations": [
+    {
+      "id": "f734c9e4-3818-433b-aef3-e509b87bd21f",
+      "status": "approved",
+      "attendance_record_id": "59efd8ad-ccc2-4804-917c-a757b4ac767e",
+      "requested_status": "remote",
+      "manager_comment": "PW_REG_APPROVAL_1792243117997_APPROVED"
+    }
+  ],
+  "attendance": [
+    {
+      "id": "59efd8ad-ccc2-4804-917c-a757b4ac767e",
+      "attendance_date": "2026-10-17",
+      "status": "remote"
+    }
+  ]
+}

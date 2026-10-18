@@ -1,5 +1,35 @@
 from django.urls import path
 
+from apps.common.retention_api import TenantGovernanceRequestView, TenantRetentionWorkspaceView
+from apps.common.attendance_close_api import (
+    HrAdminAttendanceCloseDetailView, HrAdminAttendanceCloseListCreateView, HrAdminAttendanceCloseTransitionView,
+)
+from apps.common.fiscal_api import (
+    AccountingPeriodListCreateView,
+    AccountingPeriodTransitionView,
+    FiscalCalendarDetailView,
+    FiscalCalendarListCreateView,
+    FiscalWorkspaceView,
+    FiscalYearListCreateView,
+    FiscalYearTransitionView,
+)
+
+from apps.common.leave_year_api import (
+    HrAdminLeaveHistoricalClassificationView,
+    HrAdminLeavePolicyPeriodListCreateView,
+    HrAdminLeavePolicyPeriodTransitionView,
+    HrAdminLeaveYearCloseRunDetailView,
+    HrAdminLeaveYearCloseRunListCreateView,
+    HrAdminLeaveYearPreviewView,
+    TenantAdminLeaveHistoricalClassificationView,
+    TenantAdminLeavePolicyPeriodListCreateView,
+    TenantAdminLeavePolicyPeriodTransitionView,
+    TenantAdminLeaveYearOptionsView,
+    TenantAdminLeaveYearCloseRunDetailView,
+    TenantAdminLeaveYearCloseRunListCreateView,
+    TenantAdminLeaveYearPreviewView,
+)
+
 from apps.common.api_views import (
     HrAdminAttendancePolicyDetailView,
     HrAdminAttendancePolicyDetachView,
@@ -60,6 +90,7 @@ from apps.common.api_views import (
     HrAdminShiftRosterRolloutListView,
     HrAdminShiftRosterTemplateRolloutView,
     HrAdminEmployeeFormOptionsView,
+    HrAdminEmploymentHistoryClassificationView,
     HrAdminEmployeeListView,
     HrAdminExitDetailView,
     HrAdminExitListCreateView,
@@ -116,6 +147,7 @@ from apps.common.api_views import (
     HrAdminOnboardingDetailView,
     HrAdminOnboardingListCreateView,
     HrAdminOrganizationFormOptionsView,
+    HrAdminOrganizationImportView,
     HrAdminOrganizationSectionDetailView,
     HrAdminOrganizationSectionListCreateView,
     HrAdminOrganizationSnapshotView,
@@ -302,6 +334,31 @@ from apps.common.api_views import (
 
 
 urlpatterns = [
+    path("hr-admin/attendance-closes/", HrAdminAttendanceCloseListCreateView.as_view()),
+    path("hr-admin/attendance-closes/<uuid:item_id>/", HrAdminAttendanceCloseDetailView.as_view()),
+    path("hr-admin/attendance-closes/<uuid:item_id>/<str:action>/", HrAdminAttendanceCloseTransitionView.as_view()),
+    path("tenant-admin/financial-calendars/", FiscalWorkspaceView.as_view(), name="tenant-admin-financial-calendars"),
+    path("tenant-admin/financial-calendars/calendars/", FiscalCalendarListCreateView.as_view(), name="tenant-admin-fiscal-calendar-create"),
+    path("tenant-admin/financial-calendars/calendars/<uuid:item_id>/", FiscalCalendarDetailView.as_view(), name="tenant-admin-fiscal-calendar-detail"),
+    path("tenant-admin/financial-calendars/years/", FiscalYearListCreateView.as_view(), name="tenant-admin-fiscal-year-create"),
+    path("tenant-admin/financial-calendars/years/<uuid:item_id>/transition/", FiscalYearTransitionView.as_view(), name="tenant-admin-fiscal-year-transition"),
+    path("tenant-admin/financial-calendars/periods/", AccountingPeriodListCreateView.as_view(), name="tenant-admin-accounting-period-create"),
+    path("tenant-admin/financial-calendars/periods/<uuid:item_id>/transition/", AccountingPeriodTransitionView.as_view(), name="tenant-admin-accounting-period-transition"),
+    path("tenant-admin/data-governance/", TenantRetentionWorkspaceView.as_view(), name="tenant-admin-data-governance"),
+    path("tenant-admin/data-governance/requests/", TenantGovernanceRequestView.as_view(), name="tenant-admin-data-governance-requests"),
+    path("hr-admin/leave-year/periods/", HrAdminLeavePolicyPeriodListCreateView.as_view(), name="hr-admin-leave-periods"),
+    path("hr-admin/leave-year/periods/<uuid:item_id>/transition/", HrAdminLeavePolicyPeriodTransitionView.as_view(), name="hr-admin-leave-period-transition"),
+    path("hr-admin/leave-year/preview/", HrAdminLeaveYearPreviewView.as_view(), name="hr-admin-leave-year-preview"),
+    path("hr-admin/leave-year/close-runs/", HrAdminLeaveYearCloseRunListCreateView.as_view(), name="hr-admin-leave-year-close-runs"),
+    path("hr-admin/leave-year/close-runs/<uuid:item_id>/", HrAdminLeaveYearCloseRunDetailView.as_view(), name="hr-admin-leave-year-close-run-detail"),
+    path("hr-admin/leave-year/historical-classification/", HrAdminLeaveHistoricalClassificationView.as_view(), name="hr-admin-leave-history-classification"),
+    path("tenant-admin/leave-year/periods/", TenantAdminLeavePolicyPeriodListCreateView.as_view(), name="tenant-admin-leave-periods"),
+    path("tenant-admin/leave-year/options/", TenantAdminLeaveYearOptionsView.as_view(), name="tenant-admin-leave-year-options"),
+    path("tenant-admin/leave-year/periods/<uuid:item_id>/transition/", TenantAdminLeavePolicyPeriodTransitionView.as_view(), name="tenant-admin-leave-period-transition"),
+    path("tenant-admin/leave-year/preview/", TenantAdminLeaveYearPreviewView.as_view(), name="tenant-admin-leave-year-preview"),
+    path("tenant-admin/leave-year/close-runs/", TenantAdminLeaveYearCloseRunListCreateView.as_view(), name="tenant-admin-leave-year-close-runs"),
+    path("tenant-admin/leave-year/close-runs/<uuid:item_id>/", TenantAdminLeaveYearCloseRunDetailView.as_view(), name="tenant-admin-leave-year-close-run-detail"),
+    path("tenant-admin/leave-year/historical-classification/", TenantAdminLeaveHistoricalClassificationView.as_view(), name="tenant-admin-leave-history-classification"),
     path("support/tenant-console/", SupportSessionTenantConsoleView.as_view(), name="support-session-tenant-console"),
     path("support/domain-snapshot/", SupportSessionDomainSnapshotView.as_view(), name="support-session-domain-snapshot"),
     path("tenant-admin/console/", TenantAdminConsoleView.as_view(), name="tenant-admin-console"),
@@ -528,6 +585,7 @@ urlpatterns = [
     path("hr-admin/probation-reviews/", HrAdminProbationReviewListCreateView.as_view(), name="hr-admin-probation-review-list-create"),
     path("hr-admin/probation-reviews/<uuid:item_id>/", HrAdminProbationReviewDetailView.as_view(), name="hr-admin-probation-review-detail"),
     path("hr-admin/movements/", HrAdminMovementListCreateView.as_view(), name="hr-admin-movement-list-create"),
+    path("hr-admin/employment-history/classification/", HrAdminEmploymentHistoryClassificationView.as_view(), name="hr-admin-employment-history-classification"),
     path("hr-admin/movements/<uuid:item_id>/", HrAdminMovementDetailView.as_view(), name="hr-admin-movement-detail"),
     path("hr-admin/exits/", HrAdminExitListCreateView.as_view(), name="hr-admin-exit-list-create"),
     path("hr-admin/exits/<uuid:item_id>/", HrAdminExitDetailView.as_view(), name="hr-admin-exit-detail"),
@@ -556,6 +614,7 @@ urlpatterns = [
     path("hr-admin/employees/<uuid:employee_id>/bank-accounts/<uuid:item_id>/", HrAdminEmployeeBankAccountDetailView.as_view(), name="hr-admin-employee-bank-account-detail"),
     path("hr-admin/employees/<uuid:employee_id>/", HrAdminEmployeeDetailView.as_view(), name="hr-admin-employee-detail"),
     path("hr-admin/organization/options/", HrAdminOrganizationFormOptionsView.as_view(), name="hr-admin-organization-form-options"),
+    path("hr-admin/organization/import/", HrAdminOrganizationImportView.as_view(), name="hr-admin-organization-import"),
     path("hr-admin/organization/<slug:section>/", HrAdminOrganizationSectionListCreateView.as_view(), name="hr-admin-organization-section-list-create"),
     path("hr-admin/organization/<slug:section>/<uuid:item_id>/", HrAdminOrganizationSectionDetailView.as_view(), name="hr-admin-organization-section-detail"),
     path("hr-admin/organization/", HrAdminOrganizationSnapshotView.as_view(), name="hr-admin-organization-snapshot"),

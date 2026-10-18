@@ -158,7 +158,7 @@ test.describe("Employee self service control center certification", () => {
     const uploadButton = page.getByRole("button", { name: "Upload document" }).first();
     if (await uploadButton.isEnabled().catch(() => false)) {
       await uploadButton.click();
-      const uploadDialog = page.getByRole("dialog", { name: "Upload document" });
+      const uploadDialog = page.getByRole("dialog", { name: /Upload document|Replace document/ });
       await expect(uploadDialog).toBeVisible();
       for (const label of ["Category", "Title", "Document number", "Issued on", "Expires on", "File"]) {
         await expect(uploadDialog.getByLabel(label).first(), `${label} should be available in the upload dialog`).toBeVisible();

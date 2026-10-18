@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -388,7 +390,7 @@ function LeaveApplyModal({
   leaveTypes: EssLeaveTypeOption[];
   onClose: () => void;
 }) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [leaveTypeId, setLeaveTypeId] = useState(leaveTypes[0]?.id ?? "");
   const [startDate, setStartDate] = useState(today);
@@ -473,10 +475,20 @@ function LeaveApplyModal({
       return;
     }
     setSubmitting(true);
+    const mutationScope = "ess.leave.submit";
+    const idempotencyKey = mutationIdempotencyKey(mutationScope, {
+      leave_type_id: leaveTypeId,
+      start_date: startDate,
+      end_date: endDate,
+      reason: String(formData.get("reason") ?? ""),
+      attachment_reference: evidenceReference,
+      attachment: selectedFile ? [selectedFile.name, selectedFile.size, selectedFile.lastModified] : null,
+    });
     let response: Response;
     try {
       response = await fetch("/api/me/leave-requests", {
         method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
         body: formData,
       });
     } catch {
@@ -496,15 +508,14 @@ function LeaveApplyModal({
       submittingRef.current = false;
       return;
     }
+    clearMutationIdempotencyKey(mutationScope);
     const message = "Leave request submitted. Refreshing your history.";
     setFeedback({ tone: "success", message });
     setToast({ title: "Submitted successfully.", message, tone: "success" });
     form.reset();
     submittingRef.current = false;
-    window.setTimeout(() => {
-      onClose();
-      router.refresh();
-    }, 900);
+    onClose();
+    refresh();
   }
 
   useEffect(() => {
@@ -619,9 +630,15 @@ function LeaveApplyModal({
             ) : null}
             <div className="form-actions-bar form-field--full">
               <span className="muted">After you submit, approval goes to your manager when required.</span>
-              <button className="button button--primary" disabled={submitting || !leaveTypes.length || !requestEstimate.valid || !evidenceReady || Boolean(overlappingRequest)} type="submit">
-                {submitting ? "Submitting..." : "Submit leave"}
-              </button>
+              <AsyncActionButton
+                className="button button--primary"
+                disabled={submitting || isRefreshing || !leaveTypes.length || !requestEstimate.valid || !evidenceReady || Boolean(overlappingRequest)}
+                pending={submitting || isRefreshing}
+                pendingLabel={isRefreshing ? "Refreshing leave history" : "Submitting leave"}
+                type="submit"
+              >
+                Submit leave
+              </AsyncActionButton>
             </div>
           </div>
           <aside className="leave-apply-summary" aria-label="Leave request summary">

@@ -1,0 +1,58 @@
+Traceback (most recent call last):
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/sql/query.py", line 2196, in add_fields
+    join_info = self.setup_joins(
+        name.split(LOOKUP_SEP), opts, alias, allow_many=allow_m2m
+    )
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/sql/query.py", line 1864, in setup_joins
+    path, final_field, targets, rest = self.names_to_path(
+                                       ~~~~~~~~~~~~~~~~~~^
+        names[:pivot],
+        ^^^^^^^^^^^^^^
+    ...<2 lines>...
+        fail_on_missing=True,
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/sql/query.py", line 1769, in names_to_path
+    raise FieldError(
+    ...<2 lines>...
+    )
+django.core.exceptions.FieldError: Cannot resolve keyword 'transaction_type' into field. Choices are: action, close_run, close_run_id, closing_balance_after, closing_balance_before, compensating_transactions, created_at, delta_units, effective_date, employee, employee_id, entitlement_lots, id, idempotency_key, leave_balance, leave_balance_id, leave_policy, leave_policy_id, leave_request, leave_request_id, metadata, performed_by, performed_by_id, policy_period, policy_period_id, reason, rejection_reason, reviewed_at, reviewed_by, reviewed_by_id, source_transaction, source_transaction_id, status, tenant, tenant_id, units, updated_at
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/manage.py", line 21, in <module>
+    main()
+    ~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/manage.py", line 17, in main
+    execute_from_command_line(sys.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+    ~~~~~~~~~~~~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/commands/shell.py", line 117, in handle
+    exec(options["command"], globals())
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 19, in <module>
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 1362, in values
+    clone = self._values(*fields, **expressions)
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 1357, in _values
+    clone.query.set_values(fields)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/sql/query.py", line 2501, in set_values
+    self.add_fields(field_names, True)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/sql/query.py", line 2224, in add_fields
+    raise FieldError(
+    ...<2 lines>...
+    )
+django.core.exceptions.FieldError: Cannot resolve keyword 'transaction_type' into field. Choices are: action, close_run, close_run_id, closing_balance_after, closing_balance_before, compensating_transactions, created_at, delta_units, effective_date, employee, employee_id, entitlement_lots, id, idempotency_key, leave_balance, leave_balance_id, leave_policy, leave_policy_id, leave_request, leave_request_id, metadata, performed_by, performed_by_id, policy_period, policy_period_id, reason, rejection_reason, reviewed_at, reviewed_by, reviewed_by_id, source_transaction, source_transaction_id, status, tenant, tenant_id, units, updated_at

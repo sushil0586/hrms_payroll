@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch } from "@/lib/types";
 
 type PayrollRegisterRow = {
@@ -146,8 +147,8 @@ export function PayrollRegisterReportWorkspace({
             <p className="section-copy section-copy-soft">Review locked register totals, publish state, source hashes, and downloadable payroll output before finance handoff.</p>
           </div>
           <div className="report-command-panel__actions">
-            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <AsyncDownloadButton href={exportHref} fileName="payroll-register.csv">Export filtered CSV</AsyncDownloadButton>
+            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="payroll-register-manifest.json">Manifest</AsyncDownloadButton>
             <button className="button button--ghost" type="button" onClick={() => window.print()}>Print report</button>
           </div>
         </div>
@@ -282,9 +283,9 @@ export function PayrollRegisterReportWorkspace({
                         Open
                       </Link>
                       {artifact.is_downloadable ? (
-                        <Link className="button button--ghost" href={`/api/hr-admin/payroll-output-artifacts/${artifact.id}/download`} prefetch={false}>
+                        <AsyncDownloadButton className="button button--ghost" href={`/api/hr-admin/payroll-output-artifacts/${artifact.id}/download`} fileName={artifact.file_name}>
                           Export
-                        </Link>
+                        </AsyncDownloadButton>
                       ) : null}
                     </div>
                   </td>

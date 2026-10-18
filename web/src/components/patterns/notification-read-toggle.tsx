@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 type Props = {
   endpoint: string;
@@ -11,19 +12,29 @@ type Props = {
 };
 
 export function NotificationReadToggle({ endpoint, isRead }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   async function handleToggle() {
+    if (isSubmitting || isRefreshing) return;
     setIsSubmitting(true);
     setError("");
-    const response = await fetch(endpoint, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ read_at: isRead ? null : new Date().toISOString() }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ read_at: isRead ? null : new Date().toISOString() }),
+      });
+    } catch {
+      const message = "Unable to reach the server. Check your connection and retry.";
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
+      setIsSubmitting(false);
+      return;
+    }
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       const message =
@@ -36,8 +47,8 @@ export function NotificationReadToggle({ endpoint, isRead }: Props) {
       return;
     }
     setToast({ title: "Action saved.", message: isRead ? "Notification marked unread." : "Notification marked read.", tone: "success" });
-    window.setTimeout(() => router.refresh(), 900);
     setIsSubmitting(false);
+    refresh();
   }
 
   useEffect(() => {
@@ -49,9 +60,7 @@ export function NotificationReadToggle({ endpoint, isRead }: Props) {
   return (
     <div className="record-card__actions">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <button className="button button--secondary" disabled={isSubmitting} onClick={handleToggle} type="button">
-        {isSubmitting ? "Saving..." : isRead ? "Mark unread" : "Mark read"}
-      </button>
+      <AsyncActionButton className="button button--secondary" pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification" : "Saving read state"} onClick={handleToggle} type="button">{isRead ? "Mark unread" : "Mark read"}</AsyncActionButton>
       {error ? <span className="muted">{error}</span> : null}
     </div>
   );

@@ -2032,7 +2032,9 @@ class PlatformTenantLaunchPreviewView(APIView):
     @transaction.atomic
     def post(self, request, item_id):
         tenant = _get_tenant_or_404(item_id)
-        onboarding = tenant.onboarding_record
+        # Serialize replay detection and launch creation for this tenant. The
+        # database constraint remains the final guard for bypass write paths.
+        onboarding = TenantOnboarding.objects.select_for_update().get(tenant=tenant)
         serializer = PlatformTenantLaunchPreviewRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data

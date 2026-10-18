@@ -1,5 +1,6 @@
 """Leave configuration, balances, and request models."""
 
+from django.conf import settings
 from django.db import models
 
 from apps.common.models import TimeStampedModel, UUIDPrimaryKeyModel
@@ -46,6 +47,32 @@ class LeaveRequestStatus(models.TextChoices):
     REJECTED = "rejected", "Rejected"
     CANCELLED = "cancelled", "Cancelled"
     WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+class LeavePolicyPeriodStatus(models.TextChoices):
+    PLANNED = "planned", "Planned"
+    OPEN = "open", "Open"
+    CLOSED = "closed", "Closed"
+    LOCKED = "locked", "Locked"
+
+
+class LeavePolicyPeriodAction(models.TextChoices):
+    CLOSE = "close", "Close"
+    REOPEN = "reopen", "Reopen"
+    LOCK = "lock", "Lock"
+
+
+class LeaveYearCloseRunStatus(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    RUNNING = "running", "Running"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+
+
+class LeaveYearCloseItemStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
 
 
 class LeaveDayPortion(models.TextChoices):
@@ -200,14 +227,144 @@ class LeavePolicyAssignment(UUIDPrimaryKeyModel, TimeStampedModel):
     )
     priority = models.PositiveIntegerField(default=100)
     is_active = models.BooleanField(default=True)
+    effective_from = models.DateField(blank=True, null=True)
+    effective_to = models.DateField(blank=True, null=True)
+    resolution_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["priority", "created_at"]
         verbose_name = "Leave Policy Assignment"
         verbose_name_plural = "Leave Policy Assignments"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(effective_to__isnull=True) | models.Q(effective_from__isnull=True) | models.Q(effective_to__gte=models.F("effective_from")),
+                name="leave_policy_assignment_dates_ordered",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.leave_policy} -> {self.tenant.code}"
+
+
+class LeavePolicyPeriod(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Persisted leave-year boundary for one effective policy scope."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="leave_policy_periods")
+    leave_policy = models.ForeignKey(LeavePolicy, on_delete=models.PROTECT, related_name="periods")
+    legal_entity = models.ForeignKey(
+        LegalEntity,
+        on_delete=models.PROTECT,
+        related_name="leave_policy_periods",
+        blank=True,
+        null=True,
+    )
+    code = models.CharField(max_length=60)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=LeavePolicyPeriodStatus.choices,
+        default=LeavePolicyPeriodStatus.PLANNED,
+    )
+    policy_snapshot = models.JSONField(default=dict, blank=True)
+    closed_at = models.DateTimeField(blank=True, null=True)
+    closed_by = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        related_name="closed_leave_policy_periods",
+        blank=True,
+        null=True,
+    )
+    reopened_at = models.DateTimeField(blank=True, null=True)
+    reopened_by = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        related_name="reopened_leave_policy_periods",
+        blank=True,
+        null=True,
+    )
+    reopen_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["leave_policy", "start_date", "legal_entity"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["leave_policy", "legal_entity", "code"],
+                name="uniq_leave_policy_period_scope_code",
+            ),
+        ]
+
+
+class LeaveYearCloseRun(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Durable, resumable and tenant-scoped leave-year rollover command."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="leave_year_close_runs")
+    leave_policy = models.ForeignKey(LeavePolicy, on_delete=models.PROTECT, related_name="year_close_runs")
+    source_period = models.ForeignKey(
+        LeavePolicyPeriod,
+        on_delete=models.PROTECT,
+        related_name="source_close_runs",
+    )
+    target_period = models.ForeignKey(
+        LeavePolicyPeriod,
+        on_delete=models.PROTECT,
+        related_name="target_close_runs",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=LeaveYearCloseRunStatus.choices,
+        default=LeaveYearCloseRunStatus.QUEUED,
+    )
+    idempotency_key = models.CharField(max_length=160)
+    requested_by = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        related_name="requested_leave_year_close_runs",
+        blank=True,
+        null=True,
+    )
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    scheduled_for = models.DateTimeField(blank=True, null=True)
+    dispatched_at = models.DateTimeField(blank=True, null=True)
+    celery_task_id = models.CharField(max_length=255, blank=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    processed_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    request_snapshot = models.JSONField(default=dict, blank=True)
+    result_snapshot = models.JSONField(default=dict, blank=True)
+    error_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "idempotency_key"], name="uniq_leave_year_close_command"),
+        ]
+
+
+class LeavePolicyPeriodStatusEvent(UUIDPrimaryKeyModel, TimeStampedModel):
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="leave_policy_period_status_events")
+    policy_period = models.ForeignKey(LeavePolicyPeriod, on_delete=models.PROTECT, related_name="status_events")
+    action = models.CharField(max_length=20, choices=LeavePolicyPeriodAction.choices)
+    previous_status = models.CharField(max_length=20, choices=LeavePolicyPeriodStatus.choices)
+    next_status = models.CharField(max_length=20, choices=LeavePolicyPeriodStatus.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="leave_policy_period_status_events",
+    )
+    reason = models.TextField()
+    idempotency_key = models.CharField(max_length=160)
+    authorization_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "idempotency_key"],
+                name="uniq_leave_period_status_command",
+            ),
+        ]
 
 
 class LeaveBalance(UUIDPrimaryKeyModel, TimeStampedModel):
@@ -228,6 +385,13 @@ class LeaveBalance(UUIDPrimaryKeyModel, TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="leave_balances",
     )
+    policy_period = models.ForeignKey(
+        LeavePolicyPeriod,
+        on_delete=models.PROTECT,
+        related_name="leave_balances",
+        blank=True,
+        null=True,
+    )
     period_year = models.PositiveIntegerField()
     opening_balance = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     accrued_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
@@ -236,7 +400,11 @@ class LeaveBalance(UUIDPrimaryKeyModel, TimeStampedModel):
     carry_forward_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     encashed_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     adjustment_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    expired_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    forfeited_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     closing_balance = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    ledger_version = models.PositiveIntegerField(default=0)
+    ledger_checksum = models.CharField(max_length=64, blank=True)
 
     class Meta:
         ordering = ["employee", "period_year", "leave_policy"]
@@ -252,9 +420,20 @@ class LeaveBalanceTransaction(UUIDPrimaryKeyModel, TimeStampedModel):
     """Audit ledger for leave balance mutations."""
 
     class ActionType(models.TextChoices):
+        OPENING = "opening", "Opening"
+        ACCRUAL = "accrual", "Accrual"
+        RESERVATION = "reservation", "Reservation"
+        RESERVATION_RELEASE = "reservation_release", "Reservation Release"
+        CONSUMPTION = "consumption", "Consumption"
+        CONSUMPTION_REVERSAL = "consumption_reversal", "Consumption Reversal"
         CREDIT_ADJUSTMENT = "credit_adjustment", "Credit Adjustment"
         DEBIT_ADJUSTMENT = "debit_adjustment", "Debit Adjustment"
+        CARRY_FORWARD = "carry_forward", "Carry Forward"
+        EXPIRY = "expiry", "Expiry"
+        FORFEITURE = "forfeiture", "Forfeiture"
         ENCASHMENT = "encashment", "Encashment"
+        ENCASHMENT_REVERSAL = "encashment_reversal", "Encashment Reversal"
+        CORRECTION = "correction", "Correction"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending Review"
@@ -281,9 +460,39 @@ class LeaveBalanceTransaction(UUIDPrimaryKeyModel, TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="leave_balance_transactions",
     )
+    policy_period = models.ForeignKey(
+        LeavePolicyPeriod,
+        on_delete=models.PROTECT,
+        related_name="transactions",
+        blank=True,
+        null=True,
+    )
+    close_run = models.ForeignKey(
+        LeaveYearCloseRun,
+        on_delete=models.PROTECT,
+        related_name="transactions",
+        blank=True,
+        null=True,
+    )
+    leave_request = models.ForeignKey(
+        "LeaveRequest",
+        on_delete=models.PROTECT,
+        related_name="balance_transactions",
+        blank=True,
+        null=True,
+    )
+    source_transaction = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="compensating_transactions",
+        blank=True,
+        null=True,
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.APPLIED)
     action = models.CharField(max_length=30, choices=ActionType.choices)
     units = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    delta_units = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    idempotency_key = models.CharField(max_length=180, blank=True, null=True)
     effective_date = models.DateField()
     reason = models.TextField(blank=True)
     performed_by = models.ForeignKey(
@@ -310,6 +519,13 @@ class LeaveBalanceTransaction(UUIDPrimaryKeyModel, TimeStampedModel):
         ordering = ["-created_at"]
         verbose_name = "Leave Balance Transaction"
         verbose_name_plural = "Leave Balance Transactions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "idempotency_key"],
+                condition=models.Q(idempotency_key__isnull=False),
+                name="uniq_leave_ledger_command",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.leave_balance} - {self.action} - {self.units}"
@@ -363,3 +579,86 @@ class LeaveRequest(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.employee} - {self.leave_type.name} - {self.start_date}"
+
+
+class LeaveYearCloseItem(UUIDPrimaryKeyModel, TimeStampedModel):
+    close_run = models.ForeignKey(LeaveYearCloseRun, on_delete=models.PROTECT, related_name="items")
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="leave_year_close_items")
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="leave_year_close_items")
+    source_balance = models.ForeignKey(
+        LeaveBalance,
+        on_delete=models.PROTECT,
+        related_name="source_close_items",
+    )
+    target_balance = models.ForeignKey(
+        LeaveBalance,
+        on_delete=models.PROTECT,
+        related_name="target_close_items",
+        blank=True,
+        null=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=LeaveYearCloseItemStatus.choices,
+        default=LeaveYearCloseItemStatus.PENDING,
+    )
+    carry_forward_units = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    forfeited_units = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    result_snapshot = models.JSONField(default=dict, blank=True)
+    error_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["close_run", "employee"], name="uniq_leave_close_employee"),
+        ]
+
+
+class LeaveEntitlementLot(UUIDPrimaryKeyModel, TimeStampedModel):
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="leave_entitlement_lots")
+    leave_balance = models.ForeignKey(LeaveBalance, on_delete=models.PROTECT, related_name="entitlement_lots")
+    policy_period = models.ForeignKey(LeavePolicyPeriod, on_delete=models.PROTECT, related_name="entitlement_lots")
+    source_transaction = models.ForeignKey(
+        LeaveBalanceTransaction,
+        on_delete=models.PROTECT,
+        related_name="entitlement_lots",
+    )
+    granted_units = models.DecimalField(max_digits=8, decimal_places=2)
+    remaining_units = models.DecimalField(max_digits=8, decimal_places=2)
+    effective_date = models.DateField()
+    expiry_date = models.DateField(blank=True, null=True)
+    priority = models.PositiveIntegerField(default=100)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["expiry_date", "effective_date", "priority", "created_at"]
+
+
+class LeaveRequestAllocation(UUIDPrimaryKeyModel, TimeStampedModel):
+    class Status(models.TextChoices):
+        RESERVED = "reserved", "Reserved"
+        CONSUMED = "consumed", "Consumed"
+        RELEASED = "released", "Released"
+        REVERSED = "reversed", "Reversed"
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="leave_request_allocations")
+    leave_request = models.ForeignKey(LeaveRequest, on_delete=models.PROTECT, related_name="allocations")
+    leave_balance = models.ForeignKey(LeaveBalance, on_delete=models.PROTECT, related_name="request_allocations")
+    policy_period = models.ForeignKey(LeavePolicyPeriod, on_delete=models.PROTECT, related_name="request_allocations")
+    entitlement_lot = models.ForeignKey(
+        LeaveEntitlementLot,
+        on_delete=models.PROTECT,
+        related_name="request_allocations",
+        blank=True,
+        null=True,
+    )
+    allocation_date = models.DateField()
+    units = models.DecimalField(max_digits=8, decimal_places=2)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RESERVED)
+    idempotency_key = models.CharField(max_length=180)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["allocation_date", "created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "idempotency_key"], name="uniq_leave_request_allocation_command"),
+        ]

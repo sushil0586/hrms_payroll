@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
       Authorization: `Token ${token}`,
       "Content-Type": "application/json",
       "X-Request-ID": request.headers.get("x-request-id") ?? "",
+      "Idempotency-Key": request.headers.get("idempotency-key") ?? "",
     },
     body: JSON.stringify(body),
     cache: "no-store",

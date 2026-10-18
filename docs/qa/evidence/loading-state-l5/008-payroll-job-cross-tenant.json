@@ -1,0 +1,11 @@
+{
+  "tenant_a": "pw-qa-l5-job-isolation-a",
+  "tenant_b": "pw-qa-l5-job-isolation-b",
+  "job_id": "3780cb50-6408-43fd-ab9e-05bce43d88a8",
+  "same_tenant_http": 200,
+  "same_tenant_job_status": "queued",
+  "cross_tenant_status_http": 404,
+  "cross_tenant_status_detail": "Payroll background job not found.",
+  "cross_tenant_retry_http": 404,
+  "cross_tenant_retry_detail": "Payroll background job not found."
+}

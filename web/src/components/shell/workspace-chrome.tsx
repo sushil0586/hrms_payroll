@@ -7,6 +7,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LogoutButton } from "@/app/components/logout-button";
 import { payrollCycleOperationalHrefs } from "@/lib/ui/navigation";
 
+import { useWorkspaceNavigationFeedback, WorkspaceNavigationFeedback } from "./workspace-navigation-feedback";
+
 export type WorkspaceNavItem = {
   href: string;
   label: string;
@@ -111,14 +113,14 @@ function WorkspaceSearch({
   quickLinks,
   searchDestinations,
   searchHint,
-  router,
 }: {
   groups: WorkspaceNavGroup[];
   quickLinks: Array<{ href: string; label: string }>;
   searchDestinations: WorkspaceSearchDestination[];
   searchHint: string;
-  router: ReturnType<typeof useRouter>;
 }) {
+  const navigate = useWorkspaceNavigationFeedback();
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -184,9 +186,9 @@ function WorkspaceSearch({
   }, []);
 
   function openResult(href: string) {
+    navigate(href, results.find((item) => item.href === href)?.label || "workspace page", inputRef.current);
     setIsOpen(false);
     setQuery("");
-    router.push(href);
   }
 
   return (
@@ -277,6 +279,7 @@ export function WorkspaceChrome({
   }, [prefetchItems, quickLinks, router]);
 
   return (
+    <WorkspaceNavigationFeedback>
     <div className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}`}>
       <aside className="app-sidebar app-sidebar--workspace">
         <div className="app-sidebar__brand">
@@ -327,7 +330,7 @@ export function WorkspaceChrome({
             <strong>{workspaceLabel}</strong>
           </div>
 
-          <WorkspaceSearch groups={groups} quickLinks={quickLinks} router={router} searchDestinations={searchDestinations} searchHint={searchHint} />
+          <WorkspaceSearch groups={groups} quickLinks={quickLinks} searchDestinations={searchDestinations} searchHint={searchHint} />
 
           <div className="topbar-actions topbar-actions--workspace">
             <details className="mobile-workspace-nav">
@@ -399,5 +402,6 @@ export function WorkspaceChrome({
         <div className="app-content app-content--workspace">{children}</div>
       </div>
     </div>
+    </WorkspaceNavigationFeedback>
   );
 }

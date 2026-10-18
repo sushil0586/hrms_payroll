@@ -9,7 +9,7 @@ from copy import deepcopy
 from datetime import date, timedelta
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -2465,7 +2465,7 @@ def create_support_access_grant(tenant, *, actor_identifier: str, payload: dict)
 
 
 def update_support_access_grant(tenant, item_id, *, actor_identifier: str, payload: dict) -> dict:
-    item = SaasSupportAccessGrant.objects.filter(tenant=tenant, id=item_id).first()
+    item = SaasSupportAccessGrant.objects.select_for_update().filter(tenant=tenant, id=item_id).first()
     if not item:
         raise ValueError("Support access grant not found.")
     action = payload["action"]
@@ -2613,6 +2613,7 @@ def evaluate_support_access_session(
     request_path: str = "",
     method: str = "GET",
     record_event: bool = True,
+    lock_grant: bool = False,
 ) -> dict:
     actor_identifier = _support_access_actor_identifier(user)
     normalized_session_ref = (session_ref or "").strip()
@@ -2649,8 +2650,13 @@ def evaluate_support_access_session(
             _record_support_access_runtime_event(tenant, event_type="support_access_session_denied", actor_identifier=actor_identifier, decision=decision)
         return decision
 
+    grant_queryset = SaasSupportAccessGrant.objects.filter(tenant=tenant, session_ref=normalized_session_ref)
+    if lock_grant:
+        if not transaction.get_connection().in_atomic_block:
+            raise RuntimeError("Locking support access evaluation requires an active transaction.")
+        grant_queryset = grant_queryset.select_for_update()
     grant = (
-        SaasSupportAccessGrant.objects.filter(tenant=tenant, session_ref=normalized_session_ref)
+        grant_queryset
         .order_by("-started_at", "-approved_at", "-requested_at")
         .first()
     )
@@ -3151,6 +3157,29 @@ def update_saas_commercial_subscription(
         subscription_plan = subscription_plan.strip()
         if subscription_plan and subscription_plan not in plans:
             raise ValueError("Subscription plan is not configured in the SaaS commercial profile.")
+        current_plan_ref = str(tenant.subscription_plan or "")
+        current_plan = plans.get(current_plan_ref) if isinstance(plans.get(current_plan_ref), dict) else {}
+        target_plan = plans.get(subscription_plan) if isinstance(plans.get(subscription_plan), dict) else {}
+        if subscription_plan and subscription_plan != current_plan_ref:
+            current_entitlements = current_plan.get("entitlements") if isinstance(current_plan.get("entitlements"), dict) else {}
+            target_entitlements = target_plan.get("entitlements") if isinstance(target_plan.get("entitlements"), dict) else {}
+            removed_entitlements = sorted(
+                key for key, enabled in current_entitlements.items() if enabled and not target_entitlements.get(key)
+            )
+            current_limits = current_plan.get("usage_limits") if isinstance(current_plan.get("usage_limits"), dict) else {}
+            target_limits = target_plan.get("usage_limits") if isinstance(target_plan.get("usage_limits"), dict) else {}
+            reduced_limits = sorted(
+                key
+                for key, current_value in current_limits.items()
+                if isinstance(current_value, int)
+                and isinstance(target_limits.get(key), int)
+                and (current_value == 0 or target_limits[key] < current_value)
+                and target_limits[key] != 0
+            )
+            if removed_entitlements or reduced_limits:
+                raise ValueError(
+                    "Subscription downgrade is unavailable until enforcement, active-workflow, and data-retention policy is approved."
+                )
         if subscription_plan:
             tenant.subscription_plan = subscription_plan
             tenant.save(update_fields=["subscription_plan", "updated_at"])

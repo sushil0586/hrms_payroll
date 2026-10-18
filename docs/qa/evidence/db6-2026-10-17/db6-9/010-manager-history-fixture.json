@@ -1,0 +1,12 @@
+{
+  "employee_id": "dbebedc3-c554-4f94-a73b-695f422e93c8",
+  "manager_a_id": "72a46adc-c2b5-4da7-a858-c9536c5fed89",
+  "manager_b_id": "c9f67039-99a2-458f-8e30-88b6688b0d16",
+  "baseline_assignment_id": "b825bb6c-c08e-4a7d-a95d-0ef90ba6a45e",
+  "current_assignment_id": "3f3c2923-ee1b-4630-8502-2f24b70cb324",
+  "movement_id": "44b5e93e-b0c1-4511-bee5-73810df5c456",
+  "as_of_previous_manager": "72a46adc-c2b5-4da7-a858-c9536c5fed89",
+  "as_of_current_manager": "c9f67039-99a2-458f-8e30-88b6688b0d16",
+  "projected_manager": "c9f67039-99a2-458f-8e30-88b6688b0d16",
+  "effective_date": "2026-10-17"
+}

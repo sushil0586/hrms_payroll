@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { useMemo, useState } from "react";
 
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch, HrAdminPayrollRun } from "@/lib/types";
@@ -182,8 +184,8 @@ export function PayslipPublicationReportWorkspace({
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => row.accessRisk === "High").length}</strong> high risk</span>
           <span className="queue-summary-chip"><strong>{filteredRows.reduce((sum, row) => sum + row.artifact.access_summary.download_count, 0)}</strong> downloads</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+          <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
+          <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
         <div className="report-catalog-table-wrap">

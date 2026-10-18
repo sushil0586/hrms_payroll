@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils import timezone
 
 from apps.iam.models import TenantMembership
@@ -123,6 +125,15 @@ def create_workflow_instance(
     """Creates a workflow instance and seeds step assignments when possible."""
 
     template = _get_active_template(tenant, module, trigger_key)
+    requested_steps = approval_steps or []
+    if any((step.get("mode") or WorkflowStepMode.SEQUENTIAL) != WorkflowStepMode.SEQUENTIAL for step in requested_steps):
+        raise ValidationError(
+            {"approval_steps": "Parallel approval is unavailable until quorum and mixed-decision rules are approved."}
+        )
+    if template and template.steps.exclude(mode=WorkflowStepMode.SEQUENTIAL).exists():
+        raise ValidationError(
+            {"template": "Parallel approval is unavailable until quorum and mixed-decision rules are approved."}
+        )
     instance = WorkflowInstance.objects.create(
         tenant=tenant,
         template=template,
@@ -175,12 +186,31 @@ def create_workflow_instance(
     return instance
 
 
+@transaction.atomic
 def resolve_workflow_action(*, instance: WorkflowInstance, actor_identifier: str, action: str, comment: str = "") -> WorkflowInstance:
     """Applies a simple approve/reject action to a workflow instance."""
 
-    current_step = instance.step_instances.order_by("step_order").filter(status__in=["pending", "in_progress"]).first()
+    supported_actions = {WorkflowAction.APPROVE, WorkflowAction.REJECT, WorkflowAction.CANCEL}
+    if action not in supported_actions:
+        raise ValidationError(
+            {"action": "This workflow action is unavailable until its authority and lifecycle policy is approved."}
+        )
+    instance = WorkflowInstance.objects.select_for_update().get(pk=instance.pk)
+    current_step = (
+        WorkflowStepInstance.objects.select_for_update()
+        .filter(workflow_instance=instance, status__in=["pending", "in_progress"])
+        .order_by("step_order")
+        .first()
+    )
     if not current_step:
-        return instance
+        terminal_action_statuses = {
+            WorkflowAction.APPROVE: WorkflowInstanceStatus.APPROVED,
+            WorkflowAction.REJECT: WorkflowInstanceStatus.REJECTED,
+            WorkflowAction.CANCEL: WorkflowInstanceStatus.CANCELLED,
+        }
+        if terminal_action_statuses.get(action) == instance.status:
+            return instance
+        raise ValidationError({"action": "This workflow has already been resolved with a different outcome."})
     previous_instance_status = instance.status
     current_step.resolved_action = action
     current_step.resolution_comment = comment
@@ -188,7 +218,9 @@ def resolve_workflow_action(*, instance: WorkflowInstance, actor_identifier: str
     if action == WorkflowAction.APPROVE:
         current_step.status = WorkflowInstanceStatus.APPROVED
         next_step = (
-            instance.step_instances.order_by("step_order")
+            WorkflowStepInstance.objects.select_for_update()
+            .filter(workflow_instance=instance)
+            .order_by("step_order")
             .filter(step_order__gt=current_step.step_order)
             .first()
         )

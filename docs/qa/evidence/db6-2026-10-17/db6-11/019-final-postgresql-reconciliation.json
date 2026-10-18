@@ -1,0 +1,133 @@
+{
+  "run": {
+    "id": "b6e2a670-c719-4258-88a9-02002844e7f4",
+    "code": "DB610_1792248389983",
+    "status": "locked",
+    "tenant_id": "883d125c-89d9-4a98-8f78-716871d6224a"
+  },
+  "batch": {
+    "id": "b74b8917-69fa-465f-9d91-fa488c44d8dc",
+    "status": "published",
+    "published_at": "2026-10-17T14:47:38.018547+00:00",
+    "reconciliation": {
+      "status": "passed",
+      "mismatches": [],
+      "payslip_count": 1,
+      "checked_fields": [
+        "gross_earnings",
+        "employee_deductions",
+        "employer_contributions",
+        "net_pay"
+      ],
+      "mismatch_count": 0,
+      "register_row_count": 1,
+      "matched_employee_count": 1,
+      "missing_register_row_count": 0
+    }
+  },
+  "handoff": {
+    "id": "0c7e5e10-edd8-40fc-a92c-870abe95619b",
+    "status": "generated"
+  },
+  "comparisons": {
+    "gross_earnings": {
+      "batch": "50000.00",
+      "handoff": "50000.00",
+      "match": true
+    },
+    "employee_deductions": {
+      "batch": "0.00",
+      "handoff": "0.00",
+      "match": true
+    },
+    "net_pay": {
+      "batch": "50000.00",
+      "handoff": "50000.00",
+      "match": true
+    },
+    "employee_count": {
+      "batch": 1,
+      "handoff": 1,
+      "match": true
+    }
+  },
+  "all_documented_totals_match": true,
+  "bank_advice_total_matches_net_pay": true,
+  "artifacts": [
+    {
+      "id": "f84628c8-387c-46be-a665-f5fb3b284cc1",
+      "kind": "accounting_export",
+      "status": "generated",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 454,
+      "checksum_sha256": "77b9d40a7c079d0c18e96d1dbf5ebb07ea4f5dfa8fcf23902c064943e7164730"
+    },
+    {
+      "id": "72b3665d-8a33-499e-b292-fcebb0a2a408",
+      "kind": "bank_advice",
+      "status": "generated",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 243,
+      "checksum_sha256": "f1d87f04fb7645d81225c3abe269d0c829628311b05c69af94cbaa4708636c0c"
+    },
+    {
+      "id": "0f21ce64-38d6-44ff-bbde-6bb27d28b4fa",
+      "kind": "payslip",
+      "status": "published",
+      "employee_id": "9a97908e-8669-4a69-8928-d54ef271e408",
+      "is_downloadable": true,
+      "file_size_bytes": 926,
+      "checksum_sha256": "5f0dfd41f4f6d3bb9ed940f5999c309409407d45b021772f213e9ec1bc82bb13"
+    },
+    {
+      "id": "6d2c0f0c-f1e9-4e21-9e2d-a9cc77d24486",
+      "kind": "register",
+      "status": "published",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 343,
+      "checksum_sha256": "9acb56b717fe4dbb9322828d16dd26382816d97886b7809053a180a29c7e3b4e"
+    },
+    {
+      "id": "17cd020d-84c1-430d-b8ab-cc882efee631",
+      "kind": "statutory_report",
+      "status": "generated",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 0,
+      "checksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "c2f5da7e-f92f-4ff0-a2b0-063dac4060de",
+      "operation": "calculate",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:46:56.379973+00:00"
+    },
+    {
+      "id": "450b2891-7cf2-4508-9ba4-0a74ae4fff8b",
+      "operation": "generate_outputs",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:47:25.969514+00:00"
+    },
+    {
+      "id": "1b4f295e-a877-46b6-b81f-9e5ef6051cc3",
+      "operation": "publish_outputs",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:47:38.339747+00:00"
+    },
+    {
+      "id": "a22b5274-0540-484c-bb18-24a92c472c42",
+      "operation": "generate_finance_handoff",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:47:45.843621+00:00"
+    }
+  ]
+}

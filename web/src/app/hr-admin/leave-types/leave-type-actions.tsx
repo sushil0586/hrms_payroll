@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import type { HrAdminLeaveTypeImpact } from "@/lib/types";
 
 type Props = {
@@ -19,7 +20,7 @@ function errorMessage(payload: unknown) {
 }
 
 export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [impact, setImpact] = useState<HrAdminLeaveTypeImpact | null>(null);
   const [isLoadingImpact, setIsLoadingImpact] = useState(false);
@@ -34,21 +35,27 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
     setError("");
     setSuccessMessage("");
     setIsLoadingImpact(true);
-    const response = await fetch(`/api/hr-admin/leave-types/${leaveTypeId}/impact`);
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = errorMessage(payload);
+    try {
+      const response = await fetch(`/api/hr-admin/leave-types/${leaveTypeId}/impact`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = errorMessage(payload);
+        setError(message);
+        setToast({ title: "Action failed.", message, tone: "error" });
+        return;
+      }
+      setImpact(payload as HrAdminLeaveTypeImpact);
+    } catch {
+      const message = "Unable to reach the server. Check your connection and try again.";
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
+    } finally {
       setIsLoadingImpact(false);
-      return;
     }
-    setImpact(payload as HrAdminLeaveTypeImpact);
-    setIsLoadingImpact(false);
   }
 
   function closeDialog() {
-    if (isSubmitting) return;
+    if (isSubmitting || isRefreshing) return;
     setDialogOpen(false);
     setImpact(null);
     setError("");
@@ -63,25 +70,31 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
   async function submit(action: "deactivate" | "delete") {
     setIsSubmitting(true);
     setError("");
-    const response = await fetch(`/api/hr-admin/leave-types/${leaveTypeId}/${action}`, {
-      method: action === "delete" ? "DELETE" : "POST",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = errorMessage(payload);
-      setImpact((payload as HrAdminLeaveTypeImpact) ?? impact);
+    try {
+      const response = await fetch(`/api/hr-admin/leave-types/${leaveTypeId}/${action}`, {
+        method: action === "delete" ? "DELETE" : "POST",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = errorMessage(payload);
+        setImpact((payload as HrAdminLeaveTypeImpact) ?? impact);
+        setError(message);
+        setToast({ title: "Action failed.", message, tone: "error" });
+        return;
+      }
+      const message = action === "delete" ? "Leave type deleted." : "Leave type deactivated.";
+      setSuccessMessage(message);
+      setToast({ title: "Leave type updated.", message, tone: "success" });
+      setDialogOpen(false);
+      setImpact(null);
+      refresh();
+    } catch {
+      const message = "Unable to reach the server. Check your connection and try again.";
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-    const message = action === "delete" ? "Leave type deleted." : "Leave type deactivated.";
-    setSuccessMessage(message);
-    setToast({ title: "Leave type updated.", message, tone: "success" });
-    setIsSubmitting(false);
-    setDialogOpen(false);
-    setImpact(null);
-    window.setTimeout(() => router.refresh(), 900);
   }
 
   return (
@@ -121,12 +134,8 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
             <div className="form-actions-bar">
               <span className="muted">Deactivate hides this leave type from new use while keeping linked history intact.</span>
               <div className="form-actions-bar__buttons">
-                <button className="button button--secondary" disabled={isSubmitting || !impact?.can_deactivate || !isActive} onClick={() => submit("deactivate")} type="button">
-                  {isSubmitting ? "Working..." : "Deactivate"}
-                </button>
-                <button className="button button--primary" disabled={isSubmitting || !impact?.can_delete} onClick={() => submit("delete")} type="button">
-                  Delete permanently
-                </button>
+                <AsyncActionButton className="button button--secondary" disabled={!impact?.can_deactivate || !isActive} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave types" : "Deactivating leave type"} onClick={() => submit("deactivate")} type="button">Deactivate</AsyncActionButton>
+                <AsyncActionButton className="button button--primary" disabled={!impact?.can_delete} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave types" : "Deleting leave type"} onClick={() => submit("delete")} type="button">Delete permanently</AsyncActionButton>
               </div>
             </div>
         </HrAdminActionModal>

@@ -55,6 +55,15 @@ export default async function HrAdminPoliciesPage() {
       tone: "success" as const,
     },
     {
+      href: "/hr-admin/leave-year",
+      label: "Leave-year control",
+      description: "Configure effective periods, preview rollover, and monitor governed year close.",
+      metric: "Year close",
+      secondary: "Audited periods and history",
+      action: "Open calendar",
+      tone: "warning" as const,
+    },
+    {
       href: "/hr-admin/attendance-policies",
       label: "Attendance policies",
       description: "Define lateness, overtime, check-in, and regularization behavior.",

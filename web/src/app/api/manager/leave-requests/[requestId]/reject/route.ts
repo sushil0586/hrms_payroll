@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, { params }: Props) {
   const body = await request.json();
   const upstream = await fetch(`${API_BASE_URL}/manager/leave-requests/${requestId}/reject/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
+    headers: { "Content-Type": "application/json", Authorization: `Token ${token}`, "Idempotency-Key": request.headers.get("idempotency-key") ?? "" },
     body: JSON.stringify(body),
     cache: "no-store",
   });

@@ -16,6 +16,7 @@ from io import StringIO
 from typing import Any
 from urllib.parse import urlencode
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, Q
 from django.utils import timezone
@@ -28,6 +29,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from apps.notifications.models import NotificationChannel, NotificationStatus
 from apps.notifications.services import trigger_notification_event
 from apps.payroll.models import (
+    AccountingPeriod,
     EmployeeStatutoryDeclaration,
     EmployeeStatutoryDeclarationItem,
     PayrollCalculationLine,
@@ -4202,9 +4204,11 @@ def create_payroll_adjustment(
     )
 
 
+@transaction.atomic
 def submit_payroll_adjustment(adjustment: PayrollAdjustment, *, submitted_by=None) -> PayrollAdjustment:
     """Submit a draft or rejected payroll adjustment for approval."""
 
+    adjustment = PayrollAdjustment.objects.select_for_update().select_related("payroll_run").get(pk=adjustment.pk)
     if adjustment.status not in {PayrollAdjustmentStatus.DRAFT, PayrollAdjustmentStatus.REJECTED}:
         raise PayrollAdjustmentError("Only draft or rejected payroll adjustments can be submitted.")
     if adjustment.payroll_run.status in {PayrollRunStatus.REVIEW, PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED}:
@@ -4218,6 +4222,7 @@ def submit_payroll_adjustment(adjustment: PayrollAdjustment, *, submitted_by=Non
     return adjustment
 
 
+@transaction.atomic
 def approve_payroll_adjustment(
     adjustment: PayrollAdjustment,
     *,
@@ -4226,8 +4231,11 @@ def approve_payroll_adjustment(
 ) -> PayrollAdjustment:
     """Approve a submitted payroll adjustment."""
 
+    adjustment = PayrollAdjustment.objects.select_for_update().select_related("payroll_run").get(pk=adjustment.pk)
     if adjustment.status != PayrollAdjustmentStatus.SUBMITTED:
         raise PayrollAdjustmentError("Payroll adjustment must be submitted before approval.")
+    if approved_by and adjustment.submitted_by_id == approved_by.id:
+        raise PayrollAdjustmentError("Payroll adjustment approval requires a different authorized user from the submitter.")
     if adjustment.payroll_run.status in {PayrollRunStatus.REVIEW, PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED}:
         raise PayrollAdjustmentError("Payroll adjustments cannot be approved after run review starts.")
     adjustment.status = PayrollAdjustmentStatus.APPROVED
@@ -4239,9 +4247,11 @@ def approve_payroll_adjustment(
     return adjustment
 
 
+@transaction.atomic
 def reject_payroll_adjustment(adjustment: PayrollAdjustment, *, rejected_by=None, reason: str = "") -> PayrollAdjustment:
     """Reject a submitted payroll adjustment."""
 
+    adjustment = PayrollAdjustment.objects.select_for_update().select_related("payroll_run").get(pk=adjustment.pk)
     if adjustment.status != PayrollAdjustmentStatus.SUBMITTED:
         raise PayrollAdjustmentError("Payroll adjustment must be submitted before rejection.")
     adjustment.status = PayrollAdjustmentStatus.REJECTED
@@ -4253,9 +4263,11 @@ def reject_payroll_adjustment(adjustment: PayrollAdjustment, *, rejected_by=None
     return adjustment
 
 
+@transaction.atomic
 def apply_payroll_adjustment(adjustment: PayrollAdjustment, *, applied_by=None) -> PayrollAdjustment:
     """Mark an approved adjustment as consumed by payroll input/calculation preparation."""
 
+    adjustment = PayrollAdjustment.objects.select_for_update().select_related("payroll_run").get(pk=adjustment.pk)
     if adjustment.status != PayrollAdjustmentStatus.APPROVED:
         raise PayrollAdjustmentError("Only approved payroll adjustments can be applied.")
     if adjustment.payroll_run.status in {PayrollRunStatus.REVIEW, PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED}:
@@ -4404,9 +4416,11 @@ def create_payroll_settlement_line(
     return line
 
 
+@transaction.atomic
 def submit_payroll_settlement(settlement: PayrollSettlement, *, submitted_by=None) -> PayrollSettlement:
     """Submit a full-and-final settlement package for approval."""
 
+    settlement = PayrollSettlement.objects.select_for_update(of=("self",)).select_related("payroll_run").get(pk=settlement.pk)
     if settlement.status not in {PayrollSettlementStatus.DRAFT, PayrollSettlementStatus.REJECTED}:
         raise PayrollSettlementError("Only draft or rejected payroll settlements can be submitted.")
     if settlement.payroll_run.status in {PayrollRunStatus.REVIEW, PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED}:
@@ -4423,6 +4437,7 @@ def submit_payroll_settlement(settlement: PayrollSettlement, *, submitted_by=Non
     return settlement
 
 
+@transaction.atomic
 def approve_payroll_settlement(
     settlement: PayrollSettlement,
     *,
@@ -4431,8 +4446,11 @@ def approve_payroll_settlement(
 ) -> PayrollSettlement:
     """Approve a submitted full-and-final settlement package."""
 
+    settlement = PayrollSettlement.objects.select_for_update(of=("self",)).select_related("payroll_run").get(pk=settlement.pk)
     if settlement.status != PayrollSettlementStatus.SUBMITTED:
         raise PayrollSettlementError("Payroll settlement must be submitted before approval.")
+    if approved_by and settlement.submitted_by_id == approved_by.id:
+        raise PayrollSettlementError("Payroll settlement approval requires a different authorized user from the submitter.")
     if settlement.payroll_run.status in {PayrollRunStatus.REVIEW, PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED}:
         raise PayrollSettlementError("Payroll settlements cannot be approved after run review starts.")
     settlement.status = PayrollSettlementStatus.APPROVED
@@ -4445,9 +4463,11 @@ def approve_payroll_settlement(
     return settlement
 
 
+@transaction.atomic
 def reject_payroll_settlement(settlement: PayrollSettlement, *, rejected_by=None, reason: str = "") -> PayrollSettlement:
     """Reject a submitted full-and-final settlement package."""
 
+    settlement = PayrollSettlement.objects.select_for_update(of=("self",)).select_related("payroll_run").get(pk=settlement.pk)
     if settlement.status != PayrollSettlementStatus.SUBMITTED:
         raise PayrollSettlementError("Payroll settlement must be submitted before rejection.")
     settlement.status = PayrollSettlementStatus.REJECTED
@@ -4463,6 +4483,7 @@ def reject_payroll_settlement(settlement: PayrollSettlement, *, rejected_by=None
 def apply_payroll_settlement(settlement: PayrollSettlement, *, applied_by=None) -> PayrollSettlement:
     """Apply approved settlement lines as payroll adjustments for calculation consumption."""
 
+    settlement = PayrollSettlement.objects.select_for_update(of=("self",)).select_related("payroll_run", "input_snapshot").get(pk=settlement.pk)
     if settlement.status != PayrollSettlementStatus.APPROVED:
         raise PayrollSettlementError("Only approved payroll settlements can be applied.")
     if settlement.payroll_run.status in {PayrollRunStatus.REVIEW, PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED}:
@@ -5843,16 +5864,22 @@ def validate_payroll_artifact_signed_access_grant(
     token: str,
     actor_user=None,
     actor_membership=None,
+    lock_grant: bool = False,
 ) -> PayrollArtifactSignedAccessGrant:
     """Validate an incoming signed access grant against artifact, token, expiry, and recipient binding."""
 
     if not grant_id or not token:
         raise PayrollOutputError("Signed access grant id and token are required.")
-    grant = PayrollArtifactSignedAccessGrant.objects.filter(
+    grant_queryset = PayrollArtifactSignedAccessGrant.objects.filter(
         tenant=artifact.tenant,
         output_artifact=artifact,
         id=grant_id,
-    ).first()
+    )
+    if lock_grant:
+        if not transaction.get_connection().in_atomic_block:
+            raise RuntimeError("Locking signed access validation requires an active transaction.")
+        grant_queryset = grant_queryset.select_for_update()
+    grant = grant_queryset.first()
     if not grant:
         raise PayrollOutputError("Signed access grant was not found for this payroll artifact.")
     if grant.token_hash != hashlib.sha256(token.encode("utf-8")).hexdigest():
@@ -5880,6 +5907,7 @@ def mark_payroll_artifact_signed_access_grant_used(grant: PayrollArtifactSignedA
     return grant
 
 
+@transaction.atomic
 def revoke_payroll_artifact_signed_access_grant(
     grant: PayrollArtifactSignedAccessGrant,
     *,
@@ -5893,6 +5921,9 @@ def revoke_payroll_artifact_signed_access_grant(
 ) -> PayrollArtifactSignedAccessGrant:
     """Revoke an active signed access grant and record a revocation event."""
 
+    grant = PayrollArtifactSignedAccessGrant.objects.select_for_update().select_related(
+        "output_artifact",
+    ).get(pk=grant.pk)
     if grant.status == PayrollArtifactSignedAccessGrantStatus.REVOKED:
         return grant
     if not reason:
@@ -9168,6 +9199,19 @@ def ingest_payroll_provider_callback(
     accepted = signature_valid and not security_blocked
 
     with transaction.atomic():
+        handoff = PayrollFinanceHandoff.objects.select_for_update().get(pk=delivery.handoff_id)
+        delivery = (
+            PayrollProviderDelivery.objects.select_for_update()
+            .select_related("handoff", "output_artifact")
+            .get(pk=delivery.pk)
+        )
+        existing = PayrollProviderCallbackEvent.objects.filter(
+            provider_ref=provider_ref,
+            idempotency_key=idempotency_key,
+        ).first()
+        if existing:
+            return existing, True
+        delivery.handoff = handoff
         event = PayrollProviderCallbackEvent.objects.create(
             tenant=delivery.tenant,
             provider_delivery=delivery,
@@ -9205,7 +9249,7 @@ def ingest_payroll_provider_callback(
         if not accepted:
             return event, False
 
-        if delivery.status == PayrollProviderDeliveryStatus.RECONCILED and provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+        if delivery.status == PayrollProviderDeliveryStatus.RECONCILED:
             event.status = PayrollProviderCallbackEventStatus.PROCESSED
             event.processed_at = received_at
             event.processing_snapshot = {
@@ -9213,6 +9257,7 @@ def ingest_payroll_provider_callback(
                 "handoff_id": str(delivery.handoff_id),
                 "delivery_status": delivery.status,
                 "handoff_status": delivery.handoff.status,
+                "received_provider_status": provider_status,
                 "processed_at": received_at.isoformat(),
                 "delivery_mutation_skipped": True,
                 "delivery_mutation_skip_reason": "reconciled_provider_deliveries_are_immutable",
@@ -9611,6 +9656,21 @@ def generate_payroll_finance_handoff(
     bank_profile_ref = profile.get("bank_file_profile_ref") or "payroll.bank_file.profile.default.v1"
     accounting_profile_ref = profile.get("accounting_export_profile_ref") or "payroll.accounting_export.profile.default.v1"
     statutory_pack_ref = profile.get("statutory_pack_ref") or "payroll.statutory_pack.default.v1"
+    from apps.payroll.fiscal_services import resolve_accounting_period, resolve_fiscal_calendar
+
+    legal_entity = batch.payroll_run.pay_group.legal_entity if batch.payroll_run.pay_group_id else None
+    posting_date = batch.payroll_run.period.pay_date
+    posting_period = resolve_accounting_period(
+        tenant=batch.tenant,
+        posting_date=posting_date,
+        legal_entity=legal_entity,
+    )
+    if posting_period is None and resolve_fiscal_calendar(
+        tenant=batch.tenant,
+        on_date=posting_date,
+        legal_entity=legal_entity,
+    ) is not None:
+        raise PayrollFinanceHandoffError("No accounting period is configured for the payroll payment date.")
     artifact_key_prefix = profile.get("artifact_key_prefix") or f"{batch.payroll_run.code}-{profile_ref}"
     bank_file_name = f"{batch.payroll_run.code}-bank-advice.{_artifact_extension(_artifact_mime_type(PayrollOutputArtifactKind.BANK_ADVICE, profile))}"
     accounting_file_name = f"{batch.payroll_run.code}-accounting-export.{_artifact_extension(_artifact_mime_type(PayrollOutputArtifactKind.ACCOUNTING_EXPORT, profile))}"
@@ -9710,6 +9770,8 @@ def generate_payroll_finance_handoff(
             bank_file_profile_ref=bank_profile_ref,
             accounting_export_profile_ref=accounting_profile_ref,
             statutory_pack_ref=statutory_pack_ref,
+            posting_accounting_period=posting_period,
+            posting_date=posting_date if posting_period else None,
             generated_by=generated_by,
             totals_snapshot={
                 "gross_earnings": str(accounting_gross),
@@ -9789,8 +9851,23 @@ def generate_payroll_finance_handoff(
     return handoff
 
 
+@transaction.atomic
 def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmitted_by=None) -> PayrollFinanceHandoff:
     """Mark a generated finance handoff as transmitted and publish its finance artifacts."""
+
+    handoff = (
+        PayrollFinanceHandoff.objects.select_for_update(of=("self",))
+        .select_related("posting_accounting_period", "output_batch")
+        .get(pk=handoff.pk)
+    )
+    if handoff.posting_accounting_period_id:
+        from apps.payroll.fiscal_services import assert_period_is_postable
+
+        posting_period = AccountingPeriod.objects.select_for_update().get(pk=handoff.posting_accounting_period_id)
+        try:
+            assert_period_is_postable(posting_period)
+        except ValidationError as exc:
+            raise PayrollFinanceHandoffError(str(exc)) from exc
 
     if handoff.status == PayrollFinanceHandoffStatus.TRANSMITTED:
         deliveries = [

@@ -4,6 +4,8 @@ import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from
 import { expectDialogLocatorStable, expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
+const documentDetailDialogName = /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement|QA Identity Evidence/;
+
 function field(scope: Page | Locator, label: string) {
   return scope.locator("label.form-field").filter({ hasText: label }).locator("input, select, textarea").first();
 }
@@ -123,11 +125,11 @@ test.describe("ESS Documents launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "Review" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      const detail = page.getByRole("dialog", { name: /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement/ });
+      const detail = page.getByRole("dialog", { name: documentDetailDialogName });
       await expect(detail).toBeVisible();
       await expect(detail.getByText("Review status")).toBeVisible();
       await expect(detail.getByText("Audit trail")).toBeVisible();
-      await expectDialogStable(page, /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement/);
+      await expectDialogStable(page, documentDetailDialogName);
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
     }
@@ -153,7 +155,7 @@ test.describe("ESS Documents launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "Review" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      await expectDialogStable(page, /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement/);
+      await expectDialogStable(page, documentDetailDialogName);
     }
   });
 });

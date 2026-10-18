@@ -26,7 +26,7 @@ export function getPrimaryWorkspaceHref(user: WorkspaceRouteUser | null | undefi
   if (primaryRoleCode === "payroll-finance-manager") return "/finance-manager";
   if (primaryRoleCode === "manager" && user.workspace_access?.mss) return "/mss/approvals";
   if (primaryRoleCode === "employee" && user.workspace_access?.ess) return "/ess";
-  if (roleCodes.has("hr-admin") && user.workspace_access?.hr_admin) return "/hr-admin";
+  if (user.workspace_access?.hr_admin) return "/hr-admin";
   if (user.workspace_access?.tenant_admin) return "/tenant-admin";
   if (roleCodes.has("payroll-finance-manager")) return "/finance-manager";
   if (user.workspace_access?.mss) return "/mss/approvals";

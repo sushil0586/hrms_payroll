@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { hasFieldErrors, requireText, type FieldErrors } from "@/lib/ui/validation";
 import { getPrimaryWorkspaceHref } from "@/lib/workspace-routing";
 
@@ -20,6 +21,7 @@ export function LoginForm({ demoModeWithoutBackend = false }: LoginFormProps) {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LoginField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStage, setSubmitStage] = useState<"authenticating" | "opening">("authenticating");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,6 +36,7 @@ export function LoginForm({ demoModeWithoutBackend = false }: LoginFormProps) {
     }
 
     setIsSubmitting(true);
+    setSubmitStage("authenticating");
     setError("");
     setFieldErrors({});
 
@@ -60,6 +63,7 @@ export function LoginForm({ demoModeWithoutBackend = false }: LoginFormProps) {
     }
 
     const workspaceHref = getPrimaryWorkspaceHref(payload.user ?? {});
+    setSubmitStage("opening");
     if (!workspaceHref) {
       router.push("/workspace-access");
       router.refresh();
@@ -150,9 +154,14 @@ export function LoginForm({ demoModeWithoutBackend = false }: LoginFormProps) {
             Forgot password?
           </Link>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">
-              {isSubmitting ? "Signing in..." : "Sign in"}
-            </button>
+            <AsyncActionButton
+              className="button button--primary"
+              pending={isSubmitting}
+              pendingLabel={submitStage === "opening" ? "Opening workspace" : "Signing in"}
+              type="submit"
+            >
+              Sign in
+            </AsyncActionButton>
           </div>
         </div>
       ) : null}

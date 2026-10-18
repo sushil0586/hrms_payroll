@@ -2,17 +2,20 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { attendanceRecordToFormValue } from "@/app/hr-admin/attendance-records/form-values";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { useWorkspaceNavigationFeedback } from "@/components/shell/workspace-navigation-feedback";
 import type {
   HrAdminAttendanceOperationOptions,
   HrAdminAttendanceRecord,
   HrAdminEnumOption,
   HrAdminOptionItem,
 } from "@/lib/types";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { AttendanceRecordForm } from "./attendance-record-form";
 
 type Props = {
@@ -113,7 +116,8 @@ export function AttendanceRecordBulkManager({
   pagination,
   canManageRecords = true,
 }: Props) {
-  const router = useRouter();
+  const navigate = useWorkspaceNavigationFeedback();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -179,18 +183,18 @@ export function AttendanceRecordBulkManager({
     })}`;
   }
 
-  function goToPage(page: number) {
-    router.push(buildFilterHref(page));
+  function goToPage(page: number, target?: HTMLElement | null) {
+    navigate(buildFilterHref(page), `attendance page ${page}`, target, { scroll: false });
   }
 
-  function applyFilters() {
+  function applyFilters(target?: HTMLElement | null) {
     const nextSearch = searchInputRef.current?.value ?? search;
     setSearch(nextSearch);
-    router.push(buildFilterHref(1, pageSize, nextSearch));
+    navigate(buildFilterHref(1, pageSize, nextSearch), "attendance filters", target, { scroll: false });
   }
 
-  function applyPageSize() {
-    router.push(buildFilterHref(1, pageSize));
+  function applyPageSize(target?: HTMLElement | null) {
+    navigate(buildFilterHref(1, pageSize), "attendance rows", target, { scroll: false });
   }
 
   function toggleOne(itemId: string) {
@@ -202,7 +206,7 @@ export function AttendanceRecordBulkManager({
   }
 
   async function handleBulkAction(action: "lock" | "unlock" | "set_status" | "mark_regularized" | "clear_regularized") {
-    if (submittingRef.current) return;
+    if (submittingRef.current || isRefreshing) return;
     submittingRef.current = true;
     if (state !== "live") {
       setError("Bulk actions are disabled in demo mode.");
@@ -244,7 +248,7 @@ export function AttendanceRecordBulkManager({
     setSelectedIds([]);
     setIsSubmitting(false);
     submittingRef.current = false;
-    router.refresh();
+    refresh();
   }
 
   return (
@@ -332,8 +336,8 @@ export function AttendanceRecordBulkManager({
           </details>
         </WorkspaceFilterBar>
         <div className="queue-toolbar__actions attendance-toolbar-actions">
-          <button className="button button--primary" onClick={applyFilters} type="button">Apply filters</button>
-          <button className="button button--ghost" onClick={() => {
+          <button className="button button--primary" onClick={(event) => applyFilters(event.currentTarget)} type="button">Apply filters</button>
+          <button className="button button--ghost" onClick={(event) => {
             setSearch("");
             setStatusFilter("all");
             setSourceFilter("all");
@@ -344,7 +348,7 @@ export function AttendanceRecordBulkManager({
             setToDate("");
             setLateOnly(false);
             setPageSize("25");
-            router.push(pathname);
+            navigate(pathname, "cleared attendance filters", event.currentTarget, { scroll: false });
           }} type="button">
             Clear filters
           </button>
@@ -363,13 +367,13 @@ export function AttendanceRecordBulkManager({
               </select>
             </label>
             <div className="attendance-bulk-panel__actions">
-              <button className="button button--primary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("set_status")} type="button">
+              <AsyncActionButton className="button button--primary" disabled={selectedIds.length === 0} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing records" : "Updating records"} onClick={() => handleBulkAction("set_status")} type="button">
                 Set status ({selectedIds.length || 0})
-              </button>
-              <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("lock")} type="button">Lock</button>
-              <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("unlock")} type="button">Unlock</button>
-              <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("mark_regularized")} type="button">Mark regularized</button>
-              <button className="button button--ghost" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("clear_regularized")} type="button">Clear regularized</button>
+              </AsyncActionButton>
+              <AsyncActionButton className="button button--secondary" disabled={selectedIds.length === 0} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing records" : "Locking records"} onClick={() => handleBulkAction("lock")} type="button">Lock</AsyncActionButton>
+              <AsyncActionButton className="button button--secondary" disabled={selectedIds.length === 0} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing records" : "Unlocking records"} onClick={() => handleBulkAction("unlock")} type="button">Unlock</AsyncActionButton>
+              <AsyncActionButton className="button button--secondary" disabled={selectedIds.length === 0} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing records" : "Marking records regularized"} onClick={() => handleBulkAction("mark_regularized")} type="button">Mark regularized</AsyncActionButton>
+              <AsyncActionButton className="button button--ghost" disabled={selectedIds.length === 0} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing records" : "Clearing regularization"} onClick={() => handleBulkAction("clear_regularized")} type="button">Clear regularized</AsyncActionButton>
             </div>
           </div>
         ) : (
@@ -513,13 +517,13 @@ export function AttendanceRecordBulkManager({
             {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
           </select>
         </label>
-        <button className="button button--secondary" onClick={applyPageSize} type="button">Apply</button>
+        <button className="button button--secondary" onClick={(event) => applyPageSize(event.currentTarget)} type="button">Apply</button>
         {totalPages > 1 ? (
           <div className="attendance-pagination-panel__controls">
-            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(1)} type="button">First</button>
-            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(pagination.page - 1)} type="button">Previous</button>
-            <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(pagination.page + 1)} type="button">Next</button>
-            <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(totalPages)} type="button">Last</button>
+            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(1, event.currentTarget)} type="button">First</button>
+            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(pagination.page - 1, event.currentTarget)} type="button">Previous</button>
+            <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(pagination.page + 1, event.currentTarget)} type="button">Next</button>
+            <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(totalPages, event.currentTarget)} type="button">Last</button>
           </div>
         ) : null}
       </div>

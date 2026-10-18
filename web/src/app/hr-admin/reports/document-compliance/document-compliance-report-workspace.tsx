@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { useMemo, useState } from "react";
 
 import type { HrAdminEmployeeDocument } from "@/lib/types";
@@ -140,8 +142,8 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
             <p className="section-copy section-copy-soft">Review missing verification, expiry risk, and re-upload follow-up before exporting or printing the compliance view.</p>
           </div>
           <div className="report-command-panel__actions">
-            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
+            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
             <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
           </div>
         </div>

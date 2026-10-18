@@ -41,6 +41,10 @@ type PendingRegularizationList = {
   items?: PendingRegularizationItem[];
 };
 
+const employeeCode = process.env.PLAYWRIGHT_LIVE_EMPLOYEE_CODE ?? "EMP-0042";
+const managerCode = process.env.PLAYWRIGHT_LIVE_MANAGER_CODE ?? "EMP-0002";
+const leaveTypeLabel = process.env.PLAYWRIGHT_LIVE_LEAVE_TYPE_LABEL;
+
 function uniqueRef(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
 }
@@ -55,6 +59,18 @@ function field(scope: Page | Locator, label: string, index = 0) {
 
 function card(page: Page, text: string | RegExp) {
   return page.locator("article.record-card, a.tableish__row, button.leave-request-card, tr, [role='dialog']").filter({ hasText: text }).first();
+}
+
+async function selectAssignedLeaveType(scope: Page | Locator) {
+  const select = field(scope, "Leave type");
+  if (leaveTypeLabel) {
+    await select.selectOption({ label: leaveTypeLabel });
+    return;
+  }
+  const option = select.locator("option:not([disabled])").filter({ hasNotText: /^Select / }).first();
+  const value = await option.getAttribute("value");
+  expect(value, "ESS should offer an assigned leave type").toBeTruthy();
+  await select.selectOption(value!);
 }
 
 async function openRegularizationDialog(page: Page) {
@@ -207,7 +223,7 @@ async function getHrEmployeeByCode(page: Page, employeeCode: string) {
 
 async function topUpSeedLeaveBalance(page: Page, effectiveDate: string, requiredUnits = 2) {
   await authenticateForSetup(page, hrAdmin);
-  const response = await page.request.get(`${apiBaseUrl()}/hr-admin/leave-balances/?q=EMP-0042&page_size=100`, {
+  const response = await page.request.get(`${apiBaseUrl()}/hr-admin/leave-balances/?q=${encodeURIComponent(employeeCode)}&page_size=100`, {
     headers: await authHeaders(page),
   });
   expect(response.ok(), await response.text()).toBeTruthy();
@@ -216,7 +232,7 @@ async function topUpSeedLeaveBalance(page: Page, effectiveDate: string, required
   const periodYear = Number(effectiveDate.slice(0, 4));
   const matchingBalances = balances.filter(
     (item) =>
-      item.employee_code === "EMP-0042" &&
+      item.employee_code === employeeCode &&
       /CL|Casual/i.test(item.leave_policy_name) &&
       item.period_year === periodYear,
   );
@@ -242,8 +258,8 @@ async function topUpSeedLeaveBalance(page: Page, effectiveDate: string, required
 async function ensureSeedManager(page: Page) {
   await authenticateForSetup(page, hrAdmin);
   await page.goto("/hr-admin/employees", { waitUntil: "domcontentloaded" });
-  const targetEmployee = await getHrEmployeeByCode(page, "EMP-0042");
-  const seedManager = await getHrEmployeeByCode(page, "EMP-0002");
+  const targetEmployee = await getHrEmployeeByCode(page, employeeCode);
+  const seedManager = await getHrEmployeeByCode(page, managerCode);
   const response = await page.request.patch(`${apiBaseUrl()}/hr-admin/employees/${targetEmployee.id}/`, {
     headers: await authHeaders(page),
     data: { reporting_manager_id: seedManager.id },
@@ -259,7 +275,7 @@ async function clearSeedPendingRegularizations(page: Page) {
   expect(response.ok(), await response.text()).toBeTruthy();
   const payload = (await response.json()) as PendingRegularizationList | PendingRegularizationItem[];
   const items = (Array.isArray(payload) ? payload : payload.items ?? []) as PendingRegularizationItem[];
-  for (const item of items.filter((entry) => entry.employee_code === "EMP-0042" || /Riya Sharma/i.test(entry.employee ?? ""))) {
+  for (const item of items.filter((entry) => entry.employee_code === employeeCode)) {
     const rejectResponse = await page.request.post(`${apiBaseUrl()}/manager/attendance-regularizations/${item.id}/reject/`, {
       headers: await authHeaders(page),
       data: { comment: "Playwright TL certification cleanup." },
@@ -296,7 +312,7 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await expect(field(page, "Evidence reference")).toBeVisible();
     await expect(field(page, "Reason")).toBeVisible();
 
-    await field(page, "Leave type").selectOption({ label: "Casual Leave" });
+    await selectAssignedLeaveType(page);
     await field(page, "Start date").fill(startDate);
     await field(page, "End date").fill(endDate);
     await field(page, "Reason").fill(reason);
@@ -364,7 +380,7 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await expectPageReady(page, "Leave");
     await page.getByRole("button", { name: "Apply leave" }).click();
     await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
-    await field(page, "Leave type").selectOption({ label: "Casual Leave" });
+    await selectAssignedLeaveType(page);
     await field(page, "Start date").fill(startDate);
     await field(page, "End date").fill(endDate);
     await field(page, "Reason").fill(invalidReason);
@@ -377,7 +393,7 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await gotoAuthenticated(page, "/ess/leave", employee);
     await page.getByRole("button", { name: "Apply leave" }).click();
     await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
-    await field(page, "Leave type").selectOption({ label: "Casual Leave" });
+    await selectAssignedLeaveType(page);
     await field(page, "Start date").fill(validLeaveDate);
     await field(page, "End date").fill(validLeaveDate);
     await field(page, "Reason").fill(rejectReason);

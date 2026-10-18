@@ -1,0 +1,48 @@
+[
+  {
+    "id": "0795e293-cc33-474c-8880-5f88f25b5bf6",
+    "code": "e2e-20261017081241",
+    "plan": "starter",
+    "status": "draft",
+    "onboarding_status": "handoff_ready",
+    "is_sandbox": true,
+    "domains": [
+      "e2e-20261017081241.example.test"
+    ],
+    "runs": [
+      {
+        "run_type": "apply",
+        "status": "succeeded"
+      },
+      {
+        "run_type": "preview",
+        "status": "succeeded"
+      }
+    ],
+    "memberships": 0,
+    "contacts": 0
+  },
+  {
+    "id": "a9c8226e-c153-47a5-aa4b-e655b1d83c7f",
+    "code": "e2e-20261017081401",
+    "plan": "starter",
+    "status": "draft",
+    "onboarding_status": "handoff_ready",
+    "is_sandbox": true,
+    "domains": [
+      "e2e-20261017081401.example.test"
+    ],
+    "runs": [
+      {
+        "run_type": "apply",
+        "status": "succeeded"
+      },
+      {
+        "run_type": "preview",
+        "status": "succeeded"
+      }
+    ],
+    "memberships": 2,
+    "contacts": 1
+  }
+]

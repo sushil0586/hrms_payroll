@@ -56,8 +56,9 @@ async function createSupportGrant(page: Page, sessionRef: string, reason: string
       requested_duration_minutes: 30,
     },
   });
-  expect(createResponse.ok()).toBeTruthy();
-  let payload = (await createResponse.json()) as SupportGrantResponse;
+  const createResponseBody = await createResponse.text();
+  expect(createResponse.ok(), `${createResponse.status()} ${createResponseBody}`).toBeTruthy();
+  let payload = JSON.parse(createResponseBody) as SupportGrantResponse;
   expect(payload.support_access_grant.status).toBe("requested");
 
   const approveResponse = await page.request.patch(`/api/tenant-admin/support-access-grants/${payload.support_access_grant.id}`, {

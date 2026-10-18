@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
+import { submitImportRequest } from "@/lib/ui/import-request";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeListItem, HrAdminEmployeeWriteInput, HrAdminOptionItem, HrAdminManagerOption } from "@/lib/types";
 
 type EmployeeImportWorkbenchProps = {
@@ -274,6 +276,7 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
   const [isCommitting, setIsCommitting] = useState(false);
   const existingCodes = useMemo(() => new Set(employees.map((employee) => employee.employee_code.toLowerCase())), [employees]);
   const readyCount = rows.filter((row) => row.status === "ready").length;
+  const hasFailedRows = rows.some((row) => row.status === "failed");
 
   async function preview() {
     const parsed = parseCsv(csvText);
@@ -315,6 +318,7 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
   }
 
   async function commitReadyRows() {
+    if (isCommitting) return;
     setIsCommitting(true);
     const nextRows = [...rows];
 
@@ -324,12 +328,12 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
         continue;
       }
 
-      const response = await fetch("/api/hr-admin/employees", {
+      const response = await submitImportRequest("/api/hr-admin/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(row.payload),
       });
-      const payload = await response.json().catch(() => ({}));
+      const payload = response.payload;
       nextRows[index] = {
         ...row,
         status: response.ok ? "created" : "failed",
@@ -340,7 +344,9 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
     }
 
     setIsCommitting(false);
-    setMessage("Commit complete. Refresh the directory to verify created employees.");
+    setMessage(nextRows.some((row) => row.status === "failed")
+      ? "Some employee rows failed. Review the row messages, then preview the preserved CSV again."
+      : "Commit complete. Refresh the directory to verify created employees.");
     await recordImportBatchAudit({
       import_type: "employees",
       status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
@@ -403,13 +409,11 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
             <button className="button button--primary" type="button" onClick={preview}>
               Preview import
             </button>
-            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting} onClick={commitReadyRows}>
-              {isCommitting ? "Committing..." : "Commit ready rows"}
-            </button>
+            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount} pending={isCommitting} pendingLabel="Committing employee rows" onClick={commitReadyRows}>Commit ready rows</AsyncActionButton>
           </div>
         </div>
 
-        {message ? <div className="notice notice--success" role="status"><strong>Employee import update completed.</strong><span>{message}</span></div> : null}
+        {message ? <div className={`notice${hasFailedRows ? "" : " notice--success"}`} role={hasFailedRows ? "alert" : "status"}><strong>{hasFailedRows ? "Employee import needs attention." : "Employee import update completed."}</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
           <div className="table-scroll">

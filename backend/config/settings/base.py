@@ -158,11 +158,18 @@ SPECTACULAR_SETTINGS = {
 
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+DATA_ERASURE_EXECUTION_ENABLED = env_bool("DATA_ERASURE_EXECUTION_ENABLED", False)
+LEAVE_YEAR_CLOSE_STALE_SECONDS = env_int("LEAVE_YEAR_CLOSE_STALE_SECONDS", 1800)
 CELERY_BEAT_SCHEDULE = {
     "dispatch-pending-payroll-background-jobs": {
         "task": "payroll.dispatch_pending_background_jobs",
         "schedule": 2.0,
         "kwargs": {"limit": 100},
+    },
+    "dispatch-pending-leave-year-close-runs": {
+        "task": "leave.dispatch_pending_year_close_runs",
+        "schedule": 15.0,
+        "kwargs": {"limit": 50},
     },
 }
 

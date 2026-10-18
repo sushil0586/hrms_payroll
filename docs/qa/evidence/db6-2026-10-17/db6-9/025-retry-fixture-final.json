@@ -1,0 +1,9 @@
+{
+  "quarantined_fixture_id": "1700ca86-3159-44f6-a8bc-a1061de34672",
+  "quarantined_status": "withdrawn",
+  "governed_request_id": "11ea4760-0d61-496a-9b4d-77b405623fa7",
+  "workflow_reference": "4b62b893-616f-4201-aa0c-a03ea9408349",
+  "ledger_actions": [
+    "reservation"
+  ]
+}

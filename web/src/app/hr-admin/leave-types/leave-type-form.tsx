@@ -122,10 +122,7 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item, retur
     });
     setIsSubmitting(false);
     isSubmittingRef.current = false;
-    window.setTimeout(() => {
-      router.push(returnPath);
-      router.refresh();
-    }, 700);
+    router.push(returnPath);
   }
 
   useEffect(() => {

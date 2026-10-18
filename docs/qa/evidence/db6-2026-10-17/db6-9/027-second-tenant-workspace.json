@@ -1,0 +1,81 @@
+{
+  "action": "provision",
+  "attendance": {
+    "policy_id": "3b7ac4e1-126c-43f6-acae-7097351fda1a",
+    "shift_id": "6ece23ae-e905-4935-9c7a-024ef647aa8d"
+  },
+  "checks": {
+    "document_category_available": true,
+    "employee_relations_tenant_scoped": true,
+    "locked_payroll_snapshot_available": true,
+    "manager_queues_available": true,
+    "ownership_markers_valid": true,
+    "period_pay_group_calendar_match": true,
+    "platform_onboarding_available": true,
+    "single_target_leave_balance": true,
+    "statutory_fixture_available": true
+  },
+  "counts": {
+    "employees": 5,
+    "platform_users": 1,
+    "tenant_users": 5
+  },
+  "credentials": {
+    "employee": {
+      "employee_code": "QA-EMP-001",
+      "employee_id": "d11e966e-3388-420d-87ec-0469a6a5ace7",
+      "username": "pw_db69_other_employee"
+    },
+    "hr_admin": {
+      "employee_code": "QA-HR-001",
+      "employee_id": "abac0735-63d3-4827-8a46-98e4c5c167f8",
+      "username": "pw_db69_other_hr_admin"
+    },
+    "manager": {
+      "employee_code": "QA-MGR-001",
+      "employee_id": "5a3c9cc4-b9f0-4fa3-a253-fa9fda827d57",
+      "username": "pw_db69_other_manager"
+    },
+    "manager_b": {
+      "employee_code": "QA-MGR-002",
+      "employee_id": "26433302-9eb7-492e-84d6-b07a5521a6b9",
+      "username": "pw_db69_other_manager_b"
+    },
+    "tenant_admin": {
+      "employee_code": "QA-TA-001",
+      "employee_id": "40ae893a-b31a-4459-9474-9ab51f70c460",
+      "username": "pw_db69_other_tenant_admin"
+    }
+  },
+  "fixtures": {
+    "attendance_regularization_id": "8155f512-72f9-43c8-97af-a6b7d5c8eab9",
+    "document_category_id": "644d7a6e-7f4a-4f11-8b59-cc547b6c2fc7",
+    "leave_request_id": "328b62cd-a688-4f9a-9ffb-5a6071e47972",
+    "payroll_run_id": "34c0e94f-aaa9-492b-a524-9ef1c4d7d214",
+    "platform_onboarding_id": "d7790993-3938-4200-8d2d-7ec1082578af"
+  },
+  "generated_at": "2026-10-17T13:51:53.350165+00:00",
+  "leave": {
+    "balance_id": "fd0a993a-f617-4951-b7d7-b099b82ba5e2",
+    "policy_id": "6da5e915-5f23-4d4a-9df4-574d043bad16"
+  },
+  "ownership": {
+    "disposable": true,
+    "owner": "playwright",
+    "seed_ref": "db69-other"
+  },
+  "payroll": {
+    "calendar_id": "30ae2979-e25d-4836-8990-a6a0b6e340ce",
+    "pay_group_id": "b1dafee8-3f28-4f39-b071-d0108f1ee55d",
+    "period_id": "fa2b5643-e581-4018-ac00-e2ff79b11d3c",
+    "salary_assignment_id": "316d80e3-88a1-4e7a-9b7e-e77e3eb4cbf9"
+  },
+  "platform_admin": {
+    "platform_only": true,
+    "username": "pw_db69_other_platform_admin"
+  },
+  "tenant": {
+    "code": "pw-qa-db69-other",
+    "id": "3181717a-b4d0-4c60-801c-826be0f0779c"
+  }
+}

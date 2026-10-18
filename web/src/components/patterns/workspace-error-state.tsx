@@ -14,7 +14,7 @@ type Props = {
 
 export function WorkspaceErrorState({ actions, detail, eyebrow, onRetry, title }: Props) {
   return (
-    <main className="shell shell--workspace">
+    <main className="shell shell--workspace" data-workspace-error="true">
       <PageIntro
         eyebrow={eyebrow}
         title={title}
@@ -35,7 +35,7 @@ export function WorkspaceErrorState({ actions, detail, eyebrow, onRetry, title }
       />
 
       <section className="section">
-        <div className="notice">
+        <div className="notice" role="alert">
           <strong>Live workspace load failed.</strong>
           <span className="muted">
             Check API base URL, authentication, and backend availability. If you intended to use seeded demo data,

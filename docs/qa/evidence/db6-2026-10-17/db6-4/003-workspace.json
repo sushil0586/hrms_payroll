@@ -1,0 +1,76 @@
+{
+  "action": "provision",
+  "attendance": {
+    "policy_id": "77b42ce7-49d5-4f5f-9869-2ef2e457bb34",
+    "shift_id": "79e6e151-b312-4170-9867-d6267ff86caa"
+  },
+  "checks": {
+    "document_category_available": true,
+    "employee_relations_tenant_scoped": true,
+    "locked_payroll_snapshot_available": true,
+    "manager_queues_available": true,
+    "ownership_markers_valid": true,
+    "period_pay_group_calendar_match": true,
+    "platform_onboarding_available": true,
+    "single_target_leave_balance": true,
+    "statutory_fixture_available": true
+  },
+  "counts": {
+    "employees": 4,
+    "platform_users": 1,
+    "tenant_users": 4
+  },
+  "credentials": {
+    "employee": {
+      "employee_code": "QA-EMP-001",
+      "employee_id": "3705dfac-0f19-44b7-8758-740ff3e1b12b",
+      "username": "pw_db6_leave_employee"
+    },
+    "hr_admin": {
+      "employee_code": "QA-HR-001",
+      "employee_id": "e9aab3e5-fb1a-4f45-a586-c837a7c30b68",
+      "username": "pw_db6_leave_hr_admin"
+    },
+    "manager": {
+      "employee_code": "QA-MGR-001",
+      "employee_id": "b1f966f2-cba4-4799-8cb8-ec38229ff702",
+      "username": "pw_db6_leave_manager"
+    },
+    "tenant_admin": {
+      "employee_code": "QA-TA-001",
+      "employee_id": "bb6c053a-bb5b-459e-a0ad-781cd6f7584f",
+      "username": "pw_db6_leave_tenant_admin"
+    }
+  },
+  "fixtures": {
+    "attendance_regularization_id": "b0d60d48-0b37-47db-88b0-79678264607c",
+    "document_category_id": "84a68aa8-385d-46db-87e0-746c01144b51",
+    "leave_request_id": "29e0c618-e62b-4028-801d-3144259d05c6",
+    "payroll_run_id": "a5f98ebc-4067-4d8c-a8a5-f7cdbe9563b9",
+    "platform_onboarding_id": "61901992-df00-474c-98a1-2e01efd982f0"
+  },
+  "generated_at": "2026-10-17T09:41:01.531383+00:00",
+  "leave": {
+    "balance_id": "8e5a5ab3-1ccd-4774-9336-bfdfe0b5af7d",
+    "policy_id": "f0c16ff2-dbbf-4542-89d5-91f60fc81169"
+  },
+  "ownership": {
+    "disposable": true,
+    "owner": "playwright",
+    "seed_ref": "db6-leave"
+  },
+  "payroll": {
+    "calendar_id": "a21112fe-a037-46d1-8662-a3529a783dda",
+    "pay_group_id": "f6fb9010-b94b-4f7f-9b5f-86d96cd48b95",
+    "period_id": "afef2b52-e996-4248-b5b6-6299dacfe208",
+    "salary_assignment_id": "d60c257f-91d7-4484-a0c4-a54a773a355c"
+  },
+  "platform_admin": {
+    "platform_only": true,
+    "username": "pw_db6_leave_platform_admin"
+  },
+  "tenant": {
+    "code": "pw-qa-db6-leave",
+    "id": "ee693962-6641-4a0c-ad62-d211ee0531c1"
+  }
+}

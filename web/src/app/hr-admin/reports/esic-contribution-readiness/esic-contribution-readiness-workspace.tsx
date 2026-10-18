@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type {
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollOutputArtifact,
@@ -245,12 +246,8 @@ export function EsicContributionReadinessWorkspace({
           <span className="queue-summary-chip">
             <strong>{currentPage}</strong> of {pageCount} pages
           </span>
-          <Link className="button button--secondary" href="/api/hr-admin/reports/esic-contribution-package" prefetch={false}>
-            Download ESIC package
-          </Link>
-          <Link className="button button--ghost" href="/api/hr-admin/reports/esic-contribution-package?format=manifest" prefetch={false}>
-            Package manifest
-          </Link>
+          <AsyncDownloadButton href="/api/hr-admin/reports/esic-contribution-package" fileName="esic-contribution-package.csv">Download ESIC package</AsyncDownloadButton>
+          <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/esic-contribution-package?format=manifest" fileName="esic-contribution-package-manifest.json">Package manifest</AsyncDownloadButton>
         </div>
 
         <div className="report-catalog-table-wrap">

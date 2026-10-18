@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { performJsonMutation } from "@/lib/ui/json-mutation";
 import type { TenantAdminConsole, TenantAdminSupportAccessGrantMutationResult } from "@/lib/types";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
@@ -124,6 +126,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
   }
 
   async function requestSupportAccess() {
+    if (busyRef) return;
     setBusyRef("request");
     setNotice("");
     if (!canSubmitSupportAccessRequest) {
@@ -136,7 +139,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
       );
       return;
     }
-    const response = await fetch("/api/tenant-admin/support-access-grants", {
+    const response = await performJsonMutation<TenantAdminSupportAccessGrantMutationResult>("/api/tenant-admin/support-access-grants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -145,8 +148,8 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         scope_refs: selectedScopes,
         requested_duration_minutes: duration,
       }),
-    });
-    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminSupportAccessGrantMutationResult>;
+    }, "Unable to reach the support-access service. Check your connection and retry.");
+    const result = response.payload;
     setBusyRef("");
     if (!response.ok) {
       setNoticeTone("error");
@@ -167,9 +170,10 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
   }
 
   async function runGrantAction(grantId: string, action: "approve" | "reject" | "start" | "end" | "revoke") {
+    if (busyRef) return;
     setBusyRef(`${grantId}:${action}`);
     setNotice("");
-    const response = await fetch(`/api/tenant-admin/support-access-grants/${grantId}`, {
+    const response = await performJsonMutation<TenantAdminSupportAccessGrantMutationResult>(`/api/tenant-admin/support-access-grants/${grantId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -177,8 +181,8 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         decision_note: decisionNotes[grantId] ?? "",
         session_ref: sessionRefs[grantId] ?? "",
       }),
-    });
-    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminSupportAccessGrantMutationResult>;
+    }, "Unable to reach the support-access service. Check your connection and retry.");
+    const result = response.payload;
     setBusyRef("");
     if (!response.ok) {
       setNoticeTone("error");
@@ -274,14 +278,16 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
       ) : null}
 
       <div className="tenant-membership-actions__footer">
-        <button
+        <AsyncActionButton
           className="button button--primary"
           disabled={!canSubmitSupportAccessRequest}
+          pending={busyRef === "request"}
+          pendingLabel="Requesting support access"
           onClick={requestSupportAccess}
           type="button"
         >
-          {busyRef === "request" ? "Requesting" : "Request access"}
-        </button>
+          Request access
+        </AsyncActionButton>
         {notice ? <span className={`tenant-inline-notice tenant-inline-notice--${noticeTone}`} role={noticeTone === "success" ? "status" : "alert"}>{notice}</span> : null}
       </div>
 

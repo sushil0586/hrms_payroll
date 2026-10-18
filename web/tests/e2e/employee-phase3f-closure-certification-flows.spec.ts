@@ -147,7 +147,10 @@ async function createReviewedDocument(page: Page, note: string) {
     page.getByRole("button", { name: "Apply filters" }).click(),
   ]);
   await expect(page.getByRole("table").first()).toContainText(title);
-  await page.getByRole("button", { name: "Review", exact: true }).first().click();
+  const documentRow = page.getByRole("row").filter({ hasText: title }).first();
+  await documentRow.getByRole("button", { name: "Inspect" }).click();
+  await expect(page.getByRole("heading", { name: "Document detail" })).toBeVisible();
+  await page.getByRole("button", { name: "Review", exact: true }).click();
   await expect(page).toHaveURL(/reviewDocument=/);
   const reviewDialog = page.getByRole("dialog", { name: new RegExp(`Review ${title}`) });
   await expect(reviewDialog).toBeVisible();

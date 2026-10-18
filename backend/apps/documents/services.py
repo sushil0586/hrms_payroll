@@ -76,7 +76,12 @@ def store_document_artifact(
         created_by_identifier=actor_identifier,
         metadata=metadata or {},
     )
-    artifact.stored_file.save(artifact.original_filename, uploaded_file, save=False)
-    artifact.storage_key = artifact.stored_file.name
-    artifact.save()
+    try:
+        artifact.stored_file.save(artifact.original_filename, uploaded_file, save=False)
+        artifact.storage_key = artifact.stored_file.name
+        artifact.save()
+    except Exception:
+        if artifact.stored_file.name:
+            artifact.stored_file.storage.delete(artifact.stored_file.name)
+        raise
     return artifact

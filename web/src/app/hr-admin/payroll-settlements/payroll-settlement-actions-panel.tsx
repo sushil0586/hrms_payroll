@@ -33,6 +33,12 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
   );
   const [snapshotId, setSnapshotId] = useState(runSnapshots[1]?.id ?? runSnapshots[0]?.id ?? "");
   const activeSnapshot = runSnapshots.find((snapshot) => snapshot.id === snapshotId) ?? runSnapshots[0] ?? null;
+  const matchingExitRecords = useMemo(
+    () => setup.options.exit_records.filter((exitRecord) => exitRecord.employee_id === activeSnapshot?.employee_id),
+    [activeSnapshot?.employee_id, setup.options.exit_records],
+  );
+  const [exitRecordId, setExitRecordId] = useState("");
+  const activeExitRecord = matchingExitRecords.find((exitRecord) => exitRecord.id === exitRecordId) ?? matchingExitRecords[0] ?? null;
   const [sourceRef, setSourceRef] = useState("pilot-settlement-manual");
   const [grossAmount, setGrossAmount] = useState("42000");
   const [recoveryAmount, setRecoveryAmount] = useState("3000");
@@ -90,9 +96,10 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
       {
         payroll_run_id: selectedRun.id,
         employee_id: activeSnapshot.employee_id,
+        exit_record_id: activeExitRecord?.id ?? null,
         input_snapshot_id: activeSnapshot.id,
         settlement_date: activeSnapshot.period_end,
-        last_working_date: activeSnapshot.period_end,
+        last_working_date: activeExitRecord?.last_working_date ?? activeSnapshot.period_end,
         currency_code: "INR",
         settlement_profile_ref: "tenant.payroll.settlement.pilot100.v1",
         approval_profile_ref: "tenant.payroll.settlement.approval.pilot100.v1",
@@ -102,6 +109,7 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
         config_snapshot: { source_system_ref: "hr_admin_browser_certification", pilot_phase: "P100-7" },
       },
       "Settlement package created.",
+      { refresh: false },
     );
     if (!settlement?.id || !selectedRun) {
       return;
@@ -174,6 +182,16 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
                 {snapshot.employee_code} - {snapshot.employee_name}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          <span>Exit record</span>
+          <select aria-label="Settlement exit record" value={activeExitRecord?.id ?? ""} onChange={(event) => setExitRecordId(event.target.value)}>
+            {matchingExitRecords.length ? matchingExitRecords.map((exitRecord) => (
+              <option key={exitRecord.id} value={exitRecord.id}>
+                {exitRecord.employee_code} - {exitRecord.status} - {exitRecord.last_working_date ?? "Date pending"}
+              </option>
+            )) : <option value="">No linked exit record</option>}
           </select>
         </label>
         <label>

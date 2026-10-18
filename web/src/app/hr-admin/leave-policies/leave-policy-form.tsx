@@ -608,10 +608,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
     setToast({ title: "Save complete.", message, tone: "success" });
     setIsSubmitting(false);
     isSubmittingRef.current = false;
-    window.setTimeout(() => {
-      router.push(returnPath);
-      router.refresh();
-    }, 700);
+    router.push(returnPath);
   }
 
   async function handlePreview() {

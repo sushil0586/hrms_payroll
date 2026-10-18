@@ -1,0 +1,33 @@
+Traceback (most recent call last):
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/manage.py", line 21, in <module>
+    main()
+    ~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/manage.py", line 17, in main
+    execute_from_command_line(sys.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+    ~~~~~~~~~~~~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 85, in inner
+    return func(*args, **kwds)
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/apps/common/management/commands/manage_playwright_workspace.py", line 149, in handle
+    manifest = self._cleanup(tenant, seed_ref, tenant_code)
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/apps/common/management/commands/manage_playwright_workspace.py", line 604, in _cleanup
+    tenant.delete()
+    ~~~~~~~~~~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/base.py", line 1272, in delete
+    collector.collect([self], keep_parents=keep_parents)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/deletion.py", line 351, in collect
+    raise ProtectedError(
+    ...<7 lines>...
+    )
+django.db.models.deletion.ProtectedError: ("Cannot delete some instances of model 'Tenant' because they are referenced through protected foreign keys: 'LegalEntity.tenant', 'Employee.tenant', 'LeaveType.tenant', 'LeavePolicyPeriod.tenant', 'LeaveEntitlementLot.tenant', 'LeaveRequestAllocation.tenant'.", {<LeaveRequestAllocation: LeaveRequestAllocation object (a44fa511-a4c0-4b6f-be5a-626a25aaae61)>, <LeaveEntitlementLot: LeaveEntitlementLot object (4132c6e6-7a1e-4203-b70c-9f87dbeb89f3)>, <LeavePolicyPeriod: LeavePolicyPeriod object (a7b9c61f-7873-4252-bd1c-90fdb3dd1fe5)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation - 1.00>})

@@ -80,6 +80,10 @@ import type {
   HrAdminHolidayCalendar,
   HrAdminLeaveRequestListResponse,
   HrAdminLeavePolicy,
+  LeaveHistoricalClassification,
+  LeavePolicyPeriod,
+  LeaveYearCloseRun,
+  FinancialCalendarWorkspace,
   HrAdminLeaveBalance,
   HrAdminLeaveBalanceListResponse,
   HrAdminLeaveBalanceTransaction,
@@ -812,6 +816,46 @@ export async function getHrAdminAttendancePolicy(itemId: string) {
 
 export async function getHrAdminLeavePolicies() {
   return apiGet<HrAdminLeavePolicy[]>("/hr-admin/leave-policies/");
+}
+
+export async function getLeaveYearWorkspace(portal: "hr-admin" | "tenant-admin") {
+  const [periods, runs, classification] = await Promise.all([
+    apiGet<LeavePolicyPeriod[]>(`/${portal}/leave-year/periods/`),
+    apiGet<LeaveYearCloseRun[]>(`/${portal}/leave-year/close-runs/`),
+    apiGet<LeaveHistoricalClassification>(`/${portal}/leave-year/historical-classification/?limit=50`),
+  ]);
+  return {
+    data: { periods: periods.data, runs: runs.data, classification: classification.data },
+    state: periods.state === "live" && runs.state === "live" && classification.state === "live" ? "live" as const : "demo" as const,
+  };
+}
+
+export async function getTenantAdminLeaveYearOptions() {
+  return apiGet<Pick<HrAdminPolicyWorkbenchOptions, "leave_policies" | "legal_entities">>("/tenant-admin/leave-year/options/");
+}
+
+export async function getFinancialCalendarWorkspace() {
+  return apiGet<FinancialCalendarWorkspace>("/tenant-admin/financial-calendars/");
+}
+
+export async function getTenantDataGovernanceWorkspace() {
+  return apiGet<{
+    record_categories: string[];
+    policies: Array<Record<string, unknown>>;
+    legal_holds: Array<Record<string, unknown>>;
+    requests: Array<Record<string, unknown>>;
+    preview: { categories: Array<Record<string, unknown>>; destructive_execution_enabled: boolean };
+  }>("/tenant-admin/data-governance/");
+}
+
+export async function getPlatformDataGovernanceWorkspace(tenantId?: string) {
+  return apiGet<{
+    record_categories: string[];
+    policies: Array<Record<string, unknown>>;
+    legal_holds: Array<Record<string, unknown>>;
+    requests: Array<Record<string, unknown>>;
+    preview: { categories: Array<Record<string, unknown>>; destructive_execution_enabled: boolean } | null;
+  }>(`/platform/data-governance/${tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ""}`);
 }
 
 export async function getHrAdminLeavePolicy(itemId: string) {

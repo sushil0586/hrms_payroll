@@ -1,0 +1,43 @@
+{
+  "request_id": "55059e78-fda1-43f2-b5ff-6eadd0515f9c",
+  "status": "approved",
+  "approved_units": "1.00",
+  "workflow_id": "31754d34-f59f-4d1e-8302-ceca4cd68c64",
+  "workflow_status": "approved",
+  "actions": [
+    {
+      "action": "approve",
+      "actor_identifier": "8a62851f-cadd-45c4-af82-78d94e961476"
+    },
+    {
+      "action": "submit",
+      "actor_identifier": "b4286524-7011-4fc4-a47c-8161faef4831"
+    }
+  ],
+  "ledger": [
+    {
+      "action": "reservation",
+      "units": "1.00",
+      "delta_units": "-1.00",
+      "closing_balance_before": "21.00",
+      "closing_balance_after": "20.00",
+      "idempotency_key": "leave-request:55059e78-fda1-43f2-b5ff-6eadd0515f9c:reserve:3b1222c6-2aef-4c6d-bea7-8140975fe65f"
+    },
+    {
+      "action": "reservation_release",
+      "units": "1.00",
+      "delta_units": "1.00",
+      "closing_balance_before": "20.00",
+      "closing_balance_after": "21.00",
+      "idempotency_key": "leave-request:55059e78-fda1-43f2-b5ff-6eadd0515f9c:release:3b1222c6-2aef-4c6d-bea7-8140975fe65f"
+    },
+    {
+      "action": "consumption",
+      "units": "1.00",
+      "delta_units": "-1.00",
+      "closing_balance_before": "21.00",
+      "closing_balance_after": "20.00",
+      "idempotency_key": "leave-request:55059e78-fda1-43f2-b5ff-6eadd0515f9c:consume:3b1222c6-2aef-4c6d-bea7-8140975fe65f"
+    }
+  ]
+}

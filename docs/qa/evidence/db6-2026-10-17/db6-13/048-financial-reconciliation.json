@@ -1,0 +1,126 @@
+{
+  "calculation": {
+    "id": "d6d16f1f-7ef2-42bb-8d32-d44b403ef23b",
+    "status": "completed",
+    "totals": {
+      "employee_count": 1,
+      "employee_deductions": "0.00",
+      "employer_contributions": "0.00",
+      "error_count": 0,
+      "gross_earnings": "50000.00",
+      "line_count": 1,
+      "net_pay": "50000.00"
+    }
+  },
+  "handoff": {
+    "id": "79281776-95c8-4f8f-9232-2eac991b228b",
+    "posting_date": "2026-12-31",
+    "posting_period": "3a9784e5-d0bb-4fa2-ab9f-c515ff436b88",
+    "status": "generated",
+    "totals": {
+      "bank_advice_total": "50000.00",
+      "employee_count": 1,
+      "employee_deductions": "0.00",
+      "gross_earnings": "50000.00",
+      "net_pay": "50000.00",
+      "statutory_total": "0.00"
+    }
+  },
+  "jobs": [
+    {
+      "attempt_count": 1,
+      "completed_items": 3,
+      "id": "c40ef1b5-dcda-4de9-818f-0cd26914f28c",
+      "operation": "generate_finance_handoff",
+      "stage": "completed",
+      "status": "succeeded",
+      "total_items": 3
+    },
+    {
+      "attempt_count": 1,
+      "completed_items": 2,
+      "id": "545d315c-52af-4201-922e-ff669f14df7e",
+      "operation": "publish_outputs",
+      "stage": "completed",
+      "status": "succeeded",
+      "total_items": 2
+    },
+    {
+      "attempt_count": 1,
+      "completed_items": 1,
+      "id": "419732b6-9633-452b-97f1-ec644e21cd20",
+      "operation": "generate_outputs",
+      "stage": "completed",
+      "status": "succeeded",
+      "total_items": 1
+    },
+    {
+      "attempt_count": 1,
+      "completed_items": 1,
+      "id": "cb14de09-1a28-4767-ace8-238af78f091e",
+      "operation": "calculate",
+      "stage": "completed",
+      "status": "succeeded",
+      "total_items": 1
+    }
+  ],
+  "output": {
+    "checksum": "024f403c25e782cac541ab324395acf661e94c9d392830bbd43577bbe64e0916",
+    "id": "2d6e2bde-402e-4309-a731-47c23b7b8a06",
+    "payslip_id": "9d891923-2e2e-4fb5-a40b-a7c4669785e4",
+    "status": "published",
+    "totals": {
+      "employee_count": 1,
+      "employee_deductions": "0.00",
+      "employer_contributions": "0.00",
+      "error_count": 0,
+      "gross_earnings": "50000.00",
+      "line_count": 1,
+      "net_pay": "50000.00"
+    }
+  },
+  "review": {
+    "id": "08c6a9af-ecc4-49d9-8224-eb7837a0043b",
+    "status": "locked",
+    "totals": {
+      "employee_count": 1,
+      "employee_deductions": "0.00",
+      "employer_contributions": "0.00",
+      "error_count": 0,
+      "gross_earnings": "50000.00",
+      "line_count": 1,
+      "net_pay": "50000.00"
+    }
+  },
+  "run": {
+    "code": "DB610_1792256223848",
+    "earning_period": "3a9784e5-d0bb-4fa2-ab9f-c515ff436b88",
+    "fiscal_year": "ee4586da-86cb-4f16-9f4d-cf0417ec0d53",
+    "id": "1b2539fb-7ba4-4151-b9b6-14b6835011d2",
+    "mapping": {
+      "earning_accounting_period_id": "3a9784e5-d0bb-4fa2-ab9f-c515ff436b88",
+      "earning_period_code": "DB613-2026-12",
+      "earning_period_end": "2026-12-31",
+      "earning_period_start": "2026-12-01",
+      "fiscal_year_code": "DB613-FY2026-27",
+      "fiscal_year_id": "ee4586da-86cb-4f16-9f4d-cf0417ec0d53",
+      "payment_accounting_period_id": "3a9784e5-d0bb-4fa2-ab9f-c515ff436b88",
+      "payment_date": "2026-12-31",
+      "payment_period_code": "DB613-2026-12"
+    },
+    "payment_period": "3a9784e5-d0bb-4fa2-ab9f-c515ff436b88",
+    "period": "88caf339-2107-4a5f-ada4-a78ba121741a",
+    "status": "locked"
+  },
+  "snapshot": {
+    "employee_id": "fcab79b6-f7ee-4caf-b88c-0817656ef036",
+    "id": "fcf3f126-eaac-47eb-ab67-6bb0f43f3ed2",
+    "status": "locked"
+  },
+  "tenant": {
+    "code": "pw-qa-db613-browser",
+    "id": "5fd06505-7319-4b29-ae9e-acbef02bc568",
+    "plan": "enterprise",
+    "status": "active"
+  }
+}

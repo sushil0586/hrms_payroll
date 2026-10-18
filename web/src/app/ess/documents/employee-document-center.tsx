@@ -2,14 +2,18 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { UploadProgressStatus } from "@/components/patterns/upload-progress";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { EssDocumentCenterResponse, EssDocumentRequirementItem, HrAdminEmployeeDocument } from "@/lib/types";
+import { uploadFormData, type UploadProgress } from "@/lib/ui/upload-form-data";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import {
   hasFieldErrors,
   requireText,
@@ -199,7 +203,7 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
       eyebrow="Document detail"
       footer={(
         <>
-          {item.artifact_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.id}/download`}>Download file</Link> : null}
+          {item.artifact_id ? <AsyncDownloadButton href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download file</AsyncDownloadButton> : null}
           <button className="button button--primary" onClick={onClose} type="button">Close</button>
         </>
       )}
@@ -271,6 +275,7 @@ function UploadDocumentModal({
   fieldErrors,
   formValue,
   isSubmitting,
+  progress,
   onClose,
   onFieldChange,
   onSubmit,
@@ -281,6 +286,7 @@ function UploadDocumentModal({
   fieldErrors: UploadFieldErrors;
   formValue: UploadFormValue;
   isSubmitting: boolean;
+  progress: UploadProgress | null;
   onClose: () => void;
   onFieldChange: <Key extends keyof UploadFormValue>(key: Key, value: UploadFormValue[Key]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -299,9 +305,9 @@ function UploadDocumentModal({
         <>
           {data.uploadable_categories.length === 0 ? <span className="muted">No self-upload categories are available right now.</span> : null}
           <button className="button button--secondary" disabled={isSubmitting} onClick={onClose} type="button">Cancel</button>
-          <button className="button button--primary" disabled={!canSubmit || data.uploadable_categories.length === 0} form={formId} type="submit">
-            {isSubmitting ? "Uploading..." : "Submit for review"}
-          </button>
+          <AsyncActionButton className="button button--primary" disabled={!canSubmit || data.uploadable_categories.length === 0} form={formId} pending={isSubmitting} pendingLabel="Uploading document" type="submit">
+            Submit for review
+          </AsyncActionButton>
         </>
       )}
       labelledBy="ess-document-upload-title"
@@ -399,6 +405,7 @@ function UploadDocumentModal({
               <span className="muted">{feedback.message}</span>
             </div>
           ) : null}
+          <UploadProgressStatus progress={progress} />
 
           {!canSubmit && data.uploadable_categories.length > 0 ? (
             <div className="notice notice--quiet">
@@ -430,7 +437,7 @@ function RequirementDetailModal({
       eyebrow="Required document"
       footer={(
         <>
-          {item.current_document_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.current_document_id}/download`}>Download</Link> : null}
+          {item.current_document_id ? <AsyncDownloadButton href={`/api/me/employee-documents/${item.current_document_id}/download`} fileName={currentDocument?.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
           <button className="button button--secondary" onClick={onClose} type="button">Close</button>
           {item.allow_employee_upload ? (
             <button className="button button--primary" onClick={onUpload} type="button">
@@ -499,6 +506,7 @@ function RequirementDetailModal({
 
 export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const pathname = usePathname();
   const [search, setSearch] = useState(currentFilters.q);
   const [verificationStatus, setVerificationStatus] = useState(currentFilters.verification_status || "all");
@@ -510,6 +518,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     category_id: data.uploadable_categories[0]?.id ?? "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [feedback, setFeedback] = useState<UploadFeedback | null>(null);
   const [pageFeedback, setPageFeedback] = useState<UploadFeedback | null>(null);
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
@@ -529,6 +538,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               fieldErrors={fieldErrors}
               formValue={formValue}
               isSubmitting={isSubmitting}
+              progress={uploadProgress}
               onClose={() => setIsUploadOpen(false)}
               onFieldChange={updateUploadField}
               onSubmit={handleUpload}
@@ -603,6 +613,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
 
     setFieldErrors({});
     setIsSubmitting(true);
+    setUploadProgress({ loaded: 0, total: formValue.file?.size ?? null });
 
     const body = new FormData();
     body.set("category_id", formValue.category_id);
@@ -615,39 +626,34 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     if (formValue.expires_on) body.set("expires_on", formValue.expires_on);
     if (formValue.file) body.set("file", formValue.file);
 
-    let response: Response;
     try {
-      response = await fetch("/api/me/employee-documents", {
-        method: "POST",
-        body,
-      });
-    } catch {
-      const message = "Unable to reach the server. Check your connection and try again.";
+      const response = await uploadFormData("/api/me/employee-documents", body, { onProgress: setUploadProgress });
+      if (!response.ok) {
+        const message = extractError(response.payload);
+        setFeedback({ tone: "error", message });
+        setToast({ title: "Upload failed.", message, tone: "error" });
+        return;
+      }
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Unable to reach the server. Check your connection and try again.";
       setFeedback({ tone: "error", message });
       setToast({ title: "Upload failed.", message, tone: "error" });
-      setIsSubmitting(false);
       return;
-    }
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = extractError(payload);
-      setFeedback({ tone: "error", message });
-      setToast({ title: "Upload failed.", message, tone: "error" });
+    } finally {
       setIsSubmitting(false);
-      return;
+      setUploadProgress(null);
     }
 
     setFormValue({
       ...INITIAL_UPLOAD_VALUE,
       category_id: data.uploadable_categories[0]?.id ?? "",
     });
-    setIsSubmitting(false);
     setIsUploadOpen(false);
     setFeedback(null);
     const message = "Your document has been sent to HR for verification.";
     setPageFeedback({ tone: "success", message });
     setToast({ title: "Document uploaded successfully.", message, tone: "success" });
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   useEffect(() => {
@@ -659,7 +665,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   return (
     <div className="stack ess-documents-center">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <section className="workspace-section ess-documents-status-section">
+      <section aria-busy={isRefreshing || undefined} className="workspace-section ess-documents-status-section">
         <div className="workspace-section__header">
           <div>
             <h2>Document status</h2>
@@ -873,7 +879,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                     <td>
                       <span className="ess-document-history-actions">
                         <button className="button button--secondary" onClick={() => setSelectedDocument(item)} type="button">Review</button>
-                        {item.artifact_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`}>Download</Link> : null}
+                        {item.artifact_id ? <AsyncDownloadButton className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
                       </span>
                     </td>
                   </tr>

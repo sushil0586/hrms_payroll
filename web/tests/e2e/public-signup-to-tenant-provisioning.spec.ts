@@ -118,8 +118,8 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await page.getByLabel("Password").fill(adminPassword);
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL(/\/tenant-admin$/, { timeout: 15_000 });
-    await expect(page.getByRole("heading", { name: "Tenant Admin Console" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: companyName })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Account Control Center" })).toBeVisible();
+    await expect(page.locator("main").getByText(companyName, { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

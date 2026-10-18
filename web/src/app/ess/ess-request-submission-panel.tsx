@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { EssAttendanceRecordOption, EssLeaveTypeOption } from "@/lib/types";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 
 type Props = {
@@ -35,7 +37,7 @@ function formatRecordLabel(record: EssAttendanceRecordOption) {
 }
 
 export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDemo, mode = "all" }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [leaveFieldErrors, setLeaveFieldErrors] = useState<FieldErrors<LeaveField>>({});
@@ -89,20 +91,23 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
       return;
     }
     setSubmitting("leave");
+    const requestPayload = {
+      leave_type_id: String(formData.get("leave_type_id") ?? ""),
+      start_date: String(formData.get("start_date") ?? ""),
+      end_date: String(formData.get("end_date") ?? ""),
+      start_day_portion: String(formData.get("start_day_portion") ?? "full_day"),
+      end_day_portion: String(formData.get("end_day_portion") ?? "full_day"),
+      reason: String(formData.get("reason") ?? ""),
+      attachment_reference: String(formData.get("attachment_reference") ?? ""),
+    };
+    const mutationScope = "ess.leave.submit";
+    const idempotencyKey = mutationIdempotencyKey(mutationScope, requestPayload);
     let response: Response;
     try {
       response = await fetch("/api/me/leave-requests", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leave_type_id: String(formData.get("leave_type_id") ?? ""),
-          start_date: String(formData.get("start_date") ?? ""),
-          end_date: String(formData.get("end_date") ?? ""),
-          start_day_portion: String(formData.get("start_day_portion") ?? "full_day"),
-          end_day_portion: String(formData.get("end_day_portion") ?? "full_day"),
-          reason: String(formData.get("reason") ?? ""),
-          attachment_reference: String(formData.get("attachment_reference") ?? ""),
-        }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(requestPayload),
       });
     } catch {
       setSubmitting(null);
@@ -121,12 +126,13 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
       submittingRef.current = null;
       return;
     }
+    clearMutationIdempotencyKey(mutationScope);
     event.currentTarget.reset();
     const message = "Leave request submitted.";
     setFeedback({ tone: "success", message });
     setToast({ title: "Submitted successfully.", message, tone: "success" });
     submittingRef.current = null;
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   async function submitRegularization(event: React.FormEvent<HTMLFormElement>) {
@@ -161,18 +167,21 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
       return;
     }
     setSubmitting("attendance");
+    const requestPayload = {
+      attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
+      requested_status: String(formData.get("requested_status") ?? "present"),
+      requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
+      requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
+      reason: String(formData.get("reason") ?? ""),
+    };
+    const mutationScope = "ess.attendance.regularization.submit";
+    const idempotencyKey = mutationIdempotencyKey(mutationScope, requestPayload);
     let response: Response;
     try {
       response = await fetch("/api/me/attendance-regularizations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
-          requested_status: String(formData.get("requested_status") ?? "present"),
-          requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
-          requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
-          reason: String(formData.get("reason") ?? ""),
-        }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(requestPayload),
       });
     } catch {
       setSubmitting(null);
@@ -191,12 +200,13 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
       submittingRef.current = null;
       return;
     }
+    clearMutationIdempotencyKey(mutationScope);
     event.currentTarget.reset();
     const message = "Attendance regularization submitted.";
     setFeedback({ tone: "success", message });
     setToast({ title: "Submitted successfully.", message, tone: "success" });
     submittingRef.current = null;
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   useEffect(() => {
@@ -263,9 +273,7 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
             </label>
             <div className="form-actions-bar form-field--full">
               <span className="muted">Requests appear in MSS when manager approval is required.</span>
-              <button className="button button--primary" disabled={submitting === "leave" || !leaveTypes.length} type="submit">
-                {submitting === "leave" ? "Submitting..." : "Submit leave"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={!leaveTypes.length || Boolean(submitting && submitting !== "leave")} pending={submitting === "leave" || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave requests" : "Submitting leave"} type="submit">Submit leave</AsyncActionButton>
             </div>
           </form>
         </article>
@@ -315,9 +323,7 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
             </label>
             <div className="form-actions-bar form-field--full">
               <span className="muted">Regularizations route to the reporting manager inbox.</span>
-              <button className="button button--primary" disabled={submitting === "attendance" || !attendanceRecords.length} type="submit">
-                {submitting === "attendance" ? "Submitting..." : "Submit regularization"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={!attendanceRecords.length || Boolean(submitting && submitting !== "attendance")} pending={submitting === "attendance" || isRefreshing} pendingLabel={isRefreshing ? "Refreshing attendance requests" : "Submitting regularization"} type="submit">Submit regularization</AsyncActionButton>
             </div>
           </form>
         </article>

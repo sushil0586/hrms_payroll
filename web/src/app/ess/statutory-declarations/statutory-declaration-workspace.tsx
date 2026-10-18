@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateUploadFile } from "@/lib/ui/validation";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import type {
   EssStatutoryDeclaration,
   EssStatutoryDeclarationItem,
@@ -444,7 +445,7 @@ function NextActionPanel({
 }
 
 export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedDeclarationId }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const selectedDeclaration = data.items.find((item) => item.id === selectedDeclarationId) ?? data.items[0] ?? null;
   const editableDeclaration = isEditable(selectedDeclaration) ? selectedDeclaration : null;
   const [activeModal, setActiveModal] = useState<ModalState>(null);
@@ -540,20 +541,25 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
       payload.proof_window_ref = proofWindowRef.trim();
     }
     const endpoint = editableDeclaration ? `/api/me/statutory-declarations/${editableDeclaration.id}` : "/api/me/statutory-declarations";
-    const response = await fetch(endpoint, {
-      body: JSON.stringify(payload),
-      headers: { "Content-Type": "application/json" },
-      method: editableDeclaration ? "PATCH" : "POST",
-    });
-    const result = await response.json().catch(() => ({}));
-    setIsSavingDeclaration(false);
-    if (!response.ok) {
-      setNoticeMessage(apiErrorMessage(result, "Declaration could not be saved."), "error");
-      return;
+    try {
+      const response = await fetch(endpoint, {
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        method: editableDeclaration ? "PATCH" : "POST",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNoticeMessage(apiErrorMessage(result, "Declaration could not be saved."), "error");
+        return;
+      }
+      setNoticeMessage("Declaration saved.", "success");
+      setActiveModal(null);
+      refresh();
+    } catch {
+      setNoticeMessage("Unable to reach the server. Check your connection and try again.", "error");
+    } finally {
+      setIsSavingDeclaration(false);
     }
-    setNoticeMessage("Declaration saved.", "success");
-    setActiveModal(null);
-    window.setTimeout(() => router.refresh(), 900);
   }
 
   async function handleItemSubmit(event: FormEvent<HTMLFormElement>) {
@@ -579,8 +585,9 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     }
     setIsSavingItem(true);
     setNoticeMessage("");
-    let response: Response;
-    if (proofFile) {
+    try {
+      let response: Response;
+      if (proofFile) {
       if (!proofCategoryId) {
         setNoticeMessage("Select a proof upload category.", "error");
         setIsSavingItem(false);
@@ -595,12 +602,12 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
       body.set("declared_amount", declaredAmount);
       body.set("title", itemName);
       body.set("file", proofFile);
-      response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/proof-upload`, {
-        body,
-        method: "POST",
-      });
-    } else {
-      response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/items`, {
+        response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/proof-upload`, {
+          body,
+          method: "POST",
+        });
+      } else {
+        response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/items`, {
         body: JSON.stringify({
           component_code: componentCode.trim(),
           config_snapshot: {
@@ -615,22 +622,26 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
-      });
+        });
+      }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNoticeMessage(apiErrorMessage(result, "Proof item could not be saved."), "error");
+        return;
+      }
+      setItemName("");
+      setDeclaredAmount("");
+      setProofDocumentRef("");
+      setProofFile(null);
+      setProofFileInputKey((current) => current + 1);
+      setNoticeMessage(proofFile ? "Proof file uploaded and linked." : "Proof item saved.", "success");
+      setActiveModal(null);
+      refresh();
+    } catch {
+      setNoticeMessage("Unable to reach the server. Check your connection and try again.", "error");
+    } finally {
+      setIsSavingItem(false);
     }
-    const result = await response.json().catch(() => ({}));
-    setIsSavingItem(false);
-    if (!response.ok) {
-      setNoticeMessage(apiErrorMessage(result, "Proof item could not be saved."), "error");
-      return;
-    }
-    setItemName("");
-    setDeclaredAmount("");
-    setProofDocumentRef("");
-    setProofFile(null);
-    setProofFileInputKey((current) => current + 1);
-    setNoticeMessage(proofFile ? "Proof file uploaded and linked." : "Proof item saved.", "success");
-    setActiveModal(null);
-    window.setTimeout(() => router.refresh(), 900);
   }
 
   async function handleSubmitDeclaration() {
@@ -639,18 +650,23 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     }
     setIsSubmitting(true);
     setNoticeMessage("");
-    const response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/submit`, {
-      method: "POST",
-    });
-    const result = await response.json().catch(() => ({}));
-    setIsSubmitting(false);
-    if (!response.ok) {
-      setNoticeMessage(apiErrorMessage(result, "Declaration could not be submitted."), "error");
-      return;
+    try {
+      const response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/submit`, {
+        method: "POST",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNoticeMessage(apiErrorMessage(result, "Declaration could not be submitted."), "error");
+        return;
+      }
+      setNoticeMessage("Declaration submitted.", "success");
+      setActiveModal(null);
+      refresh();
+    } catch {
+      setNoticeMessage("Unable to reach the server. Check your connection and try again.", "error");
+    } finally {
+      setIsSubmitting(false);
     }
-    setNoticeMessage("Declaration submitted.", "success");
-    setActiveModal(null);
-    window.setTimeout(() => router.refresh(), 900);
   }
 
   useEffect(() => {
@@ -786,9 +802,9 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             <>
               <span className={`notice notice--${noticeTone}`}>{notice}</span>
               <button className="button button--secondary" disabled={isSavingDeclaration} onClick={() => setActiveModal(null)} type="button">Cancel</button>
-              <button className="button button--primary" disabled={!data.profile || isSavingDeclaration} form="ess-tax-declaration-form" type="submit">
-                {isSavingDeclaration ? "Saving" : editableDeclaration ? "Update declaration" : "Create declaration"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={!data.profile} form="ess-tax-declaration-form" pending={isSavingDeclaration || isRefreshing} pendingLabel={isSavingDeclaration ? "Saving declaration" : "Refreshing declaration"} type="submit">
+                {editableDeclaration ? "Update declaration" : "Create declaration"}
+              </AsyncActionButton>
             </>
           )}
           labelledBy="ess-tax-declaration-modal-title"
@@ -842,9 +858,9 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             <>
               <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || (editableDeclaration ? `${editableDeclaration.financial_year_code} accepts draft proof rows.` : "Create or select a draft declaration first.")}</span>
               <button className="button button--secondary" disabled={isSavingItem} onClick={() => setActiveModal(null)} type="button">Cancel</button>
-              <button className="button button--primary" disabled={!editableDeclaration || isSavingItem} form="ess-tax-proof-form" type="submit">
-                {isSavingItem ? "Saving" : proofFile ? "Upload proof" : "Add proof"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={!editableDeclaration} form="ess-tax-proof-form" pending={isSavingItem || isRefreshing} pendingLabel={isSavingItem ? (proofFile ? "Uploading proof" : "Saving proof") : "Refreshing declaration"} type="submit">
+                {proofFile ? "Upload proof" : "Add proof"}
+              </AsyncActionButton>
             </>
           )}
           labelledBy="ess-tax-proof-modal-title"
@@ -926,9 +942,9 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             <>
               <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || "Confirm only after proof rows are correct."}</span>
               <button className="button button--secondary" disabled={isSubmitting} onClick={() => setActiveModal(null)} type="button">Cancel</button>
-              <button className="button button--primary" disabled={!editableDeclaration || isSubmitting} onClick={handleSubmitDeclaration} type="button">
-                {isSubmitting ? "Submitting" : "Submit declaration"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={!editableDeclaration} onClick={handleSubmitDeclaration} pending={isSubmitting || isRefreshing} pendingLabel={isSubmitting ? "Submitting declaration" : "Refreshing declaration"} type="button">
+                Submit declaration
+              </AsyncActionButton>
             </>
           )}
           labelledBy="ess-tax-submit-modal-title"

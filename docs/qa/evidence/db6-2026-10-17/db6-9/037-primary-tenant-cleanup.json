@@ -1,0 +1,33 @@
+Traceback (most recent call last):
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/manage.py", line 21, in <module>
+    main()
+    ~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/manage.py", line 17, in main
+    execute_from_command_line(sys.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+    ~~~~~~~~~~~~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/core/management/base.py", line 459, in execute
+    output = self.handle(*args, **options)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 85, in inner
+    return func(*args, **kwds)
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/apps/common/management/commands/manage_playwright_workspace.py", line 149, in handle
+    manifest = self._cleanup(tenant, seed_ref, tenant_code)
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/apps/common/management/commands/manage_playwright_workspace.py", line 604, in _cleanup
+    tenant.delete()
+    ~~~~~~~~~~~~~^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/base.py", line 1272, in delete
+    collector.collect([self], keep_parents=keep_parents)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ansh/Documents/hrms-payroll-saas/backend/.venv/lib/python3.14/site-packages/django/db/models/deletion.py", line 351, in collect
+    raise ProtectedError(
+    ...<7 lines>...
+    )
+django.db.models.deletion.ProtectedError: ("Cannot delete some instances of model 'Tenant' because they are referenced through protected foreign keys: 'LegalEntity.tenant', 'Employee.tenant', 'LeaveType.tenant', 'LeavePolicyPeriod.tenant', 'LeaveEntitlementLot.tenant', 'LeaveRequestAllocation.tenant'.", {<LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation - 1.00>, <LeaveEntitlementLot: LeaveEntitlementLot object (a1ad809c-bfdb-4a71-bf0f-5dfc750abde3)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation - 1.00>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - consumption - 1.00>, <LeaveRequestAllocation: LeaveRequestAllocation object (51646aff-951d-4ec0-82c1-742440f99713)>, <LeaveRequestAllocation: LeaveRequestAllocation object (ae296526-f606-495a-8e3b-f1d47abb69ad)>, <LeaveRequestAllocation: LeaveRequestAllocation object (b1d0b0b7-0dbb-4cde-9f12-18084531538c)>, <LeaveRequestAllocation: LeaveRequestAllocation object (f48409a0-3176-4386-8f9d-6af54f2aad3c)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation_release - 1.00>, <LeaveRequestAllocation: LeaveRequestAllocation object (127289e3-2081-4875-b5a7-dc394002608f)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - consumption - 1.00>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - consumption - 1.00>, <LeavePolicyPeriod: LeavePolicyPeriod object (3b1222c6-2aef-4c6d-bea7-8140975fe65f)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation - 1.00>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation_release - 1.00>, <LeaveRequestAllocation: LeaveRequestAllocation object (2f0b91a4-8b1f-4f99-9d6a-7bb50f7de00e)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation_release - 1.00>, <LeaveRequestAllocation: LeaveRequestAllocation object (0d8cf23e-3666-4729-a7aa-aa9b8c6e311e)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - consumption - 1.00>, <LeaveRequestAllocation: LeaveRequestAllocation object (0f9057be-c8af-4add-9277-aa8c6cfbe584)>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation_release - 1.00>, <LeaveBalanceTransaction: QA-EMP-001 - Esha Employee - QA Casual 2026 - 2026 - reservation - 1.00>})

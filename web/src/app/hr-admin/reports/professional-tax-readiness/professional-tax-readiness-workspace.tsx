@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type {
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollOutputArtifact,
@@ -204,8 +205,8 @@ export function ProfessionalTaxReadinessWorkspace({
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.length}</strong> gates</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href="/api/hr-admin/reports/professional-tax-package" prefetch={false}>Download PT package</Link>
-          <Link className="button button--ghost" href="/api/hr-admin/reports/professional-tax-package?format=manifest" prefetch={false}>Package manifest</Link>
+          <AsyncDownloadButton href="/api/hr-admin/reports/professional-tax-package" fileName="professional-tax-package.csv">Download PT package</AsyncDownloadButton>
+          <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/professional-tax-package?format=manifest" fileName="professional-tax-package-manifest.json">Package manifest</AsyncDownloadButton>
         </div>
 
         <div className="report-catalog-table-wrap">

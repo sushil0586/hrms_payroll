@@ -9,9 +9,11 @@ const TENANT_ADMIN_NAV_ITEMS = [
   { href: "/tenant-admin/plan", label: "Plan & Billing", shortLabel: "PB", blurb: "Subscription details", permissions: ["tenant.plan.view"] },
   { href: "/tenant-admin/setup", label: "Setup Guide", shortLabel: "SG", blurb: "Launch steps", permissions: ["tenant.setup.view"] },
   { href: "/tenant-admin/settings", label: "Settings", shortLabel: "ST", blurb: "Tenant configuration", permissions: ["tenant.settings.view"] },
+  { href: "/tenant-admin/financial-calendars", label: "Financial Years", shortLabel: "FY", blurb: "Calendars and posting periods", permissions: ["tenant.settings.view", "finance.periods.close", "finance.periods.reopen"] },
   { href: "/tenant-admin/security-readiness", label: "Security", shortLabel: "SE", blurb: "Access and policies", permissions: ["tenant.security.view"] },
   { href: "/tenant-admin/support-access", label: "Support Access", shortLabel: "SA", blurb: "Assisted operations", permissions: ["tenant.support_access.request", "tenant.support_access.approve"] },
   { href: "/tenant-admin/trust-audit", label: "Audit Trail", shortLabel: "AT", blurb: "Activity logs", permissions: ["tenant.audit.view", "tenant.audit.export"] },
+  { href: "/tenant-admin/data-governance", label: "Data Governance", shortLabel: "DG", blurb: "Retention and exports", permissions: ["tenant.retention.view"] },
 ];
 
 const TENANT_ADMIN_NAV_GROUPS = [
@@ -25,11 +27,11 @@ const TENANT_ADMIN_NAV_GROUPS = [
   },
   {
     title: "Tenant Setup",
-    items: TENANT_ADMIN_NAV_ITEMS.slice(4, 6),
+    items: TENANT_ADMIN_NAV_ITEMS.slice(4, 7),
   },
   {
     title: "Security & Governance",
-    items: TENANT_ADMIN_NAV_ITEMS.slice(6),
+    items: TENANT_ADMIN_NAV_ITEMS.slice(7),
   },
 ];
 

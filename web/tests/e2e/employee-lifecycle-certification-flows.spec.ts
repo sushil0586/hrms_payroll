@@ -121,10 +121,15 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
     page.waitForResponse((item) => item.url().includes(`/api/hr-admin/${path}`) && item.request().method() === method),
     action(),
   ]);
+  const payload = (await response.json().catch(() => ({}))) as T;
+  if (response.ok() && method === "POST" && path === "employees" && !(payload as { id?: string }).id) {
+    await page.waitForURL((url) => Boolean(url.searchParams.get("employeeId")));
+    (payload as { id?: string }).id = new URL(page.url()).searchParams.get("employeeId") ?? undefined;
+  }
   return {
     ok: response.ok(),
     status: response.status(),
-    payload: (await response.json().catch(() => ({}))) as T,
+    payload,
   };
 }
 
@@ -291,6 +296,7 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await actionsMenu.locator("summary").click();
     await expect(actionsMenu.getByRole("link", { name: "Edit employee" })).toBeVisible();
     await expect(actionsMenu.getByRole("link", { name: "Manage access" })).toBeVisible();
+    await actionsMenu.locator("summary").click();
     await detailPanel.getByRole("link", { name: "Access", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}&action=access`), { timeout: 30_000 });
     await expect(page.getByRole("dialog", { name: "Manage access" })).toBeVisible();

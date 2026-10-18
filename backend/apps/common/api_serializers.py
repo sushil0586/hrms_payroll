@@ -66,6 +66,7 @@ from apps.payroll.models import (
     PayrollPeriodStatus,
     PayrollRuleType,
     PayrollRuleVersionStatus,
+    PayrollRunKind,
     PayrollRunStatus,
     SalaryComponentType,
     SalaryComponentValueType,
@@ -504,6 +505,16 @@ class HrAdminOrganizationWriteSerializer(serializers.Serializer):
         if "level" in attrs and attrs["level"] is not None and attrs["level"] < 1:
             raise serializers.ValidationError({"level": "Level must be 1 or higher."})
         return attrs
+
+
+class HrAdminOrganizationImportRowSerializer(serializers.Serializer):
+    row_number = serializers.IntegerField(min_value=2)
+    section = serializers.CharField(max_length=40)
+    data = serializers.DictField(child=serializers.CharField(allow_blank=True), allow_empty=False)
+
+
+class HrAdminOrganizationImportSerializer(serializers.Serializer):
+    rows = HrAdminOrganizationImportRowSerializer(many=True, allow_empty=False)
 
 
 class HrAdminOrganizationSummarySerializer(serializers.Serializer):
@@ -2070,6 +2081,11 @@ class HrAdminPayrollRunSerializer(serializers.Serializer):
     pay_group_name = serializers.CharField(allow_null=True)
     code = serializers.CharField()
     name = serializers.CharField()
+    run_kind = serializers.CharField(allow_null=True)
+    fiscal_year_id = serializers.UUIDField(allow_null=True)
+    earning_accounting_period_id = serializers.UUIDField(allow_null=True)
+    payment_accounting_period_id = serializers.UUIDField(allow_null=True)
+    period_mapping_snapshot = serializers.JSONField()
     status = serializers.CharField()
     status_label = serializers.CharField()
     input_profile_ref = serializers.CharField()
@@ -2094,6 +2110,7 @@ class HrAdminPayrollRunWriteSerializer(serializers.Serializer):
     pay_group_id = serializers.UUIDField(required=False, allow_null=True)
     code = serializers.SlugField(max_length=100, required=False)
     name = serializers.CharField(max_length=255, required=False)
+    run_kind = serializers.ChoiceField(choices=PayrollRunKind.values, required=False)
     status = serializers.ChoiceField(choices=PayrollRunStatus.values, required=False)
     input_profile_ref = serializers.CharField(max_length=160, required=False)
     snapshot_schema_ref = serializers.CharField(max_length=160, required=False)
@@ -2174,6 +2191,7 @@ class HrAdminPayrollInputSnapshotListSerializer(serializers.Serializer):
 class HrAdminPayrollInputSnapshotWriteSerializer(serializers.Serializer):
     payroll_run_id = serializers.UUIDField(required=False)
     employee_id = serializers.UUIDField(required=False)
+    attendance_close_id = serializers.UUIDField(required=False, allow_null=True)
     pay_group_assignment_id = serializers.UUIDField(required=False, allow_null=True)
     salary_assignment_id = serializers.UUIDField(required=False, allow_null=True)
     snapshot_status = serializers.ChoiceField(choices=PayrollInputSnapshotStatus.values, required=False)
@@ -3999,6 +4017,8 @@ class HrAdminScopedAssignmentSerializer(serializers.Serializer):
     employee = serializers.CharField(allow_null=True)
     priority = serializers.IntegerField()
     is_active = serializers.BooleanField()
+    effective_from = serializers.DateField(allow_null=True, required=False)
+    effective_to = serializers.DateField(allow_null=True, required=False)
     scope_labels = serializers.ListField(child=serializers.CharField(), allow_empty=True, required=False)
     conflict_count = serializers.IntegerField(required=False)
     has_blocking_conflict = serializers.BooleanField(required=False)
@@ -4015,10 +4035,14 @@ class HrAdminLeavePolicyAssignmentWriteSerializer(serializers.Serializer):
     employee_id = serializers.UUIDField(allow_null=True, required=False)
     priority = serializers.IntegerField(required=False, default=100)
     is_active = serializers.BooleanField(required=False, default=True)
+    effective_from = serializers.DateField(allow_null=True, required=False)
+    effective_to = serializers.DateField(allow_null=True, required=False)
 
     def validate(self, attrs):
         if not self.partial and not attrs.get("leave_policy_id"):
             raise serializers.ValidationError({"leave_policy_id": "This field is required."})
+        if attrs.get("effective_from") and attrs.get("effective_to") and attrs["effective_to"] < attrs["effective_from"]:
+            raise serializers.ValidationError({"effective_to": "Effective-to date must be on or after effective-from."})
         return attrs
 
 
@@ -4033,6 +4057,8 @@ class HrAdminLeavePolicyAssignmentConflictRequestSerializer(serializers.Serializ
     employee_id = serializers.UUIDField(allow_null=True, required=False)
     priority = serializers.IntegerField(required=False, default=100)
     is_active = serializers.BooleanField(required=False, default=True)
+    effective_from = serializers.DateField(allow_null=True, required=False)
+    effective_to = serializers.DateField(allow_null=True, required=False)
 
 
 class HrAdminLeavePolicyAssignmentConflictItemSerializer(serializers.Serializer):
@@ -4088,10 +4114,14 @@ class HrAdminAttendancePolicyAssignmentWriteSerializer(serializers.Serializer):
     employee_id = serializers.UUIDField(allow_null=True, required=False)
     priority = serializers.IntegerField(required=False, default=100)
     is_active = serializers.BooleanField(required=False, default=True)
+    effective_from = serializers.DateField(allow_null=True, required=False)
+    effective_to = serializers.DateField(allow_null=True, required=False)
 
     def validate(self, attrs):
         if not self.partial and not attrs.get("attendance_policy_id"):
             raise serializers.ValidationError({"attendance_policy_id": "This field is required."})
+        if attrs.get("effective_from") and attrs.get("effective_to") and attrs["effective_to"] < attrs["effective_from"]:
+            raise serializers.ValidationError({"effective_to": "Effective-to date must be on or after effective-from."})
         return attrs
 
 
@@ -4105,6 +4135,8 @@ class HrAdminAttendancePolicyAssignmentConflictRequestSerializer(serializers.Ser
     grade_id = serializers.UUIDField(allow_null=True, required=False)
     employment_type_id = serializers.UUIDField(allow_null=True, required=False)
     employee_id = serializers.UUIDField(allow_null=True, required=False)
+    effective_from = serializers.DateField(allow_null=True, required=False)
+    effective_to = serializers.DateField(allow_null=True, required=False)
     priority = serializers.IntegerField(required=False, default=100)
     is_active = serializers.BooleanField(required=False, default=True)
 
@@ -4639,7 +4671,7 @@ class HrAdminWorkflowStepWriteSerializer(serializers.Serializer):
     scope_type = serializers.ChoiceField(choices=ScopeType.values, required=False, allow_blank=True)
     auto_approve_after_hours = serializers.IntegerField(required=False, min_value=0, default=0)
     escalate_after_hours = serializers.IntegerField(required=False, min_value=0, default=0)
-    allow_delegate = serializers.BooleanField(required=False, default=True)
+    allow_delegate = serializers.BooleanField(required=False, default=False)
     allow_send_back = serializers.BooleanField(required=False, default=True)
     allow_comment = serializers.BooleanField(required=False, default=True)
     rule_snapshot = serializers.JSONField(required=False)
@@ -4667,6 +4699,18 @@ class HrAdminWorkflowTemplateWriteSerializer(serializers.Serializer):
         step_payloads = attrs.get("steps")
         if step_payloads:
             for index, step_payload in enumerate(step_payloads, start=1):
+                if step_payload.get("mode", WorkflowStepMode.SEQUENTIAL) != WorkflowStepMode.SEQUENTIAL:
+                    raise serializers.ValidationError(
+                        {"steps": [f"Step {index}: parallel approval is unavailable until quorum rules are approved."]}
+                    )
+                if step_payload.get("allow_delegate", False):
+                    raise serializers.ValidationError(
+                        {"steps": [f"Step {index}: delegation is unavailable until grant and revocation rules are approved."]}
+                    )
+                if step_payload.get("escalate_after_hours", 0):
+                    raise serializers.ValidationError(
+                        {"steps": [f"Step {index}: escalation is unavailable until SLA and fallback-owner rules are approved."]}
+                    )
                 _validate_workflow_step_rule_snapshot(
                     module=module,
                     trigger_key=trigger_key,

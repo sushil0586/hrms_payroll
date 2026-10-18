@@ -1,0 +1,74 @@
+{
+  "tenant_id": "ee693962-6641-4a0c-ad62-d211ee0531c1",
+  "run": {
+    "id": "8732a825-7374-4500-af99-e02539bdc522",
+    "status": "succeeded",
+    "attempt_count": 1,
+    "processed_count": 1,
+    "failed_count": 0,
+    "celery_task_id": "52efa630-9259-412d-bffa-2e9fc6782869",
+    "request_snapshot": {
+      "expiry_date": null,
+      "expiring_units": "0.00",
+      "policy_snapshot": {
+        "entitlement": {
+          "proration_mode": "joining_month",
+          "carry_forward_cap": "10.00",
+          "carry_forward_mode": "limited",
+          "policy_year_start_day": 1,
+          "policy_year_start_month": 4
+        }
+      },
+      "carry_forward_cap": "10.00"
+    },
+    "result_snapshot": {
+      "processed_count": 1,
+      "source_balance_count": 1
+    }
+  },
+  "source_balance": [
+    {
+      "opening_balance": "18.00",
+      "accrued_amount": "0.00",
+      "reserved_amount": "0.00",
+      "consumed_amount": "0.00",
+      "carry_forward_amount": "0.00",
+      "expired_amount": "0.00",
+      "forfeited_amount": "8.00",
+      "closing_balance": "10.00"
+    }
+  ],
+  "target_balance": [
+    {
+      "opening_balance": "0.00",
+      "carry_forward_amount": "10.00",
+      "closing_balance": "10.00"
+    }
+  ],
+  "movements": [
+    {
+      "action": "carry_forward",
+      "units": "10.00",
+      "effective_date": "2027-04-01",
+      "idempotency_key": "8732a825-7374-4500-af99-e02539bdc522:carry:3705dfac-0f19-44b7-8758-740ff3e1b12b"
+    },
+    {
+      "action": "forfeiture",
+      "units": "8.00",
+      "effective_date": "2027-03-31",
+      "idempotency_key": "8732a825-7374-4500-af99-e02539bdc522:forfeit:3705dfac-0f19-44b7-8758-740ff3e1b12b"
+    }
+  ],
+  "lots": [
+    {
+      "granted_units": "10.00",
+      "remaining_units": "10.00",
+      "effective_date": "2027-04-01",
+      "expiry_date": null,
+      "metadata": {
+        "lot_kind": "carry_forward_base",
+        "close_run_id": "8732a825-7374-4500-af99-e02539bdc522"
+      }
+    }
+  ]
+}

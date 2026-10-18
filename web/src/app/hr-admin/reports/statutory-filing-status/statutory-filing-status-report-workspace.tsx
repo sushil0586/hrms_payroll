@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { useMemo, useState } from "react";
 
 import type {
@@ -260,12 +262,8 @@ export function StatutoryFilingStatusReportWorkspace({
           <span className="queue-summary-chip">
             <strong>{currentPage}</strong> of {pageCount} pages
           </span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>
-            Export filtered CSV
-          </Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>
-            Manifest
-          </Link>
+          <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
+          <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
         <div className="report-catalog-table-wrap">

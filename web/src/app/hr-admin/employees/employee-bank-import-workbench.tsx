@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
+import { submitImportRequest } from "@/lib/ui/import-request";
 import type { HrAdminEmployeeBankAccountWriteInput, HrAdminEmployeeListItem } from "@/lib/types";
 
 type EmployeeBankImportWorkbenchProps = {
@@ -179,6 +181,7 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
     [employees],
   );
   const readyCount = rows.filter((row) => row.status === "ready").length;
+  const hasFailedRows = rows.some((row) => row.status === "failed");
   const createdCount = rows.filter((row) => row.status === "created").length;
 
   async function preview() {
@@ -219,6 +222,7 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
   }
 
   async function commitReadyRows() {
+    if (isCommitting) return;
     setIsCommitting(true);
     const nextRows = [...rows];
 
@@ -228,12 +232,12 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
         continue;
       }
 
-      const response = await fetch(`/api/hr-admin/employees/${row.employeeId}/bank-accounts`, {
+      const response = await submitImportRequest(`/api/hr-admin/employees/${row.employeeId}/bank-accounts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(row.payload),
       });
-      const payload = await response.json().catch(() => ({}));
+      const payload = response.payload;
       nextRows[index] = {
         ...row,
         status: response.ok ? "created" : "failed",
@@ -243,7 +247,9 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
     }
 
     setIsCommitting(false);
-    setMessage("Commit complete. Open the employee bank account page or payroll readiness to verify coverage.");
+    setMessage(nextRows.some((row) => row.status === "failed")
+      ? "Some bank rows failed. Review the row messages, then preview the preserved CSV again."
+      : "Commit complete. Open the employee bank account page or payroll readiness to verify coverage.");
     await recordImportBatchAudit({
       import_type: "employee_bank_accounts",
       status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
@@ -311,13 +317,11 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
             <button className="button button--primary" type="button" onClick={preview}>
               Preview bank import
             </button>
-            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting} onClick={commitReadyRows}>
-              {isCommitting ? "Committing..." : "Commit ready bank rows"}
-            </button>
+            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount} pending={isCommitting} pendingLabel="Committing bank rows" onClick={commitReadyRows}>Commit ready bank rows</AsyncActionButton>
           </div>
         </div>
 
-        {message ? <div className="notice notice--success" role="status"><strong>Bank import update completed.</strong><span>{message}</span></div> : null}
+        {message ? <div className={`notice${hasFailedRows ? "" : " notice--success"}`} role={hasFailedRows ? "alert" : "status"}><strong>{hasFailedRows ? "Bank import needs attention." : "Bank import update completed."}</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
           <div className="table-scroll">

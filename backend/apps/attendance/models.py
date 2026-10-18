@@ -1,6 +1,7 @@
 """Attendance policies, shifts, records, and regularization."""
 
 from django.db import models
+from django.utils import timezone
 
 from apps.common.models import TimeStampedModel, UUIDPrimaryKeyModel
 from apps.employees.models import Employee
@@ -48,6 +49,14 @@ class RegularizationStatus(models.TextChoices):
     APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
     CANCELLED = "cancelled", "Cancelled"
+
+
+class AttendancePeriodCloseStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    APPROVED = "approved", "Approved"
+    CLOSED = "closed", "Closed"
+    REOPENED = "reopened", "Reopened"
 
 
 class HolidayType(models.TextChoices):
@@ -301,11 +310,20 @@ class AttendancePolicyAssignment(UUIDPrimaryKeyModel, TimeStampedModel):
     )
     priority = models.PositiveIntegerField(default=100)
     is_active = models.BooleanField(default=True)
+    effective_from = models.DateField(blank=True, null=True)
+    effective_to = models.DateField(blank=True, null=True)
+    resolution_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["priority", "created_at"]
         verbose_name = "Attendance Policy Assignment"
         verbose_name_plural = "Attendance Policy Assignments"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(effective_to__isnull=True) | models.Q(effective_from__isnull=True) | models.Q(effective_to__gte=models.F("effective_from")),
+                name="attendance_policy_assignment_dates_ordered",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.attendance_policy} -> {self.tenant.code}"
@@ -557,3 +575,53 @@ class AttendanceRegularization(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.employee} - {self.attendance_record.attendance_date}"
+
+
+class AttendancePeriodClose(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Versioned, tenant-scoped evidence for a governed attendance period close."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="attendance_period_closes")
+    legal_entity = models.ForeignKey(LegalEntity, on_delete=models.PROTECT, related_name="attendance_period_closes")
+    period_start = models.DateField()
+    period_end = models.DateField()
+    version = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=20, choices=AttendancePeriodCloseStatus.choices, default=AttendancePeriodCloseStatus.DRAFT)
+    previous_version = models.ForeignKey("self", on_delete=models.PROTECT, related_name="correction_versions", blank=True, null=True)
+    idempotency_key = models.CharField(max_length=160)
+    reconciliation_snapshot = models.JSONField(default=dict, blank=True)
+    snapshot_hash = models.CharField(max_length=64, blank=True)
+    employee_count = models.PositiveIntegerField(default=0)
+    attendance_record_count = models.PositiveIntegerField(default=0)
+    blocker_count = models.PositiveIntegerField(default=0)
+    submitted_by = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="submitted_attendance_closes", blank=True, null=True)
+    submitted_at = models.DateTimeField(blank=True, null=True)
+    approved_by = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="approved_attendance_closes", blank=True, null=True)
+    approved_at = models.DateTimeField(blank=True, null=True)
+    closed_by = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="closed_attendance_periods", blank=True, null=True)
+    closed_at = models.DateTimeField(blank=True, null=True)
+    reopened_by = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="reopened_attendance_periods", blank=True, null=True)
+    reopened_at = models.DateTimeField(blank=True, null=True)
+    reopen_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-period_end", "legal_entity__name", "-version"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(period_end__gte=models.F("period_start")), name="attendance_close_dates_ordered"),
+            models.UniqueConstraint(fields=["tenant", "legal_entity", "period_start", "period_end", "version"], name="unique_attendance_close_version"),
+            models.UniqueConstraint(fields=["tenant", "idempotency_key"], name="unique_attendance_close_idempotency"),
+        ]
+
+
+class AttendancePeriodCloseEvent(UUIDPrimaryKeyModel):
+    """Append-only lifecycle and correction audit evidence."""
+
+    close = models.ForeignKey(AttendancePeriodClose, on_delete=models.PROTECT, related_name="events")
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="attendance_close_events")
+    event_type = models.CharField(max_length=30)
+    actor = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="attendance_close_events")
+    reason = models.TextField(blank=True)
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["occurred_at", "id"]

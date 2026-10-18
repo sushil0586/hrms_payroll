@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { performJsonMutation } from "@/lib/ui/json-mutation";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminLeavePolicy, HrAdminLeavePolicyImpact } from "@/lib/types";
@@ -24,7 +26,7 @@ function uniqueValues(items: string[]) {
 }
 
 export function LeavePolicyList({ canManagePolicies, policies }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [leaveType, setLeaveType] = useState("");
@@ -96,13 +98,13 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
   }, [toast]);
 
   async function submitPolicyRemoval(action: "archive" | "delete") {
-    if (!selectedPolicy) return;
+    if (!selectedPolicy || isActionSubmitting || isRefreshing) return;
     setIsActionSubmitting(true);
     setActionError("");
-    const response = await fetch(`/api/hr-admin/leave-policies/${selectedPolicy.id}/${action}`, {
+    const response = await performJsonMutation<HrAdminLeavePolicyImpact>(`/api/hr-admin/leave-policies/${selectedPolicy.id}/${action}`, {
       method: action === "delete" ? "DELETE" : "POST",
-    });
-    const payload = await response.json().catch(() => ({}));
+    }, "Unable to reach the policy service. Check your connection and retry.");
+    const payload = response.payload;
     if (!response.ok) {
       const message = String(payload.detail || payload.summary || "Unable to update this policy.");
       setImpact((payload as { impact?: HrAdminLeavePolicyImpact }).impact ?? (payload as HrAdminLeavePolicyImpact));
@@ -117,7 +119,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
     setIsActionSubmitting(false);
     setSelectedPolicy(null);
     setImpact(null);
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   return (
@@ -300,12 +302,8 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
             <div className="form-actions-bar">
               <span className="muted">Archive removes the policy from active use while preserving audit links. Delete is only available for unused policies.</span>
               <div className="form-actions-bar__buttons">
-                <button className="button button--secondary" disabled={isActionSubmitting || !impact?.can_archive} onClick={() => submitPolicyRemoval("archive")} type="button">
-                  {isActionSubmitting ? "Working..." : "Archive policy"}
-                </button>
-                <button className="button button--primary" disabled={isActionSubmitting || !impact?.can_delete} onClick={() => submitPolicyRemoval("delete")} type="button">
-                  Delete permanently
-                </button>
+                <AsyncActionButton className="button button--secondary" disabled={!impact?.can_archive} pending={isActionSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing policies" : "Archiving policy"} onClick={() => submitPolicyRemoval("archive")} type="button">Archive policy</AsyncActionButton>
+                <AsyncActionButton className="button button--primary" disabled={!impact?.can_delete} pending={isActionSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing policies" : "Deleting policy"} onClick={() => submitPolicyRemoval("delete")} type="button">Delete permanently</AsyncActionButton>
               </div>
             </div>
         </HrAdminActionModal>

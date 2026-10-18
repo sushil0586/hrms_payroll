@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import type { LeaveRequestItem } from "@/lib/types";
 
 type Props = {
@@ -21,7 +22,7 @@ function getErrorMessage(payload: unknown) {
 }
 
 export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [reason, setReason] = useState("");
   const [attachmentReference, setAttachmentReference] = useState("");
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -31,7 +32,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
   const isSubmittingRef = useRef(false);
 
   async function runAction(action: "withdraw" | "cancel") {
-    if (isSubmittingRef.current) {
+    if (isSubmittingRef.current || isRefreshing) {
       return;
     }
     isSubmittingRef.current = true;
@@ -81,7 +82,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
     setIsSubmitting(null);
     isSubmittingRef.current = false;
     onCompleted?.();
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   useEffect(() => {
@@ -132,9 +133,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
 
       <div className="leave-lifecycle-panel__actions">
         {item.can_withdraw ? (
-          <button className="button button--secondary" disabled={Boolean(isSubmitting)} onClick={() => runAction("withdraw")} type="button">
-            {isSubmitting === "withdraw" ? "Withdrawing..." : "Withdraw request"}
-          </button>
+          <AsyncActionButton className="button button--secondary" disabled={Boolean(isSubmitting && isSubmitting !== "withdraw")} pending={isSubmitting === "withdraw" || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave request" : "Withdrawing request"} onClick={() => runAction("withdraw")} type="button">Withdraw request</AsyncActionButton>
         ) : item.withdraw_block_reason ? (
           <div className="notice">
             <strong>Withdraw unavailable.</strong>
@@ -143,9 +142,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
         ) : null}
 
         {item.can_cancel ? (
-          <button className="button button--secondary" disabled={Boolean(isSubmitting)} onClick={() => runAction("cancel")} type="button">
-            {isSubmitting === "cancel" ? "Saving..." : cancelLabel}
-          </button>
+          <AsyncActionButton className="button button--secondary" disabled={Boolean(isSubmitting && isSubmitting !== "cancel")} pending={isSubmitting === "cancel" || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave request" : "Saving cancellation"} onClick={() => runAction("cancel")} type="button">{cancelLabel}</AsyncActionButton>
         ) : item.cancel_block_reason ? (
           <div className="notice">
             <strong>Cancel unavailable.</strong>

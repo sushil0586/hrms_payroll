@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { useMemo, useState } from "react";
 
 import type { HrAdminPayrollFinanceHandoff, HrAdminPayrollOutputArtifact, HrAdminPayrollProviderDelivery } from "@/lib/types";
@@ -156,8 +158,8 @@ export function BankAdviceReportWorkspace({
             <p className="section-copy section-copy-soft">Review payout totals, provider delivery, handoff status, and checksum evidence before finance sign-off.</p>
           </div>
           <div className="report-command-panel__actions">
-            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
+            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
             <button className="button button--ghost" type="button" onClick={() => window.print()}>Print report</button>
           </div>
         </div>

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { requireText } from "@/lib/ui/validation";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
 
 type Props = {
   itemId: string;
@@ -50,13 +52,14 @@ export function ManagerDecisionPanel({
   canDecide = true,
   onCompleted,
 }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
   const [commentError, setCommentError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null);
   const isSubmittingRef = useRef(false);
 
   const isPending = status === "pending" || status === "partially_approved";
@@ -64,7 +67,7 @@ export function ManagerDecisionPanel({
   const actionLocked = Boolean(successMessage);
 
   async function handleDecision(action: "approve" | "reject") {
-    if (isSubmittingRef.current) {
+    if (isSubmittingRef.current || isRefreshing) {
       return;
     }
     isSubmittingRef.current = true;
@@ -102,18 +105,23 @@ export function ManagerDecisionPanel({
     }
 
     setIsSubmitting(true);
+    setPendingAction(action);
+    const mutationScope = `mss.${kind}.${action}.${itemId}`;
+    const requestPayload = { comment };
+    const idempotencyKey = mutationIdempotencyKey(mutationScope, requestPayload);
     let response: Response;
     try {
       response = await fetch(getEndpoint(kind, itemId, action), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comment }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(requestPayload),
       });
     } catch {
       const message = "Unable to reach the server. Check your connection and try again.";
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(false);
+      setPendingAction(null);
       isSubmittingRef.current = false;
       return;
     }
@@ -126,9 +134,11 @@ export function ManagerDecisionPanel({
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(false);
+      setPendingAction(null);
       isSubmittingRef.current = false;
       return;
     }
+    clearMutationIdempotencyKey(mutationScope);
     const message =
       action === "approve"
         ? isCancellationRequest
@@ -141,9 +151,10 @@ export function ManagerDecisionPanel({
     setToast({ title: "Action saved.", message, tone: "success" });
     setComment("");
     setIsSubmitting(false);
+    setPendingAction(null);
     isSubmittingRef.current = false;
     onCompleted?.();
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   useEffect(() => {
@@ -174,7 +185,7 @@ export function ManagerDecisionPanel({
         <span className="muted">Decision note</span>
         <textarea
           className="input-control"
-          disabled={isSubmitting || actionLocked || !isPending || !canDecide}
+          disabled={isSubmitting || isRefreshing || actionLocked || !isPending || !canDecide}
           aria-invalid={Boolean(commentError)}
           onChange={(event) => {
             setComment(event.target.value);
@@ -220,22 +231,26 @@ export function ManagerDecisionPanel({
             : "Approvals refresh the MSS queue immediately after the manager decision is recorded."}
         </span>
         <div className="form-actions-bar__buttons">
-          <button
+          <AsyncActionButton
             className="button button--primary"
             disabled={isSubmitting || actionLocked || !isPending || !canDecide}
             onClick={() => handleDecision("approve")}
+            pending={pendingAction === "approve" || isRefreshing}
+            pendingLabel={isRefreshing ? "Refreshing approval queue" : isCancellationRequest ? "Approving cancellation" : "Approving request"}
             type="button"
           >
-            {isSubmitting ? "Saving..." : isCancellationRequest ? "Approve cancellation" : "Approve request"}
-          </button>
-          <button
+            {isCancellationRequest ? "Approve cancellation" : "Approve request"}
+          </AsyncActionButton>
+          <AsyncActionButton
             className="button button--secondary"
             disabled={isSubmitting || actionLocked || !isPending || !canDecide}
             onClick={() => handleDecision("reject")}
+            pending={pendingAction === "reject" || isRefreshing}
+            pendingLabel={isRefreshing ? "Refreshing approval queue" : isCancellationRequest ? "Rejecting cancellation" : "Rejecting request"}
             type="button"
           >
             {isCancellationRequest ? "Reject cancellation" : "Reject request"}
-          </button>
+          </AsyncActionButton>
         </div>
       </div>
     </div>

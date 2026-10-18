@@ -22,6 +22,9 @@ function field(scope: Page | Locator, label: string, index = 0) {
 function isoDateFromToday(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + 1);
+  }
   return date.toISOString().slice(0, 10);
 }
 
@@ -92,7 +95,9 @@ test.describe("ESS leave policy resolution certification", () => {
     expect(leaveResult.ok, `Leave request failed with ${leaveResult.status}: ${payloadText}`).toBeTruthy();
     expect(leaveResult.status).toBe(201);
     expect(leaveResult.payload.status).toBe("pending");
-    await expect(dialog.getByText("Submitted.", { exact: true })).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await page.goto(`/ess/leave?status=pending&requestId=${leaveResult.payload.id}`);
+    await expect(page.getByText(reason).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

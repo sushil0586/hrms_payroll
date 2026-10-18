@@ -1,0 +1,214 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: e2e/loading-state-l6b-shared-mutations.spec.ts >> Phase L6B shared mutation recovery >> Tenant support request acknowledges delay, rejects duplicates, and preserves input on network failure
+- Location: tests/e2e/loading-state-l6b-shared-mutations.spec.ts:13:7
+
+# Error details
+
+```
+Test timeout of 120000ms exceeded.
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=f1e3]:
+  - complementary [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]: HR
+      - generic [ref=f1e7]:
+        - strong [ref=f1e8]: HRMS
+        - paragraph [ref=f1e9]: Tenant Admin
+    - navigation "Tenant Admin navigation" [ref=f1e10]:
+      - group [ref=f1e11]:
+        - generic "Workspace" [ref=f1e12]
+        - generic [ref=f1e14]:
+          - link [ref=f1e15] [cursor=pointer]:
+            - /url: /tenant-admin
+            - generic [ref=f1e16]: DB
+            - strong [ref=f1e18]: Dashboard
+          - link [ref=f1e19] [cursor=pointer]:
+            - /url: /tenant-admin/users
+            - generic [ref=f1e20]: US
+            - strong [ref=f1e22]: Users
+          - link [ref=f1e23] [cursor=pointer]:
+            - /url: /tenant-admin/roles
+            - generic [ref=f1e24]: RO
+            - strong [ref=f1e26]: Roles
+          - link [ref=f1e27] [cursor=pointer]:
+            - /url: /tenant-admin/plan
+            - generic [ref=f1e28]: PL
+            - strong [ref=f1e30]: Plan
+          - link [ref=f1e31] [cursor=pointer]:
+            - /url: /tenant-admin/setup
+            - generic [ref=f1e32]: SG
+            - strong [ref=f1e34]: Setup Guide
+          - link [ref=f1e35] [cursor=pointer]:
+            - /url: /tenant-admin/support-access
+            - generic [ref=f1e36]: SA
+            - strong [ref=f1e38]: Support Access
+          - link [ref=f1e39] [cursor=pointer]:
+            - /url: /tenant-admin/trust-audit
+            - generic [ref=f1e40]: TA
+            - strong [ref=f1e42]: Trust Audit
+          - link [ref=f1e43] [cursor=pointer]:
+            - /url: /tenant-admin/settings
+            - generic [ref=f1e44]: ST
+            - strong [ref=f1e46]: Settings
+          - link [ref=f1e47] [cursor=pointer]:
+            - /url: /tenant-admin/security-readiness
+            - generic [ref=f1e48]: SE
+            - strong [ref=f1e50]: Security
+    - generic [ref=f1e52]:
+      - strong [ref=f1e53]: Account Control Center
+      - paragraph [ref=f1e54]: Account setup, users, plan, support, security, and audit evidence in one focused workspace.
+  - generic [ref=f1e55]:
+    - banner [ref=f1e56]:
+      - generic [ref=f1e57]:
+        - generic [ref=f1e58]: Tenant Admin
+        - strong [ref=f1e59]: Account Control Center
+      - generic "Workspace search" [ref=f1e61]:
+        - generic [ref=f1e62]: ⌕
+        - searchbox "Workspace search" [ref=f1e63]
+        - generic [ref=f1e64]: Cmd K
+      - generic [ref=f1e65]:
+        - generic [ref=f1e66]:
+          - generic [ref=f1e67]: T
+          - generic [ref=f1e68]:
+            - strong [ref=f1e69]: Tanvi Admin
+            - generic [ref=f1e70]: Tenant Admin
+        - button "Sign out" [ref=f1e72] [cursor=pointer]
+    - main [ref=f1e76]:
+      - generic [ref=f1e77]:
+        - generic [ref=f1e78]:
+          - generic [ref=f1e79]: Live support access
+          - generic [ref=f1e80]:
+            - heading "Support Access" [level=1] [ref=f1e81]
+            - generic [ref=f1e82]:
+              - link "Back to dashboard" [ref=f1e83] [cursor=pointer]:
+                - /url: /tenant-admin
+              - link "Support audit" [ref=f1e84] [cursor=pointer]:
+                - /url: /tenant-admin/trust-audit?event_group=support
+          - paragraph [ref=f1e85]: Request, approve, start, end, reject, or revoke scoped support sessions.
+        - generic [ref=f1e86]:
+          - generic [ref=f1e87]: pw-qa-tenant-support-r-0-mvbs3gch
+          - generic [ref=f1e88]: 0 active or pending
+          - generic [ref=f1e89]: 120 min max
+      - generic [ref=f1e91]:
+        - article [ref=f1e92]:
+          - generic [ref=f1e93]: Active or pending
+          - strong [ref=f1e94]: "0"
+          - generic [ref=f1e95]: Support grants
+        - article [ref=f1e96]:
+          - generic [ref=f1e97]: Grant rows
+          - strong [ref=f1e98]: "0"
+          - generic [ref=f1e99]: Recent support access
+        - article [ref=f1e100]:
+          - generic [ref=f1e101]: Scopes
+          - strong [ref=f1e102]: "4"
+          - generic [ref=f1e103]: Assignable support scopes
+        - article [ref=f1e104]:
+          - generic [ref=f1e105]: Max duration
+          - strong [ref=f1e106]: 120m
+          - generic [ref=f1e107]: Enabled
+      - generic [ref=f1e109]:
+        - generic [ref=f1e110]:
+          - text: Support workflow
+          - heading "Controlled assistance" [level=2] [ref=f1e111]
+          - paragraph [ref=f1e112]: Request only the help needed, approve it with a time limit, and keep the evidence available for customer review.
+        - list "Support access workflow" [ref=f1e113]:
+          - listitem [ref=f1e114]:
+            - strong [ref=f1e115]: "1"
+            - generic [ref=f1e116]: Request scoped support
+          - listitem [ref=f1e117]:
+            - strong [ref=f1e118]: "2"
+            - generic [ref=f1e119]: Approve, start, or reject
+          - listitem [ref=f1e120]:
+            - strong [ref=f1e121]: "3"
+            - generic [ref=f1e122]: End, revoke, and audit
+      - generic "Tenant support access form" [ref=f1e125]:
+        - generic [ref=f1e126]:
+          - generic [ref=f1e127]:
+            - text: Support access
+            - heading "Scoped support grants" [level=2] [ref=f1e128]
+            - paragraph [ref=f1e129]: Create a time-bound request, then review every grant from the ledger below.
+          - generic [ref=f1e130]: 120 min max
+        - generic [ref=f1e131]:
+          - generic [ref=f1e132]:
+            - generic [ref=f1e133]: Support agent
+            - textbox "Support agent Support agent is required." [invalid] [ref=f1e134]:
+              - /placeholder: support.agent@example.com
+              - text: qa.support@example.test
+            - alert [ref=f1e135]: Support agent is required.
+          - generic [ref=f1e136]:
+            - generic [ref=f1e137]: Duration
+            - spinbutton "Duration" [ref=f1e138]: "60"
+          - generic [ref=f1e139]:
+            - generic [ref=f1e140]: Reason
+            - textbox "Reason Reason is required." [active] [invalid] [ref=f1e141]: L6B retained support reason
+            - alert [ref=f1e142]: Reason is required.
+        - generic "Support scopes" [ref=f1e143]:
+          - generic [ref=f1e144]:
+            - checkbox "Account posture" [checked] [ref=f1e145]
+            - generic [ref=f1e146]: Account posture
+          - generic [ref=f1e147]:
+            - checkbox "Commercial evidence" [ref=f1e148]
+            - generic [ref=f1e149]: Commercial evidence
+          - generic [ref=f1e150]:
+            - checkbox "Configuration health" [ref=f1e151]
+            - generic [ref=f1e152]: Configuration health
+          - generic [ref=f1e153]:
+            - checkbox "Payroll support" [ref=f1e154]
+            - generic [ref=f1e155]: Payroll support
+        - generic [ref=f1e156]:
+          - button "Request access" [disabled]
+        - generic [ref=f1e157]:
+          - generic [ref=f1e158]:
+            - generic [ref=f1e159]: Search grants
+            - textbox "Search support grants" [ref=f1e160]:
+              - /placeholder: Agent, reason, status, scope
+          - generic "Support grant pagination" [ref=f1e161]:
+            - generic [ref=f1e162]: 0-0 of 0
+            - button "Previous" [disabled]
+            - button "Next" [disabled]
+        - paragraph [ref=f1e164]: No support grants match the current search.
+      - generic [ref=f1e166]:
+        - generic [ref=f1e167]:
+          - generic [ref=f1e168]:
+            - text: Scope guide
+            - heading "What support can access" [level=2] [ref=f1e169]
+            - paragraph [ref=f1e170]: Use scopes to keep assisted operations narrow, time-bound, and auditable.
+          - generic [ref=f1e171]: 4 scopes
+        - generic [ref=f1e172]:
+          - generic [ref=f1e173]:
+            - generic [ref=f1e174]: Time-bound
+            - strong [ref=f1e175]: 120 min max
+            - paragraph [ref=f1e176]: Every session needs a duration and should be closed after work is complete.
+          - generic [ref=f1e177]:
+            - generic [ref=f1e178]: Scope-bound
+            - strong [ref=f1e179]: 4 scopes
+            - paragraph [ref=f1e180]: Only the selected product areas are available to the support operator.
+          - generic [ref=f1e181]:
+            - generic [ref=f1e182]: Audit-bound
+            - strong [ref=f1e183]: Full trail
+            - paragraph [ref=f1e184]: Request, approval, start, end, reject, and revoke decisions remain reviewable.
+        - generic [ref=f1e185]:
+          - generic [ref=f1e187]:
+            - strong [ref=f1e188]: Account posture
+            - text: Read Only Account
+          - generic [ref=f1e190]:
+            - strong [ref=f1e191]: Commercial evidence
+            - text: Commercial Evidence
+          - generic [ref=f1e193]:
+            - strong [ref=f1e194]: Configuration health
+            - text: Configuration Health
+          - generic [ref=f1e196]:
+            - strong [ref=f1e197]: Payroll support
+            - text: Payroll Support
+```

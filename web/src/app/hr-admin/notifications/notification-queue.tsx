@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 import { NotificationInlineReview } from "@/app/hr-admin/notifications/notification-inline-review";
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
 import type { HrAdminEnumOption, HrAdminNotification } from "@/lib/types";
@@ -65,6 +67,7 @@ export function NotificationQueue({
   pagination,
 }: Props) {
   const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const pathname = usePathname();
   const actionableItems = items.filter((item) => item.can_retry);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -110,6 +113,7 @@ export function NotificationQueue({
   }
 
   async function handleBulkRetry() {
+    if (isSubmittingBulk || isRefreshing) return;
     setError("");
     setIsSubmittingBulk(true);
     let response: Response;
@@ -141,7 +145,7 @@ export function NotificationQueue({
     const skippedCount = Number((payload as { skipped_count?: unknown }).skipped_count ?? 0);
     const message = `${retryCount} notification(s) queued for retry${skippedCount ? `, ${skippedCount} skipped` : ""}.`;
     setToast({ title: "Action saved.", message, tone: "success" });
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   useEffect(() => {
@@ -270,9 +274,7 @@ export function NotificationQueue({
         </div>
 
         <div className="queue-toolbar__actions">
-          <button className="button button--secondary" disabled={isSubmittingBulk || selectedActionableCount === 0} onClick={handleBulkRetry} type="button">
-            {isSubmittingBulk ? "Retrying..." : `Retry selected (${selectedActionableCount || 0})`}
-          </button>
+          <AsyncActionButton className="button button--secondary" disabled={selectedActionableCount === 0} pending={isSubmittingBulk || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification queue" : "Retrying selected notifications"} onClick={handleBulkRetry} type="button">{`Retry selected (${selectedActionableCount || 0})`}</AsyncActionButton>
           <button className="button button--primary" onClick={() => goToPage(1)} type="button">
             Apply filters
           </button>

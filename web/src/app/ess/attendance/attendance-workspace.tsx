@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
 import type {
   AttendanceRegularizationItem,
   EmployeeDashboard,
@@ -214,7 +216,7 @@ function AttendanceRegularizationModal({
   isDemo: boolean;
   onClose: () => void;
 }) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const defaultAttendanceRecord = attendanceRecords.find((record) => !record.is_locked)?.id ?? attendanceRecords[0]?.id ?? "";
   const [selectedRecordId, setSelectedRecordId] = useState(defaultAttendanceRecord);
   const [requestedStatus, setRequestedStatus] = useState("present");
@@ -268,19 +270,22 @@ function AttendanceRegularizationModal({
       return;
     }
     const formData = new FormData(form);
+    const requestPayload = {
+      attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
+      requested_status: String(formData.get("requested_status") ?? "present"),
+      requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
+      requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
+      reason: String(formData.get("reason") ?? ""),
+    };
+    const mutationScope = "ess.attendance.regularization.submit";
+    const idempotencyKey = mutationIdempotencyKey(mutationScope, requestPayload);
     setSubmitting(true);
     let response: Response;
     try {
       response = await fetch("/api/me/attendance-regularizations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
-          requested_status: String(formData.get("requested_status") ?? "present"),
-          requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
-          requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
-          reason: String(formData.get("reason") ?? ""),
-        }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(requestPayload),
       });
     } catch {
       const message = "Unable to reach the server. Check your connection and try again.";
@@ -299,15 +304,14 @@ function AttendanceRegularizationModal({
       submittingRef.current = false;
       return;
     }
+    clearMutationIdempotencyKey(mutationScope);
     const message = "Attendance regularization submitted.";
     setFeedback({ tone: "success", message });
     setToast({ title: "Submitted successfully.", message, tone: "success" });
     form.reset();
     submittingRef.current = false;
-    window.setTimeout(() => {
-      onClose();
-      router.refresh();
-    }, 900);
+    onClose();
+    refresh();
   }
 
   useEffect(() => {
@@ -388,9 +392,15 @@ function AttendanceRegularizationModal({
             ) : null}
             <div className="form-actions-bar form-field--full">
               <span className="muted">After you submit, your manager receives this correction for approval.</span>
-              <button className="button button--primary" disabled={isSubmitBlocked} type="submit">
-                {submitting ? "Submitting..." : "Submit correction"}
-              </button>
+              <AsyncActionButton
+                className="button button--primary"
+                disabled={isSubmitBlocked}
+                pending={submitting || isRefreshing}
+                pendingLabel={isRefreshing ? "Refreshing attendance" : "Submitting correction"}
+                type="submit"
+              >
+                Submit correction
+              </AsyncActionButton>
             </div>
           </div>
           <aside className="attendance-regularize-summary" aria-label="Attendance regularization summary">

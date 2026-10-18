@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { FormSection } from "@/components/patterns/form-section";
 import type {
@@ -65,6 +66,7 @@ export function EmployeeShiftAssignmentForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminEmployeeShiftAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const submittingRef = useRef(false);
   const shiftWarning = options.shifts.length === 0 ? "No active shifts are available. Create a shift before assigning coverage." : null;
 
   function update<Key extends keyof HrAdminEmployeeShiftAssignmentWriteInput>(key: Key, value: HrAdminEmployeeShiftAssignmentWriteInput[Key]) {
@@ -168,25 +170,35 @@ export function EmployeeShiftAssignmentForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
       return;
     }
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError("");
-    const response = await fetch(mode === "create" ? "/api/hr-admin/employee-shift-assignments" : `/api/hr-admin/employee-shift-assignments/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/employee-shift-assignments" : `/api/hr-admin/employee-shift-assignments/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
-    router.push(successHref);
-    router.refresh();
+    window.location.assign(successHref);
   }
 
   const rotationSummary = formValue.config_snapshot.rotation.entries
@@ -351,7 +363,7 @@ export function EmployeeShiftAssignmentForm({
         <div className="form-actions-bar">
           <span className="muted">Shift assignment runtime supports fixed windows, weekly rotations, and temporary overrides.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}</button>
+            <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Saving shift assignment" type="submit">{mode === "create" ? "Create assignment" : "Save changes"}</AsyncActionButton>
             <button className="button button--secondary" onClick={() => (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>

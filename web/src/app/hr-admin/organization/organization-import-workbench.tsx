@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import type { HrAdminOrganizationSnapshot, HrAdminOrganizationWriteInput } from "@/lib/types";
+import { submitImportRequest } from "@/lib/ui/import-request";
 import { ORGANIZATION_SECTION_CONFIG, type OrganizationSectionKey } from "./section-config";
 
 type ImportRow = {
@@ -280,51 +282,35 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
   const createdCount = rows.filter((row) => row.status === "created").length;
 
   function preview() {
-    setRows(parsedRows);
+    setRows(parsedRows.map((row) => ({ ...row, data: { ...row.data }, errors: [...row.errors], payload: row.payload ? { ...row.payload } : null })));
     setSummary(parsedRows.length ? "Preview ready. Review blocked rows before committing." : "Add CSV rows before preview.");
   }
 
   async function commitReadyRows() {
+    if (isCommitting) return;
     setIsCommitting(true);
     const nextRows = [...rows];
-    const toLookup = (items: CreatedLookupItem[]) => items.map((item) => ({ id: item.id, code: item.code, name: item.name }));
-    const collections = {
-      legal_entities: toLookup(snapshot.legal_entities),
-      locations: toLookup(snapshot.locations),
-      business_units: toLookup(snapshot.business_units),
-      departments: toLookup(snapshot.departments),
-      grades: toLookup(snapshot.grades),
-    };
-    for (const row of nextRows) {
-      const section = sectionFromValue(row.data.section);
-      if (!section || !row.payload || row.status !== "ready") {
-        continue;
+    const readyRows = nextRows.filter((row) => row.status === "ready");
+    try {
+      const response = await submitImportRequest("/api/hr-admin/organization/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: readyRows.map((row) => ({ row_number: row.rowNumber, section: row.data.section, data: row.data })) }),
+      });
+      if (response.ok) {
+        readyRows.forEach((row) => { row.status = "created"; row.message = "Created"; });
+      } else {
+        const message = JSON.stringify(response.payload.rows ?? response.payload.detail ?? "Atomic import failed");
+        readyRows.forEach((row) => { row.status = "failed"; row.message = message; });
       }
-      try {
-        const resolvedPayload = resolvePayload(row, section, collections);
-        const response = await fetch(`/api/hr-admin/organization/${section}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(resolvedPayload),
-        });
-        const payload = await response.json().catch(() => ({}));
-        row.status = response.ok ? "created" : "failed";
-        row.message = response.ok ? "Created" : String(payload.detail || payload.code || "Create failed");
-        if (response.ok && section in collections) {
-          collections[section as keyof typeof collections].push({
-            id: String(payload.id),
-            code: row.data.code,
-            name: row.data.name,
-          });
-        }
-      } catch {
-        row.status = "failed";
-        row.message = "Network failure during create.";
-      }
-      setRows([...nextRows]);
+    } catch {
+      readyRows.forEach((row) => { row.status = "failed"; row.message = "Network failure; no rows were created."; });
     }
+    setRows([...nextRows]);
     setIsCommitting(false);
-    setSummary("Commit complete. Refresh the catalog to verify created masters.");
+    setSummary(nextRows.some((row) => row.status === "failed")
+      ? "Some organization rows failed. Review the row messages, then preview the preserved CSV again."
+      : "Commit complete. Refresh the catalog to verify created masters.");
   }
 
   return (
@@ -377,9 +363,7 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
               />
             </label>
             <button className="button button--primary" type="button" onClick={preview}>Preview import</button>
-            <button className="button button--primary" type="button" disabled={!rows.some((row) => row.status === "ready") || isCommitting} onClick={commitReadyRows}>
-              {isCommitting ? "Creating..." : "Commit ready rows"}
-            </button>
+            <AsyncActionButton className="button button--primary" type="button" disabled={!rows.some((row) => row.status === "ready")} pending={isCommitting} pendingLabel="Creating organization rows" onClick={commitReadyRows}>Commit ready rows</AsyncActionButton>
           </div>
         </div>
         {summary ? <div className="notice"><strong>{summary}</strong></div> : null}

@@ -1,7 +1,15 @@
 import { expect, type APIResponse, type Locator, type Page, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin, manager, platformAdmin, type Persona } from "../helpers/staging-auth";
+import {
+  employee,
+  gotoAuthenticated,
+  hrAdmin,
+  manager,
+  platformAdmin,
+  requestWithBrowserSession,
+  type Persona,
+} from "../helpers/staging-auth";
 
 function card(page: Page, heading: string | RegExp): Locator {
   return page.locator("article").filter({ has: page.getByRole("heading", { name: heading }) }).first();
@@ -129,15 +137,27 @@ test.describe("Platform admin negative and security certification", () => {
     await expect(gates.getByRole("button", { name: "Mark ready" })).toBeDisabled();
     await expect(gates.getByRole("button", { name: "Activate tenant" })).toBeDisabled();
 
-    const directBaselineResponse = await page.request.post(`/api/platform/tenants/${tenantId}/onboarding/mark-baseline-published`);
-    expect(directBaselineResponse.status()).toBe(400);
-    expect(JSON.stringify(await directBaselineResponse.json())).toContain("At least one adopted policy pack is required");
-    const directHandoffResponse = await page.request.post(`/api/platform/tenants/${tenantId}/onboarding/mark-handoff-ready`);
-    expect(directHandoffResponse.status()).toBe(400);
-    expect(JSON.stringify(await directHandoffResponse.json())).toContain("Baseline must be published");
-    const directActivationResponse = await page.request.post(`/api/platform/tenants/${tenantId}/onboarding/activate`);
-    expect(directActivationResponse.status()).toBe(400);
-    expect(JSON.stringify(await directActivationResponse.json())).toContain("Tenant handoff must be ready");
+    const directBaselineResponse = await requestWithBrowserSession(
+      page,
+      `/api/platform/tenants/${tenantId}/onboarding/mark-baseline-published`,
+      { method: "POST" },
+    );
+    expect(directBaselineResponse.status).toBe(400);
+    expect(directBaselineResponse.body).toContain("At least one adopted policy pack is required");
+    const directHandoffResponse = await requestWithBrowserSession(
+      page,
+      `/api/platform/tenants/${tenantId}/onboarding/mark-handoff-ready`,
+      { method: "POST" },
+    );
+    expect(directHandoffResponse.status).toBe(400);
+    expect(directHandoffResponse.body).toContain("Baseline must be published");
+    const directActivationResponse = await requestWithBrowserSession(
+      page,
+      `/api/platform/tenants/${tenantId}/onboarding/activate`,
+      { method: "POST" },
+    );
+    expect(directActivationResponse.status).toBe(400);
+    expect(directActivationResponse.body).toContain("Tenant handoff must be ready");
 
     await openPlatformTab(page, "Admin Access");
     const addContact = await openAddContactDialog(page);

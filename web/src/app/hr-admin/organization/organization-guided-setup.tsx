@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { HrAdminOrganizationItem, HrAdminOrganizationSnapshot, HrAdminOrganizationWriteInput } from "@/lib/types";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 type GuidedSetupProps = {
   snapshot: HrAdminOrganizationSnapshot;
@@ -127,7 +128,7 @@ function readinessCount(snapshot: HrAdminOrganizationSnapshot) {
 }
 
 export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [formValue, setFormValue] = useState<SetupFormValue>(initialFormValue);
   const [steps, setSteps] = useState<StepStatus[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -236,7 +237,7 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
       });
 
       setNotice("Organization setup saved. Refreshing the catalog and launch readiness.");
-      router.refresh();
+      refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to complete organization setup.");
       setSteps((current) =>
@@ -260,7 +261,7 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
           </span>
           <span className="button button--secondary button--compact">Open setup</span>
         </summary>
-      <form className="organization-guided-setup" onSubmit={handleSubmit}>
+      <form aria-busy={isSubmitting || isRefreshing} className="organization-guided-setup" onSubmit={handleSubmit}>
         <div className="tenant-console-panel__header">
           <div>
             <span className="workspace-card__eyebrow">Guided setup</span>
@@ -386,7 +387,7 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
         </div>
 
         {steps.length ? (
-          <div className="organization-guided-setup__steps">
+          <div aria-live="polite" className="organization-guided-setup__steps" role="status">
             {steps.map((step) => (
               <div className="detail-row" key={step.label}>
                 <span>{step.label}</span>
@@ -410,9 +411,15 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
         <div className="form-actions-bar">
           <span className="muted">Use this for first-time tenant setup. CSV remains available below for bulk imports.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting || missingRequired.length > 0} type="submit">
-              {isSubmitting ? "Saving setup..." : "Save organization setup"}
-            </button>
+            <AsyncActionButton
+              className="button button--primary"
+              disabled={missingRequired.length > 0}
+              pending={isSubmitting || isRefreshing}
+              pendingLabel={isRefreshing ? "Refreshing organization catalog" : "Saving organization setup"}
+              type="submit"
+            >
+              Save organization setup
+            </AsyncActionButton>
           </div>
         </div>
       </form>

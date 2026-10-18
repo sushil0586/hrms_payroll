@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
+import { submitImportRequest } from "@/lib/ui/import-request";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeListItem } from "@/lib/types";
 
 type EmployeeManagerImportWorkbenchProps = {
@@ -175,6 +177,7 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
     [options.managers],
   );
   const readyCount = rows.filter((row) => row.status === "ready").length;
+  const hasFailedRows = rows.some((row) => row.status === "failed");
   const createdCount = rows.filter((row) => row.status === "created").length;
 
   async function preview() {
@@ -204,6 +207,7 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
   }
 
   async function commitReadyRows() {
+    if (isCommitting) return;
     setIsCommitting(true);
     const nextRows = [...rows];
 
@@ -213,12 +217,12 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
         continue;
       }
 
-      const response = await fetch(`/api/hr-admin/employees/${row.employeeId}`, {
+      const response = await submitImportRequest(`/api/hr-admin/employees/${row.employeeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reporting_manager_id: row.reportingManagerId }),
       });
-      const payload = await response.json().catch(() => ({}));
+      const payload = response.payload;
       nextRows[index] = {
         ...row,
         status: response.ok ? "created" : "failed",
@@ -228,7 +232,9 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
     }
 
     setIsCommitting(false);
-    setMessage("Commit complete. Refresh the directory or workforce report to verify manager coverage.");
+    setMessage(nextRows.some((row) => row.status === "failed")
+      ? "Some manager rows failed. Review the row messages, then preview the preserved CSV again."
+      : "Commit complete. Refresh the directory or workforce report to verify manager coverage.");
     await recordImportBatchAudit({
       import_type: "reporting_manager_mappings",
       status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
@@ -292,13 +298,11 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
             <button className="button button--primary" type="button" onClick={preview}>
               Preview manager import
             </button>
-            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting} onClick={commitReadyRows}>
-              {isCommitting ? "Committing..." : "Commit ready manager rows"}
-            </button>
+            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount} pending={isCommitting} pendingLabel="Committing manager rows" onClick={commitReadyRows}>Commit ready manager rows</AsyncActionButton>
           </div>
         </div>
 
-        {message ? <div className="notice notice--success" role="status"><strong>Manager import update completed.</strong><span>{message}</span></div> : null}
+        {message ? <div className={`notice${hasFailedRows ? "" : " notice--success"}`} role={hasFailedRows ? "alert" : "status"}><strong>{hasFailedRows ? "Manager import needs attention." : "Manager import update completed."}</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
           <div className="table-scroll">

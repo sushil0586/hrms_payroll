@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type { ReportCatalogItem } from "@/lib/report-catalog";
 
 const groups = [
@@ -148,18 +149,10 @@ export function ComplianceReportHubWorkspace({ reports }: { reports: ReportCatal
         <span className="queue-summary-chip">
           <strong>{visibleReports.filter((report) => report.status === "Ready").length}</strong> ready
         </span>
-        <Link className="button button--secondary" href="/api/hr-admin/reports/provider-filing-receipts?delivery_status=failed&sort=status" prefetch={false}>
-          Export blocked items
-        </Link>
-        <Link className="button button--ghost" href="/api/hr-admin/reports/provider-filing-receipts?delivery_status=failed&sort=status&format=manifest" prefetch={false}>
-          Blocked manifest
-        </Link>
-        <Link className="button button--secondary" href="/api/hr-admin/reports/statutory-filing-status?due_status=Overdue&sort=due_status" prefetch={false}>
-          Export overdue filings
-        </Link>
-        <Link className="button button--ghost" href="/api/hr-admin/reports/statutory-filing-status?due_status=Overdue&sort=due_status&format=manifest" prefetch={false}>
-          Overdue manifest
-        </Link>
+        <AsyncDownloadButton href="/api/hr-admin/reports/provider-filing-receipts?delivery_status=failed&sort=status" fileName="blocked-provider-items.csv">Export blocked items</AsyncDownloadButton>
+        <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/provider-filing-receipts?delivery_status=failed&sort=status&format=manifest" fileName="blocked-provider-items-manifest.json">Blocked manifest</AsyncDownloadButton>
+        <AsyncDownloadButton href="/api/hr-admin/reports/statutory-filing-status?due_status=Overdue&sort=due_status" fileName="overdue-statutory-filings.csv">Export overdue filings</AsyncDownloadButton>
+        <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/statutory-filing-status?due_status=Overdue&sort=due_status&format=manifest" fileName="overdue-statutory-filings-manifest.json">Overdue manifest</AsyncDownloadButton>
       </div>
 
       <div className="compliance-hub-grid">
@@ -188,15 +181,9 @@ export function ComplianceReportHubWorkspace({ reports }: { reports: ReportCatal
                   Open
                 </Link>
               ) : null}
-              {report.exportRoute ? (
-                <Link className="button button--ghost" href={report.exportRoute} prefetch={false}>
-                  Export
-                </Link>
-              ) : null}
+              {report.exportRoute ? <AsyncDownloadButton className="button button--ghost" href={report.exportRoute} fileName={`${report.key}.csv`}>Export</AsyncDownloadButton> : null}
               {report.exportRoute && report.key !== "tds-efile-readiness" && report.key !== "statutory-deductions" ? (
-                <Link className="button button--ghost" href={manifestHref(report.exportRoute)} prefetch={false}>
-                  Manifest
-                </Link>
+                <AsyncDownloadButton className="button button--ghost" href={manifestHref(report.exportRoute)} fileName={`${report.key}-manifest.json`}>Manifest</AsyncDownloadButton>
               ) : null}
             </div>
           </article>

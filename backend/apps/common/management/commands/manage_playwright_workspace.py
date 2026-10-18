@@ -13,6 +13,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.attendance.models import (
+    AttendancePeriodClose,
+    AttendancePeriodCloseEvent,
     AttendanceRecord,
     AttendanceRegularization,
     AttendancePolicy,
@@ -24,21 +26,48 @@ from apps.attendance.models import (
     AttendanceStatus,
     RegularizationStatus,
 )
-from apps.documents.models import DocumentCategory, DocumentCategoryType
+from apps.documents.models import (
+    DocumentCategory,
+    DocumentCategoryType,
+    DocumentRequirementRule,
+    EmployeeDocument,
+    EmployeeDocumentStatus,
+    VerificationStatus,
+)
+from apps.employee_lifecycle.models import (
+    EmployeeExit,
+    EmployeeLifecycleEvent,
+    EmployeeMovement,
+    EmployeeOnboarding,
+    EmploymentAssignment,
+    EmploymentSpell,
+    ProbationReview,
+)
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, RolePermission, TenantMembership, User
 from apps.iam.permission_catalog import get_permission_catalog
 from apps.leave_management.models import (
     AccrualFrequency,
     LeaveBalance,
+    LeaveBalanceTransaction,
     LeaveCategory,
+    LeaveDayPortion,
+    LeaveEntitlementLot,
     LeavePolicy,
     LeavePolicyAssignment,
+    LeavePolicyPeriod,
+    LeavePolicyPeriodStatusEvent,
+    LeavePolicyPeriodStatus,
     LeavePolicyStatus,
     LeaveRequest,
+    LeaveRequestAllocation,
     LeaveRequestStatus,
     LeaveType,
+    LeaveYearCloseItem,
+    LeaveYearCloseRun,
 )
+from apps.leave_management.services import submit_leave_request
+from apps.leave_management.year_end_services import append_leave_ledger_movement, ensure_governed_leave_balance
 from apps.organizations.models import (
     Branch,
     BusinessUnit,
@@ -50,12 +79,14 @@ from apps.organizations.models import (
     LegalEntity,
     Location,
 )
+from apps.notifications.models import Notification, NotificationAudienceType, NotificationChannel, NotificationPriority, NotificationStatus
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
     EmployeeStatutoryDeclaration,
     EmployeeStatutoryProfile,
     PayrollArtifactAccessEvent,
     PayrollArtifactSignedAccessGrant,
+    PayrollAdjustment,
     PayrollBackgroundJob,
     PayrollCalculationLine,
     PayrollFinanceHandoff,
@@ -80,6 +111,8 @@ from apps.payroll.models import (
     PayrollRunCalculation,
     PayrollRunReview,
     PayrollReviewStatus,
+    PayrollSettlement,
+    PayrollSettlementLine,
     PayrollStatutoryComponent,
     PayrollStatutoryComponentKind,
     PayrollStatutoryEmployerRegistration,
@@ -96,6 +129,7 @@ from apps.payroll.models import (
 from apps.platform_policies.models import PlatformPolicyDomain, PlatformPolicyPack, PlatformPolicyPackStatus
 from apps.tenant_onboarding.models import TenantOnboarding, TenantOnboardingAdminContact
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantOnboardingStatus, TenantStatus
+from apps.tenants.retention import authorized_synthetic_tenant_teardown
 
 
 TENANT_PREFIX = "pw-qa-"
@@ -112,11 +146,13 @@ class Command(BaseCommand):
         parser.add_argument("--output-file", default="")
         parser.add_argument("--audit", action="store_true")
         parser.add_argument("--cleanup", action="store_true")
+        parser.add_argument("--hydrate-existing", action="store_true")
 
     @transaction.atomic
     def handle(self, *args, **options):
-        if options["audit"] and options["cleanup"]:
-            raise CommandError("Choose either --audit or --cleanup, not both.")
+        modes = [options["audit"], options["cleanup"], options["hydrate_existing"]]
+        if sum(bool(value) for value in modes) > 1:
+            raise CommandError("Choose only one of --audit, --cleanup, or --hydrate-existing.")
         seed_ref = self._normalize(options["seed_ref"])
         tenant_code = options["tenant_code"] or f"{TENANT_PREFIX}{seed_ref}"
         self._assert_safe_identity(seed_ref, tenant_code)
@@ -129,6 +165,12 @@ class Command(BaseCommand):
                 raise CommandError(f"Workspace does not exist: {tenant_code}")
             self._assert_owned(tenant, seed_ref)
             manifest = self._manifest(tenant, seed_ref, action="audit")
+        elif options["hydrate_existing"]:
+            if tenant is None:
+                raise CommandError(f"Workspace does not exist: {tenant_code}")
+            self._assert_owned(tenant, seed_ref)
+            tenant = self._hydrate_existing(tenant, seed_ref, options["password"])
+            manifest = self._manifest(tenant, seed_ref, action="hydrate")
         else:
             if tenant is not None:
                 self._assert_owned(tenant, seed_ref)
@@ -178,9 +220,25 @@ class Command(BaseCommand):
         people = self._create_people(tenant, seed_ref, password, org)
         self._create_platform_admin(seed_ref, password)
         self._create_platform_fixture(tenant, seed_ref, people["tenant_admin"])
-        self._create_document_fixture(tenant)
+        self._create_document_fixture(tenant, people["employee"])
         self._create_payroll(tenant, people["employee"], org, marker)
         self._create_leave_and_attendance(tenant, people["employee"], org, marker)
+        self._create_manager_notification(tenant, people["manager"])
+        return tenant
+
+    def _hydrate_existing(self, tenant: Tenant, seed_ref: str, password: str) -> Tenant:
+        """Add deterministic domain fixtures to an owned browser-created tenant."""
+        if tenant.employees.exists() or LegalEntity.objects.filter(tenant=tenant).exists():
+            raise CommandError("Existing workspace already contains organization or employee fixtures.")
+        marker = {"owner": "playwright", "seed_ref": seed_ref}
+        org = self._create_org(tenant)
+        people = self._create_people(tenant, seed_ref, password, org)
+        self._create_platform_admin(seed_ref, password)
+        self._create_platform_fixture(tenant, seed_ref, people["tenant_admin"])
+        self._create_document_fixture(tenant, people["employee"])
+        self._create_payroll(tenant, people["employee"], org, marker)
+        self._create_leave_and_attendance(tenant, people["employee"], org, marker)
+        self._create_manager_notification(tenant, people["manager"])
         return tenant
 
     def _create_org(self, tenant: Tenant) -> dict:
@@ -200,7 +258,9 @@ class Command(BaseCommand):
         catalog = get_permission_catalog()
         definitions = [
             ("hr_admin", "hr-admin", "HR Admin", "QA-HR-001", "Harini", "Admin"),
+            ("hr_checker", "hr-admin", "HR Checker", "QA-HR-002", "Chitra", "Checker"),
             ("manager", "manager", "Manager", "QA-MGR-001", "Manav", "Manager"),
+            ("manager_b", "manager", "Manager B", "QA-MGR-002", "Meera", "Manager"),
             ("employee", "employee", "Employee", "QA-EMP-001", "Esha", "Employee"),
             ("tenant_admin", "tenant-admin", "Tenant Admin", "QA-TA-001", "Tanvi", "Admin"),
         ]
@@ -216,11 +276,19 @@ class Command(BaseCommand):
                 display_name=f"{first_name} {last_name}",
             )
             membership = TenantMembership.objects.create(tenant=tenant, user=user, employee_code=employee_code, status=MembershipStatus.ACTIVE, is_default=True)
-            role = Role.objects.create(tenant=tenant, code=role_code, name=role_name, is_system_role=True, is_active=True)
+            role, _ = Role.objects.get_or_create(
+                tenant=tenant,
+                code=role_code,
+                defaults={"name": role_name, "is_system_role": True, "is_active": True},
+            )
             MembershipRole.objects.create(membership=membership, role=role, is_primary=True)
             for permission in catalog:
                 if role_code in permission.get("default_role_codes", []):
-                    RolePermission.objects.create(role=role, permission_key=permission["key"], description="Playwright workspace default permission.")
+                    RolePermission.objects.get_or_create(
+                        role=role,
+                        permission_key=permission["key"],
+                        defaults={"description": "Playwright workspace default permission."},
+                    )
             employee = Employee.objects.create(
                 tenant=tenant,
                 membership=membership,
@@ -250,6 +318,24 @@ class Command(BaseCommand):
             first_name="Priya",
             last_name="Platform",
             display_name="Priya Platform",
+        )
+
+    def _create_manager_notification(self, tenant: Tenant, manager: Employee) -> None:
+        Notification.objects.create(
+            tenant=tenant,
+            channel=NotificationChannel.IN_APP,
+            audience_type=NotificationAudienceType.MANAGER,
+            subject_type="leave_request",
+            subject_identifier="qa-manager-approval",
+            recipient_membership=manager.membership,
+            recipient_identifier=manager.employee_code,
+            title="Manager approval needs review",
+            subject="Review the pending employee request",
+            body="A deterministic QA request is ready for manager review.",
+            status=NotificationStatus.DELIVERED,
+            priority=NotificationPriority.HIGH,
+            delivered_at=timezone.now(),
+            payload={"href": "/mss/approvals?queue=leave", "owner": "playwright"},
         )
 
     def _create_payroll(self, tenant: Tenant, employee: Employee, org: dict, marker: dict) -> None:
@@ -345,7 +431,25 @@ class Command(BaseCommand):
             config_snapshot=marker,
         )
         LeavePolicyAssignment.objects.create(tenant=tenant, leave_policy=leave_policy, employee=employee, priority=1)
-        LeaveBalance.objects.create(tenant=tenant, employee=employee, leave_policy=leave_policy, period_year=2026, opening_balance=Decimal("12.00"), closing_balance=Decimal("12.00"))
+        policy_period = LeavePolicyPeriod.objects.create(
+            tenant=tenant,
+            leave_policy=leave_policy,
+            legal_entity=employee.legal_entity,
+            code="2026",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status=LeavePolicyPeriodStatus.OPEN,
+            policy_snapshot=leave_policy.config_snapshot,
+        )
+        leave_balance = ensure_governed_leave_balance(employee=employee, policy_period=policy_period)
+        append_leave_ledger_movement(
+            balance=leave_balance,
+            action="opening",
+            units=Decimal("12.00"),
+            effective_date=policy_period.start_date,
+            idempotency_key=f"playwright:{tenant.code}:leave-opening:{employee.employee_code}:2026",
+            reason="Deterministic Playwright workspace opening balance.",
+        )
         shift = Shift.objects.create(
             tenant=tenant, code="qa-day", name="QA Day", start_time=time(9), end_time=time(18),
             working_hours=Decimal("8.00"), break_minutes=60, weekly_off_days=["saturday", "sunday"],
@@ -356,10 +460,14 @@ class Command(BaseCommand):
         )
         AttendancePolicyAssignment.objects.create(tenant=tenant, attendance_policy=policy, employee=employee, priority=1)
         EmployeeShiftAssignment.objects.create(tenant=tenant, employee=employee, shift=shift, effective_from=date(2024, 1, 1), config_snapshot=marker)
-        LeaveRequest.objects.create(
-            tenant=tenant, employee=employee, leave_type=leave_type, leave_policy=leave_policy,
-            status=LeaveRequestStatus.PENDING, start_date=date(2026, 10, 20), end_date=date(2026, 10, 20),
-            requested_units=Decimal("1.00"), reason="Playwright manager queue", applied_at=timezone.now(), metadata=marker,
+        submit_leave_request(
+            employee=employee,
+            leave_type=leave_type,
+            start_date=date(2026, 10, 20),
+            end_date=date(2026, 10, 20),
+            start_day_portion=LeaveDayPortion.FULL_DAY,
+            end_day_portion=LeaveDayPortion.FULL_DAY,
+            reason="Playwright manager queue",
         )
         record = AttendanceRecord.objects.create(
             tenant=tenant, employee=employee, attendance_date=date(2026, 10, 15), status=AttendanceStatus.ABSENT,
@@ -371,10 +479,35 @@ class Command(BaseCommand):
             evidence_payload=marker,
         )
 
-    def _create_document_fixture(self, tenant: Tenant) -> None:
-        DocumentCategory.objects.create(
+    def _create_document_fixture(self, tenant: Tenant, employee: Employee) -> None:
+        category = DocumentCategory.objects.create(
             tenant=tenant, code="qa-identity", name="QA Identity", category_type=DocumentCategoryType.IDENTITY,
             description="Playwright-owned upload validation category.", allow_employee_upload=True,
+        )
+        DocumentRequirementRule.objects.create(
+            tenant=tenant,
+            category=category,
+            employment_type=employee.employment_type,
+            is_mandatory=True,
+            required_within_days_of_joining=0,
+            priority=10,
+            is_active=True,
+        )
+        EmployeeDocument.objects.create(
+            tenant=tenant,
+            employee=employee,
+            category=category,
+            title="QA Identity Evidence",
+            file_name="qa-identity-evidence.pdf",
+            mime_type="application/pdf",
+            status=EmployeeDocumentStatus.ACTIVE,
+            verification_status=VerificationStatus.VERIFIED,
+            document_number="QA-ID-001",
+            issued_on=date(2026, 1, 1),
+            uploaded_by_identifier=employee.employee_code,
+            verified_by_identifier="playwright-fixture",
+            verified_at=timezone.now(),
+            metadata={"owner": "playwright"},
         )
 
     def _create_platform_fixture(self, tenant: Tenant, seed_ref: str, tenant_admin: Employee) -> None:
@@ -435,7 +568,9 @@ class Command(BaseCommand):
                 code: {"username": item.membership.user.username, "employee_id": str(item.id), "employee_code": item.employee_code}
                 for code, item in [
                     ("hr_admin", employees["QA-HR-001"]),
+                    ("hr_checker", employees["QA-HR-002"]),
                     ("manager", employees["QA-MGR-001"]),
+                    ("manager_b", employees["QA-MGR-002"]),
                     ("employee", employee),
                     ("tenant_admin", employees["QA-TA-001"]),
                 ]
@@ -468,36 +603,63 @@ class Command(BaseCommand):
         usernames.append(f"pw_{seed_ref.replace('-', '_')}_platform_admin")
         platform_pack_code = f"pw-qa-{seed_ref}"
         tenant_id = str(tenant.id)
-        # Payroll configuration deliberately uses PROTECT. Remove only this
-        # already ownership-verified tenant's graph in dependency order.
-        PayrollBackgroundJob.objects.filter(tenant=tenant).delete()
-        PayrollArtifactAccessEvent.objects.filter(tenant=tenant).delete()
-        PayrollArtifactSignedAccessGrant.objects.filter(tenant=tenant).delete()
-        PayrollOutputArtifact.objects.filter(tenant=tenant).delete()
-        PayrollFinanceHandoff.objects.filter(tenant=tenant).delete()
-        PayrollOutputBatch.objects.filter(tenant=tenant).delete()
-        PayrollCalculationLine.objects.filter(tenant=tenant).delete()
-        PayrollRunReview.objects.filter(tenant=tenant).delete()
-        PayrollRunCalculation.objects.filter(tenant=tenant).delete()
-        PayrollInputSnapshot.objects.filter(tenant=tenant).delete()
-        PayrollRun.objects.filter(tenant=tenant).delete()
-        EmployeeSalaryAssignment.objects.filter(tenant=tenant).delete()
-        PayrollStatutoryFilingCalendar.objects.filter(tenant=tenant).delete()
-        PayrollStatutoryEmployerRegistration.objects.filter(tenant=tenant).delete()
-        PayrollStatutorySlab.objects.filter(tenant=tenant).delete()
-        PayrollStatutoryComponent.objects.filter(tenant=tenant).delete()
-        EmployeeStatutoryDeclaration.objects.filter(tenant=tenant).delete()
-        EmployeeStatutoryProfile.objects.filter(tenant=tenant).delete()
-        PayrollStatutoryPack.objects.filter(tenant=tenant).delete()
-        SalaryStructureComponent.objects.filter(tenant=tenant).delete()
-        SalaryStructureVersion.objects.filter(tenant=tenant).delete()
-        SalaryStructure.objects.filter(tenant=tenant).delete()
-        PayGroupAssignment.objects.filter(tenant=tenant).delete()
-        PayGroup.objects.filter(tenant=tenant).delete()
-        PayrollPeriod.objects.filter(tenant=tenant).delete()
-        PayrollCalendar.objects.filter(tenant=tenant).delete()
-        SalaryComponent.objects.filter(tenant=tenant).delete()
-        tenant.delete()
+        # DB-4 retained rows are destructible only inside this ownership-
+        # verified, transaction-scoped synthetic teardown capability.
+        with authorized_synthetic_tenant_teardown(tenant, expected_owner_email=self._owner_email(seed_ref)):
+            # DB-3 leave history uses PROTECT deliberately. Synthetic teardown
+            # must remove its graph explicitly from children to parents.
+            LeaveRequestAllocation.objects.filter(tenant=tenant).delete()
+            LeaveYearCloseItem.objects.filter(tenant=tenant).delete()
+            LeavePolicyPeriodStatusEvent.objects.filter(tenant=tenant).delete()
+            LeaveEntitlementLot.objects.filter(tenant=tenant).delete()
+            LeaveBalanceTransaction.objects.filter(tenant=tenant).delete()
+            LeaveYearCloseRun.objects.filter(tenant=tenant).delete()
+            LeaveRequest.objects.filter(tenant=tenant).delete()
+            LeaveBalance.objects.filter(tenant=tenant).delete()
+            LeavePolicyAssignment.objects.filter(tenant=tenant).delete()
+            LeavePolicyPeriod.objects.filter(tenant=tenant).delete()
+            LeavePolicy.objects.filter(tenant=tenant).delete()
+            LeaveType.objects.filter(tenant=tenant).delete()
+            PayrollBackgroundJob.objects.filter(tenant=tenant).delete()
+            PayrollArtifactAccessEvent.objects.filter(tenant=tenant).delete()
+            PayrollArtifactSignedAccessGrant.objects.filter(tenant=tenant).delete()
+            PayrollOutputArtifact.objects.filter(tenant=tenant).delete()
+            PayrollFinanceHandoff.objects.filter(tenant=tenant).delete()
+            PayrollOutputBatch.objects.filter(tenant=tenant).delete()
+            PayrollCalculationLine.objects.filter(tenant=tenant).delete()
+            PayrollRunReview.objects.filter(tenant=tenant).delete()
+            PayrollRunCalculation.objects.filter(tenant=tenant).delete()
+            PayrollSettlementLine.objects.filter(tenant=tenant).delete()
+            PayrollSettlement.objects.filter(tenant=tenant).delete()
+            PayrollAdjustment.objects.filter(tenant=tenant).delete()
+            PayrollInputSnapshot.objects.filter(tenant=tenant).delete()
+            AttendancePeriodCloseEvent.objects.filter(tenant=tenant).delete()
+            AttendancePeriodClose.objects.filter(tenant=tenant).delete()
+            PayrollRun.objects.filter(tenant=tenant).delete()
+            EmployeeSalaryAssignment.objects.filter(tenant=tenant).delete()
+            PayrollStatutoryFilingCalendar.objects.filter(tenant=tenant).delete()
+            PayrollStatutoryEmployerRegistration.objects.filter(tenant=tenant).delete()
+            PayrollStatutorySlab.objects.filter(tenant=tenant).delete()
+            PayrollStatutoryComponent.objects.filter(tenant=tenant).delete()
+            EmployeeStatutoryDeclaration.objects.filter(tenant=tenant).delete()
+            EmployeeStatutoryProfile.objects.filter(tenant=tenant).delete()
+            PayrollStatutoryPack.objects.filter(tenant=tenant).delete()
+            SalaryStructureComponent.objects.filter(tenant=tenant).delete()
+            SalaryStructureVersion.objects.filter(tenant=tenant).delete()
+            SalaryStructure.objects.filter(tenant=tenant).delete()
+            PayGroupAssignment.objects.filter(tenant=tenant).delete()
+            PayGroup.objects.filter(tenant=tenant).delete()
+            PayrollPeriod.objects.filter(tenant=tenant).delete()
+            PayrollCalendar.objects.filter(tenant=tenant).delete()
+            SalaryComponent.objects.filter(tenant=tenant).delete()
+            EmployeeLifecycleEvent.objects.filter(tenant=tenant).delete()
+            EmployeeMovement.objects.filter(tenant=tenant).delete()
+            EmployeeExit.objects.filter(tenant=tenant).delete()
+            ProbationReview.objects.filter(tenant=tenant).delete()
+            EmployeeOnboarding.objects.filter(tenant=tenant).delete()
+            EmploymentAssignment.objects.filter(tenant=tenant).delete()
+            EmploymentSpell.objects.filter(tenant=tenant).delete()
+            tenant.delete()
         PlatformPolicyPack.objects.filter(code=platform_pack_code, description=f"Playwright-owned fixture [{seed_ref}]").delete()
         User.objects.filter(username__in=usernames).delete()
         return {

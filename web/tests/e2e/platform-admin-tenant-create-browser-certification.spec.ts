@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow } from "../helpers/assertions";
-import { platformAdmin, type Persona } from "../helpers/staging-auth";
+import { platformAdmin, requestWithBrowserSession, type Persona } from "../helpers/staging-auth";
 
 const liveApiRequired = Boolean(process.env.HRMS_API_BASE_URL);
 
@@ -208,9 +208,9 @@ test.describe("Platform Admin tenant creation browser certification", () => {
     await page.getByRole("button", { name: "Complete customer handoff" }).click();
     await expect(page.locator(".platform-feedback").getByText("Customer handoff completed.", { exact: true })).toBeVisible();
 
-    const runsResponse = await page.request.get(`/api/platform/tenants/${tenantId}/launch-runs`);
-    expect(runsResponse.ok()).toBeTruthy();
-    const runs = (await runsResponse.json()) as LaunchRun[];
+    const runsResponse = await requestWithBrowserSession(page, `/api/platform/tenants/${tenantId}/launch-runs`);
+    expect(runsResponse.status).toBe(200);
+    const runs = JSON.parse(runsResponse.body) as LaunchRun[];
     const applyRun = runs.find((run) => run.run_type === "apply" && run.status === "succeeded");
     expect(applyRun?.result_payload?.applied_modules ?? []).toContain("leave_attendance");
     const leaveEvidence = applyRun?.seeded_items.find((item) => item.module_ref === "leave_attendance");

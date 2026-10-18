@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { WorkspaceFormFooter } from "@/components/patterns/workspace-standard";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeWriteInput, HrAdminOptionItem } from "@/lib/types";
 import { hasFieldErrors, requireText, validateDateOrder, validateEmail } from "@/lib/ui/validation";
@@ -725,9 +726,15 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
               Continue
             </button>
           ) : (
-            <button className="button button--primary" disabled={isSubmitting} type="submit">
-              {isSubmitting ? "Saving..." : mode === "create" ? "Create employee" : "Save changes"}
-            </button>
+            <AsyncActionButton
+              className="button button--primary"
+              disabled={isSubmitting}
+              pending={isSubmitting}
+              pendingLabel={mode === "create" ? "Creating employee" : "Saving changes"}
+              type="submit"
+            >
+              {mode === "create" ? "Create employee" : "Save changes"}
+            </AsyncActionButton>
           )}
         </WorkspaceFormFooter>
       </section>

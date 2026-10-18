@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { FormSection } from "@/components/patterns/form-section";
 import type {
@@ -66,6 +67,8 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
   const isSubmittingRef = useRef(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminLeavePolicyAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const [conflictError, setConflictError] = useState("");
+  const [conflictRetry, setConflictRetry] = useState(0);
   const hasEmployeeOverride = Boolean(formValue.employee_id);
   const filteredBranches = filteredByLegalEntity(options.branches, formValue.legal_entity_id);
   const branchWarning =
@@ -75,6 +78,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
 
   function update<Key extends keyof HrAdminLeavePolicyAssignmentWriteInput>(key: Key, value: HrAdminLeavePolicyAssignmentWriteInput[Key]) {
     setConflictCheck(null);
+    setConflictError("");
     setIsCheckingConflicts(false);
     setFieldErrors((current) => ({ ...current, [key as LeavePolicyAssignmentField]: undefined }));
     setFormValue((current) => {
@@ -108,8 +112,10 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
       return;
     }
 
+    const controller = new AbortController();
     const timeoutId = window.setTimeout(async () => {
       setIsCheckingConflicts(true);
+      setConflictError("");
       try {
         const response = await fetch("/api/hr-admin/leave-policy-assignments/conflicts", {
           method: "POST",
@@ -118,24 +124,29 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
             ...formValue,
             item_id: itemId ?? null,
           }),
+          signal: controller.signal,
         });
         const payload = (await response.json().catch(() => null)) as HrAdminLeavePolicyAssignmentConflictCheck | null;
         if (!response.ok || !payload) {
           setConflictCheck(null);
+          setConflictError("Unable to check overlapping leave assignments.");
           return;
         }
         setConflictCheck(payload);
-      } catch {
+      } catch (requestError) {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
         setConflictCheck(null);
+        setConflictError("Unable to check overlapping leave assignments.");
       } finally {
-        setIsCheckingConflicts(false);
+        if (!controller.signal.aborted) setIsCheckingConflicts(false);
       }
     }, 250);
 
     return () => {
       window.clearTimeout(timeoutId);
+      controller.abort();
     };
-  }, [formValue, itemId]);
+  }, [conflictRetry, formValue, itemId]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -195,10 +206,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
     });
     setIsSubmitting(false);
     isSubmittingRef.current = false;
-    window.setTimeout(() => {
-      router.push(returnPath);
-      router.refresh();
-    }, 700);
+    router.push(returnPath);
   }
 
   useEffect(() => {
@@ -240,15 +248,18 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
                 onChange={(value) => update("employee_id", value || null)}
               />
               <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
+              <label className="form-field"><span className="muted">Effective from</span><input className="input-control" type="date" value={formValue.effective_from ?? ""} onChange={(e) => update("effective_from", e.target.value || null)} /><FieldHint>Leave blank only for an explicitly classified legacy assignment.</FieldHint></label>
+              <label className="form-field"><span className="muted">Effective to</span><input className="input-control" min={formValue.effective_from ?? undefined} type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} /></label>
             </div>
             {formValue.is_active ? (
-              <div className="notice">
-                <strong>{conflictCheck ? (conflictCheck.has_blocking_conflict ? "Blocking overlap detected." : conflictCheck.has_conflicts ? "Active overlap review." : "Assignment governance check.") : "Checking overlap impact..."}</strong>
+              <div aria-busy={isCheckingConflicts} aria-live="polite" className="notice" role="status">
+                <strong>{conflictError ? "Overlap check unavailable." : conflictCheck ? (conflictCheck.has_blocking_conflict ? "Blocking overlap detected." : conflictCheck.has_conflicts ? "Active overlap review." : "Assignment governance check.") : "Checking overlap impact..."}</strong>
                 <span className="muted">
-                  {isCheckingConflicts && !conflictCheck
+                  {conflictError || (isCheckingConflicts && !conflictCheck
                     ? "Reviewing active leave assignments for the same leave type."
-                    : conflictCheck?.summary ?? "This panel will show whether the current scope overlaps with active assignments for the same leave type."}
+                    : conflictCheck?.summary ?? "This panel will show whether the current scope overlaps with active assignments for the same leave type.")}
                 </span>
+                {conflictError ? <button className="button button--secondary button--compact" onClick={() => setConflictRetry((value) => value + 1)} type="button">Retry overlap check</button> : null}
               </div>
             ) : (
               <div className="notice">
@@ -301,7 +312,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
         <div className="form-actions-bar">
           <span className="muted">Assignment changes go back into the leave policy rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}</button>
+            <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Saving leave policy assignment" type="submit">{mode === "create" ? "Create assignment" : "Save changes"}</AsyncActionButton>
             <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">Cancel</button>
           </div>
         </div>

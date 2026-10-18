@@ -1,0 +1,120 @@
+{
+  "checks": [
+    {
+      "detail": "Backend image is pinned by sha256 digest.",
+      "name": "images.backend_digest",
+      "passed": false
+    },
+    {
+      "detail": "Web image is pinned by sha256 digest.",
+      "name": "images.web_digest",
+      "passed": false
+    },
+    {
+      "detail": "Django secret is externally injected and non-placeholder.",
+      "name": "django.secret",
+      "passed": false
+    },
+    {
+      "detail": "Allowed hosts are explicitly configured.",
+      "name": "django.hosts",
+      "passed": false
+    },
+    {
+      "detail": "CSRF origins are HTTPS origins.",
+      "name": "django.csrf",
+      "passed": true
+    },
+    {
+      "detail": "Session and CSRF cookies are secure.",
+      "name": "django.secure_cookies",
+      "passed": true
+    },
+    {
+      "detail": "HTTPS redirect is enabled.",
+      "name": "django.ssl_redirect",
+      "passed": true
+    },
+    {
+      "detail": "One-year HSTS with subdomains and preload is configured.",
+      "name": "django.hsts",
+      "passed": true
+    },
+    {
+      "detail": "Demo data is disabled.",
+      "name": "runtime.demo_disabled",
+      "passed": true
+    },
+    {
+      "detail": "Irreversible erasure remains disabled.",
+      "name": "runtime.erasure_disabled",
+      "passed": true
+    },
+    {
+      "detail": "PostgreSQL URL requires an explicit non-disabled SSL mode.",
+      "name": "database.tls",
+      "passed": false
+    },
+    {
+      "detail": "Redis broker uses TLS.",
+      "name": "broker.tls",
+      "passed": false
+    },
+    {
+      "detail": "Persistent managed broker mode is declared.",
+      "name": "broker.managed",
+      "passed": true
+    },
+    {
+      "detail": "Employee documents use a non-local storage provider.",
+      "name": "storage.provider",
+      "passed": true
+    },
+    {
+      "detail": "A malware scanner integration reference is configured.",
+      "name": "storage.scanner",
+      "passed": false
+    },
+    {
+      "detail": "Payroll artifact storage verification is strict.",
+      "name": "storage.payroll_strict",
+      "passed": true
+    },
+    {
+      "detail": "Payroll storage credentials resolve through a non-empty secret-backed map.",
+      "name": "storage.payroll_credentials",
+      "passed": false
+    },
+    {
+      "detail": "Payroll storage policies are configured.",
+      "name": "storage.payroll_policies",
+      "passed": false
+    },
+    {
+      "detail": "Backup encryption recipient is externally configured.",
+      "name": "backup.encryption",
+      "passed": false
+    },
+    {
+      "detail": "Encrypted backup off-site destination is configured.",
+      "name": "backup.offsite",
+      "passed": false
+    },
+    {
+      "detail": "Central logging destination is declared.",
+      "name": "observability.logs",
+      "passed": false
+    },
+    {
+      "detail": "Alert route and incident owner are declared.",
+      "name": "observability.alerts",
+      "passed": false
+    },
+    {
+      "detail": "A controlled deployment strategy is declared.",
+      "name": "deployment.strategy",
+      "passed": true
+    }
+  ],
+  "status": "failed"
+}

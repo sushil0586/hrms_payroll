@@ -1,0 +1,9 @@
+{
+  "action": "cleanup",
+  "deleted": true,
+  "tenant": {
+    "code": "pw-qa-lc1-browser",
+    "id": "9c0e108e-03a7-4d30-aeac-2231e4619243"
+  },
+  "verified_absent": true
+}

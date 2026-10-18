@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta
 import csv
+import hashlib
 import json
 import logging
 import math
@@ -23,6 +24,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.views import APIView
 
 from apps.common.models import HrmsImportBatchAudit, HrmsImportBatchStatus, HrmsLaunchRemediationAssignment
+from apps.common.idempotency import execute_idempotent_mutation
 from apps.common.api_serializers import (
     LIFECYCLE_COMMON_DUE_ANCHORS,
     LIFECYCLE_EXIT_DUE_ANCHORS,
@@ -107,6 +109,7 @@ from apps.common.api_serializers import (
     HrAdminWorkflowTemplateSerializer,
     HrAdminWorkflowTemplateWriteSerializer,
     HrAdminOrganizationWriteSerializer,
+    HrAdminOrganizationImportSerializer,
     HrAdminOrganizationSnapshotSerializer,
     HrAdminDocumentCategorySerializer,
     HrAdminDocumentCategoryWriteSerializer,
@@ -683,6 +686,11 @@ from apps.employee_lifecycle.models import (
     ProbationDecision,
     ProbationReview,
 )
+from apps.employee_lifecycle.effective_services import (
+    apply_completed_movement,
+    classify_employment_history,
+    initialize_employment_timeline,
+)
 from apps.notifications.models import (
     Notification,
     NotificationAudienceType,
@@ -891,8 +899,10 @@ def _validate_employee_structure_consistency(item: Employee):
         )
 
 
+@transaction.atomic
 def save_hr_admin_employee(actor, validated_data, *, item=None):
     tenant = actor.tenant
+    is_new = item is None
     model_map = {
         "legal_entity_id": LegalEntity,
         "branch_id": Branch,
@@ -972,6 +982,13 @@ def save_hr_admin_employee(actor, validated_data, *, item=None):
     _validate_employee_structure_consistency(item)
 
     item.save()
+    if is_new and item.legal_entity_id and item.date_of_joining:
+        initialize_employment_timeline(
+            employee_id=item.id,
+            actor_identifier=actor.employee_code,
+            approved_source_reference=f"employee_create:{item.id}",
+            effective_from=item.date_of_joining,
+        )
     ensure_employee_leave_balances(item)
     ensure_employee_attendance_records(item)
     refresh_attendance_records_for_employee(item)
@@ -1108,6 +1125,20 @@ ORGANIZATION_MODEL_MAP = {
 }
 
 
+def _would_create_organization_hierarchy_cycle(*, model_class, item, parent) -> bool:
+    if parent is None or item.id is None:
+        return False
+
+    visited = set()
+    current = parent
+    while current is not None and current.id not in visited:
+        if current.id == item.id:
+            return True
+        visited.add(current.id)
+        current = model_class.objects.filter(tenant=item.tenant, id=current.parent_id).first() if current.parent_id else None
+    return False
+
+
 def _get_organization_deactivation_conflicts(*, tenant, section: str, item) -> list[str]:
     if section == "legal_entities":
         conflicts = []
@@ -1220,6 +1251,10 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
             parent = BusinessUnit.objects.filter(id=validated_data["parent_id"], tenant=tenant).first() if validated_data["parent_id"] else None
             if validated_data["parent_id"] and not parent:
                 raise serializers.ValidationError({"parent_id": "Invalid selection."})
+            if _would_create_organization_hierarchy_cycle(model_class=BusinessUnit, item=item, parent=parent):
+                raise serializers.ValidationError(
+                    {"parent_id": "This parent would create an organization hierarchy cycle."}
+                )
             item.parent = parent
     elif section == "departments":
         if "parent_id" in validated_data:
@@ -1228,6 +1263,10 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
             parent = Department.objects.filter(id=validated_data["parent_id"], tenant=tenant).first() if validated_data["parent_id"] else None
             if validated_data["parent_id"] and not parent:
                 raise serializers.ValidationError({"parent_id": "Invalid selection."})
+            if _would_create_organization_hierarchy_cycle(model_class=Department, item=item, parent=parent):
+                raise serializers.ValidationError(
+                    {"parent_id": "This parent would create an organization hierarchy cycle."}
+                )
             item.parent = parent
         if "business_unit_id" in validated_data:
             business_unit = BusinessUnit.objects.filter(id=validated_data["business_unit_id"], tenant=tenant).first() if validated_data["business_unit_id"] else None
@@ -1256,6 +1295,68 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
 
     item.save()
     return item
+
+
+def import_hr_admin_organization_items(actor, rows):
+    """Create an ordered organization graph atomically from validated CSV rows."""
+
+    tenant = actor.tenant
+    lookups = {
+        section: {item.code.casefold(): item for item in model.objects.filter(tenant=tenant)}
+        for section, model in ORGANIZATION_MODEL_MAP.items()
+    }
+    created = []
+
+    def lookup(section, code, field):
+        if not code:
+            return None
+        item = lookups[section].get(code.strip().casefold())
+        if item is None:
+            raise serializers.ValidationError({field: f"Unknown organization code: {code}."})
+        return item.id
+
+    with transaction.atomic():
+        # Serialize imports for a tenant so concurrent batches cannot race uniqueness checks.
+        type(tenant).objects.select_for_update().get(pk=tenant.pk)
+        for row in rows:
+            section = row["section"].strip().casefold()
+            data = row["data"]
+            if section not in ORGANIZATION_MODEL_MAP:
+                raise serializers.ValidationError({"rows": {row["row_number"]: "Unsupported organization section."}})
+            payload = {
+                key: value for key, value in data.items()
+                if key in {field.field_name for field in HrAdminOrganizationWriteSerializer().fields.values()}
+                and value != ""
+            }
+            payload.update({"code": data.get("code", ""), "name": data.get("name", "")})
+            if "is_active" in data:
+                payload["is_active"] = data["is_active"].strip().casefold() in {"true", "yes", "1", "active"}
+            if section == "branches":
+                payload["legal_entity_id"] = lookup("legal_entities", data.get("legal_entity_code"), "legal_entity_code")
+                payload["location_id"] = lookup("locations", data.get("location_code"), "location_code")
+            elif section == "business_units":
+                payload["parent_id"] = lookup("business_units", data.get("parent_code"), "parent_code")
+            elif section == "departments":
+                payload["business_unit_id"] = lookup("business_units", data.get("business_unit_code"), "business_unit_code")
+                payload["parent_id"] = lookup("departments", data.get("parent_code"), "parent_code")
+            elif section == "cost_centers":
+                payload["legal_entity_id"] = lookup("legal_entities", data.get("legal_entity_code"), "legal_entity_code")
+            elif section == "designations":
+                payload["grade_id"] = lookup("grades", data.get("grade_code"), "grade_code")
+            if section == "grades" and data.get("level"):
+                payload["level"] = data["level"]
+            if section == "employment_types" and "is_payroll_eligible" in data:
+                payload["is_payroll_eligible"] = data["is_payroll_eligible"].strip().casefold() in {"true", "yes", "1", "payroll"}
+
+            serializer = HrAdminOrganizationWriteSerializer(data=payload)
+            try:
+                serializer.is_valid(raise_exception=True)
+                item = save_hr_admin_organization_item(actor, section, serializer.validated_data)
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({"rows": {row["row_number"]: exc.detail}}) from exc
+            lookups[section][item.code.casefold()] = item
+            created.append({"row_number": row["row_number"], "section": section, "id": item.id, "code": item.code})
+    return created
 
 def _hr_admin_actor_identifier(actor) -> str:
     membership = getattr(actor, "membership", None)
@@ -1852,6 +1953,8 @@ def build_hr_admin_assignment_payload(item, *, policy_id_field: str, policy_name
         "employee": f"{item.employee.first_name} {item.employee.last_name}".strip() if item.employee else None,
         "priority": item.priority,
         "is_active": item.is_active,
+        "effective_from": item.effective_from,
+        "effective_to": item.effective_to,
     }
     if include_location:
         payload["location_id"] = item.location_id
@@ -1890,7 +1993,7 @@ def save_hr_admin_leave_policy_assignment(actor, validated_data, *, item=None):
                 raise serializers.ValidationError({field_name: "Invalid selection."})
             setattr(item, relation_name, related)
 
-    for field in ["priority", "is_active"]:
+    for field in ["priority", "is_active", "effective_from", "effective_to"]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
 
@@ -1914,6 +2017,8 @@ def save_hr_admin_leave_policy_assignment(actor, validated_data, *, item=None):
                 "grade_id": item.grade_id,
                 "employment_type_id": item.employment_type_id,
                 "employee_id": item.employee_id,
+                "effective_from": item.effective_from,
+                "effective_to": item.effective_to,
             },
             priority=item.priority,
             item_id=str(item.id) if item.id else None,
@@ -1961,6 +2066,8 @@ def build_hr_admin_leave_assignment_governance_payload(*, tenant, item):
             "grade_id": item.grade_id,
             "employment_type_id": item.employment_type_id,
             "employee_id": item.employee_id,
+            "effective_from": item.effective_from,
+            "effective_to": item.effective_to,
         },
         priority=item.priority,
         item_id=str(item.id),
@@ -2074,7 +2181,7 @@ def save_hr_admin_attendance_policy_assignment(actor, validated_data, *, item=No
                 raise serializers.ValidationError({field_name: "Invalid selection."})
             setattr(item, relation_name, related)
 
-    for field in ["priority", "is_active"]:
+    for field in ["priority", "is_active", "effective_from", "effective_to"]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
 
@@ -2099,6 +2206,8 @@ def save_hr_admin_attendance_policy_assignment(actor, validated_data, *, item=No
             "grade_id": item.grade_id,
             "employment_type_id": item.employment_type_id,
             "employee_id": item.employee_id,
+            "effective_from": item.effective_from,
+            "effective_to": item.effective_to,
         },
         priority=item.priority,
         item_id=str(item.id) if item.id else None,
@@ -2145,6 +2254,8 @@ def build_hr_admin_attendance_assignment_governance_payload(*, tenant, item):
             "grade_id": item.grade_id,
             "employment_type_id": item.employment_type_id,
             "employee_id": item.employee_id,
+            "effective_from": item.effective_from,
+            "effective_to": item.effective_to,
         },
         priority=item.priority,
         item_id=str(item.id),
@@ -2461,7 +2572,7 @@ def save_hr_admin_workflow_template(actor, validated_data, *, item=None):
                     scope_type=step_payload.get("scope_type", ""),
                     auto_approve_after_hours=step_payload.get("auto_approve_after_hours", 0),
                     escalate_after_hours=step_payload.get("escalate_after_hours", 0),
-                    allow_delegate=step_payload.get("allow_delegate", True),
+                    allow_delegate=step_payload.get("allow_delegate", False),
                     allow_send_back=step_payload.get("allow_send_back", True),
                     allow_comment=step_payload.get("allow_comment", True),
                     rule_snapshot=step_payload.get("rule_snapshot") or {},
@@ -3058,9 +3169,14 @@ def create_hr_admin_employee_document(actor, validated_data) -> EmployeeDocument
     return _create_employee_document(actor, validated_data, employee=target_employee)
 
 
+@transaction.atomic
 def _create_employee_document(actor, validated_data, *, employee: Employee) -> EmployeeDocument:
     tenant = actor.tenant
-    category = DocumentCategory.objects.filter(tenant=tenant, id=validated_data["category_id"], is_active=True).first()
+    category = (
+        DocumentCategory.objects.select_for_update(of=("self",))
+        .filter(tenant=tenant, id=validated_data["category_id"], is_active=True)
+        .first()
+    )
     if not category:
         raise serializers.ValidationError({"category_id": "Document category not found."})
 
@@ -3102,44 +3218,50 @@ def _create_employee_document(actor, validated_data, *, employee: Employee) -> E
                 {"category_id": "An active document already exists for this employee and category. Replace or archive it first."}
             )
 
-    artifact = store_document_artifact(
-        tenant=tenant,
-        employee=employee,
-        uploaded_file=uploaded_file,
-        actor_identifier=actor.employee_code,
-        metadata={
-            "category_id": str(category.id),
-            "category_code": category.code,
-            "employee_id": str(employee.id),
-            "replacement_document_id": str(replacement_document.id) if replacement_document else "",
-        },
-    )
+    artifact = None
+    try:
+        artifact = store_document_artifact(
+            tenant=tenant,
+            employee=employee,
+            uploaded_file=uploaded_file,
+            actor_identifier=actor.employee_code,
+            metadata={
+                "category_id": str(category.id),
+                "category_code": category.code,
+                "employee_id": str(employee.id),
+                "replacement_document_id": str(replacement_document.id) if replacement_document else "",
+            },
+        )
 
-    if replacement_document:
-        replacement_document.status = EmployeeDocumentStatus.REPLACED
-        replacement_document.reupload_requested = False
-        replacement_document.reupload_requested_at = None
-        replacement_document.reupload_requested_by_identifier = ""
-        replacement_document.save(update_fields=["status", "reupload_requested", "reupload_requested_at", "reupload_requested_by_identifier", "updated_at"])
+        if replacement_document:
+            replacement_document.status = EmployeeDocumentStatus.REPLACED
+            replacement_document.reupload_requested = False
+            replacement_document.reupload_requested_at = None
+            replacement_document.reupload_requested_by_identifier = ""
+            replacement_document.save(update_fields=["status", "reupload_requested", "reupload_requested_at", "reupload_requested_by_identifier", "updated_at"])
 
-    item = EmployeeDocument.objects.create(
-        tenant=tenant,
-        employee=employee,
-        category=category,
-        artifact=artifact,
-        previous_document=replacement_document,
-        version_number=(replacement_document.version_number + 1) if replacement_document else 1,
-        title=(validated_data.get("title") or artifact.original_filename).strip() or artifact.original_filename,
-        file_name=artifact.original_filename,
-        file_path=artifact.storage_key,
-        mime_type=artifact.mime_type,
-        file_size_bytes=artifact.file_size_bytes,
-        document_number=validated_data.get("document_number", ""),
-        issued_on=validated_data.get("issued_on"),
-        expires_on=validated_data.get("expires_on"),
-        uploaded_by_identifier=actor.employee_code,
-        verification_status=VerificationStatus.PENDING if category.requires_verification else VerificationStatus.VERIFIED,
-    )
+        item = EmployeeDocument.objects.create(
+            tenant=tenant,
+            employee=employee,
+            category=category,
+            artifact=artifact,
+            previous_document=replacement_document,
+            version_number=(replacement_document.version_number + 1) if replacement_document else 1,
+            title=(validated_data.get("title") or artifact.original_filename).strip() or artifact.original_filename,
+            file_name=artifact.original_filename,
+            file_path=artifact.storage_key,
+            mime_type=artifact.mime_type,
+            file_size_bytes=artifact.file_size_bytes,
+            document_number=validated_data.get("document_number", ""),
+            issued_on=validated_data.get("issued_on"),
+            expires_on=validated_data.get("expires_on"),
+            uploaded_by_identifier=actor.employee_code,
+            verification_status=VerificationStatus.PENDING if category.requires_verification else VerificationStatus.VERIFIED,
+        )
+    except Exception:
+        if artifact and artifact.stored_file.name:
+            artifact.stored_file.storage.delete(artifact.stored_file.name)
+        raise
     item.file_url = f"/api/v1/hr-admin/employee-documents/{item.id}/download/"
     if item.verification_status == VerificationStatus.VERIFIED:
         item.verified_at = timezone.now()
@@ -4044,7 +4166,13 @@ def _notify_document_verification_updated(*, document: EmployeeDocument):
     )
 
 
+@transaction.atomic
 def _send_document_expiry_attention_reminder(*, document: EmployeeDocument, reminder_source: str = "manual_action") -> bool:
+    document = (
+        EmployeeDocument.objects.select_for_update(of=("self",))
+        .select_related("tenant", "employee__membership__user", "category")
+        .get(pk=document.pk)
+    )
     expiry_runtime = _get_employee_document_expiry_runtime(document)
     if expiry_runtime["is_expired"]:
         title = f"Document expired: {document.category.name}"
@@ -4074,6 +4202,15 @@ def _send_document_expiry_attention_reminder(*, document: EmployeeDocument, remi
     elif document.employee.work_email:
         recipient_identifier = document.employee.work_email
 
+    reminder_key = f"{document.id}:{expiry_runtime['state']}:{timezone.localdate().isoformat()}"
+    if Notification.objects.filter(
+        tenant=document.tenant,
+        subject_type="employee_document",
+        subject_identifier=str(document.id),
+        payload__reminder_key=reminder_key,
+    ).exists():
+        return False
+
     trigger_notification_event(
         tenant=document.tenant,
         module="documents",
@@ -4095,6 +4232,7 @@ def _send_document_expiry_attention_reminder(*, document: EmployeeDocument, remi
             "days_until_expiry": expiry_runtime["days_until_expiry"],
             "expires_on": document.expires_on.isoformat() if document.expires_on else None,
             "reminder_source": reminder_source,
+            "reminder_key": reminder_key,
         },
     )
     return True
@@ -5155,6 +5293,14 @@ def _validate_onboarding_status_metadata(item: EmployeeOnboarding, field_name: s
             raise serializers.ValidationError({"actual_joining_date": "Actual joining date is required before completing a rehire onboarding."})
         if last_exit_date and item.actual_joining_date <= last_exit_date:
             raise serializers.ValidationError({"actual_joining_date": "Rehire joining date must be later than the employee's last exit date."})
+        raise serializers.ValidationError(
+            {
+                field_name: (
+                    "Rehire completion is unavailable until service-continuity, benefit, leave, "
+                    "and payroll treatment policies are approved."
+                )
+            }
+        )
 
 
 def _validate_probation_decision_metadata(item: ProbationReview):
@@ -5303,28 +5449,10 @@ def _apply_movement_to_employee(item: EmployeeMovement) -> None:
     if item.status != LifecycleEventStatus.COMPLETED:
         return
 
-    employee = item.employee
-    update_fields = []
-    field_map = {
-        "to_legal_entity": "legal_entity",
-        "to_branch": "branch",
-        "to_location": "location",
-        "to_department": "department",
-        "to_business_unit": "business_unit",
-        "to_designation": "designation",
-        "to_grade": "grade",
-        "to_employment_type": "employment_type",
-        "to_manager": "reporting_manager",
-    }
-    for source_field, employee_field in field_map.items():
-        source_value = getattr(item, source_field)
-        if source_value is not None and getattr(employee, employee_field) != source_value:
-            setattr(employee, employee_field, source_value)
-            update_fields.append(employee_field)
-
-    if update_fields:
-        _validate_employee_structure_consistency(employee)
-        employee.save(update_fields=[*update_fields, "updated_at"])
+    try:
+        apply_completed_movement(item.id, actor_identifier=item.employee.employee_code)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError({"detail": exc.messages}) from exc
 
 
 def _validate_exit_metadata(item: EmployeeExit) -> None:
@@ -7006,14 +7134,26 @@ def _payroll_signed_access_grant_from_request(artifact: PayrollOutputArtifact, r
     token = (request.query_params.get("token") or "").strip()
     if not grant_id and not token:
         return None
-    grant = validate_payroll_artifact_signed_access_grant(
-        artifact,
-        grant_id=grant_id,
-        token=token,
-        actor_user=request.user,
-        actor_membership=actor_membership,
-    )
-    return mark_payroll_artifact_signed_access_grant_used(grant)
+    validation_error = None
+    grant = None
+    with transaction.atomic():
+        try:
+            grant = validate_payroll_artifact_signed_access_grant(
+                artifact,
+                grant_id=grant_id,
+                token=token,
+                actor_user=request.user,
+                actor_membership=actor_membership,
+                lock_grant=True,
+            )
+        except PayrollOutputError as exc:
+            # Expiry validation updates the durable grant state before denying access.
+            validation_error = exc
+        else:
+            grant = mark_payroll_artifact_signed_access_grant_used(grant)
+    if validation_error:
+        raise validation_error
+    return grant
 
 
 def build_me_statutory_declaration_item_payload(item: EmployeeStatutoryDeclarationItem) -> dict:
@@ -8185,18 +8325,19 @@ class SupportSessionTenantConsoleView(APIView):
         if not tenant:
             return response.Response({"detail": "Tenant was not found.", "code": "tenant_not_found"}, status=status.HTTP_404_NOT_FOUND)
 
-        support_session = evaluate_support_access_session(
-            tenant,
-            user=request.user,
-            session_ref=session_ref,
-            required_scope_ref=scope_ref,
-            request_path=request.path,
-            method=request.method,
-        )
-        if not support_session["allowed"]:
-            return response.Response(support_session, status=status.HTTP_403_FORBIDDEN)
-
-        payload = get_support_session_tenant_console_payload(tenant, support_session=support_session)
+        with transaction.atomic():
+            support_session = evaluate_support_access_session(
+                tenant,
+                user=request.user,
+                session_ref=session_ref,
+                required_scope_ref=scope_ref,
+                request_path=request.path,
+                method=request.method,
+                lock_grant=True,
+            )
+            if not support_session["allowed"]:
+                return response.Response(support_session, status=status.HTTP_403_FORBIDDEN)
+            payload = get_support_session_tenant_console_payload(tenant, support_session=support_session)
         return response.Response(SupportSessionTenantConsoleSerializer(payload).data)
 
 
@@ -8217,18 +8358,19 @@ class SupportSessionDomainSnapshotView(APIView):
         if not domain_option:
             return response.Response({"detail": "Support domain snapshot is not configured.", "code": "support_domain_not_configured"}, status=status.HTTP_400_BAD_REQUEST)
 
-        support_session = evaluate_support_access_session(
-            tenant,
-            user=request.user,
-            session_ref=session_ref,
-            required_scope_ref=domain_option["scope_ref"],
-            request_path=request.path,
-            method=request.method,
-        )
-        if not support_session["allowed"]:
-            return response.Response(support_session, status=status.HTTP_403_FORBIDDEN)
-
-        payload = get_support_session_domain_snapshot_payload(tenant, support_session=support_session, domain_ref=domain_ref)
+        with transaction.atomic():
+            support_session = evaluate_support_access_session(
+                tenant,
+                user=request.user,
+                session_ref=session_ref,
+                required_scope_ref=domain_option["scope_ref"],
+                request_path=request.path,
+                method=request.method,
+                lock_grant=True,
+            )
+            if not support_session["allowed"]:
+                return response.Response(support_session, status=status.HTTP_403_FORBIDDEN)
+            payload = get_support_session_domain_snapshot_payload(tenant, support_session=support_session, domain_ref=domain_ref)
         return response.Response(SupportSessionDomainSnapshotSerializer(payload).data)
 
 
@@ -9947,6 +10089,11 @@ def build_hr_admin_payroll_run_payload(item: PayrollRun) -> dict:
         "pay_group_name": item.pay_group.name if item.pay_group else None,
         "code": item.code,
         "name": item.name,
+        "run_kind": item.run_kind,
+        "fiscal_year_id": item.fiscal_year_id,
+        "earning_accounting_period_id": item.earning_accounting_period_id,
+        "payment_accounting_period_id": item.payment_accounting_period_id,
+        "period_mapping_snapshot": item.period_mapping_snapshot,
         "status": item.status,
         "status_label": item.get_status_display(),
         "input_profile_ref": item.input_profile_ref,
@@ -9976,6 +10123,8 @@ def build_hr_admin_payroll_input_snapshot_payload(item: PayrollInputSnapshot) ->
         "employee_id": item.employee_id,
         "employee_name": _employee_display_name(item.employee),
         "employee_code": item.employee.employee_code,
+        "attendance_close_id": item.attendance_close_id,
+        "attendance_close_version": item.attendance_close.version if item.attendance_close else None,
         "pay_group_assignment_id": item.pay_group_assignment_id,
         "pay_group_name": item.pay_group_assignment.pay_group.name if item.pay_group_assignment else None,
         "salary_assignment_id": item.salary_assignment_id,
@@ -10266,6 +10415,7 @@ class HrAdminPayrollAdjustmentSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         return response.Response(HrAdminPayrollAdjustmentSetupSerializer(get_hr_admin_payroll_adjustment_setup_payload(employee, request)).data)
 
 
@@ -10274,6 +10424,7 @@ class HrAdminPayrollAdjustmentListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         items = PayrollAdjustment.objects.filter(tenant=employee.tenant).select_related("payroll_run", "employee", "input_snapshot", "salary_component")
         return response.Response(HrAdminPayrollAdjustmentSerializer([build_hr_admin_payroll_adjustment_payload(item) for item in items], many=True).data)
 
@@ -10281,6 +10432,7 @@ class HrAdminPayrollAdjustmentListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         serializer = HrAdminPayrollAdjustmentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -10297,6 +10449,8 @@ class HrAdminPayrollAdjustmentActionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        permission = "payroll.approve" if self.action in {"approve", "reject"} else "payroll.review"
+        self.require_tenant_permission(employee.tenant, permission)
         item = PayrollAdjustment.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "employee", "input_snapshot", "salary_component").first()
         if not item:
             return response.Response({"detail": "Payroll adjustment not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10542,6 +10696,7 @@ class HrAdminPayrollSettlementSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         return response.Response(HrAdminPayrollSettlementSetupSerializer(get_hr_admin_payroll_settlement_setup_payload(employee)).data)
 
 
@@ -10550,6 +10705,7 @@ class HrAdminPayrollSettlementListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         items = PayrollSettlement.objects.filter(tenant=employee.tenant).select_related("payroll_run", "employee", "exit_record", "input_snapshot").prefetch_related("lines")
         return response.Response(HrAdminPayrollSettlementSerializer([build_hr_admin_payroll_settlement_payload(item) for item in items], many=True).data)
 
@@ -10557,6 +10713,7 @@ class HrAdminPayrollSettlementListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         serializer = HrAdminPayrollSettlementWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -10571,6 +10728,7 @@ class HrAdminPayrollSettlementLineListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         settlement = PayrollSettlement.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "employee", "input_snapshot").first()
         if not settlement:
             return response.Response({"detail": "Payroll settlement not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10590,6 +10748,8 @@ class HrAdminPayrollSettlementActionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        permission = "payroll.approve" if self.action in {"approve", "reject"} else "payroll.review"
+        self.require_tenant_permission(employee.tenant, permission)
         item = PayrollSettlement.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "employee", "input_snapshot").prefetch_related("lines").first()
         if not item:
             return response.Response({"detail": "Payroll settlement not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10657,11 +10817,39 @@ def save_hr_admin_payroll_run(actor, validated_data, *, item=None):
         if validated_data["pay_group_id"] and not pay_group:
             raise serializers.ValidationError({"pay_group_id": "Invalid selection."})
         item.pay_group = pay_group
-    for field in ["code", "name", "status", "input_profile_ref", "snapshot_schema_ref", "config_snapshot"]:
+    for field in ["code", "name", "run_kind", "status", "input_profile_ref", "snapshot_schema_ref", "config_snapshot"]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
     if item.period_id is None:
         raise serializers.ValidationError({"period_id": "This field is required."})
+    if item.status not in {PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED} and not item.fiscal_year_id:
+        from apps.payroll.fiscal_services import accounting_context_for_payroll_period, resolve_fiscal_calendar
+
+        legal_entity = item.pay_group.legal_entity if item.pay_group_id else None
+        context = accounting_context_for_payroll_period(item.period, legal_entity=legal_entity)
+        if context["fiscal_year"]:
+            item.fiscal_year = context["fiscal_year"]
+            item.earning_accounting_period = context["earning_period"]
+            item.payment_accounting_period = context["payment_period"]
+            item.period_mapping_snapshot = {
+                "fiscal_year_id": str(context["fiscal_year"].id),
+                "fiscal_year_code": context["fiscal_year"].code,
+                "earning_accounting_period_id": str(context["earning_period"].id),
+                "earning_period_code": context["earning_period"].code,
+                "payment_accounting_period_id": str(context["payment_period"].id) if context["payment_period"] else None,
+                "payment_period_code": context["payment_period"].code if context["payment_period"] else None,
+                "earning_period_start": item.period.start_date.isoformat(),
+                "earning_period_end": item.period.end_date.isoformat(),
+                "payment_date": item.period.pay_date.isoformat(),
+            }
+        elif resolve_fiscal_calendar(tenant=actor.tenant, on_date=item.period.end_date, legal_entity=legal_entity):
+            raise serializers.ValidationError({"period_id": "No accounting period covers this payroll earning period."})
+        if context["fiscal_year"] and context["payment_period"] is None and resolve_fiscal_calendar(
+            tenant=actor.tenant,
+            on_date=item.period.pay_date,
+            legal_entity=legal_entity,
+        ):
+            raise serializers.ValidationError({"period_id": "No accounting period covers this payroll payment date."})
     item.save()
     return item
 
@@ -10731,6 +10919,21 @@ def save_hr_admin_payroll_input_snapshot(actor, validated_data, *, item=None):
         if not target_employee:
             raise serializers.ValidationError({"employee_id": "Invalid selection."})
         item.employee = target_employee
+    if "attendance_close_id" in validated_data:
+        from apps.attendance.models import AttendancePeriodClose, AttendancePeriodCloseStatus
+
+        attendance_close = (
+            AttendancePeriodClose.objects.filter(
+                tenant=actor.tenant,
+                id=validated_data["attendance_close_id"],
+                status=AttendancePeriodCloseStatus.CLOSED,
+            ).first()
+            if validated_data["attendance_close_id"]
+            else None
+        )
+        if validated_data["attendance_close_id"] and not attendance_close:
+            raise serializers.ValidationError({"attendance_close_id": "Select a closed attendance period in this tenant."})
+        item.attendance_close = attendance_close
     if "pay_group_assignment_id" in validated_data:
         pay_group_assignment = PayGroupAssignment.objects.filter(tenant=actor.tenant, id=validated_data["pay_group_assignment_id"]).first() if validated_data["pay_group_assignment_id"] else None
         if validated_data["pay_group_assignment_id"] and not pay_group_assignment:
@@ -10762,6 +10965,64 @@ def save_hr_admin_payroll_input_snapshot(actor, validated_data, *, item=None):
     if item.employee_id is None:
         raise serializers.ValidationError({"employee_id": "This field is required."})
     if item.payroll_run_id and item.employee_id:
+        from apps.attendance.models import AttendancePeriodClose, AttendancePeriodCloseStatus
+
+        period = item.payroll_run.period
+        if item.payroll_run.pay_group_id and item.payroll_run.pay_group.calendar_id != period.calendar_id:
+            raise serializers.ValidationError({
+                "payroll_run_id": "Payroll run pay group and period must use the same payroll calendar."
+            })
+        if item.pay_group_assignment_id:
+            if item.pay_group_assignment.employee_id != item.employee_id:
+                raise serializers.ValidationError({
+                    "pay_group_assignment_id": "Pay group assignment must belong to the selected employee."
+                })
+            if item.payroll_run.pay_group_id and item.pay_group_assignment.pay_group_id != item.payroll_run.pay_group_id:
+                raise serializers.ValidationError({
+                    "pay_group_assignment_id": "Pay group assignment must match the payroll run pay group."
+                })
+            if (
+                item.pay_group_assignment.status != PayGroupStatus.ACTIVE
+                or item.pay_group_assignment.effective_from > period.end_date
+                or (
+                    item.pay_group_assignment.effective_to is not None
+                    and item.pay_group_assignment.effective_to < period.start_date
+                )
+            ):
+                raise serializers.ValidationError({
+                    "pay_group_assignment_id": "Pay group assignment is not active during the payroll earning period."
+                })
+        if item.salary_assignment_id:
+            if item.salary_assignment.employee_id != item.employee_id:
+                raise serializers.ValidationError({
+                    "salary_assignment_id": "Salary assignment must belong to the selected employee."
+                })
+            if (
+                item.salary_assignment.status != PayrollConfigStatus.ACTIVE
+                or item.salary_assignment.effective_from > period.end_date
+                or (
+                    item.salary_assignment.effective_to is not None
+                    and item.salary_assignment.effective_to < period.start_date
+                )
+            ):
+                raise serializers.ValidationError({
+                    "salary_assignment_id": "Salary assignment is not active during the payroll earning period."
+                })
+
+        close_scope = AttendancePeriodClose.objects.filter(
+            tenant=actor.tenant,
+            legal_entity_id=item.employee.legal_entity_id,
+            period_start=item.payroll_run.period.start_date,
+            period_end=item.payroll_run.period.end_date,
+        )
+        if not item.attendance_close_id:
+            item.attendance_close = close_scope.filter(
+                status=AttendancePeriodCloseStatus.CLOSED,
+            ).order_by("-version").first()
+        if close_scope.exists() and not item.attendance_close_id:
+            raise serializers.ValidationError({
+                "attendance_close_id": "Attendance reconciliation exists for this scope but is not closed."
+            })
         schedule_spine = build_payroll_schedule_spine_snapshot(
             employee=item.employee,
             period_start=item.payroll_run.period.start_date,
@@ -10826,6 +11087,11 @@ class HrAdminPayrollRunListCreateView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_run(employee, serializer.validated_data)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError:
+            return response.Response(
+                {"detail": "An active regular payroll run already exists for this period and pay group."},
+                status=status.HTTP_409_CONFLICT,
+            )
         except serializers.ValidationError as exc:
             return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollRun.objects.select_related("period", "pay_group", "locked_by").get(id=item.id)
@@ -10857,6 +11123,11 @@ class HrAdminPayrollRunDetailView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_run(employee, serializer.validated_data, item=item)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError:
+            return response.Response(
+                {"detail": "An active regular payroll run already exists for this period and pay group."},
+                status=status.HTTP_409_CONFLICT,
+            )
         except serializers.ValidationError as exc:
             return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollRun.objects.select_related("period", "pay_group", "locked_by").get(id=item.id)
@@ -14994,10 +15265,33 @@ def _hrms_import_batch_audit_payload(item: HrmsImportBatchAudit) -> dict:
 
 
 class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
+    IMPORT_PERMISSIONS = {
+        "employees": "employees.import",
+        "reporting_manager_mappings": "employees.import",
+        "employee_bank_accounts": "employees.import",
+        "attendance_records": "attendance.records.manage",
+        "employee_shift_assignments": "attendance.policies.manage",
+        "leave_requests": "leave.requests.approve",
+        "leave_policy_assignments": "leave.policies.manage",
+        "organization": "organization.manage",
+    }
+
+    def require_import_history_access(self, tenant):
+        self.require_any_tenant_permission(
+            tenant,
+            "employees.import",
+            "organization.manage",
+            "attendance.records.manage",
+            "attendance.policies.manage",
+            "leave.requests.approve",
+            "leave.policies.manage",
+        )
+
     def get(self, request):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_import_history_access(employee.tenant)
         queryset = HrmsImportBatchAudit.objects.filter(tenant=employee.tenant)
         page, page_size = _get_page_params(request, default_page_size=25, max_page_size=100)
         import_type = request.query_params.get("import_type")
@@ -15051,11 +15345,16 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminImportBatchAuditSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        import_type = serializer.validated_data["import_type"]
+        permission_key = self.IMPORT_PERMISSIONS.get(import_type)
+        if not permission_key:
+            raise serializers.ValidationError({"import_type": "This import type is not supported by the governed audit ledger."})
+        self.require_tenant_permission(employee.tenant, permission_key)
         item = HrmsImportBatchAudit.objects.create(
             tenant=employee.tenant,
             actor_user=request.user,
             actor_identifier=serializer.validated_data.get("actor_identifier") or getattr(request.user, "username", "") or getattr(request.user, "email", "") or employee.employee_code,
-            import_type=serializer.validated_data["import_type"],
+            import_type=import_type,
             status=serializer.validated_data["status"],
             file_name=serializer.validated_data.get("file_name") or "",
             source_hash=serializer.validated_data["source_hash"],
@@ -15357,6 +15656,18 @@ class HrAdminOrganizationSectionListCreateView(HrAdminContextMixin, APIView):
         item = save_hr_admin_organization_item(employee, section, serializer.validated_data)
         payload = get_hr_admin_organization_item_detail(employee, section, item.id)
         return response.Response(HrAdminOrganizationItemSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminOrganizationImportView(HrAdminContextMixin, APIView):
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "organization.manage")
+        serializer = HrAdminOrganizationImportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        created = import_hr_admin_organization_items(employee, serializer.validated_data["rows"])
+        return response.Response({"created": created}, status=status.HTTP_201_CREATED)
 
 
 class HrAdminOrganizationSectionDetailView(HrAdminContextMixin, APIView):
@@ -18823,6 +19134,14 @@ class HrAdminProbationReviewDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminProbationReviewSerializer(build_hr_admin_probation_review_payload(item)).data)
 
 
+class HrAdminEmploymentHistoryClassificationView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(classify_employment_history(employee.tenant))
+
+
 class HrAdminMovementListCreateView(HrAdminContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
@@ -20195,33 +20514,48 @@ class MeLeaveRequestListCreateView(EmployeeContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         payload_data, uploaded_file = _extract_leave_payload(request)
-        artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="leave_request") if uploaded_file else None
-        if artifact and not str(payload_data.get("attachment_reference", "") or "").strip():
-            payload_data["attachment_reference"] = artifact.original_filename
+        if uploaded_file and not str(payload_data.get("attachment_reference", "") or "").strip():
+            payload_data["attachment_reference"] = uploaded_file.name
         serializer = LeaveRequestCreateSerializer(data=payload_data)
         if not serializer.is_valid():
-            _delete_document_artifact_quietly(artifact)
             raise serializers.ValidationError(serializer.errors)
         payload = dict(serializer.validated_data)
         leave_type = LeaveType.objects.filter(id=payload.pop("leave_type_id"), tenant=employee.tenant).first()
         if not leave_type:
-            _delete_document_artifact_quietly(artifact)
             return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            leave_request = submit_leave_request(employee=employee, leave_type=leave_type, **payload)
-        except DjangoValidationError as exc:
-            _delete_document_artifact_quietly(artifact)
-            error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave request."}
-            return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
-        if artifact:
-            _append_leave_attachment_metadata(
-                leave_request=leave_request,
-                artifact=artifact,
-                action="leave_request",
-                label=str(payload.get("attachment_reference", "") or artifact.original_filename),
-            )
-        payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+        file_signature = None
+        if uploaded_file:
+            digest = hashlib.sha256()
+            for chunk in uploaded_file.chunks():
+                digest.update(chunk)
+            uploaded_file.seek(0)
+            file_signature = {"name": uploaded_file.name, "size": uploaded_file.size, "sha256": digest.hexdigest()}
+
+        def operation():
+            artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="leave_request") if uploaded_file else None
+            try:
+                leave_request = submit_leave_request(employee=employee, leave_type=leave_type, **payload)
+            except DjangoValidationError as exc:
+                _delete_document_artifact_quietly(artifact)
+                error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave request."}
+                return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
+            if artifact:
+                _append_leave_attachment_metadata(
+                    leave_request=leave_request,
+                    artifact=artifact,
+                    action="leave_request",
+                    label=str(payload.get("attachment_reference", "") or artifact.original_filename),
+                )
+            result = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(result).data, status=status.HTTP_201_CREATED)
+
+        return execute_idempotent_mutation(
+            request=request,
+            tenant=employee.tenant,
+            action="ess.leave.submit",
+            fingerprint_payload={"leave_type_id": str(leave_type.id), **payload, "attachment": file_signature},
+            operation=operation,
+        )
 
 
 class MeLeaveRequestDetailView(EmployeeContextMixin, APIView):
@@ -20445,19 +20779,31 @@ class MeAttendanceRegularizationListCreateView(EmployeeContextMixin, APIView):
         ).first()
         if not attendance_record:
             return response.Response({"detail": "Attendance record not found."}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            regularization = submit_regularization(
-                employee=employee,
-                attendance_record=attendance_record,
-                requested_status=serializer.validated_data["requested_status"],
-                requested_check_in_at=serializer.validated_data.get("requested_check_in_at"),
-                requested_check_out_at=serializer.validated_data.get("requested_check_out_at"),
-                reason=serializer.validated_data.get("reason", ""),
-            )
-        except ValueError as exc:
-            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        payload = {"id": regularization.id, "status": regularization.status, "workflow_reference": regularization.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+        def operation():
+            try:
+                regularization = submit_regularization(
+                    employee=employee,
+                    attendance_record=attendance_record,
+                    requested_status=serializer.validated_data["requested_status"],
+                    requested_check_in_at=serializer.validated_data.get("requested_check_in_at"),
+                    requested_check_out_at=serializer.validated_data.get("requested_check_out_at"),
+                    reason=serializer.validated_data.get("reason", ""),
+                )
+            except ValueError as exc:
+                return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            result = {"id": regularization.id, "status": regularization.status, "workflow_reference": regularization.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(result).data, status=status.HTTP_201_CREATED)
+
+        return execute_idempotent_mutation(
+            request=request,
+            tenant=employee.tenant,
+            action="ess.attendance.regularization.submit",
+            fingerprint_payload={
+                "attendance_record_id": str(attendance_record.id),
+                **serializer.validated_data,
+            },
+            operation=operation,
+        )
 
 
 class MeAttendanceRegularizationDetailView(EmployeeContextMixin, APIView):
@@ -20472,6 +20818,15 @@ class MeAttendanceRegularizationDetailView(EmployeeContextMixin, APIView):
 
 
 class ManagerDecisionMixin(EmployeeContextMixin):
+    def execute_idempotent_decision(self, *, request, actor, action, item_id, comment, operation):
+        return execute_idempotent_mutation(
+            request=request,
+            tenant=actor.tenant,
+            action=action,
+            fingerprint_payload={"item_id": str(item_id), "comment": comment},
+            operation=operation,
+        )
+
     def _is_current_workflow_approver(self, workflow_reference: str) -> bool:
         actor = self.get_employee()
         if not actor or not workflow_reference:
@@ -20557,13 +20912,18 @@ class ManagerLeaveRequestApproveView(ManagerDecisionMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(actor.tenant, "leave.requests.approve")
         leave_request = LeaveRequest.objects.select_related("employee__reporting_manager", "employee__membership").filter(id=request_id).first()
-        if not leave_request or not self.ensure_leave_request_scope(leave_request):
+        if not leave_request:
             return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ManagerDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        leave_request = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=True, comment=serializer.validated_data.get("comment", ""))
-        payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data)
+        comment = serializer.validated_data.get("comment", "")
+        def operation():
+            if not self.ensure_leave_request_scope(leave_request):
+                return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
+            result = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=True, comment=comment)
+            payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(payload).data)
+        return self.execute_idempotent_decision(request=request, actor=actor, action="mss.leave.approve", item_id=leave_request.id, comment=comment, operation=operation)
 
 
 class ManagerLeaveRequestRejectView(ManagerDecisionMixin, APIView):
@@ -20573,13 +20933,18 @@ class ManagerLeaveRequestRejectView(ManagerDecisionMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(actor.tenant, "leave.requests.approve")
         leave_request = LeaveRequest.objects.select_related("employee__reporting_manager", "employee__membership").filter(id=request_id).first()
-        if not leave_request or not self.ensure_leave_request_scope(leave_request):
+        if not leave_request:
             return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ManagerDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        leave_request = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=False, comment=serializer.validated_data.get("comment", ""))
-        payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data)
+        comment = serializer.validated_data.get("comment", "")
+        def operation():
+            if not self.ensure_leave_request_scope(leave_request):
+                return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
+            result = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=False, comment=comment)
+            payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(payload).data)
+        return self.execute_idempotent_decision(request=request, actor=actor, action="mss.leave.reject", item_id=leave_request.id, comment=comment, operation=operation)
 
 
 class ManagerAttendanceRegularizationApproveView(ManagerDecisionMixin, APIView):
@@ -20589,13 +20954,18 @@ class ManagerAttendanceRegularizationApproveView(ManagerDecisionMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(actor.tenant, "attendance.regularization.review")
         regularization = AttendanceRegularization.objects.select_related("employee__reporting_manager", "employee__membership", "attendance_record").filter(id=regularization_id).first()
-        if not regularization or not self.ensure_manager_scope(regularization.employee):
+        if not regularization:
             return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ManagerDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        regularization = resolve_regularization(regularization=regularization, actor_employee=actor, approve=True, comment=serializer.validated_data.get("comment", ""))
-        payload = {"id": regularization.id, "status": regularization.status, "workflow_reference": regularization.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data)
+        comment = serializer.validated_data.get("comment", "")
+        def operation():
+            if not self.ensure_manager_scope(regularization.employee):
+                return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
+            result = resolve_regularization(regularization=regularization, actor_employee=actor, approve=True, comment=comment)
+            payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(payload).data)
+        return self.execute_idempotent_decision(request=request, actor=actor, action="mss.attendance.approve", item_id=regularization.id, comment=comment, operation=operation)
 
 
 class ManagerPendingAttendanceRegularizationListView(EmployeeContextMixin, APIView):
@@ -20629,10 +20999,15 @@ class ManagerAttendanceRegularizationRejectView(ManagerDecisionMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(actor.tenant, "attendance.regularization.review")
         regularization = AttendanceRegularization.objects.select_related("employee__reporting_manager", "employee__membership", "attendance_record").filter(id=regularization_id).first()
-        if not regularization or not self.ensure_manager_scope(regularization.employee):
+        if not regularization:
             return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ManagerDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        regularization = resolve_regularization(regularization=regularization, actor_employee=actor, approve=False, comment=serializer.validated_data.get("comment", ""))
-        payload = {"id": regularization.id, "status": regularization.status, "workflow_reference": regularization.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data)
+        comment = serializer.validated_data.get("comment", "")
+        def operation():
+            if not self.ensure_manager_scope(regularization.employee):
+                return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
+            result = resolve_regularization(regularization=regularization, actor_employee=actor, approve=False, comment=comment)
+            payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(payload).data)
+        return self.execute_idempotent_decision(request=request, actor=actor, action="mss.attendance.reject", item_id=regularization.id, comment=comment, operation=operation)

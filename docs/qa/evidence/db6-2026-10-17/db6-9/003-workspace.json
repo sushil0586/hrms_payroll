@@ -1,0 +1,76 @@
+{
+  "action": "provision",
+  "attendance": {
+    "policy_id": "b46e7f3d-3964-49ee-8e4c-f067a3378a86",
+    "shift_id": "1f64f824-5c80-41ec-992f-2ba7397616bd"
+  },
+  "checks": {
+    "document_category_available": true,
+    "employee_relations_tenant_scoped": true,
+    "locked_payroll_snapshot_available": true,
+    "manager_queues_available": true,
+    "ownership_markers_valid": true,
+    "period_pay_group_calendar_match": true,
+    "platform_onboarding_available": true,
+    "single_target_leave_balance": true,
+    "statutory_fixture_available": true
+  },
+  "counts": {
+    "employees": 4,
+    "platform_users": 1,
+    "tenant_users": 4
+  },
+  "credentials": {
+    "employee": {
+      "employee_code": "QA-EMP-001",
+      "employee_id": "e369ef69-d871-4034-a0c1-1e94d05c55c8",
+      "username": "pw_db69_employee"
+    },
+    "hr_admin": {
+      "employee_code": "QA-HR-001",
+      "employee_id": "55c4aee1-deb0-4375-91a0-c50493794eb8",
+      "username": "pw_db69_hr_admin"
+    },
+    "manager": {
+      "employee_code": "QA-MGR-001",
+      "employee_id": "f576c206-4c08-4faa-b4b7-e56a27fb09d3",
+      "username": "pw_db69_manager"
+    },
+    "tenant_admin": {
+      "employee_code": "QA-TA-001",
+      "employee_id": "d588b70c-c11d-4199-8ad5-73b16113afc2",
+      "username": "pw_db69_tenant_admin"
+    }
+  },
+  "fixtures": {
+    "attendance_regularization_id": "156674c0-0002-49ad-98b0-9a2b76686d48",
+    "document_category_id": "c46cd008-c370-4e85-bf96-0c4bbba02aee",
+    "leave_request_id": "ce926419-9bd8-4a29-b911-ad949a9950ac",
+    "payroll_run_id": "97607867-5456-4db8-bbb3-b637b25c4b75",
+    "platform_onboarding_id": "49da6eee-fb11-4782-b7c0-0c25edd59017"
+  },
+  "generated_at": "2026-10-17T13:36:25.283741+00:00",
+  "leave": {
+    "balance_id": "292e76f2-4d26-4327-b328-e42ef6d178b8",
+    "policy_id": "16452968-bf1a-4920-ba54-07e56ca71db9"
+  },
+  "ownership": {
+    "disposable": true,
+    "owner": "playwright",
+    "seed_ref": "db69"
+  },
+  "payroll": {
+    "calendar_id": "359fa2a8-8f54-4e69-8daa-a841e6851eb8",
+    "pay_group_id": "e294a71d-1351-4419-b5f8-423402ef4d5f",
+    "period_id": "ef0e0ea9-b39a-4804-b1fa-a3c3b20a92ca",
+    "salary_assignment_id": "65354d96-70a0-4292-a377-2604b5af5f57"
+  },
+  "platform_admin": {
+    "platform_only": true,
+    "username": "pw_db69_platform_admin"
+  },
+  "tenant": {
+    "code": "pw-qa-db69",
+    "id": "76330c23-da6c-4e22-b346-864adf92a8c7"
+  }
+}

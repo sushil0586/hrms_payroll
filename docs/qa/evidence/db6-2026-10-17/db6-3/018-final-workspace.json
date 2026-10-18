@@ -1,0 +1,76 @@
+{
+  "action": "provision",
+  "attendance": {
+    "policy_id": "2ad3c180-9088-4b00-b6b9-202c09de7e91",
+    "shift_id": "de13c973-e42f-4b93-bc1d-5b0a3364abeb"
+  },
+  "checks": {
+    "document_category_available": true,
+    "employee_relations_tenant_scoped": true,
+    "locked_payroll_snapshot_available": true,
+    "manager_queues_available": true,
+    "ownership_markers_valid": true,
+    "period_pay_group_calendar_match": true,
+    "platform_onboarding_available": true,
+    "single_target_leave_balance": true,
+    "statutory_fixture_available": true
+  },
+  "counts": {
+    "employees": 4,
+    "platform_users": 1,
+    "tenant_users": 4
+  },
+  "credentials": {
+    "employee": {
+      "employee_code": "QA-EMP-001",
+      "employee_id": "de1ac12e-6d0f-4f6b-8e19-a2a7b5fb9b30",
+      "username": "pw_db6_fiscal_employee"
+    },
+    "hr_admin": {
+      "employee_code": "QA-HR-001",
+      "employee_id": "f6c688fa-9772-4af4-bd73-d0b9482ce50d",
+      "username": "pw_db6_fiscal_hr_admin"
+    },
+    "manager": {
+      "employee_code": "QA-MGR-001",
+      "employee_id": "ac4d7e27-cc71-44c5-808d-467d1fecb6ca",
+      "username": "pw_db6_fiscal_manager"
+    },
+    "tenant_admin": {
+      "employee_code": "QA-TA-001",
+      "employee_id": "d6d89b54-f06c-4f92-9cdb-7d461d00b40e",
+      "username": "pw_db6_fiscal_tenant_admin"
+    }
+  },
+  "fixtures": {
+    "attendance_regularization_id": "30083806-0110-4a6f-9cac-5b575a3e94a2",
+    "document_category_id": "39dbdc7b-936c-466a-9556-0be0b6f5c7f4",
+    "leave_request_id": "ce7d8d4a-c568-4f97-8886-ebc60395878f",
+    "payroll_run_id": "57b4d235-78c8-4847-97d4-9255bb0df995",
+    "platform_onboarding_id": "4fc2b4cc-4d62-4ec7-b10e-e34d84e9dd48"
+  },
+  "generated_at": "2026-10-17T09:27:02.884250+00:00",
+  "leave": {
+    "balance_id": "90d83b4a-b5ff-4466-ab3d-216e3378b522",
+    "policy_id": "e8f76e60-a9fa-428f-9709-d8ff35ae6ec4"
+  },
+  "ownership": {
+    "disposable": true,
+    "owner": "playwright",
+    "seed_ref": "db6-fiscal"
+  },
+  "payroll": {
+    "calendar_id": "0a3e73c3-69cd-47be-bc79-10c029e98519",
+    "pay_group_id": "60dd017a-3c89-4df7-8a91-82e5fbabcdd5",
+    "period_id": "14abcd13-1ba4-4dda-98c0-2e524a7e15b6",
+    "salary_assignment_id": "da06e13a-04d5-4c04-b108-88ec33afb9c0"
+  },
+  "platform_admin": {
+    "platform_only": true,
+    "username": "pw_db6_fiscal_platform_admin"
+  },
+  "tenant": {
+    "code": "pw-qa-db6-fiscal",
+    "id": "a79bd021-e809-4156-bbdd-8dd5020c3f1a"
+  }
+}

@@ -1,5 +1,13 @@
 from django.urls import path
 
+from apps.common.retention_api import (
+    PlatformGovernanceRequestActionView,
+    PlatformLegalHoldReleaseView,
+    PlatformLegalHoldView,
+    PlatformRetentionPreviewView,
+    PlatformRetentionWorkspaceView,
+)
+
 from apps.tenant_onboarding.api_views import (
     PlatformAdminContactProvisionView,
     PlatformAdminContactDetailView,
@@ -33,6 +41,11 @@ from apps.tenant_onboarding.api_views import (
 
 
 urlpatterns = [
+    path("data-governance/", PlatformRetentionWorkspaceView.as_view(), name="platform-data-governance"),
+    path("data-governance/preview/", PlatformRetentionPreviewView.as_view(), name="platform-data-governance-preview"),
+    path("data-governance/legal-holds/", PlatformLegalHoldView.as_view(), name="platform-legal-holds"),
+    path("data-governance/legal-holds/<uuid:item_id>/release/", PlatformLegalHoldReleaseView.as_view(), name="platform-legal-hold-release"),
+    path("data-governance/requests/<uuid:item_id>/actions/", PlatformGovernanceRequestActionView.as_view(), name="platform-governance-request-actions"),
     path("public-leads/", PublicTenantLeadCreateView.as_view(), name="public-tenant-lead-create"),
     path("permission-catalog/", PlatformPermissionCatalogListView.as_view(), name="platform-permission-catalog-list"),
     path("permission-catalog/<str:permission_key>/", PlatformPermissionCatalogDetailView.as_view(), name="platform-permission-catalog-detail"),

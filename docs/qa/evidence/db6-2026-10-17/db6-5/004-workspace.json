@@ -1,0 +1,76 @@
+{
+  "action": "provision",
+  "attendance": {
+    "policy_id": "cbc6aedc-e429-4ffd-8981-8dd346002009",
+    "shift_id": "eafb1d8b-7aa9-4ab6-9d1f-8f0683d4b8cf"
+  },
+  "checks": {
+    "document_category_available": true,
+    "employee_relations_tenant_scoped": true,
+    "locked_payroll_snapshot_available": true,
+    "manager_queues_available": true,
+    "ownership_markers_valid": true,
+    "period_pay_group_calendar_match": true,
+    "platform_onboarding_available": true,
+    "single_target_leave_balance": true,
+    "statutory_fixture_available": true
+  },
+  "counts": {
+    "employees": 4,
+    "platform_users": 1,
+    "tenant_users": 4
+  },
+  "credentials": {
+    "employee": {
+      "employee_code": "QA-EMP-001",
+      "employee_id": "3c6b5b6b-0ef5-4f09-8556-7c539a02fdbe",
+      "username": "pw_db6_attendance_employee"
+    },
+    "hr_admin": {
+      "employee_code": "QA-HR-001",
+      "employee_id": "83d72b9c-2eb2-4e43-86d6-468f0169605b",
+      "username": "pw_db6_attendance_hr_admin"
+    },
+    "manager": {
+      "employee_code": "QA-MGR-001",
+      "employee_id": "b88b60c5-3107-4b44-8796-899ffdb9bb22",
+      "username": "pw_db6_attendance_manager"
+    },
+    "tenant_admin": {
+      "employee_code": "QA-TA-001",
+      "employee_id": "a39445ad-9b93-4306-9474-22afd48bbf33",
+      "username": "pw_db6_attendance_tenant_admin"
+    }
+  },
+  "fixtures": {
+    "attendance_regularization_id": "933d575d-fd3e-476b-a4d8-71dc5e9a3da2",
+    "document_category_id": "bed05332-fc2a-4a9a-b900-2a9474f62233",
+    "leave_request_id": "2d02d957-dab7-4b1d-83aa-8dab159a662b",
+    "payroll_run_id": "c57b9cee-cf3d-4ce8-8433-d2e4f677c01e",
+    "platform_onboarding_id": "0bad3d25-0682-4b00-85eb-6434adb23455"
+  },
+  "generated_at": "2026-10-17T10:49:45.965814+00:00",
+  "leave": {
+    "balance_id": "806fd7b6-8429-46c6-91a1-152fe494dd90",
+    "policy_id": "c6432c81-1d9b-43e1-ba75-8b6ecc033cb3"
+  },
+  "ownership": {
+    "disposable": true,
+    "owner": "playwright",
+    "seed_ref": "db6-attendance"
+  },
+  "payroll": {
+    "calendar_id": "f2a9d72d-82e4-4414-b7a0-ee8374e4cf6c",
+    "pay_group_id": "3443847f-2a13-4b10-b162-e5ae9507d266",
+    "period_id": "94d50c86-f769-4cac-9153-9e0d49cbf5dc",
+    "salary_assignment_id": "a8c71da1-dbc3-4165-bd38-cc1c851b57a7"
+  },
+  "platform_admin": {
+    "platform_only": true,
+    "username": "pw_db6_attendance_platform_admin"
+  },
+  "tenant": {
+    "code": "pw-qa-db6-attendance",
+    "id": "d04e1c48-2356-4d15-be28-270a9a689996"
+  }
+}

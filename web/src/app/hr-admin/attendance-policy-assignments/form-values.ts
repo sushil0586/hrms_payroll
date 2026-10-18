@@ -12,6 +12,8 @@ export function attendancePolicyAssignmentToFormValue(item: HrAdminScopedAssignm
     employee_id: item.employee_id,
     priority: item.priority,
     is_active: item.is_active,
+    effective_from: item.effective_from ?? null,
+    effective_to: item.effective_to ?? null,
   };
 }
 
@@ -27,5 +29,7 @@ export function createEmptyAttendancePolicyAssignmentValue(): HrAdminAttendanceP
     employee_id: null,
     priority: 100,
     is_active: true,
+    effective_from: null,
+    effective_to: null,
   };
 }

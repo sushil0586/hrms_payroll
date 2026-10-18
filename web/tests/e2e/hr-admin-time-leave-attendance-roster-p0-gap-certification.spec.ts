@@ -50,7 +50,7 @@ function employeeSelect(page: Page): Locator {
 }
 
 async function firstEmployeeAndShift(page: Page): Promise<{ employee: EmployeeOption; shift: ShiftOption }> {
-  const employeesResponse = await page.request.get("/api/hr-admin/employees/option-search?limit=25");
+  const employeesResponse = await backendGet(page, "/hr-admin/employees/option-search/?limit=25");
   expect(employeesResponse.ok()).toBeTruthy();
   const employeesPayload = await employeesResponse.json();
   const employee = employeesPayload.items?.find((item: EmployeeOption) => item.employee_code) as EmployeeOption | undefined;
@@ -214,7 +214,7 @@ test.describe("Phase 3B.3 HR Admin time, leave, attendance, roster P0 gap certif
     await formField(page, "Description").fill("Phase 3B.3 browser roster certification");
     await page.getByRole("button", { name: "Create template" }).click();
     await expect(page).toHaveURL(/\/hr-admin\/shift-roster-templates$/, { timeout: 20_000 });
-    await expect(page.getByText(rosterCode)).toBeVisible();
+    await expect(page.getByText(rosterCode, { exact: true }).first()).toBeVisible();
 
     const templatesResponse = await backendGet(page, `/hr-admin/shift-roster-templates/?page=1&page_size=10&q=${encodeURIComponent(rosterCode)}`);
     expect(templatesResponse.ok()).toBeTruthy();

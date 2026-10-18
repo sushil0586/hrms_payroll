@@ -6,7 +6,8 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.attendance.models import AttendanceRecord, AttendanceStatus, Holiday, HolidayCalendar, HolidayType
@@ -18,10 +19,12 @@ from apps.leave_management.models import (
     LeaveDayPortion,
     LeavePolicy,
     LeavePolicyAssignment,
+    LeaveRequestAllocation,
     LeaveType,
     LeaveRequest,
     LeaveRequestStatus,
 )
+from apps.employee_lifecycle.effective_services import resolve_employment_scope
 from apps.notifications.services import trigger_notification_event
 from apps.workflows.models import WorkflowActorType, WorkflowAction, WorkflowInstanceStatus, WorkflowModule
 from apps.workflows.services import create_workflow_instance, resolve_workflow_action
@@ -90,6 +93,20 @@ DEFAULT_LEAVE_POLICY_CONFIG = {
         "paid_cap_exhaustion_action": "block",
     },
 }
+
+
+def _save_leave_balance_admin_projection(balance: LeaveBalance) -> None:
+    update_fields = ["adjustment_amount", "encashed_amount", "closing_balance", "updated_at"]
+    if balance.policy_period_id:
+        from apps.leave_management.year_end_services import _projection_checksum
+
+        balance.ledger_version += 1
+        balance.ledger_checksum = _projection_checksum(balance)
+        update_fields.extend(["ledger_version", "ledger_checksum"])
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('hrms.leave_ledger_write', 'authorized', true)")
+    balance.save(update_fields=update_fields)
 
 LEAVE_ASSIGNMENT_SCOPE_FIELDS = (
     "legal_entity_id",
@@ -561,6 +578,12 @@ def _employee_matches_assignment_scope(employee, assignment_scope) -> bool:
 
 
 def _assignment_scopes_overlap(candidate_scope, existing_assignment: LeavePolicyAssignment) -> bool:
+    candidate_from = _assignment_scope_value(candidate_scope, "effective_from") or date.min
+    candidate_to = _assignment_scope_value(candidate_scope, "effective_to") or date.max
+    existing_from = existing_assignment.effective_from or date.min
+    existing_to = existing_assignment.effective_to or date.max
+    if candidate_to < existing_from or existing_to < candidate_from:
+        return False
     candidate_employee_id = _assignment_scope_value(candidate_scope, "employee_id")
     existing_employee_id = existing_assignment.employee_id
     if candidate_employee_id and existing_employee_id:
@@ -1006,7 +1029,9 @@ def _leave_assignment_resolution_signature(assignment_scope) -> tuple[int, int, 
     )
 
 
-def _find_matching_leave_policy_assignment(employee, leave_type) -> LeavePolicyAssignment | None:
+def _find_matching_leave_policy_assignment(employee, leave_type, *, as_of: date | None = None) -> LeavePolicyAssignment | None:
+    as_of = as_of or timezone.localdate()
+    scope = resolve_employment_scope(employee, as_of=as_of)
     assignments = (
         LeavePolicyAssignment.objects.filter(
             tenant=employee.tenant,
@@ -1014,6 +1039,8 @@ def _find_matching_leave_policy_assignment(employee, leave_type) -> LeavePolicyA
             leave_policy__status="active",
             is_active=True,
         )
+        .filter(Q(effective_from__isnull=True) | Q(effective_from__lte=as_of))
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of))
         .select_related(
             "leave_policy",
             "employee",
@@ -1032,15 +1059,15 @@ def _find_matching_leave_policy_assignment(employee, leave_type) -> LeavePolicyA
                 continue
             matching_assignments.append(assignment)
             continue
-        if assignment.legal_entity_id and assignment.legal_entity_id != employee.legal_entity_id:
+        if assignment.legal_entity_id and assignment.legal_entity_id != scope.legal_entity_id:
             continue
-        if assignment.branch_id and assignment.branch_id != employee.branch_id:
+        if assignment.branch_id and assignment.branch_id != scope.branch_id:
             continue
-        if assignment.department_id and assignment.department_id != employee.department_id:
+        if assignment.department_id and assignment.department_id != scope.department_id:
             continue
-        if assignment.grade_id and assignment.grade_id != employee.grade_id:
+        if assignment.grade_id and assignment.grade_id != scope.grade_id:
             continue
-        if assignment.employment_type_id and assignment.employment_type_id != employee.employment_type_id:
+        if assignment.employment_type_id and assignment.employment_type_id != scope.employment_type_id:
             continue
         matching_assignments.append(assignment)
     if not matching_assignments:
@@ -1056,7 +1083,7 @@ def _find_matching_leave_policy_assignment(employee, leave_type) -> LeavePolicyA
 
 
 def _resolve_leave_policy(employee, leave_type, *, as_of: date | None = None) -> LeavePolicy | None:
-    assignment = _find_matching_leave_policy_assignment(employee, leave_type)
+    assignment = _find_matching_leave_policy_assignment(employee, leave_type, as_of=as_of)
     if assignment:
         return assignment.leave_policy
     return _find_leave_policy_from_employee_balance(employee, leave_type, as_of=as_of)
@@ -1343,11 +1370,26 @@ def _recalculate_closing_balance(balance: LeaveBalance) -> LeaveBalance:
         - balance.consumed_amount
         - balance.reserved_amount
         - balance.encashed_amount
+        - balance.expired_amount
+        - balance.forfeited_amount
     )
     return balance
 
 
-def _get_or_create_leave_balance(*, employee, leave_policy: LeavePolicy, period_year: int, as_of: date) -> LeaveBalance:
+def _get_or_create_leave_balance(
+    *,
+    employee,
+    leave_policy: LeavePolicy,
+    period_year: int,
+    as_of: date,
+    lock_for_update: bool = False,
+) -> LeaveBalance:
+    from apps.leave_management.year_end_services import (
+        append_leave_ledger_movement,
+        ensure_governed_leave_balance,
+        resolve_leave_policy_period,
+    )
+
     policy_config = normalize_leave_policy_config(leave_policy.config_snapshot)
     prorated_entitlement = _calculate_prorated_entitlement(
         employee=employee,
@@ -1367,8 +1409,49 @@ def _get_or_create_leave_balance(*, employee, leave_policy: LeavePolicy, period_
         policy_period_year=period_year,
         policy_config=policy_config,
     )
+    policy_period = resolve_leave_policy_period(
+        tenant=employee.tenant,
+        leave_policy=leave_policy,
+        on_date=as_of,
+        legal_entity=employee.legal_entity,
+    )
+    if policy_period is not None:
+        balance = ensure_governed_leave_balance(employee=employee, policy_period=policy_period)
+        accrual_shortfall = accrued_amount - Decimal(balance.accrued_amount or 0)
+        if accrual_shortfall > 0:
+            accrual_transaction = append_leave_ledger_movement(
+                balance=balance,
+                action=LeaveBalanceTransaction.ActionType.ACCRUAL,
+                units=accrual_shortfall,
+                effective_date=as_of,
+                idempotency_key=f"accrual:{balance.id}:{as_of.isoformat()}",
+                reason="Scheduled policy accrual",
+                metadata={"policy_period_id": str(policy_period.id), "policy_config": policy_period.policy_snapshot},
+            )
+            from apps.leave_management.models import LeaveEntitlementLot
+
+            LeaveEntitlementLot.objects.get_or_create(
+                source_transaction=accrual_transaction,
+                defaults={
+                    "tenant": employee.tenant,
+                    "leave_balance": balance,
+                    "policy_period": policy_period,
+                    "granted_units": accrual_shortfall,
+                    "remaining_units": accrual_shortfall,
+                    "effective_date": as_of,
+                    "priority": 100,
+                    "metadata": {"lot_kind": "scheduled_accrual"},
+                },
+            )
+            balance.refresh_from_db()
+        return balance
     closing_balance = accrued_amount + carry_forward_amount
-    balance, created = LeaveBalance.objects.get_or_create(
+    balances = LeaveBalance.objects
+    if lock_for_update:
+        if not transaction.get_connection().in_atomic_block:
+            raise RuntimeError("Leave balance row locks require an active transaction.")
+        balances = balances.select_for_update()
+    balance, created = balances.get_or_create(
         employee=employee,
         tenant=employee.tenant,
         leave_policy=leave_policy,
@@ -1650,7 +1733,7 @@ def _validate_leave_request(
     return policy_runtime
 
 
-def _reserve_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, requested_units: Decimal):
+def _reserve_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, requested_units: Decimal, leave_request=None):
     if not leave_policy:
         return
     balance = _get_or_create_leave_balance(
@@ -1658,13 +1741,164 @@ def _reserve_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_
         leave_policy=leave_policy,
         period_year=get_leave_policy_period_year(leave_policy=leave_policy, as_of=start_date),
         as_of=start_date,
+        lock_for_update=True,
     )
+    if not leave_policy.leave_type.allow_negative_balance and requested_units > balance.closing_balance:
+        raise ValidationError(
+            {"leave_type_id": f"Insufficient balance. Available balance is {balance.closing_balance} units."}
+        )
+    if balance.policy_period_id:
+        from apps.leave_management.year_end_services import append_leave_ledger_movement
+
+        append_leave_ledger_movement(
+            balance=balance,
+            action=LeaveBalanceTransaction.ActionType.RESERVATION,
+            units=requested_units,
+            effective_date=start_date,
+            idempotency_key=f"leave-request:{leave_request.id}:reserve",
+            reason="Leave request reservation",
+            leave_request=leave_request,
+        )
+        return
     balance.reserved_amount += requested_units
     _recalculate_closing_balance(balance)
     balance.save(update_fields=["reserved_amount", "closing_balance", "updated_at"])
 
 
-def _release_reserved_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, requested_units: Decimal):
+def _governed_request_period_groups(*, leave_request, unit_breakdown: dict):
+    from apps.leave_management.year_end_services import resolve_leave_policy_period
+
+    groups = {}
+    counted_rows = [row for row in unit_breakdown.get("days", []) if Decimal(row.get("units") or 0) > 0]
+    for row in counted_rows:
+        allocation_date = date.fromisoformat(row["date"])
+        period = resolve_leave_policy_period(
+            tenant=leave_request.tenant,
+            leave_policy=leave_request.leave_policy,
+            on_date=allocation_date,
+            legal_entity=leave_request.employee.legal_entity,
+        )
+        if period is None:
+            return None
+        group = groups.setdefault(period.id, {"period": period, "rows": [], "units": Decimal("0")})
+        units = Decimal(row["units"])
+        group["rows"].append((allocation_date, units, row))
+        group["units"] += units
+    return list(groups.values())
+
+
+@transaction.atomic
+def _reserve_governed_leave_request(*, leave_request, unit_breakdown: dict) -> bool:
+    from apps.leave_management.year_end_services import append_leave_ledger_movement
+
+    groups = _governed_request_period_groups(leave_request=leave_request, unit_breakdown=unit_breakdown)
+    if not groups:
+        return False
+    prepared = []
+    for group in groups:
+        first_date = group["rows"][0][0]
+        balance = _get_or_create_leave_balance(
+            employee=leave_request.employee,
+            leave_policy=leave_request.leave_policy,
+            period_year=group["period"].start_date.year,
+            as_of=first_date,
+            lock_for_update=True,
+        )
+        if not leave_request.leave_type.allow_negative_balance and group["units"] > balance.closing_balance:
+            raise ValidationError({
+                "leave_type_id": f"Insufficient balance for leave period {group['period'].code}. Available balance is {balance.closing_balance} units."
+            })
+        prepared.append((group, balance))
+    for group, balance in prepared:
+        append_leave_ledger_movement(
+            balance=balance,
+            action=LeaveBalanceTransaction.ActionType.RESERVATION,
+            units=group["units"],
+            effective_date=group["rows"][0][0],
+            idempotency_key=f"leave-request:{leave_request.id}:reserve:{group['period'].id}",
+            reason="Leave request period reservation",
+            leave_request=leave_request,
+            metadata={"policy_period_id": str(group["period"].id)},
+        )
+        for allocation_date, units, row in group["rows"]:
+            LeaveRequestAllocation.objects.get_or_create(
+                tenant=leave_request.tenant,
+                idempotency_key=f"leave-request:{leave_request.id}:date:{allocation_date.isoformat()}",
+                defaults={
+                    "leave_request": leave_request,
+                    "leave_balance": balance,
+                    "policy_period": group["period"],
+                    "allocation_date": allocation_date,
+                    "units": units,
+                    "status": LeaveRequestAllocation.Status.RESERVED,
+                    "metadata": {"day_basis": row},
+                },
+            )
+    return True
+
+
+@transaction.atomic
+def _release_governed_request_reservations(*, leave_request) -> bool:
+    from apps.leave_management.year_end_services import append_leave_ledger_movement
+
+    allocations = list(
+        leave_request.allocations.select_for_update()
+        .filter(status=LeaveRequestAllocation.Status.RESERVED)
+        .select_related("leave_balance", "policy_period")
+        .order_by("policy_period_id", "allocation_date")
+    )
+    if not allocations:
+        return False
+    groups = {}
+    for allocation in allocations:
+        group = groups.setdefault(allocation.leave_balance_id, {"balance": allocation.leave_balance, "items": [], "units": Decimal("0")})
+        group["items"].append(allocation)
+        group["units"] += allocation.units
+    for group in groups.values():
+        append_leave_ledger_movement(
+            balance=group["balance"],
+            action=LeaveBalanceTransaction.ActionType.RESERVATION_RELEASE,
+            units=group["units"],
+            effective_date=group["items"][0].allocation_date,
+            idempotency_key=f"leave-request:{leave_request.id}:release:{group['balance'].policy_period_id}",
+            reason="Leave request period reservation released",
+            leave_request=leave_request,
+        )
+        LeaveRequestAllocation.objects.filter(id__in=[item.id for item in group["items"]]).update(
+            status=LeaveRequestAllocation.Status.RELEASED
+        )
+    return True
+
+
+@transaction.atomic
+def _consume_governed_leave_request(*, leave_request) -> bool:
+    from apps.leave_management.year_end_services import consume_entitlement_lots
+
+    reserved = list(
+        leave_request.allocations.filter(status=LeaveRequestAllocation.Status.RESERVED)
+        .select_related("leave_balance")
+        .order_by("policy_period_id", "allocation_date")
+    )
+    if not reserved:
+        return False
+    groups = {}
+    for allocation in reserved:
+        group = groups.setdefault(allocation.leave_balance_id, {"balance": allocation.leave_balance, "items": [], "units": Decimal("0")})
+        group["items"].append(allocation)
+        group["units"] += allocation.units
+    _release_governed_request_reservations(leave_request=leave_request)
+    for group in groups.values():
+        consume_entitlement_lots(
+            balance=group["balance"],
+            units=group["units"],
+            consumption_date=group["items"][0].allocation_date,
+            idempotency_key=f"leave-request:{leave_request.id}:consume:{group['balance'].policy_period_id}",
+            leave_request=leave_request,
+        )
+    return True
+
+
+def _release_reserved_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, requested_units: Decimal, leave_request=None):
     if not leave_policy:
         return
     balance = _get_or_create_leave_balance(
@@ -1672,13 +1906,27 @@ def _release_reserved_leave_balance(*, employee, leave_policy: LeavePolicy | Non
         leave_policy=leave_policy,
         period_year=get_leave_policy_period_year(leave_policy=leave_policy, as_of=start_date),
         as_of=start_date,
+        lock_for_update=True,
     )
+    if balance.policy_period_id:
+        from apps.leave_management.year_end_services import append_leave_ledger_movement
+
+        append_leave_ledger_movement(
+            balance=balance,
+            action=LeaveBalanceTransaction.ActionType.RESERVATION_RELEASE,
+            units=min(requested_units, Decimal(balance.reserved_amount or 0)),
+            effective_date=start_date,
+            idempotency_key=f"leave-request:{leave_request.id}:reservation-release",
+            reason="Leave request reservation released",
+            leave_request=leave_request,
+        )
+        return
     balance.reserved_amount = max(balance.reserved_amount - requested_units, Decimal("0"))
     _recalculate_closing_balance(balance)
     balance.save(update_fields=["reserved_amount", "closing_balance", "updated_at"])
 
 
-def _consume_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, approved_units: Decimal):
+def _consume_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, approved_units: Decimal, leave_request=None):
     if not leave_policy:
         return
     balance = _get_or_create_leave_balance(
@@ -1686,13 +1934,27 @@ def _consume_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_
         leave_policy=leave_policy,
         period_year=get_leave_policy_period_year(leave_policy=leave_policy, as_of=start_date),
         as_of=start_date,
+        lock_for_update=True,
     )
+    if balance.policy_period_id:
+        from apps.leave_management.year_end_services import append_leave_ledger_movement
+
+        append_leave_ledger_movement(
+            balance=balance,
+            action=LeaveBalanceTransaction.ActionType.CONSUMPTION,
+            units=approved_units,
+            effective_date=start_date,
+            idempotency_key=f"leave-request:{leave_request.id}:consume",
+            reason="Approved leave consumed",
+            leave_request=leave_request,
+        )
+        return
     balance.consumed_amount += approved_units
     _recalculate_closing_balance(balance)
     balance.save(update_fields=["consumed_amount", "closing_balance", "updated_at"])
 
 
-def _release_consumed_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, approved_units: Decimal):
+def _release_consumed_leave_balance(*, employee, leave_policy: LeavePolicy | None, start_date, approved_units: Decimal, leave_request=None):
     if not leave_policy:
         return
     balance = _get_or_create_leave_balance(
@@ -1700,7 +1962,21 @@ def _release_consumed_leave_balance(*, employee, leave_policy: LeavePolicy | Non
         leave_policy=leave_policy,
         period_year=get_leave_policy_period_year(leave_policy=leave_policy, as_of=start_date),
         as_of=start_date,
+        lock_for_update=True,
     )
+    if balance.policy_period_id:
+        from apps.leave_management.year_end_services import append_leave_ledger_movement
+
+        append_leave_ledger_movement(
+            balance=balance,
+            action=LeaveBalanceTransaction.ActionType.CONSUMPTION_REVERSAL,
+            units=min(approved_units, Decimal(balance.consumed_amount or 0)),
+            effective_date=start_date,
+            idempotency_key=f"leave-request:{leave_request.id}:consumption-reversal",
+            reason="Approved leave cancellation reversal",
+            leave_request=leave_request,
+        )
+        return
     balance.consumed_amount = max(Decimal(balance.consumed_amount or 0) - approved_units, Decimal("0"))
     _recalculate_closing_balance(balance)
     balance.save(update_fields=["consumed_amount", "closing_balance", "updated_at"])
@@ -1900,6 +2176,7 @@ def _get_leave_request_lifecycle_runtime(*, leave_request: LeaveRequest, as_of: 
     }
 
 
+@transaction.atomic
 def apply_leave_balance_admin_action(
     *,
     actor=None,
@@ -1923,6 +2200,7 @@ def apply_leave_balance_admin_action(
         leave_policy=leave_policy,
         period_year=period_year,
         as_of=effective_date,
+        lock_for_update=True,
     )
     closing_balance_before = Decimal(balance.closing_balance or 0)
     projection = _project_leave_balance_admin_action(
@@ -1948,9 +2226,11 @@ def apply_leave_balance_admin_action(
         leave_balance=balance,
         employee=employee,
         leave_policy=leave_policy,
+        policy_period=balance.policy_period,
         status=LeaveBalanceTransaction.Status.PENDING if is_pending else LeaveBalanceTransaction.Status.APPLIED,
         action=action,
         units=units,
+        delta_units=(Decimal("0.00") if is_pending else projection["projected_closing_balance"] - closing_balance_before),
         effective_date=effective_date,
         reason=reason.strip(),
         performed_by=actor if actor and getattr(actor, "tenant_id", None) == employee.tenant_id else None,
@@ -1997,7 +2277,7 @@ def apply_leave_balance_admin_action(
     balance.adjustment_amount = projection["adjustment_amount"]
     balance.encashed_amount = projection["encashed_amount"]
     balance.closing_balance = projection["projected_closing_balance"]
-    balance.save(update_fields=["adjustment_amount", "encashed_amount", "closing_balance", "updated_at"])
+    _save_leave_balance_admin_projection(balance)
     return {
         "balance": balance,
         "transaction": transaction_item,
@@ -2076,15 +2356,19 @@ def review_leave_balance_transaction(*, actor, transaction_item: LeaveBalanceTra
     balance.adjustment_amount = projection["adjustment_amount"]
     balance.encashed_amount = projection["encashed_amount"]
     balance.closing_balance = projection["projected_closing_balance"]
-    balance.save(update_fields=["adjustment_amount", "encashed_amount", "closing_balance", "updated_at"])
+    _save_leave_balance_admin_projection(balance)
 
     locked_transaction.status = LeaveBalanceTransaction.Status.APPLIED
+    locked_transaction.policy_period = balance.policy_period
+    locked_transaction.delta_units = locked_transaction.closing_balance_after - locked_transaction.closing_balance_before
     locked_transaction.reviewed_by = actor
     locked_transaction.reviewed_at = timezone.now()
     locked_transaction.rejection_reason = ""
     locked_transaction.save(
         update_fields=[
             "status",
+            "policy_period",
+            "delta_units",
             "reviewed_by",
             "reviewed_at",
             "rejection_reason",
@@ -2122,6 +2406,11 @@ def review_leave_balance_transaction(*, actor, transaction_item: LeaveBalanceTra
 
 @transaction.atomic
 def withdraw_leave_request(*, leave_request: LeaveRequest, actor_employee, reason: str = "", attachment_reference: str = "") -> LeaveRequest:
+    leave_request = (
+        LeaveRequest.objects.select_for_update(of=("self",))
+        .select_related("employee", "employee__membership", "leave_policy", "leave_policy__leave_type")
+        .get(pk=leave_request.pk)
+    )
     if leave_request.employee_id != actor_employee.id:
         raise ValidationError({"detail": "You can only withdraw your own leave request."})
     runtime = _get_leave_request_lifecycle_runtime(leave_request=leave_request)
@@ -2132,12 +2421,14 @@ def withdraw_leave_request(*, leave_request: LeaveRequest, actor_employee, reaso
             {"attachment_reference": f"{runtime['withdraw_attachment_label'].capitalize()} is required to withdraw this leave request."}
         )
 
-    _release_reserved_leave_balance(
-        employee=leave_request.employee,
-        leave_policy=leave_request.leave_policy,
-        start_date=leave_request.start_date,
-        requested_units=Decimal(leave_request.requested_units or 0),
-    )
+    if not _release_governed_request_reservations(leave_request=leave_request):
+        _release_reserved_leave_balance(
+            employee=leave_request.employee,
+            leave_policy=leave_request.leave_policy,
+            start_date=leave_request.start_date,
+            requested_units=Decimal(leave_request.requested_units or 0),
+            leave_request=leave_request,
+        )
 
     leave_request.status = LeaveRequestStatus.WITHDRAWN
     leave_request.manager_comment = ""
@@ -2172,6 +2463,11 @@ def withdraw_leave_request(*, leave_request: LeaveRequest, actor_employee, reaso
 
 @transaction.atomic
 def cancel_leave_request(*, leave_request: LeaveRequest, actor_employee, reason: str = "", attachment_reference: str = "") -> LeaveRequest:
+    leave_request = (
+        LeaveRequest.objects.select_for_update(of=("self",))
+        .select_related("employee", "employee__membership", "employee__reporting_manager__membership", "leave_policy", "leave_policy__leave_type")
+        .get(pk=leave_request.pk)
+    )
     if leave_request.employee_id != actor_employee.id:
         raise ValidationError({"detail": "You can only cancel your own leave request."})
     runtime = _get_leave_request_lifecycle_runtime(leave_request=leave_request)
@@ -2246,12 +2542,22 @@ def cancel_leave_request(*, leave_request: LeaveRequest, actor_employee, reason:
         return leave_request
 
     approved_units = Decimal(leave_request.approved_units or leave_request.requested_units or 0)
-    _release_consumed_leave_balance(
-        employee=leave_request.employee,
-        leave_policy=leave_request.leave_policy,
-        start_date=leave_request.start_date,
-        approved_units=approved_units,
-    )
+    if leave_request.allocations.filter(status=LeaveRequestAllocation.Status.CONSUMED).exists():
+        from apps.leave_management.year_end_services import reverse_leave_request_allocations
+
+        reverse_leave_request_allocations(
+            leave_request=leave_request,
+            reversal_date=timezone.localdate(),
+            idempotency_key=f"leave-request:{leave_request.id}:cancel-reversal",
+        )
+    else:
+        _release_consumed_leave_balance(
+            employee=leave_request.employee,
+            leave_policy=leave_request.leave_policy,
+            start_date=leave_request.start_date,
+            approved_units=approved_units,
+            leave_request=leave_request,
+        )
 
     leave_request.status = LeaveRequestStatus.CANCELLED
     leave_request.manager_comment = ""
@@ -2363,12 +2669,14 @@ def submit_leave_request(
             ),
         },
     )
-    _reserve_leave_balance(
-        employee=employee,
-        leave_policy=leave_policy,
-        start_date=start_date,
-        requested_units=requested_units,
-    )
+    if not _reserve_governed_leave_request(leave_request=leave_request, unit_breakdown=unit_breakdown):
+        _reserve_leave_balance(
+            employee=employee,
+            leave_policy=leave_policy,
+            start_date=start_date,
+            requested_units=requested_units,
+            leave_request=leave_request,
+        )
     manager_membership = employee.reporting_manager.membership if employee.reporting_manager and employee.reporting_manager.membership else None
     approval_steps = _build_leave_approval_steps(
         employee=employee,
@@ -2415,9 +2723,25 @@ def submit_leave_request(
 def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approve: bool, comment: str = "") -> LeaveRequest:
     """Approves or rejects a leave request."""
 
+    leave_request = (
+        LeaveRequest.objects.select_for_update(of=("self",))
+        .select_related("employee", "employee__membership", "leave_policy", "leave_policy__leave_type")
+        .get(pk=leave_request.pk)
+    )
     action = WorkflowAction.APPROVE if approve else WorkflowAction.REJECT
     previous_status = leave_request.status
     request_action = str((leave_request.metadata or {}).get("request_action") or "leave_request")
+    if request_action != "cancellation_request":
+        desired_status = LeaveRequestStatus.APPROVED if approve else LeaveRequestStatus.REJECTED
+        if leave_request.status == desired_status:
+            return leave_request
+        if leave_request.status in {
+            LeaveRequestStatus.APPROVED,
+            LeaveRequestStatus.REJECTED,
+            LeaveRequestStatus.CANCELLED,
+            LeaveRequestStatus.WITHDRAWN,
+        }:
+            raise ValidationError({"status": "This leave request has already been resolved with a different outcome."})
     workflow_instance = None
     if leave_request.workflow_reference:
         from apps.workflows.models import WorkflowInstance
@@ -2483,27 +2807,48 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
     )
     if request_action == "cancellation_request":
         if is_final_approval:
-            _release_consumed_leave_balance(
-                employee=leave_request.employee,
-                leave_policy=leave_request.leave_policy,
-                start_date=leave_request.start_date,
-                approved_units=Decimal(leave_request.approved_units or leave_request.requested_units or 0),
-            )
+            if leave_request.allocations.filter(status=LeaveRequestAllocation.Status.CONSUMED).exists():
+                from apps.leave_management.year_end_services import reverse_leave_request_allocations
+
+                reverse_leave_request_allocations(
+                    leave_request=leave_request,
+                    reversal_date=timezone.localdate(),
+                    idempotency_key=f"leave-request:{leave_request.id}:approved-cancel-reversal",
+                )
+            else:
+                _release_consumed_leave_balance(
+                    employee=leave_request.employee,
+                    leave_policy=leave_request.leave_policy,
+                    start_date=leave_request.start_date,
+                    approved_units=Decimal(leave_request.approved_units or leave_request.requested_units or 0),
+                    leave_request=leave_request,
+                )
     elif previous_status in {LeaveRequestStatus.PENDING, LeaveRequestStatus.PARTIALLY_APPROVED}:
-        if is_final_approval or is_rejected:
-            _release_reserved_leave_balance(
-                employee=leave_request.employee,
-                leave_policy=leave_request.leave_policy,
-                start_date=leave_request.start_date,
-                requested_units=leave_request.requested_units,
-            )
         if is_final_approval:
-            _consume_leave_balance(
-                employee=leave_request.employee,
-                leave_policy=leave_request.leave_policy,
-                start_date=leave_request.start_date,
-                approved_units=leave_request.approved_units,
-        )
+            if not _consume_governed_leave_request(leave_request=leave_request):
+                _release_reserved_leave_balance(
+                    employee=leave_request.employee,
+                    leave_policy=leave_request.leave_policy,
+                    start_date=leave_request.start_date,
+                    requested_units=leave_request.requested_units,
+                    leave_request=leave_request,
+                )
+                _consume_leave_balance(
+                    employee=leave_request.employee,
+                    leave_policy=leave_request.leave_policy,
+                    start_date=leave_request.start_date,
+                    approved_units=leave_request.approved_units,
+                    leave_request=leave_request,
+                )
+        elif is_rejected:
+            if not _release_governed_request_reservations(leave_request=leave_request):
+                _release_reserved_leave_balance(
+                    employee=leave_request.employee,
+                    leave_policy=leave_request.leave_policy,
+                    start_date=leave_request.start_date,
+                    requested_units=leave_request.requested_units,
+                    leave_request=leave_request,
+                )
     if leave_request.employee.membership:
         fallback_body = (
             "Your leave cancellation was approved."

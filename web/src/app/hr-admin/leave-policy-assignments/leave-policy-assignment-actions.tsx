@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 type Props = {
   assignmentId: string;
@@ -18,7 +19,7 @@ function getErrorMessage(payload: unknown) {
 }
 
 export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyName }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -26,7 +27,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   function closeDialog() {
-    if (isSubmitting) return;
+    if (isSubmitting || isRefreshing) return;
     setDialogOpen(false);
     setError("");
   }
@@ -40,25 +41,31 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
   async function submit(action: "deactivate" | "delete") {
     setIsSubmitting(true);
     setError("");
-    const response = await fetch(`/api/hr-admin/leave-policy-assignments/${assignmentId}`, {
-      method: action === "delete" ? "DELETE" : "PATCH",
-      headers: action === "delete" ? undefined : { "Content-Type": "application/json" },
-      body: action === "delete" ? undefined : JSON.stringify({ is_active: false }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = getErrorMessage(payload);
+    try {
+      const response = await fetch(`/api/hr-admin/leave-policy-assignments/${assignmentId}`, {
+        method: action === "delete" ? "DELETE" : "PATCH",
+        headers: action === "delete" ? undefined : { "Content-Type": "application/json" },
+        body: action === "delete" ? undefined : JSON.stringify({ is_active: false }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = getErrorMessage(payload);
+        setError(message);
+        setToast({ title: "Action failed.", message, tone: "error" });
+        return;
+      }
+      const message = action === "delete" ? "Leave assignment removed." : "Leave assignment deactivated.";
+      setSuccessMessage(message);
+      setToast({ title: "Assignment updated.", message, tone: "success" });
+      setDialogOpen(false);
+      refresh();
+    } catch {
+      const message = "Unable to reach the server. Check your connection and try again.";
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-    const message = action === "delete" ? "Leave assignment removed." : "Leave assignment deactivated.";
-    setSuccessMessage(message);
-    setToast({ title: "Assignment updated.", message, tone: "success" });
-    setIsSubmitting(false);
-    setDialogOpen(false);
-    window.setTimeout(() => router.refresh(), 900);
   }
 
   return (
@@ -98,12 +105,8 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
             <div className="form-actions-bar">
               <span className="muted">This action does not delete leave requests, balances, or the leave policy itself.</span>
               <div className="form-actions-bar__buttons">
-                <button className="button button--secondary" disabled={isSubmitting || !isActive} onClick={() => submit("deactivate")} type="button">
-                  {isSubmitting ? "Working..." : "Deactivate"}
-                </button>
-                <button className="button button--primary" disabled={isSubmitting} onClick={() => submit("delete")} type="button">
-                  Delete assignment
-                </button>
+                <AsyncActionButton className="button button--secondary" disabled={!isActive} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing assignments" : "Deactivating assignment"} onClick={() => submit("deactivate")} type="button">Deactivate</AsyncActionButton>
+                <AsyncActionButton className="button button--primary" pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing assignments" : "Deleting assignment"} onClick={() => submit("delete")} type="button">Delete assignment</AsyncActionButton>
               </div>
             </div>
         </HrAdminActionModal>

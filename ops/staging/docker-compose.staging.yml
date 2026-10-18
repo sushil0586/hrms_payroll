@@ -1,0 +1,52 @@
+services:
+  backend:
+    image: ${HRMS_BACKEND_IMAGE:?pin HRMS_BACKEND_IMAGE by digest}
+    restart: unless-stopped
+    env_file: ${HRMS_STAGING_ENV_FILE:-.env.staging}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "python manage.py production_preflight --json --strict --skip-network >/tmp/preflight.json && curl -fsS http://localhost:8000/api/v1/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  celery-worker:
+    image: ${HRMS_BACKEND_IMAGE:?pin HRMS_BACKEND_IMAGE by digest}
+    restart: unless-stopped
+    env_file: ${HRMS_STAGING_ENV_FILE:-.env.staging}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "true"
+    command: ["celery", "-A", "config", "worker", "-l", "INFO", "--concurrency", "${CELERY_WORKER_CONCURRENCY:-2}"]
+
+  celery-beat:
+    image: ${HRMS_BACKEND_IMAGE:?pin HRMS_BACKEND_IMAGE by digest}
+    restart: unless-stopped
+    env_file: ${HRMS_STAGING_ENV_FILE:-.env.staging}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_NOTIFICATION_PROCESSOR_ENABLED: "true"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "true"
+    command: ["celery", "-A", "config", "beat", "-l", "INFO"]
+
+  web:
+    image: ${HRMS_WEB_IMAGE:?pin HRMS_WEB_IMAGE by digest}
+    restart: unless-stopped
+    env_file: ${HRMS_STAGING_ENV_FILE:-.env.staging}
+    environment:
+      NODE_ENV: production
+      HRMS_ENVIRONMENT: staging
+      HRMS_ENABLE_DEMO_DATA: "false"
+    expose: ["3000"]
+
+networks:
+  default:
+    name: hrms-staging-private

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { NotificationRetryAction } from "@/app/hr-admin/notifications/notification-retry-action";
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import type { HrAdminEnumOption, HrAdminNotification } from "@/lib/types";
 
 type Props = {
@@ -29,7 +30,7 @@ export function NotificationInlineReview({
   notificationStatusOptions,
   notificationPriorityOptions,
 }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [status, setStatus] = useState(item.status);
   const [priority, setPriority] = useState(item.priority);
   const [readState, setReadState] = useState<ReadState>("keep");
@@ -39,6 +40,7 @@ export function NotificationInlineReview({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSave() {
+    if (isSubmitting || isRefreshing) return;
     setError("");
     setSuccessMessage("");
     setIsSubmitting(true);
@@ -79,7 +81,7 @@ export function NotificationInlineReview({
     setToast({ title: "Action saved.", message, tone: "success" });
     setReadState("keep");
     setIsSubmitting(false);
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   useEffect(() => {
@@ -105,7 +107,7 @@ export function NotificationInlineReview({
       <div className="form-grid">
         <label className="form-field">
           <span className="muted">Status</span>
-          <select className="input-control" disabled={isSubmitting} onChange={(event) => setStatus(event.target.value)} value={status}>
+          <select className="input-control" disabled={isSubmitting || isRefreshing} onChange={(event) => setStatus(event.target.value)} value={status}>
             {notificationStatusOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -115,7 +117,7 @@ export function NotificationInlineReview({
         </label>
         <label className="form-field">
           <span className="muted">Priority</span>
-          <select className="input-control" disabled={isSubmitting} onChange={(event) => setPriority(event.target.value)} value={priority}>
+          <select className="input-control" disabled={isSubmitting || isRefreshing} onChange={(event) => setPriority(event.target.value)} value={priority}>
             {notificationPriorityOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -125,7 +127,7 @@ export function NotificationInlineReview({
         </label>
         <label className="form-field">
           <span className="muted">Read state</span>
-          <select className="input-control" disabled={isSubmitting} onChange={(event) => setReadState(event.target.value as ReadState)} value={readState}>
+          <select className="input-control" disabled={isSubmitting || isRefreshing} onChange={(event) => setReadState(event.target.value as ReadState)} value={readState}>
             <option value="keep">{item.read_at ? "Keep as read" : "Keep as unread"}</option>
             <option value="mark_read">Mark as read now</option>
             <option value="mark_unread">Clear read state</option>
@@ -148,9 +150,7 @@ export function NotificationInlineReview({
         <span className="muted">Quick review keeps notification triage in queue.</span>
         <div className="form-actions-bar__buttons">
           <NotificationRetryAction compact itemId={item.id} canRetry={item.can_retry} retryLimitReached={item.retry_limit_reached} />
-          <button className="button button--primary" disabled={isSubmitting} onClick={handleSave} type="button">
-            {isSubmitting ? "Saving..." : "Save review"}
-          </button>
+          <AsyncActionButton className="button button--primary" pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification" : "Saving review"} onClick={handleSave} type="button">Save review</AsyncActionButton>
         </div>
       </div>
     </div>

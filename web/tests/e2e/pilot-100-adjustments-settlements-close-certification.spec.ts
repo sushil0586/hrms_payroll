@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, hrAdmin, payrollFinanceManager } from "../helpers/staging-auth";
 
 type PayrollRun = {
   id: string;
@@ -179,11 +179,17 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
 
     await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=actions&runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Settlements");
-    for (const [action, expected] of [
-      ["Submit selected", "submitted"],
-      ["Approve selected", "approved"],
-      ["Apply selected", "applied"],
+    for (const [action, expected, persona] of [
+      ["Submit selected", "submitted", hrAdmin],
+      ["Approve selected", "approved", payrollFinanceManager],
+      ["Apply selected", "applied", hrAdmin],
     ] as const) {
+      await gotoAuthenticated(
+        page,
+        `/hr-admin/payroll-settlements?tab=actions&runId=${run.id}&settlementId=${createdSettlement.payload.id}`,
+        persona,
+      );
+      await expectPageReady(page, "Payroll Settlements");
       const response = await submitAndCapture<{ status: string }>(
         page,
         new RegExp(`/api/hr-admin/payroll-settlements/${createdSettlement.payload.id}/${action.split(" ")[0].toLowerCase()}/?$`),
@@ -194,8 +200,6 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
       );
       expect(response.ok).toBeTruthy();
       expect(response.payload.status).toBe(expected);
-      await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=actions&runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
-      await expectPageReady(page, "Payroll Settlements");
     }
     await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=detail&runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Settlements");

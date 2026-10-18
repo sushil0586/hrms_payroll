@@ -1021,6 +1021,117 @@ export type HrAdminLeavePolicy = HrAdminGovernanceFields & {
   config_snapshot: HrAdminLeavePolicyAdvancedConfig;
 };
 
+export type LeavePolicyPeriod = {
+  id: string;
+  leave_policy_id: string;
+  leave_policy_code: string;
+  leave_policy_name: string;
+  legal_entity_id: string | null;
+  legal_entity_name: string | null;
+  code: string;
+  start_date: string;
+  end_date: string;
+  status: "planned" | "open" | "closed" | "locked";
+  policy_snapshot: Record<string, unknown>;
+  closed_at: string | null;
+  reopened_at: string | null;
+  reopen_count: number;
+};
+
+export type LeaveYearCloseRun = {
+  id: string;
+  source_period_id: string;
+  target_period_id: string;
+  leave_policy_id: string;
+  leave_policy_name: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  idempotency_key: string;
+  scheduled_for: string | null;
+  dispatched_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  attempt_count: number;
+  processed_count: number;
+  failed_count: number;
+  request_snapshot: Record<string, unknown>;
+  result_snapshot: Record<string, unknown>;
+  error_snapshot: Record<string, unknown>;
+  celery_task_id: string;
+};
+
+export type LeaveHistoricalClassification = {
+  read_only: true;
+  automatic_classification_performed: false;
+  balance_counts: Record<string, number>;
+  transaction_counts: Record<string, number>;
+  balances: Array<Record<string, unknown>>;
+  transactions: Array<Record<string, unknown>>;
+};
+
+export type FiscalCalendarItem = {
+  id: string;
+  legal_entity_id: string | null;
+  legal_entity_name: string | null;
+  code: string;
+  name: string;
+  start_month: number;
+  start_day: number;
+  timezone: string;
+  country_code: string;
+  version: number;
+  status: "draft" | "active" | "retired";
+  is_default: boolean;
+  effective_from: string;
+  effective_to: string | null;
+};
+
+export type FiscalStatusEvent = {
+  action: string;
+  previous_status: string;
+  next_status: string;
+  reason: string;
+  request_key: string;
+  actor_id: string;
+  created_at: string;
+};
+
+export type FiscalYearItem = {
+  id: string;
+  calendar_id: string;
+  calendar_name: string;
+  code: string;
+  start_date: string;
+  end_date: string;
+  status: "planned" | "open" | "soft_closed" | "closed";
+  version: number;
+  status_events: FiscalStatusEvent[];
+};
+
+export type AccountingPeriodItem = {
+  id: string;
+  fiscal_year_id: string;
+  legal_entity_id: string | null;
+  legal_entity_name: string | null;
+  code: string;
+  name: string;
+  sequence: number;
+  kind: "standard" | "adjustment";
+  start_date: string;
+  end_date: string;
+  status: "planned" | "open" | "soft_closed" | "closed" | "locked";
+  closed_at: string | null;
+  reopened_at: string | null;
+  reopen_count: number;
+  status_events: FiscalStatusEvent[];
+};
+
+export type FinancialCalendarWorkspace = {
+  calendars: FiscalCalendarItem[];
+  fiscal_years: FiscalYearItem[];
+  accounting_periods: AccountingPeriodItem[];
+  legal_entities: Array<{ id: string; code: string; name: string }>;
+};
+
 export type HrAdminLeavePolicyImpact = {
   action: string;
   recommended_action: "delete" | "archive" | string;
@@ -1084,6 +1195,8 @@ export type HrAdminScopedAssignment = {
   employee: string | null;
   priority: number;
   is_active: boolean;
+  effective_from?: string | null;
+  effective_to?: string | null;
   scope_labels?: string[];
   conflict_count?: number;
   has_blocking_conflict?: boolean;
@@ -1100,6 +1213,8 @@ export type HrAdminLeavePolicyAssignmentWriteInput = {
   employee_id: string | null;
   priority: number;
   is_active: boolean;
+  effective_from: string | null;
+  effective_to: string | null;
 };
 
 export type HrAdminLeavePolicyAssignmentConflictItem = {
@@ -1149,6 +1264,8 @@ export type HrAdminAttendancePolicyAssignmentWriteInput = {
   employee_id: string | null;
   priority: number;
   is_active: boolean;
+  effective_from: string | null;
+  effective_to: string | null;
 };
 
 export type HrAdminAttendancePolicyAssignmentConflictItem = {

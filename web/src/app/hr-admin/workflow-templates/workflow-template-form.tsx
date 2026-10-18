@@ -329,14 +329,14 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
                   </div>
                   <div className="form-grid">
                     <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors[`steps.${index}.name`])} className="input-control" required value={step.name} onChange={(e) => updateStep(index, { name: e.target.value })} />{fieldErrors[`steps.${index}.name`] ? <span className="field-error-text">{fieldErrors[`steps.${index}.name`]}</span> : null}</label>
-                    <label className="form-field"><span className="muted">Mode</span><select className="input-control" value={step.mode} onChange={(e) => updateStep(index, { mode: e.target.value })}>{options.workflow_step_modes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                    <label className="form-field"><span className="muted">Mode</span><select className="input-control" value={step.mode} onChange={(e) => updateStep(index, { mode: e.target.value })}>{options.workflow_step_modes.filter((option) => option.value === "sequential" || option.value === step.mode).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                     <label className="form-field"><span className="muted">Actor type</span><select className="input-control" value={step.actor_type} onChange={(e) => updateStep(index, { actor_type: e.target.value })}>{options.workflow_actor_types.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                     <label className="form-field"><span className="muted">Role</span><select className="input-control" value={step.role_id ?? ""} onChange={(e) => updateStep(index, { role_id: e.target.value || null })}>{selectOptions(options.roles)}</select></label>
                     <label className="form-field"><span className="muted">Configured membership</span><select className="input-control" value={step.membership_id ?? ""} onChange={(e) => updateStep(index, { membership_id: e.target.value || null })}>{selectOptions(options.memberships)}</select></label>
                     <label className="form-field"><span className="muted">Scope type</span><select className="input-control" value={step.scope_type} onChange={(e) => updateStep(index, { scope_type: e.target.value })}>{options.workflow_scope_types.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                     <label className="form-field"><span className="muted">Permission key</span><input className="input-control" value={step.permission_key} onChange={(e) => updateStep(index, { permission_key: e.target.value })} /></label>
                     <label className="form-field"><span className="muted">Auto approve after hours</span><input className="input-control" min={0} type="number" value={step.auto_approve_after_hours} onChange={(e) => updateStep(index, { auto_approve_after_hours: Number(e.target.value) || 0 })} /></label>
-                    <label className="form-field"><span className="muted">Escalate after hours</span><input className="input-control" min={0} type="number" value={step.escalate_after_hours} onChange={(e) => updateStep(index, { escalate_after_hours: Number(e.target.value) || 0 })} /></label>
+                    <label className="form-field"><span className="muted">Escalate after hours</span><input className="input-control" disabled min={0} type="number" value={step.escalate_after_hours} /><span className="field-hint">Unavailable until escalation ownership and SLA policy is approved.</span></label>
                   </div>
 
                   {isLifecycleTemplate && lifecyclePreset ? (
@@ -486,6 +486,7 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
                         <span className="detail-label">{label}</span>
                         <input
                           checked={Boolean(step[key as keyof HrAdminWorkflowStepWriteInput])}
+                          disabled={key === "allow_delegate"}
                           onChange={(e) => updateStep(index, { [key]: e.target.checked } as Partial<HrAdminWorkflowStepWriteInput>)}
                           type="checkbox"
                         />

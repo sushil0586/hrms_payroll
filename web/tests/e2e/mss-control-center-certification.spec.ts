@@ -189,6 +189,45 @@ test.describe("Manager self service dashboard certification", () => {
     await page.unroute("**/api/manager/leave-requests/*/reject");
   });
 
+  test("failed manager decision remains actionable and retry persists once", async ({ page }) => {
+    await gotoAuthenticated(page, "/mss/approvals?queue=leave", manager);
+    await expectPageReady(page, "Manager approvals");
+
+    const reviewButton = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
+    await expect(reviewButton).toBeVisible();
+    await reviewButton.click();
+    const dialog = getDialog(page, mssLeaveReviewDialogName);
+    const note = dialog.getByLabel("Decision note");
+    const approve = dialog.getByRole("button", { name: /Approve request|Approve cancellation/ }).first();
+    await note.fill("DB-6.9 retry must persist exactly once.");
+
+    let decisionUrl = "";
+    await page.route("**/api/manager/leave-requests/*/approve", async (route) => {
+      decisionUrl = route.request().url();
+      await route.fulfill({
+        contentType: "application/json",
+        status: 503,
+        body: JSON.stringify({ detail: "Temporary approval service failure." }),
+      });
+    });
+    await approve.click();
+    await expect(dialog.getByText("Action failed.")).toBeVisible();
+    await expect(dialog.getByText("Temporary approval service failure.")).toBeVisible();
+    await expect(note).toHaveValue("DB-6.9 retry must persist exactly once.");
+    await expect(approve).toBeEnabled();
+    await page.unroute("**/api/manager/leave-requests/*/approve");
+
+    const retryResponse = page.waitForResponse((response) =>
+      response.url() === decisionUrl && response.request().method() === "POST",
+    );
+    await approve.click();
+    expect((await retryResponse).status()).toBe(200);
+    await expect(dialog.getByText("Request approved.")).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("No pending leave approvals.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Approve request|Approve cancellation/ })).toHaveCount(0);
+  });
+
   test("manager can open notification center and cross-link back to approvals", async ({ page }) => {
     await gotoAuthenticated(page, "/mss/notifications", manager);
     await expectPageReady(page, "Manager notifications");
@@ -209,7 +248,7 @@ test.describe("Manager self service dashboard certification", () => {
     await expect(main.getByLabel("Subject type")).toBeVisible();
     await expect(main.getByLabel("Rows per page")).toBeVisible();
     await expect(main.getByRole("button", { name: "Apply filters" })).toBeVisible();
-    await expect(main.getByRole("link", { name: "Clear filters" })).toBeVisible();
+    await expect(main.getByRole("link", { name: "Clear filters" }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Team alert list" })).toBeVisible();
     await expect(page.getByRole("table", { name: "Notifications" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Review notification" }).first()).toBeVisible();

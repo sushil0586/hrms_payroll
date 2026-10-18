@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { useMemo, useState } from "react";
 
 import type { ReportCatalogItem } from "@/lib/report-catalog";
@@ -71,9 +73,7 @@ export function ReportFamilyWorkspace({ reports, groups, exportHref = "/hr-admin
             <p className="section-copy section-copy-soft">Find the right report, export evidence with a manifest, or print the filtered report catalog for review.</p>
           </div>
           <div className="report-command-panel__actions">
-            <Link className="button button--secondary" href={exportHref}>
-              Export audit history
-            </Link>
+            <AsyncDownloadButton href={exportHref} fileName="report-export-audits.csv">Export audit history</AsyncDownloadButton>
             <button className="button button--ghost" type="button" onClick={() => window.print()}>
               Print workspace
             </button>
@@ -168,16 +168,8 @@ export function ReportFamilyWorkspace({ reports, groups, exportHref = "/hr-admin
                     Open report
                   </Link>
                 ) : null}
-                {report.exportRoute ? (
-                  <Link className="button button--ghost" href={report.exportRoute} prefetch={false}>
-                    Export
-                  </Link>
-                ) : null}
-                {report.exportRoute ? (
-                  <Link className="button button--ghost" href={manifestHref(report.exportRoute)} prefetch={false}>
-                    Manifest
-                  </Link>
-                ) : null}
+                {report.exportRoute ? <AsyncDownloadButton className="button button--ghost" href={report.exportRoute} fileName={`${report.key}.csv`}>Export</AsyncDownloadButton> : null}
+                {report.exportRoute ? <AsyncDownloadButton className="button button--ghost" href={manifestHref(report.exportRoute)} fileName={`${report.key}-manifest.json`}>Manifest</AsyncDownloadButton> : null}
               </div>
             </article>
           ))}

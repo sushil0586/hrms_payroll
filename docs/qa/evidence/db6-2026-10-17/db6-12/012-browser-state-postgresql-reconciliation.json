@@ -1,0 +1,224 @@
+{
+  "tenant": {
+    "id": "21e41fe5-0dad-4f33-8b24-5ef2b7ffb2e1",
+    "code": "pw-qa-db612-browser",
+    "status": "suspended",
+    "sandbox": true
+  },
+  "policies": [
+    {
+      "id": "2582315e-8a40-4a0a-aaf4-0babb7a2e7fb",
+      "jurisdiction": "IN-QA-APPROVED",
+      "record_category": "employee_documents",
+      "retention_days": 365,
+      "status": "approved",
+      "approval_ref": "QA-COUNSEL-DB612"
+    },
+    {
+      "id": "6b7e1b74-bd2a-4742-aaa9-88a458396c13",
+      "jurisdiction": "IN-QA-DB612-1792249074324",
+      "record_category": "employee_documents",
+      "retention_days": 365,
+      "status": "approved",
+      "approval_ref": "QA-COUNSEL-DB612-1792249074324"
+    }
+  ],
+  "holds": [
+    {
+      "id": "15960de5-772c-4470-b6fe-310face19ab8",
+      "authority_ref": "QA-HOLD-DB612",
+      "record_category": "employee_documents",
+      "status": "active",
+      "placed_by_id": "cd959067-9131-495d-afe8-94bf51dbb552",
+      "released_by_id": null,
+      "release_reason": ""
+    },
+    {
+      "id": "1dbe0680-1a5f-4626-b737-e793c5252fa1",
+      "authority_ref": "QA-HOLD-DB612-1792249074324",
+      "record_category": "employee_documents",
+      "status": "released",
+      "placed_by_id": "cd959067-9131-495d-afe8-94bf51dbb552",
+      "released_by_id": "d8a7ce9e-0b4f-4ae7-b337-fbcd012741c4",
+      "release_reason": "Independent authority confirmed preservation obligation ended"
+    }
+  ],
+  "requests": [
+    {
+      "id": "30343dbd-b528-4de6-b272-09209d9f4ffc",
+      "request_type": "export",
+      "status": "approved",
+      "requested_by_id": "6f205b9f-3b4f-4b87-b521-00ad300f9a5a",
+      "approved_by_id": "cd959067-9131-495d-afe8-94bf51dbb552",
+      "attempt_count": 0,
+      "last_error_code": "",
+      "result_snapshot": {}
+    },
+    {
+      "id": "de302559-c8ee-4adc-b625-c19cf84bc207",
+      "request_type": "erasure",
+      "status": "approved",
+      "requested_by_id": "6f205b9f-3b4f-4b87-b521-00ad300f9a5a",
+      "approved_by_id": "cd959067-9131-495d-afe8-94bf51dbb552",
+      "attempt_count": 0,
+      "last_error_code": "",
+      "result_snapshot": {}
+    },
+    {
+      "id": "d44cb64e-f9a6-4f69-9755-504e303dc635",
+      "request_type": "export",
+      "status": "approved",
+      "requested_by_id": "6f205b9f-3b4f-4b87-b521-00ad300f9a5a",
+      "approved_by_id": "cd959067-9131-495d-afe8-94bf51dbb552",
+      "attempt_count": 0,
+      "last_error_code": "",
+      "result_snapshot": {}
+    },
+    {
+      "id": "007fd721-e4eb-4562-a976-0aa7f4359c2c",
+      "request_type": "erasure",
+      "status": "blocked",
+      "requested_by_id": "6f205b9f-3b4f-4b87-b521-00ad300f9a5a",
+      "approved_by_id": "cd959067-9131-495d-afe8-94bf51dbb552",
+      "attempt_count": 1,
+      "last_error_code": "",
+      "result_snapshot": {
+        "preview": {
+          "as_of": "2026-10-17",
+          "tenant_id": "21e41fe5-0dad-4f33-8b24-5ef2b7ffb2e1",
+          "categories": [
+            {
+              "models": [
+                {
+                  "count": 1,
+                  "model": "documents.EmployeeDocument",
+                  "eligible_count": 0
+                },
+                {
+                  "count": 0,
+                  "model": "documents.DocumentArtifact",
+                  "eligible_count": 0
+                }
+              ],
+              "blockers": [
+                "1 active legal hold(s) apply.",
+                "No records have reached the configured retention expiry date."
+              ],
+              "eligible": false,
+              "policy_id": "2582315e-8a40-4a0a-aaf4-0babb7a2e7fb",
+              "record_count": 1,
+              "retention_days": 365,
+              "record_category": "employee_documents",
+              "legal_hold_count": 1,
+              "retention_cutoff": "2025-10-17",
+              "eligible_record_count": 0
+            }
+          ],
+          "backup_disposition": "external-verification-required",
+          "storage_disposition": "object-inventory-required",
+          "blocked_category_count": 1,
+          "eligible_category_count": 0,
+          "destructive_execution_enabled": false
+        },
+        "blockers": [
+          "1 active legal hold(s) apply.",
+          "Irreversible erasure is disabled by deployment policy.",
+          "No records have reached the configured retention expiry date."
+        ],
+        "executed": false
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "67d582a2-64af-4081-a6c3-62c6afee5340",
+      "event_type": "export_requested",
+      "actor_identifier": "pw_db612_browser_tenant_admin",
+      "request_id": "30343dbd-b528-4de6-b272-09209d9f4ffc",
+      "legal_hold_id": null
+    },
+    {
+      "id": "5c82a61c-b97c-4eb1-8331-e6bff66248ee",
+      "event_type": "erasure_requested",
+      "actor_identifier": "pw_db612_browser_tenant_admin",
+      "request_id": "de302559-c8ee-4adc-b625-c19cf84bc207",
+      "legal_hold_id": null
+    },
+    {
+      "id": "a54e4ee4-f722-4f73-ae1e-b8551143ac1f",
+      "event_type": "legal_hold_placed",
+      "actor_identifier": "pw_db612_browser_platform_admin",
+      "request_id": null,
+      "legal_hold_id": "15960de5-772c-4470-b6fe-310face19ab8"
+    },
+    {
+      "id": "c83271ab-d5a2-4461-99f3-6c1bcdbe8d27",
+      "event_type": "export_approved",
+      "actor_identifier": "pw_db612_browser_platform_admin",
+      "request_id": "30343dbd-b528-4de6-b272-09209d9f4ffc",
+      "legal_hold_id": null
+    },
+    {
+      "id": "d504c926-c885-4d21-b549-2dd63614189f",
+      "event_type": "erasure_approved",
+      "actor_identifier": "pw_db612_browser_platform_admin",
+      "request_id": "de302559-c8ee-4adc-b625-c19cf84bc207",
+      "legal_hold_id": null
+    },
+    {
+      "id": "aea8d6a3-330c-405f-ad87-a6a499e05b43",
+      "event_type": "export_requested",
+      "actor_identifier": "pw_db612_browser_tenant_admin",
+      "request_id": "d44cb64e-f9a6-4f69-9755-504e303dc635",
+      "legal_hold_id": null
+    },
+    {
+      "id": "84c81de1-e8e4-4726-9b55-2539076c2ce7",
+      "event_type": "erasure_requested",
+      "actor_identifier": "pw_db612_browser_tenant_admin",
+      "request_id": "007fd721-e4eb-4562-a976-0aa7f4359c2c",
+      "legal_hold_id": null
+    },
+    {
+      "id": "22bfe2bc-7865-4115-b8a4-75356d929e1b",
+      "event_type": "legal_hold_placed",
+      "actor_identifier": "pw_db612_browser_platform_admin",
+      "request_id": null,
+      "legal_hold_id": "1dbe0680-1a5f-4626-b737-e793c5252fa1"
+    },
+    {
+      "id": "a8bb055b-4028-4be0-a160-3a331d74c17b",
+      "event_type": "export_approved",
+      "actor_identifier": "pw_db612_browser_platform_admin",
+      "request_id": "d44cb64e-f9a6-4f69-9755-504e303dc635",
+      "legal_hold_id": null
+    },
+    {
+      "id": "99f185b0-76de-4846-9072-e1aadbb60917",
+      "event_type": "erasure_approved",
+      "actor_identifier": "pw_db612_browser_platform_admin",
+      "request_id": "007fd721-e4eb-4562-a976-0aa7f4359c2c",
+      "legal_hold_id": null
+    },
+    {
+      "id": "fc0f1042-535f-4d13-8e9f-be0ed6c62f17",
+      "event_type": "legal_hold_released",
+      "actor_identifier": "pw_db612_checker_platform_admin",
+      "request_id": null,
+      "legal_hold_id": "1dbe0680-1a5f-4626-b737-e793c5252fa1"
+    },
+    {
+      "id": "80e37797-de08-4695-af46-38a983cb9b66",
+      "event_type": "erasure_blocked",
+      "actor_identifier": "pw_db612_browser_platform_admin",
+      "request_id": "007fd721-e4eb-4562-a976-0aa7f4359c2c",
+      "legal_hold_id": null
+    }
+  ],
+  "protected_history": {
+    "employees": 5,
+    "documents": 1,
+    "leave_ledger": 3,
+    "payroll_runs": 1
+  }
+}

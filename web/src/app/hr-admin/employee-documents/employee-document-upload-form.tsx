@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { UploadProgressStatus } from "@/components/patterns/upload-progress";
 import type { HrAdminDocumentOptions, HrAdminEmployeeListItem } from "@/lib/types";
+import { uploadFormData, type UploadProgress } from "@/lib/ui/upload-form-data";
 import { hasFieldErrors, requireText, requireValue, validateDateNotFuture, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
 
 type Props = {
@@ -75,6 +78,7 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -115,6 +119,7 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
       return;
     }
     setIsSubmitting(true);
+    setUploadProgress({ loaded: 0, total: formValue.file?.size ?? null });
 
     const body = new FormData();
     body.set("employee_id", formValue.employee_id);
@@ -125,28 +130,21 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
     if (formValue.expires_on) body.set("expires_on", formValue.expires_on);
     if (formValue.file) body.set("file", formValue.file);
 
-    let response: Response;
     try {
-      response = await fetch("/api/hr-admin/employee-documents", {
-        method: "POST",
-        body,
-      });
-    } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const response = await uploadFormData("/api/hr-admin/employee-documents", body, { onProgress: setUploadProgress });
+      if (!response.ok) {
+        const nextErrors = extractErrors(response.payload);
+        setError(nextErrors.message);
+        setFieldErrors(nextErrors.fieldErrors);
+        return;
+      }
+      router.push("/hr-admin/employee-documents");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to reach the server. Check your connection and try again.");
+    } finally {
       setIsSubmitting(false);
-      return;
+      setUploadProgress(null);
     }
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const nextErrors = extractErrors(payload);
-      setError(nextErrors.message);
-      setFieldErrors(nextErrors.fieldErrors);
-      setIsSubmitting(false);
-      return;
-    }
-
-    router.push("/hr-admin/employee-documents");
   }
 
   return (
@@ -233,6 +231,7 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
             <span className="muted">{error}</span>
           </div>
         ) : null}
+        <UploadProgressStatus progress={uploadProgress} />
 
         <div className="form-actions-bar">
           <span className="muted">This upload returns to the document queue after the record is created.</span>
@@ -240,9 +239,9 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
             <button className="button button--secondary" onClick={() => router.push("/hr-admin/employee-documents")} type="button">
               Cancel
             </button>
-            <button className="button button--primary" disabled={isSubmitting} type="submit">
-              {isSubmitting ? "Uploading..." : "Upload document"}
-            </button>
+            <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Uploading document" type="submit">
+              Upload document
+            </AsyncActionButton>
           </div>
         </div>
       </section>

@@ -15,6 +15,7 @@ const PLATFORM_ADMIN_NAV_GROUPS = [
       { href: "/platform-admin/policy-packs", label: "Setup Templates", shortLabel: "ST", blurb: "Default setup" },
       { href: "/platform-admin/permissions", label: "Permissions", shortLabel: "PM", blurb: "RBAC catalog", permissions: ["platform.permission_catalog.manage"] },
       { href: "/platform-admin/audit-logs", label: "Audit Logs", shortLabel: "AU", blurb: "Action evidence" },
+      { href: "/platform-admin/data-governance", label: "Data Governance", shortLabel: "DG", blurb: "Retention and erasure" },
     ],
   },
 ];

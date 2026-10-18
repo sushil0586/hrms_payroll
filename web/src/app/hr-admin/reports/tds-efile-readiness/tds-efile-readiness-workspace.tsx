@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type {
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollOutputArtifact,
@@ -300,12 +301,8 @@ export function TdsEfileReadinessWorkspace({
           <span className="queue-summary-chip">
             <strong>{currentPage}</strong> of {pageCount} pages
           </span>
-          <Link className="button button--secondary" href="/api/hr-admin/reports/tds-efile-package" prefetch={false}>
-            Download TDS e-file package
-          </Link>
-          <Link className="button button--ghost" href="/api/hr-admin/reports/tds-efile-package?format=manifest" prefetch={false}>
-            Package manifest
-          </Link>
+          <AsyncDownloadButton href="/api/hr-admin/reports/tds-efile-package" fileName="tds-efile-package.csv">Download TDS e-file package</AsyncDownloadButton>
+          <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/tds-efile-package?format=manifest" fileName="tds-efile-package-manifest.json">Package manifest</AsyncDownloadButton>
         </div>
 
         <div className="report-catalog-table-wrap">

@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, hrAdmin, requestWithBrowserSession, tenantAdmin } from "../helpers/staging-auth";
 
 type SectionKey =
   | "legal_entities"
@@ -33,6 +33,28 @@ type SectionConfig = {
 };
 
 const runSuffix = Date.now().toString(36);
+
+async function browserSessionJson(
+  page: Page,
+  path: string,
+  options: { method?: string; data?: unknown } = {},
+) {
+  const response = await requestWithBrowserSession(page, path, {
+    method: options.method,
+    ...(options.data === undefined
+      ? {}
+      : {
+          body: JSON.stringify(options.data),
+          headers: { "content-type": "application/json" },
+        }),
+  });
+  const payload = response.body ? JSON.parse(response.body) : {};
+  return {
+    ok: response.status >= 200 && response.status < 300,
+    payload,
+    status: response.status,
+  };
+}
 
 function codeFor(section: SectionKey, intent: "main" | "archive") {
   const prefix: Record<SectionKey, string> = {
@@ -435,33 +457,39 @@ test.describe("HR admin organization master CRUD", () => {
     await expectPageReady(page, "Roles & Permissions");
 
     const suffix = Date.now();
-    const roleResponse = await page.request.post("/api/tenant-admin/roles", {
+    const roleResponse = await browserSessionJson(page, "/api/tenant-admin/roles", {
+      method: "POST",
       data: {
         name: `QA Organization Viewer ${suffix}`,
-        code: `qa-organization-viewer-${suffix}`,
+        code: `hr-organization-viewer-${suffix}`,
         description: "Browser certification role with read-only organization access.",
         is_active: true,
         permission_keys: ["organization.view"],
       },
     });
-    expect(roleResponse.ok()).toBeTruthy();
-    const rolePayload = await roleResponse.json();
+    expect(roleResponse.ok, `Role create failed: ${roleResponse.status} ${JSON.stringify(roleResponse.payload)}`).toBeTruthy();
+    const rolePayload = roleResponse.payload;
     const roleId = rolePayload.role.id as string;
 
+    await gotoAuthenticated(page, "/hr-admin/organization?section=departments", hrAdmin);
+    await expectPageReady(page, "Organization masters");
+
     const username = `qa.org.viewer.${suffix}`;
-    const departmentResponse = await page.request.post("/api/hr-admin/organization/departments", {
+    const departmentResponse = await browserSessionJson(page, "/api/hr-admin/organization/departments", {
+      method: "POST",
       data: {
         code: `ORGVIEW-DEPT-${suffix}`,
         name: `Org Viewer Department ${suffix}`,
         is_active: true,
       },
     });
-    const departmentPayload = await departmentResponse.json();
-    expect(departmentResponse.ok(), `Department fixture create failed: ${departmentResponse.status()} ${JSON.stringify(departmentPayload)}`).toBeTruthy();
+    const departmentPayload = departmentResponse.payload;
+    expect(departmentResponse.ok, `Department fixture create failed: ${departmentResponse.status} ${JSON.stringify(departmentPayload)}`).toBeTruthy();
     const departmentId = departmentPayload.id as string;
     expect(departmentId).toBeTruthy();
 
-    const employeeResponse = await page.request.post("/api/hr-admin/employees", {
+    const employeeResponse = await browserSessionJson(page, "/api/hr-admin/employees", {
+      method: "POST",
       data: {
         employee_code: `ORGVIEW-${suffix}`,
         first_name: "QA",
@@ -470,12 +498,13 @@ test.describe("HR admin organization master CRUD", () => {
         employment_status: "active",
       },
     });
-    const employeePayload = await employeeResponse.json();
-    expect(employeeResponse.ok(), `Employee create failed: ${employeeResponse.status()} ${JSON.stringify(employeePayload)}`).toBeTruthy();
+    const employeePayload = employeeResponse.payload;
+    expect(employeeResponse.ok, `Employee create failed: ${employeeResponse.status} ${JSON.stringify(employeePayload)}`).toBeTruthy();
     const employeeId = employeePayload.id as string;
     expect(employeeId).toBeTruthy();
 
-    const accessResponse = await page.request.post(`/api/hr-admin/employees/${employeeId}/access`, {
+    const accessResponse = await browserSessionJson(page, `/api/hr-admin/employees/${employeeId}/access`, {
+      method: "POST",
       data: {
         username,
         email: `${username}@example.com`,
@@ -490,8 +519,8 @@ test.describe("HR admin organization master CRUD", () => {
         role_ids: [roleId],
       },
     });
-    const accessPayload = await accessResponse.json();
-    expect(accessResponse.ok(), `Employee access create failed: ${accessResponse.status()} ${JSON.stringify(accessPayload)}`).toBeTruthy();
+    const accessPayload = accessResponse.payload;
+    expect(accessResponse.ok, `Employee access create failed: ${accessResponse.status} ${JSON.stringify(accessPayload)}`).toBeTruthy();
     const generatedPassword = accessPayload.generated_password as string;
     expect(generatedPassword).toBeTruthy();
 
@@ -510,28 +539,30 @@ test.describe("HR admin organization master CRUD", () => {
     await expect(page.locator(".employee-directory-item").first()).toBeVisible();
     await expect(page.locator(".employee-directory-item").first().getByRole("link", { name: "Edit" })).toHaveCount(0);
 
-    const detailResponse = await page.request.get(`/api/hr-admin/organization/departments/${departmentId}`);
-    expect(detailResponse.ok()).toBeTruthy();
+    const detailResponse = await browserSessionJson(page, `/api/hr-admin/organization/departments/${departmentId}`);
+    expect(detailResponse.ok).toBeTruthy();
 
     await page.goto("/hr-admin/organization/departments/new", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/hr-admin\/organization\?section=departments$/);
     await expectPageReady(page, "Organization masters");
 
-    const blockedCreateResponse = await page.request.post("/api/hr-admin/organization/departments", {
+    const blockedCreateResponse = await browserSessionJson(page, "/api/hr-admin/organization/departments", {
+      method: "POST",
       data: {
         code: `BLOCKED-ORG-${suffix}`,
         name: `Blocked Org ${suffix}`,
         is_active: true,
       },
     });
-    expect(blockedCreateResponse.status()).toBe(403);
-    expect(JSON.stringify(await blockedCreateResponse.json())).toContain("organization.manage");
+    expect(blockedCreateResponse.status).toBe(403);
+    expect(JSON.stringify(blockedCreateResponse.payload)).toContain("organization.manage");
 
-    const blockedEditResponse = await page.request.patch(`/api/hr-admin/organization/departments/${departmentId}`, {
+    const blockedEditResponse = await browserSessionJson(page, `/api/hr-admin/organization/departments/${departmentId}`, {
+      method: "PATCH",
       data: { name: `Blocked Org Edit ${suffix}` },
     });
-    expect(blockedEditResponse.status()).toBe(403);
-    expect(JSON.stringify(await blockedEditResponse.json())).toContain("organization.manage");
+    expect(blockedEditResponse.status).toBe(403);
+    expect(JSON.stringify(blockedEditResponse.payload)).toContain("organization.manage");
     await expectNoHorizontalOverflow(page);
   });
 
@@ -630,6 +661,20 @@ test.describe("HR admin organization master CRUD", () => {
     await expect(page.locator(".employee-directory-item").filter({ hasText: legalEntityCode })).toBeVisible();
     await gotoAuthenticated(page, `/hr-admin/organization?section=branches&q=${branchCode}&status=all`);
     await expect(page.locator(".employee-directory-item").filter({ hasText: branchCode })).toBeVisible();
+
+    await gotoAuthenticated(page, "/hr-admin/organization");
+    const retryWorkbench = page.getByTestId("organization-import-workbench");
+    await page.getByTestId("organization-import-disclosure").locator("summary").click();
+    await retryWorkbench.locator("input[type='file']").setInputFiles({
+      name: "organization-master-import-retry.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(validCsv),
+    });
+    await retryWorkbench.getByRole("button", { name: "Preview import" }).click();
+    await expect(retryWorkbench.locator("tr").filter({ hasText: legalEntityCode }).getByText("blocked")).toBeVisible();
+    await expect(retryWorkbench.locator("tr").filter({ hasText: branchCode }).getByText("blocked")).toBeVisible();
+    await expect(retryWorkbench.getByText("Code already exists in this tenant or import batch.")).toHaveCount(2);
+    await expect(retryWorkbench.getByRole("button", { name: "Commit ready rows" })).toBeDisabled();
     await expectNoHorizontalOverflow(page);
   });
 });

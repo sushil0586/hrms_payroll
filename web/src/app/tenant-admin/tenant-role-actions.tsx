@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { TenantAdminConsole } from "@/lib/types";
 
 type RoleItem = TenantAdminConsole["role_management"]["roles"][number];
@@ -201,6 +202,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
   }, [closeDialog, dialogMode]);
 
   async function saveRole() {
+    if (busyRef) return;
     if (!canManageRoles) {
       setFormError("You need tenant.roles.manage to save tenant roles.");
       return;
@@ -221,24 +223,30 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
     setBusyRef(dialogMode ?? "role");
     setFormError("");
     setNotice("");
-    const response = await fetch(target, {
-      method: dialogMode === "edit" ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const result = await response.json().catch(() => ({}));
-    setBusyRef("");
-    if (!response.ok) {
-      setFormError(apiErrorMessage(result, "Role could not be saved."));
-      return;
+    try {
+      const response = await fetch(target, {
+        method: dialogMode === "edit" ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFormError(apiErrorMessage(result, "Role could not be saved."));
+        return;
+      }
+      setNoticeTone("success");
+      setNotice(dialogMode === "edit" ? "Role updated successfully." : "Role created successfully.");
+      closeDialog();
+      router.refresh();
+    } catch {
+      setFormError("Unable to reach the server. Your role changes were preserved; try again.");
+    } finally {
+      setBusyRef("");
     }
-    setNoticeTone("success");
-    setNotice(dialogMode === "edit" ? "Role updated successfully." : "Role created successfully.");
-    closeDialog();
-    router.refresh();
   }
 
   async function runStatusAction(role: RoleItem, action: "activate" | "deactivate") {
+    if (busyRef) return;
     if (!canManageRoles) {
       setNoticeTone("error");
       setNotice("You need tenant.roles.manage to change role status.");
@@ -247,21 +255,27 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
     setBusyRef(`${role.id}:${action}`);
     setFormError("");
     setNotice("");
-    const response = await fetch(`/api/tenant-admin/roles/${role.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    const result = await response.json().catch(() => ({}));
-    setBusyRef("");
-    if (!response.ok) {
+    try {
+      const response = await fetch(`/api/tenant-admin/roles/${role.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNoticeTone("error");
+        setNotice(apiErrorMessage(result, "Role status could not be changed."));
+        return;
+      }
+      setNoticeTone("success");
+      setNotice(action === "activate" ? "Role activated successfully." : "Role deactivated successfully.");
+      router.refresh();
+    } catch {
       setNoticeTone("error");
-      setNotice(apiErrorMessage(result, "Role status could not be changed."));
-      return;
+      setNotice("Unable to reach the server. The role was not changed; try again.");
+    } finally {
+      setBusyRef("");
     }
-    setNoticeTone("success");
-    setNotice(action === "activate" ? "Role activated successfully." : "Role deactivated successfully.");
-    router.refresh();
   }
 
   return (
@@ -495,9 +509,9 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
               <button className="button button--secondary" onClick={closeDialog} type="button">
                 Cancel
               </button>
-              <button className="button button--primary" disabled={Boolean(validation) || Boolean(busyRef)} onClick={saveRole} type="button">
-                {busyRef ? "Saving" : dialogMode === "edit" ? "Update role" : "Create role"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={Boolean(validation)} onClick={saveRole} pending={Boolean(busyRef)} pendingLabel={dialogMode === "edit" ? "Updating role" : "Creating role"} type="button">
+                {dialogMode === "edit" ? "Update role" : "Create role"}
+              </AsyncActionButton>
             </div>
           </div>
         </div>

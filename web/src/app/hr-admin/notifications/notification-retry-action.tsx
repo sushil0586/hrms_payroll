@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 type Props = {
   itemId: string;
@@ -21,14 +22,14 @@ function getErrorMessage(payload: unknown) {
 }
 
 export function NotificationRetryAction({ itemId, canRetry = true, retryLimitReached = false, compact = false }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   async function handleRetry() {
-    if (!canRetry) {
+    if (!canRetry || isSubmitting || isRefreshing) {
       return;
     }
     setError("");
@@ -60,7 +61,7 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
     setSuccessMessage(message);
     setToast({ title: "Action saved.", message, tone: "success" });
     setIsSubmitting(false);
-    window.setTimeout(() => router.refresh(), 900);
+    refresh();
   }
 
   useEffect(() => {
@@ -72,9 +73,7 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
   return (
     <div className={compact ? "inline-retry-action" : "stack-list"}>
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <button className="button button--secondary" disabled={isSubmitting || !canRetry} onClick={handleRetry} type="button">
-        {isSubmitting ? "Retrying..." : retryLimitReached ? "Retry limit reached" : "Retry delivery"}
-      </button>
+      <AsyncActionButton className="button button--secondary" disabled={!canRetry} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification" : "Retrying delivery"} onClick={handleRetry} type="button">{retryLimitReached ? "Retry limit reached" : "Retry delivery"}</AsyncActionButton>
       {!canRetry && retryLimitReached ? (
         <div className="notice">
           <strong>Retry capped.</strong>

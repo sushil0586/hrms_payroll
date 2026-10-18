@@ -108,12 +108,14 @@ async function openEditByCode(page: Page, listPath: string, code: string, headin
   const href = await editLink.getAttribute("href");
   expect(href).toBeTruthy();
   await editLink.scrollIntoViewIfNeeded();
-  await Promise.all([page.waitForURL(new RegExp(`${href!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`)), editLink.click()]);
+  await editLink.click();
   const expectedHeading = page.getByRole("heading", { name: heading }).first();
+  const editDialog = page.getByRole("dialog", { name: /Edit / }).first();
+  await expect(expectedHeading.or(editDialog)).toBeVisible();
   if (await expectedHeading.isVisible().catch(() => false)) {
     await expectPageReady(page, heading);
   } else {
-    await expect(page.getByRole("dialog", { name: /Edit / })).toBeVisible();
+    await expect(editDialog).toBeVisible();
   }
   const id = href!.match(/\/([^/]+)\/edit$/)?.[1] ?? href!.match(/[?&]edit[A-Za-z]+(?:Id)?=([^&]+)/)?.[1] ?? "";
   expect(id).not.toBe("");

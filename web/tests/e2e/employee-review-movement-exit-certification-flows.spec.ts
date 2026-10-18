@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, requestWithBrowserSession } from "../helpers/staging-auth";
 
 function uniqueRef(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
@@ -71,23 +71,20 @@ async function expectBulkOwnerActionInline(page: Page) {
 
 async function createDisposableEmployee(page: Page, prefix: string) {
   const employeeCode = uniqueRef(prefix);
-  const loginResponse = await page.request.post("/api/auth/login", {
-    data: {
-      identifier: hrAdmin.username,
-      password: hrAdmin.password,
-    },
-  });
-  expect(loginResponse.ok()).toBeTruthy();
-  const response = await page.request.post("/api/hr-admin/employees", {
-    data: {
+  await gotoAuthenticated(page, "/hr-admin/employees");
+  const response = await requestWithBrowserSession(page, "/api/hr-admin/employees", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       employee_code: employeeCode,
       employment_status: "active",
       first_name: prefix.replace(/_/g, " "),
       last_name: "Certified",
       work_email: `${employeeCode.toLowerCase()}@example.test`,
-    },
+      date_of_joining: "2026-01-01",
+    }),
   });
-  expect(response.ok()).toBeTruthy();
+  expect(response.status, response.body).toBe(201);
   return employeeCode;
 }
 

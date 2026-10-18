@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type { HrAdminPayrollFinanceHandoffSetupResponse, HrAdminPayrollStatutorySetupResponse } from "@/lib/types";
 
 type ReadinessStatus = "Ready" | "Warning" | "Blocked";
@@ -155,8 +156,8 @@ export function ComplianceSummaryReportWorkspace({
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.length}</strong> areas</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href="/api/hr-admin/reports/compliance-summary" prefetch={false}>Export summary</Link>
-          <Link className="button button--ghost" href="/api/hr-admin/reports/compliance-summary?format=manifest" prefetch={false}>Manifest</Link>
+          <AsyncDownloadButton href="/api/hr-admin/reports/compliance-summary" fileName="compliance-summary.csv">Export summary</AsyncDownloadButton>
+          <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/compliance-summary?format=manifest" fileName="compliance-summary-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
         <div className="report-catalog-table-wrap">

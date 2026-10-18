@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { TenantAdminConsole, TenantAdminMembershipMutationResult } from "@/lib/types";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
@@ -220,6 +221,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
   }
 
   async function inviteMember() {
+    if (busyRef) return;
     if (!canManageUsers) {
       setFormError("You need tenant.users.manage to invite tenant users.");
       return;
@@ -231,36 +233,42 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
     setBusyRef("invite");
     setNotice("");
     setFormError("");
-    const response = await fetch("/api/tenant-admin/memberships", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: username.trim(),
-        email: email.trim(),
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        membership_status: membershipStatus,
-        role_ids: selectedRoleIds,
-      }),
-    });
-    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminMembershipMutationResult>;
-    setBusyRef("");
-    if (!response.ok) {
-      setFormError(apiErrorMessage(result, "Membership invite could not be saved."));
-      return;
+    try {
+      const response = await fetch("/api/tenant-admin/memberships", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          email: email.trim(),
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          membership_status: membershipStatus,
+          role_ids: selectedRoleIds,
+        }),
+      });
+      const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminMembershipMutationResult>;
+      if (!response.ok) {
+        setFormError(apiErrorMessage(result, "Membership invite could not be saved."));
+        return;
+      }
+      setNoticeTone("success");
+      setNotice(result.generated_password ? "Invite saved successfully. A temporary password was generated." : "Invite saved successfully.");
+      if (result.membership) {
+        upsertMembership(result.membership);
+        setMemberSearch(result.membership.email);
+        setPageIndex(0);
+      }
+      closeInviteDialog();
+      router.refresh();
+    } catch {
+      setFormError("Unable to reach the server. Your invite details were preserved; try again.");
+    } finally {
+      setBusyRef("");
     }
-    setNoticeTone("success");
-    setNotice(result.generated_password ? "Invite saved successfully. A temporary password was generated." : "Invite saved successfully.");
-    if (result.membership) {
-      upsertMembership(result.membership);
-      setMemberSearch(result.membership.email);
-      setPageIndex(0);
-    }
-    closeInviteDialog();
-    router.refresh();
   }
 
   async function runMembershipAction(membershipId: string, action: "activate" | "suspend" | "revoke" | "update_roles", note = "") {
+    if (busyRef) return;
     if (!canManageUsers) {
       setFormError("You need tenant.users.manage to update tenant users.");
       return;
@@ -280,27 +288,32 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
             note,
           }
         : { action, note };
-    const response = await fetch(`/api/tenant-admin/memberships/${membershipId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminMembershipMutationResult>;
-    setBusyRef("");
-    if (!response.ok) {
-      setFormError(apiErrorMessage(result, "Membership action could not be saved."));
-      return;
+    try {
+      const response = await fetch(`/api/tenant-admin/memberships/${membershipId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminMembershipMutationResult>;
+      if (!response.ok) {
+        setFormError(apiErrorMessage(result, "Membership action could not be saved."));
+        return;
+      }
+      setNoticeTone("success");
+      setNotice(`${actionLabels[action] ?? titleCase(action)} saved successfully.`);
+      if (result.membership) {
+        upsertMembership(result.membership);
+        setMemberSearch(result.membership.email);
+        setPageIndex(0);
+      }
+      setEditingMember(null);
+      closeConfirmation();
+      router.refresh();
+    } catch {
+      setFormError("Unable to reach the server. Your changes were preserved; try again.");
+    } finally {
+      setBusyRef("");
     }
-    setNoticeTone("success");
-    setNotice(`${actionLabels[action] ?? titleCase(action)} saved successfully.`);
-    if (result.membership) {
-      upsertMembership(result.membership);
-      setMemberSearch(result.membership.email);
-      setPageIndex(0);
-    }
-    setEditingMember(null);
-    closeConfirmation();
-    router.refresh();
   }
 
   return (
@@ -458,9 +471,9 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
               <button className="button button--secondary" onClick={closeInviteDialog} type="button">
                 Cancel
               </button>
-              <button className="button button--primary" disabled={busyRef === "invite" || Boolean(inviteValidation)} onClick={inviteMember} type="button">
-                {busyRef === "invite" ? "Saving" : actionLabels.invite ?? "Invite member"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={Boolean(inviteValidation)} onClick={inviteMember} pending={busyRef === "invite"} pendingLabel="Inviting member" type="button">
+                {actionLabels.invite ?? "Invite member"}
+              </AsyncActionButton>
             </div>
           </div>
         </div>
@@ -497,9 +510,9 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
               <button className="button button--secondary" onClick={() => setEditingMember(null)} type="button">
                 Cancel
               </button>
-              <button className="button button--primary" disabled={busyRef.startsWith(`${editingMember.id}:`) || Boolean(editValidation)} onClick={() => runMembershipAction(editingMember.id, "update_roles")} type="button">
-                {busyRef === `${editingMember.id}:update_roles` ? "Saving" : actionLabels.update_roles ?? "Update roles"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={Boolean(editValidation)} onClick={() => runMembershipAction(editingMember.id, "update_roles")} pending={busyRef === `${editingMember.id}:update_roles`} pendingLabel="Updating roles" type="button">
+                {actionLabels.update_roles ?? "Update roles"}
+              </AsyncActionButton>
             </div>
           </div>
         </div>
@@ -546,14 +559,16 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
               <button className="button button--secondary" onClick={closeConfirmation} type="button">
                 Cancel
               </button>
-              <button
+              <AsyncActionButton
                 className={confirmation.action === "revoke" ? "button button--danger" : "button button--primary"}
                 disabled={busyRef.startsWith(`${confirmation.member.id}:`)}
                 onClick={() => runMembershipAction(confirmation.member.id, confirmation.action, actionNote.trim())}
+                pending={busyRef === `${confirmation.member.id}:${confirmation.action}`}
+                pendingLabel={`${titleCase(confirmation.action)} in progress`}
                 type="button"
               >
-                {busyRef === `${confirmation.member.id}:${confirmation.action}` ? "Saving" : actionLabels[confirmation.action] ?? titleCase(confirmation.action)}
-              </button>
+                {actionLabels[confirmation.action] ?? titleCase(confirmation.action)}
+              </AsyncActionButton>
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { reportCategories, type ReportCatalogItem } from "@/lib/report-catalog";
 
 const PAGE_SIZE = 5;
@@ -165,16 +166,8 @@ export function ReportCatalogWorkspace({ reports }: { reports: ReportCatalogItem
                           Open
                         </Link>
                       ) : null}
-                      {report.exportRoute ? (
-                        <Link className="button button--ghost" href={report.exportRoute} prefetch={false}>
-                          Export
-                        </Link>
-                      ) : null}
-                      {report.exportRoute ? (
-                        <Link className="button button--ghost" href={manifestHref(report.exportRoute)} prefetch={false}>
-                          Manifest
-                        </Link>
-                      ) : null}
+                      {report.exportRoute ? <AsyncDownloadButton className="button button--ghost" href={report.exportRoute} fileName={`${report.key}.csv`}>Export</AsyncDownloadButton> : null}
+                      {report.exportRoute ? <AsyncDownloadButton className="button button--ghost" href={manifestHref(report.exportRoute)} fileName={`${report.key}-manifest.json`}>Manifest</AsyncDownloadButton> : null}
                     </div>
                   </td>
                 </tr>

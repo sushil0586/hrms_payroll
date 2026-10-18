@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { PlatformPermissionCatalogItem } from "@/lib/types";
+import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 function titleCase(value: string) {
   return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -49,7 +50,7 @@ function buildFormState(permission: PlatformPermissionCatalogItem): FormState {
 }
 
 export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
-  const router = useRouter();
+  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const labelRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<PlatformPermissionCatalogItem | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -107,20 +108,27 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
     setFieldErrors({});
     setBusy(true);
     setFormError("");
-    const response = await fetch(`/api/platform/permission-catalog/${encodeURIComponent(editing.key)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        label: form.label.trim(),
-        module: form.module.trim(),
-        description: form.description.trim(),
-        risk_level: form.risk_level,
-        tenant_assignable: form.tenant_assignable,
-        required_module: form.required_module.trim(),
-        required_plan: form.required_plan.trim(),
-        is_active: form.is_active,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/platform/permission-catalog/${encodeURIComponent(editing.key)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: form.label.trim(),
+          module: form.module.trim(),
+          description: form.description.trim(),
+          risk_level: form.risk_level,
+          tenant_assignable: form.tenant_assignable,
+          required_module: form.required_module.trim(),
+          required_plan: form.required_plan.trim(),
+          is_active: form.is_active,
+        }),
+      });
+    } catch {
+      setBusy(false);
+      setFormError("Unable to reach the server. Check your connection and try again.");
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     setBusy(false);
     if (!response.ok) {
@@ -129,7 +137,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
     }
     setNotice(`${editing.key} updated.`);
     closeDialog();
-    router.refresh();
+    refresh();
   }
 
   return (
@@ -141,7 +149,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
 
       {editing && form ? (
         <div className="tenant-modal-shell" role="presentation">
-          <div aria-describedby="permission-dialog-validation" aria-label="Edit platform permission" aria-modal="true" className="tenant-modal" role="dialog">
+          <div aria-busy={busy || isRefreshing} aria-describedby="permission-dialog-validation" aria-label="Edit platform permission" aria-modal="true" className="tenant-modal" role="dialog">
             <div className="tenant-modal__header">
               <div>
                 <span className="workspace-card__eyebrow">Permission catalog</span>
@@ -234,9 +242,15 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
               <button className="button button--secondary" onClick={closeDialog} type="button">
                 Cancel
               </button>
-              <button className="button button--primary" disabled={busy} onClick={savePermission} type="button">
-                {busy ? "Saving..." : "Save permission"}
-              </button>
+              <AsyncActionButton
+                className="button button--primary"
+                onClick={savePermission}
+                pending={busy || isRefreshing}
+                pendingLabel={isRefreshing ? "Refreshing permission catalog" : "Saving permission"}
+                type="button"
+              >
+                Save permission
+              </AsyncActionButton>
             </div>
           </div>
         </div>

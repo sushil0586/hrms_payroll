@@ -42,6 +42,9 @@ test.describe("Platform admin permission catalog certification", () => {
     await expect(page.getByText("No permissions match these filters.")).toBeVisible();
 
     await page.getByRole("link", { name: "Reset" }).click();
+    await expect(page).toHaveURL(/\/platform-admin\/permissions$/);
+    await expect(page.locator('[name="q"]')).toHaveValue("");
+    await expect(page.locator('[name="assignable"]')).toHaveValue("all");
     await page.locator('[name="risk"]').selectOption("critical");
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page).toHaveURL(/risk=critical/);

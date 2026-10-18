@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.db import transaction
 from django.utils import timezone
 
 from apps.attendance.models import (
     AttendancePolicy,
+    AttendancePeriodClose,
+    AttendancePeriodCloseEvent,
+    AttendancePeriodCloseStatus,
     AttendancePolicyAssignment,
     AttendancePolicyStatus,
     AttendanceRecord,
@@ -30,10 +36,151 @@ from apps.attendance.models import (
     ShiftRosterRolloutStatus,
     ShiftRosterTemplateStatus,
 )
+from apps.employee_lifecycle.effective_services import resolve_employment_scope
 from apps.employees.models import Employee, EmploymentStatus
 from apps.notifications.services import trigger_notification_event
 from apps.workflows.models import WorkflowAction, WorkflowActorType, WorkflowModule
 from apps.workflows.services import create_workflow_instance, resolve_workflow_action
+
+
+class AttendanceCloseError(Exception):
+    pass
+
+
+def _close_event(close, actor, event_type, *, reason=""):
+    return AttendancePeriodCloseEvent.objects.create(
+        close=close, tenant=close.tenant, actor=actor, event_type=event_type, reason=reason,
+        evidence_snapshot={"status": close.status, "version": close.version, "snapshot_hash": close.snapshot_hash},
+    )
+
+
+def build_attendance_close_snapshot(*, tenant, legal_entity, period_start, period_end):
+    records = list(
+        AttendanceRecord.objects.filter(
+            tenant=tenant, employee__legal_entity=legal_entity,
+            attendance_date__range=(period_start, period_end),
+        ).select_related("employee", "shift", "holiday").order_by("employee__employee_code", "attendance_date")
+    )
+    context = AttendanceDerivationContext.for_records(records)
+    status_counts = defaultdict(int)
+    payable = Decimal("0.00")
+    lop = Decimal("0.00")
+    rows = []
+    for record in records:
+        summary = build_attendance_derivation_summary(record, context=context)
+        impact = summary.get("payroll_impact") or {}
+        status_counts[summary["status"]] += 1
+        payable += Decimal(str(impact.get("payable_units") or "0"))
+        lop += Decimal(str(impact.get("lop_units") or "0"))
+        rows.append({
+            "attendance_record_id": str(record.id), "employee_id": str(record.employee_id),
+            "employee_code": record.employee.employee_code, "attendance_date": record.attendance_date.isoformat(),
+            "status": summary["status"], "payable_units": str(impact.get("payable_units") or "0.00"),
+            "lop_units": str(impact.get("lop_units") or "0.00"), "derivation_ref": summary.get("schema_ref"),
+        })
+    pending = AttendanceRegularization.objects.filter(
+        tenant=tenant, employee__legal_entity=legal_entity,
+        attendance_record__attendance_date__range=(period_start, period_end), status=RegularizationStatus.PENDING,
+    ).count()
+    unknown = sum(1 for row in rows if row["status"] == AttendanceStatus.UNKNOWN)
+    blockers = {"pending_regularizations": pending, "unresolved_attendance": unknown}
+    return {
+        "schema_ref": "attendance.monthly_close.snapshot.v1", "tenant_id": str(tenant.id),
+        "legal_entity_id": str(legal_entity.id), "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(), "employee_count": len({row["employee_id"] for row in rows}),
+        "attendance_record_count": len(rows), "status_counts": dict(status_counts),
+        "payroll_impact": {"payable_units": str(payable), "lop_units": str(lop), "source": ATTENDANCE_DERIVATION_SUMMARY_REF},
+        "blockers": blockers, "rows": rows,
+    }
+
+
+@transaction.atomic
+def reconcile_attendance_period(*, tenant, legal_entity, period_start, period_end, actor, idempotency_key):
+    existing = AttendancePeriodClose.objects.select_for_update().filter(tenant=tenant, idempotency_key=idempotency_key).first()
+    if existing:
+        return existing
+    if legal_entity.tenant_id != tenant.id:
+        raise AttendanceCloseError("Invalid legal entity selection.")
+    previous = AttendancePeriodClose.objects.filter(
+        tenant=tenant, legal_entity=legal_entity, period_start=period_start, period_end=period_end
+    ).order_by("-version").first()
+    if previous and previous.status != AttendancePeriodCloseStatus.REOPENED:
+        raise AttendanceCloseError("An active attendance close version already exists for this scope.")
+    snapshot = build_attendance_close_snapshot(tenant=tenant, legal_entity=legal_entity, period_start=period_start, period_end=period_end)
+    encoded = json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()
+    item = AttendancePeriodClose.objects.create(
+        tenant=tenant, legal_entity=legal_entity, period_start=period_start, period_end=period_end,
+        version=(previous.version + 1 if previous else 1), previous_version=previous,
+        idempotency_key=idempotency_key, reconciliation_snapshot=snapshot,
+        snapshot_hash=hashlib.sha256(encoded).hexdigest(), employee_count=snapshot["employee_count"],
+        attendance_record_count=snapshot["attendance_record_count"], blocker_count=sum(snapshot["blockers"].values()),
+    )
+    _close_event(item, actor, "reconciled")
+    return item
+
+
+@transaction.atomic
+def transition_attendance_close(*, close, actor, action, reason=""):
+    close = AttendancePeriodClose.objects.select_for_update().select_related("tenant", "legal_entity").get(pk=close.pk)
+    transitions = {
+        "submit": (AttendancePeriodCloseStatus.DRAFT, AttendancePeriodCloseStatus.SUBMITTED),
+        "approve": (AttendancePeriodCloseStatus.SUBMITTED, AttendancePeriodCloseStatus.APPROVED),
+        "close": (AttendancePeriodCloseStatus.APPROVED, AttendancePeriodCloseStatus.CLOSED),
+        "reopen": (AttendancePeriodCloseStatus.CLOSED, AttendancePeriodCloseStatus.REOPENED),
+    }
+    if action not in transitions:
+        raise AttendanceCloseError("Unsupported attendance-close transition.")
+    source, target = transitions[action]
+    if close.status == target:
+        return close
+    if close.status != source:
+        raise AttendanceCloseError(f"Attendance close must be {source} before {action}.")
+    if action in {"submit", "approve", "close"} and close.blocker_count:
+        raise AttendanceCloseError("Resolve missing attendance and pending regularizations before continuing.")
+    if action == "reopen" and not reason.strip():
+        raise AttendanceCloseError("A reopen reason is required.")
+    now = timezone.now()
+    close.status = target
+    fields = ["status", "updated_at"]
+    if action == "submit": close.submitted_by, close.submitted_at, fields = actor, now, fields + ["submitted_by", "submitted_at"]
+    elif action == "approve": close.approved_by, close.approved_at, fields = actor, now, fields + ["approved_by", "approved_at"]
+    elif action == "close":
+        # Serialize close against attendance mutations and reject a stale
+        # reconciliation rather than closing evidence that no longer matches.
+        list(
+            AttendanceRecord.objects.select_for_update()
+            .filter(
+                tenant=close.tenant,
+                employee__legal_entity=close.legal_entity,
+                attendance_date__range=(close.period_start, close.period_end),
+            )
+            .values_list("pk", flat=True)
+        )
+        current_snapshot = build_attendance_close_snapshot(
+            tenant=close.tenant,
+            legal_entity=close.legal_entity,
+            period_start=close.period_start,
+            period_end=close.period_end,
+        )
+        current_hash = hashlib.sha256(
+            json.dumps(current_snapshot, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        if current_hash != close.snapshot_hash:
+            raise AttendanceCloseError(
+                "Attendance changed after reconciliation. Reconcile the period again before closing."
+            )
+        close.closed_by, close.closed_at, fields = actor, now, fields + ["closed_by", "closed_at"]
+        AttendanceRecord.objects.filter(tenant=close.tenant, employee__legal_entity=close.legal_entity, attendance_date__range=(close.period_start, close.period_end)).update(is_locked=True, updated_at=now)
+    else:
+        close.reopened_by, close.reopened_at, close.reopen_reason = actor, now, reason.strip()
+        fields += ["reopened_by", "reopened_at", "reopen_reason"]
+        close.save(update_fields=fields)
+        AttendanceRecord.objects.filter(tenant=close.tenant, employee__legal_entity=close.legal_entity, attendance_date__range=(close.period_start, close.period_end)).update(is_locked=False, updated_at=now)
+        _close_event(close, actor, action, reason=reason)
+        return close
+    close.save(update_fields=fields)
+    _close_event(close, actor, action, reason=reason)
+    return close
 
 
 DEFAULT_ATTENDANCE_POLICY_CONFIG = {
@@ -350,12 +497,15 @@ def _attendance_assignment_resolution_signature(assignment_scope) -> tuple[int, 
 
 def _find_matching_attendance_policy_assignment(employee, *, as_of=None) -> AttendancePolicyAssignment | None:
     as_of = as_of or timezone.localdate()
+    scope = resolve_employment_scope(employee, as_of=as_of)
     assignments = (
         AttendancePolicyAssignment.objects.filter(
             tenant=employee.tenant,
             is_active=True,
             attendance_policy__status=AttendancePolicyStatus.ACTIVE,
         )
+        .filter(Q(effective_from__isnull=True) | Q(effective_from__lte=as_of))
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of))
         .select_related("attendance_policy", "attendance_policy__default_shift", "attendance_policy__holiday_calendar")
         .order_by("priority", "created_at")
     )
@@ -366,17 +516,17 @@ def _find_matching_attendance_policy_assignment(employee, *, as_of=None) -> Atte
                 continue
             matching_assignments.append(assignment)
             continue
-        if assignment.legal_entity_id and assignment.legal_entity_id != employee.legal_entity_id:
+        if assignment.legal_entity_id and assignment.legal_entity_id != scope.legal_entity_id:
             continue
-        if assignment.branch_id and assignment.branch_id != employee.branch_id:
+        if assignment.branch_id and assignment.branch_id != scope.branch_id:
             continue
-        if assignment.location_id and assignment.location_id != employee.location_id:
+        if assignment.location_id and assignment.location_id != scope.location_id:
             continue
-        if assignment.department_id and assignment.department_id != employee.department_id:
+        if assignment.department_id and assignment.department_id != scope.department_id:
             continue
-        if assignment.grade_id and assignment.grade_id != employee.grade_id:
+        if assignment.grade_id and assignment.grade_id != scope.grade_id:
             continue
-        if assignment.employment_type_id and assignment.employment_type_id != employee.employment_type_id:
+        if assignment.employment_type_id and assignment.employment_type_id != scope.employment_type_id:
             continue
         matching_assignments.append(assignment)
     if not matching_assignments:
@@ -447,6 +597,12 @@ def _attendance_employee_matches_assignment_scope(employee, assignment_scope) ->
 
 
 def _attendance_assignment_scopes_overlap(candidate_scope: dict, existing_assignment: AttendancePolicyAssignment) -> bool:
+    candidate_from = candidate_scope.get("effective_from") or date.min
+    candidate_to = candidate_scope.get("effective_to") or date.max
+    existing_from = existing_assignment.effective_from or date.min
+    existing_to = existing_assignment.effective_to or date.max
+    if candidate_to < existing_from or existing_to < candidate_from:
+        return False
     candidate_employee_id = candidate_scope.get("employee_id")
     existing_employee_id = existing_assignment.employee_id
     if candidate_employee_id and existing_employee_id:
@@ -804,6 +960,7 @@ def _find_matching_employee_shift_assignment(*, employee, attendance_date):
     return assignments[0] if assignments else None
 
 
+@transaction.atomic
 def preview_shift_roster_template_rollout(
     *,
     tenant,
@@ -1747,6 +1904,16 @@ def submit_regularization(
 def resolve_regularization(*, regularization: AttendanceRegularization, actor_employee, approve: bool, comment: str = "") -> AttendanceRegularization:
     """Approves or rejects an attendance regularization request."""
 
+    regularization = (
+        AttendanceRegularization.objects.select_for_update(of=("self",))
+        .select_related("employee", "employee__membership", "attendance_record")
+        .get(pk=regularization.pk)
+    )
+    desired_status = RegularizationStatus.APPROVED if approve else RegularizationStatus.REJECTED
+    if regularization.status == desired_status:
+        return regularization
+    if regularization.status in {RegularizationStatus.APPROVED, RegularizationStatus.REJECTED}:
+        raise ValidationError({"status": "This attendance regularization has already been resolved with a different outcome."})
     action = WorkflowAction.APPROVE if approve else WorkflowAction.REJECT
     previous_status = regularization.status
     regularization.status = RegularizationStatus.APPROVED if approve else RegularizationStatus.REJECTED
@@ -1763,7 +1930,7 @@ def resolve_regularization(*, regularization: AttendanceRegularization, actor_em
         ]
     )
     if approve:
-        record = regularization.attendance_record
+        record = AttendanceRecord.objects.select_for_update().get(pk=regularization.attendance_record_id)
         next_check_in_at = regularization.requested_check_in_at or record.check_in_at
         next_check_out_at = regularization.requested_check_out_at or record.check_out_at
         runtime = evaluate_attendance_runtime(

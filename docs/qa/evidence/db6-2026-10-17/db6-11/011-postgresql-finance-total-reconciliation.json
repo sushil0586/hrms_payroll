@@ -1,0 +1,36 @@
+{
+  "run_id": "d7071c41-d712-4cbc-a34e-c2f401fa597c",
+  "batch_id": "76c8f889-98cb-42a7-ae51-df7db9ec9dc4",
+  "handoff_id": "256848ea-902d-45fd-9619-173aef121c74",
+  "comparisons": {
+    "gross_earnings": {
+      "batch": "50000.00",
+      "handoff": "50000.00",
+      "match": true
+    },
+    "employee_deductions": {
+      "batch": "0.00",
+      "handoff": "0.00",
+      "match": true
+    },
+    "net_pay": {
+      "batch": "50000.00",
+      "handoff": "50000.00",
+      "match": true
+    },
+    "employee_count": {
+      "batch": 1,
+      "handoff": 1,
+      "match": true
+    }
+  },
+  "all_documented_totals_match": true,
+  "bank_advice_total_matches_net_pay": true,
+  "artifact_counts": {
+    "accounting_export": 1,
+    "bank_advice": 1,
+    "payslip": 1,
+    "register": 1,
+    "statutory_report": 1
+  }
+}

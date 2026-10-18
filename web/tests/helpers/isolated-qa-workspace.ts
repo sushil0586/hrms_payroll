@@ -26,6 +26,7 @@ export type IsolatedQaWorkspace = {
       payroll_run_id: string;
       platform_onboarding_id: string;
     };
+    platform_admin: { username: string; platform_only: boolean };
     checks: Record<string, boolean>;
   };
 };
@@ -48,6 +49,11 @@ export async function provisionIsolatedQaWorkspace(testInfo: TestInfo): Promise<
   return { seedRef, manifestPath, tempDir, manifest };
 }
 
+export async function loadIsolatedQaWorkspace(manifestPath: string, seedRef: string): Promise<IsolatedQaWorkspace> {
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  return { seedRef, manifestPath, tempDir: path.dirname(manifestPath), manifest };
+}
+
 export async function cleanupIsolatedQaWorkspace(workspace: IsolatedQaWorkspace | undefined) {
   if (!workspace) return;
   try {
@@ -59,8 +65,12 @@ export async function cleanupIsolatedQaWorkspace(workspace: IsolatedQaWorkspace 
   }
 }
 
-export function workspacePersona(workspace: IsolatedQaWorkspace, role: "hr_admin" | "manager" | "employee"): Persona {
+export function workspacePersona(workspace: IsolatedQaWorkspace, role: "hr_admin" | "hr_checker" | "manager" | "employee" | "tenant_admin"): Persona {
   return { username: workspace.manifest.credentials[role].username, password: "Password@123" };
+}
+
+export function workspacePlatformPersona(workspace: IsolatedQaWorkspace): Persona {
+  return { username: workspace.manifest.platform_admin.username, password: "Password@123" };
 }
 
 export async function resolveEmployeeById(

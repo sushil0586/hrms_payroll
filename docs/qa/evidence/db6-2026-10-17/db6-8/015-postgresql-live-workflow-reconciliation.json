@@ -1,0 +1,131 @@
+{
+  "tenant": "98fdec74-b4bf-40ae-9145-1afd8db79bdf",
+  "employee": "0ad4b250-d7ed-44ff-9d1a-30e5bcc3f48b",
+  "leave_requests": [
+    {
+      "id": "556a7c44-d19d-468c-b3d9-7d4c57b50293",
+      "status": "rejected",
+      "start_date": "2026-12-01",
+      "end_date": "2026-12-01",
+      "requested_units": "1.00",
+      "manager_comment": "PW_LEAVE_REJECT_1792242429248_MANAGER_REJECTED",
+      "rejection_reason": "PW_LEAVE_REJECT_1792242429248_MANAGER_REJECTED"
+    },
+    {
+      "id": "585a51db-5b11-4f95-9bcb-bdd1bc632863",
+      "status": "approved",
+      "start_date": "2026-12-16",
+      "end_date": "2026-12-16",
+      "requested_units": "1.00",
+      "manager_comment": "PW_LEAVE_APPROVAL_1792242398707_APPROVED",
+      "rejection_reason": ""
+    }
+  ],
+  "leave_allocations": [],
+  "leave_ledger": [],
+  "regularizations": [
+    {
+      "id": "45255b21-0009-4409-adb6-cabbc285d46c",
+      "status": "rejected",
+      "attendance_record_id": "b4e0c49c-636b-4551-b617-596759b4c26e",
+      "requested_status": "late",
+      "manager_comment": "",
+      "rejection_reason": "PW_REG_REJECT_1792242471349_MANAGER_REJECTED"
+    },
+    {
+      "id": "ac55101d-683d-4f28-92f7-bb0a8fd0279d",
+      "status": "approved",
+      "attendance_record_id": "b4e0c49c-636b-4551-b617-596759b4c26e",
+      "requested_status": "remote",
+      "manager_comment": "PW_REG_APPROVAL_1792242451240_APPROVED",
+      "rejection_reason": ""
+    }
+  ],
+  "attendance_records": [
+    {
+      "id": "b4e0c49c-636b-4551-b617-596759b4c26e",
+      "attendance_date": "2026-10-17",
+      "status": "remote"
+    },
+    {
+      "id": "608edceb-de3f-41d3-adb3-82eb8fcb6123",
+      "attendance_date": "2026-10-16",
+      "status": "unknown"
+    },
+    {
+      "id": "0ff3632d-921c-4613-b1fa-5053ee2f347d",
+      "attendance_date": "2026-10-15",
+      "status": "unknown"
+    },
+    {
+      "id": "804cdf63-9b3a-424b-a42d-c2fbd72bdebe",
+      "attendance_date": "2026-10-14",
+      "status": "unknown"
+    },
+    {
+      "id": "4eb1f949-53d4-4ce8-b2ef-d1d197a40194",
+      "attendance_date": "2026-10-13",
+      "status": "unknown"
+    },
+    {
+      "id": "ea4350cf-3b5a-41a7-bd0b-ad09fca3c8c5",
+      "attendance_date": "2026-10-12",
+      "status": "unknown"
+    },
+    {
+      "id": "f4059546-a9ed-4b46-a71a-d4ca2c432f9e",
+      "attendance_date": "2026-10-11",
+      "status": "unknown"
+    },
+    {
+      "id": "9fd44442-4358-4c36-a0a2-27df18b65614",
+      "attendance_date": "2026-10-10",
+      "status": "unknown"
+    },
+    {
+      "id": "01a7c0ed-ac22-4837-bbc9-630ecc04578a",
+      "attendance_date": "2026-10-09",
+      "status": "unknown"
+    },
+    {
+      "id": "05a7e846-6444-42dc-816d-34f391124b59",
+      "attendance_date": "2026-10-08",
+      "status": "unknown"
+    },
+    {
+      "id": "cd2f1776-8fb1-4e4c-9cdc-e8880b65ea2f",
+      "attendance_date": "2026-10-07",
+      "status": "unknown"
+    },
+    {
+      "id": "2379acbe-560f-4233-8bb3-5fe396e2baee",
+      "attendance_date": "2026-10-06",
+      "status": "unknown"
+    },
+    {
+      "id": "ddf6f932-260d-4ff5-b392-43ff222fe7f4",
+      "attendance_date": "2026-10-05",
+      "status": "unknown"
+    },
+    {
+      "id": "ef33e11b-40e7-4ec9-a4ab-d85156d9d86b",
+      "attendance_date": "2026-10-04",
+      "status": "unknown"
+    },
+    {
+      "id": "17714451-bd95-4a77-998f-4986e4435511",
+      "attendance_date": "2026-10-03",
+      "status": "unknown"
+    },
+    {
+      "id": "f94dcfce-5e2d-420e-ab39-cb21e1531b19",
+      "attendance_date": "2026-10-02",
+      "status": "unknown"
+    },
+    {
+      "id": "b1b50862-253b-436b-b55f-c7f6dd0d13ea",
+      "attendance_date": "2026-10-01",
+      "status": "unknown"
+    }
+  ]
+}

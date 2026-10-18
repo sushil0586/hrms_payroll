@@ -126,6 +126,32 @@ export async function gotoWithinSession(page: Page, path: string) {
   await gotoWithRetry(page, path);
 }
 
+export type BrowserSessionResponse = {
+  body: string;
+  headers: Record<string, string>;
+  status: number;
+};
+
+export async function requestWithBrowserSession(
+  page: Page,
+  path: string,
+  init?: { method?: string; body?: string; headers?: Record<string, string> },
+): Promise<BrowserSessionResponse> {
+  return page.evaluate(async ({ requestPath, requestInit }) => {
+    const response = await fetch(requestPath, {
+      body: requestInit?.body,
+      credentials: "same-origin",
+      headers: requestInit?.headers,
+      method: requestInit?.method ?? "GET",
+    });
+    return {
+      body: await response.text(),
+      headers: Object.fromEntries(response.headers.entries()),
+      status: response.status,
+    };
+  }, { requestPath: path, requestInit: init });
+}
+
 export async function expectVisibleText(page: Page, patterns: (string | RegExp)[]) {
   for (const pattern of patterns) {
     await expect(page.getByText(pattern).filter({ visible: true }).first()).toBeVisible();

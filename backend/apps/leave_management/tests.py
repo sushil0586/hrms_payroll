@@ -706,7 +706,7 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
                 "updated_at",
             ]
         )
-        request_date = timezone.localdate() + timedelta(days=14)
+        request_date = _next_weekday(0)
 
         leave_request = submit_leave_request(
             employee=self.employee,

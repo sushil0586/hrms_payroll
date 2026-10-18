@@ -74,6 +74,13 @@ class PayrollRunStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
 
 
+class PayrollRunKind(models.TextChoices):
+    REGULAR = "regular", "Regular"
+    SUPPLEMENTARY = "supplementary", "Supplementary"
+    OFF_CYCLE = "off_cycle", "Off Cycle"
+    CORRECTION = "correction", "Correction"
+
+
 class PayrollCalculationStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     COMPLETED = "completed", "Completed"
@@ -531,6 +538,218 @@ class PayrollExpressionLanguage(models.TextChoices):
     SAFE_EXPR_V1 = "safe_expr_v1", "Safe Expression V1"
 
 
+class FiscalCalendarStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    ACTIVE = "active", "Active"
+    RETIRED = "retired", "Retired"
+
+
+class FiscalYearStatus(models.TextChoices):
+    PLANNED = "planned", "Planned"
+    OPEN = "open", "Open"
+    SOFT_CLOSED = "soft_closed", "Soft Closed"
+    CLOSED = "closed", "Closed"
+
+
+class AccountingPeriodStatus(models.TextChoices):
+    PLANNED = "planned", "Planned"
+    OPEN = "open", "Open"
+    SOFT_CLOSED = "soft_closed", "Soft Closed"
+    CLOSED = "closed", "Closed"
+    LOCKED = "locked", "Locked"
+
+
+class AccountingPeriodKind(models.TextChoices):
+    STANDARD = "standard", "Standard"
+    ADJUSTMENT = "adjustment", "Adjustment"
+
+
+class AccountingPeriodAction(models.TextChoices):
+    OPEN = "open", "Open"
+    SOFT_CLOSE = "soft_close", "Soft Close"
+    CLOSE = "close", "Close"
+    REOPEN = "reopen", "Reopen"
+    LOCK = "lock", "Lock"
+
+
+class FiscalYearAction(models.TextChoices):
+    SOFT_CLOSE = "soft_close", "Soft Close"
+    CLOSE = "close", "Close"
+    REOPEN = "reopen", "Reopen"
+
+
+class FiscalCalendar(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Versioned fiscal calendar owned by a tenant or one legal entity."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="fiscal_calendars")
+    legal_entity = models.ForeignKey(LegalEntity, on_delete=models.PROTECT, related_name="fiscal_calendars", blank=True, null=True)
+    code = models.SlugField(max_length=60)
+    name = models.CharField(max_length=255)
+    start_month = models.PositiveSmallIntegerField(default=1)
+    start_day = models.PositiveSmallIntegerField(default=1)
+    timezone = models.CharField(max_length=64, default="UTC")
+    country_code = models.CharField(max_length=2, blank=True)
+    version = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=20, choices=FiscalCalendarStatus.choices, default=FiscalCalendarStatus.DRAFT)
+    is_default = models.BooleanField(default=False)
+    effective_from = models.DateField()
+    effective_to = models.DateField(blank=True, null=True)
+    config_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["tenant", "legal_entity", "code", "version"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "code", "version"], name="uniq_fiscal_calendar_version"),
+            models.UniqueConstraint(fields=["tenant"], condition=Q(is_default=True, legal_entity__isnull=True, status=FiscalCalendarStatus.ACTIVE), name="uniq_active_tenant_fiscal_default"),
+            models.UniqueConstraint(fields=["tenant", "legal_entity"], condition=Q(is_default=True, legal_entity__isnull=False, status=FiscalCalendarStatus.ACTIVE), name="uniq_active_entity_fiscal_default"),
+        ]
+
+    def clean(self):
+        errors = {}
+        if self.legal_entity_id and self.tenant_id and self.legal_entity.tenant_id != self.tenant_id:
+            errors["legal_entity"] = "Fiscal calendar legal entity must belong to the same tenant."
+        try:
+            date(2000, self.start_month, self.start_day)
+        except ValueError:
+            errors["start_day"] = "Fiscal calendar start month/day is invalid."
+        if self.effective_to and self.effective_from and self.effective_to < self.effective_from:
+            errors["effective_to"] = "Effective-to date must be on or after effective-from."
+        if self.pk:
+            previous = FiscalCalendar.objects.filter(pk=self.pk).first()
+            governed_fields = ["start_month", "start_day", "timezone", "country_code", "legal_entity_id"]
+            if previous and self.fiscal_years.exists() and any(getattr(previous, field) != getattr(self, field) for field in governed_fields):
+                errors["version"] = "Create a new fiscal calendar version instead of changing a calendar with fiscal years."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.legal_entity_id and not self.tenant_id:
+            self.tenant = self.legal_entity.tenant
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class FiscalYear(UUIDPrimaryKeyModel, TimeStampedModel):
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="fiscal_years")
+    calendar = models.ForeignKey(FiscalCalendar, on_delete=models.PROTECT, related_name="fiscal_years")
+    code = models.CharField(max_length=40)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(max_length=20, choices=FiscalYearStatus.choices, default=FiscalYearStatus.PLANNED)
+    version = models.PositiveIntegerField(default=1)
+    config_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["calendar", "start_date"]
+        constraints = [models.UniqueConstraint(fields=["calendar", "code", "version"], name="uniq_fiscal_year_version")]
+
+    def clean(self):
+        errors = {}
+        if self.calendar_id and self.tenant_id and self.calendar.tenant_id != self.tenant_id:
+            errors["calendar"] = "Fiscal year calendar must belong to the same tenant."
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            errors["end_date"] = "Fiscal year end must be on or after its start."
+        if self.calendar_id and self.start_date and self.end_date:
+            overlap = FiscalYear.objects.filter(calendar_id=self.calendar_id, start_date__lte=self.end_date, end_date__gte=self.start_date)
+            if self.pk:
+                overlap = overlap.exclude(pk=self.pk)
+            if overlap.exists():
+                errors["start_date"] = "Fiscal years cannot overlap within one calendar."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.calendar_id and not self.tenant_id:
+            self.tenant = self.calendar.tenant
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class FiscalYearStatusEvent(UUIDPrimaryKeyModel, TimeStampedModel):
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="fiscal_year_status_events")
+    fiscal_year = models.ForeignKey(FiscalYear, on_delete=models.PROTECT, related_name="status_events")
+    action = models.CharField(max_length=20, choices=FiscalYearAction.choices)
+    previous_status = models.CharField(max_length=20, choices=FiscalYearStatus.choices)
+    next_status = models.CharField(max_length=20, choices=FiscalYearStatus.choices)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="fiscal_year_status_events")
+    reason = models.TextField()
+    request_key = models.CharField(max_length=120)
+    authorization_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [models.UniqueConstraint(fields=["tenant", "request_key"], name="uniq_fiscal_year_action_key")]
+
+
+class AccountingPeriod(UUIDPrimaryKeyModel, TimeStampedModel):
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="accounting_periods")
+    fiscal_year = models.ForeignKey(FiscalYear, on_delete=models.PROTECT, related_name="accounting_periods")
+    legal_entity = models.ForeignKey(LegalEntity, on_delete=models.PROTECT, related_name="accounting_periods", blank=True, null=True)
+    code = models.CharField(max_length=40)
+    name = models.CharField(max_length=255)
+    sequence = models.PositiveSmallIntegerField()
+    kind = models.CharField(max_length=20, choices=AccountingPeriodKind.choices, default=AccountingPeriodKind.STANDARD)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(max_length=20, choices=AccountingPeriodStatus.choices, default=AccountingPeriodStatus.PLANNED)
+    closed_at = models.DateTimeField(blank=True, null=True)
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="closed_accounting_periods", blank=True, null=True)
+    reopened_at = models.DateTimeField(blank=True, null=True)
+    reopened_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="reopened_accounting_periods", blank=True, null=True)
+    reopen_count = models.PositiveIntegerField(default=0)
+    config_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["fiscal_year", "sequence"]
+        constraints = [
+            models.UniqueConstraint(fields=["fiscal_year", "code"], name="uniq_accounting_period_code"),
+            models.UniqueConstraint(fields=["fiscal_year", "sequence"], name="uniq_accounting_period_sequence"),
+        ]
+
+    def clean(self):
+        errors = {}
+        if self.fiscal_year_id and self.tenant_id and self.fiscal_year.tenant_id != self.tenant_id:
+            errors["fiscal_year"] = "Accounting period fiscal year must belong to the same tenant."
+        if self.legal_entity_id and self.tenant_id and self.legal_entity.tenant_id != self.tenant_id:
+            errors["legal_entity"] = "Accounting period legal entity must belong to the same tenant."
+        if self.fiscal_year_id and self.legal_entity_id and self.fiscal_year.calendar.legal_entity_id not in {None, self.legal_entity_id}:
+            errors["legal_entity"] = "Accounting period legal entity must match its fiscal calendar scope."
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            errors["end_date"] = "Accounting period end must be on or after its start."
+        if self.fiscal_year_id and self.start_date and self.end_date:
+            if self.start_date < self.fiscal_year.start_date or self.end_date > self.fiscal_year.end_date:
+                errors["start_date"] = "Accounting period must fall inside its fiscal year."
+            overlap = AccountingPeriod.objects.filter(fiscal_year_id=self.fiscal_year_id, start_date__lte=self.end_date, end_date__gte=self.start_date)
+            if self.pk:
+                overlap = overlap.exclude(pk=self.pk)
+            if overlap.exists():
+                errors["start_date"] = "Accounting periods cannot overlap within one fiscal year."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.fiscal_year_id and not self.tenant_id:
+            self.tenant = self.fiscal_year.tenant
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class AccountingPeriodStatusEvent(UUIDPrimaryKeyModel, TimeStampedModel):
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="accounting_period_status_events")
+    accounting_period = models.ForeignKey(AccountingPeriod, on_delete=models.PROTECT, related_name="status_events")
+    action = models.CharField(max_length=20, choices=AccountingPeriodAction.choices)
+    previous_status = models.CharField(max_length=20, choices=AccountingPeriodStatus.choices)
+    next_status = models.CharField(max_length=20, choices=AccountingPeriodStatus.choices)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="accounting_period_status_events")
+    reason = models.TextField()
+    request_key = models.CharField(max_length=120)
+    authorization_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [models.UniqueConstraint(fields=["tenant", "request_key"], name="uniq_accounting_period_action_key")]
+
+
 class PayrollCalendar(UUIDPrimaryKeyModel, TimeStampedModel):
     """Tenant-owned calendar that defines pay period cadence."""
 
@@ -572,6 +791,8 @@ class PayrollPeriod(UUIDPrimaryKeyModel, TimeStampedModel):
     start_date = models.DateField()
     end_date = models.DateField()
     pay_date = models.DateField()
+    earning_accounting_period = models.ForeignKey(AccountingPeriod, on_delete=models.PROTECT, related_name="earning_payroll_periods", blank=True, null=True)
+    payment_accounting_period = models.ForeignKey(AccountingPeriod, on_delete=models.PROTECT, related_name="payment_payroll_periods", blank=True, null=True)
     status = models.CharField(max_length=20, choices=PayrollPeriodStatus.choices, default=PayrollPeriodStatus.DRAFT)
     config_snapshot = models.JSONField(default=dict, blank=True)
 
@@ -585,6 +806,10 @@ class PayrollPeriod(UUIDPrimaryKeyModel, TimeStampedModel):
         errors = {}
         if self.calendar_id and self.tenant_id and self.calendar.tenant_id != self.tenant_id:
             errors["calendar"] = "Payroll calendar must belong to the same tenant."
+        for field_name in ["earning_accounting_period", "payment_accounting_period"]:
+            accounting_period = getattr(self, field_name, None)
+            if accounting_period and accounting_period.tenant_id != self.tenant_id:
+                errors[field_name] = "Accounting period must belong to the same tenant."
         if self.start_date and self.end_date and self.start_date > self.end_date:
             errors["end_date"] = "Period end date must be on or after the start date."
         if self.calendar_id and self.start_date and self.end_date:
@@ -1664,6 +1889,19 @@ class PayrollRun(UUIDPrimaryKeyModel, TimeStampedModel):
     pay_group = models.ForeignKey(PayGroup, on_delete=models.PROTECT, related_name="payroll_runs", blank=True, null=True)
     code = models.SlugField(max_length=100)
     name = models.CharField(max_length=255)
+    # Null identifies legacy rows that require explicit classification before
+    # regular-run uniqueness can safely apply to them.
+    run_kind = models.CharField(
+        max_length=20,
+        choices=PayrollRunKind.choices,
+        default=PayrollRunKind.REGULAR,
+        blank=True,
+        null=True,
+    )
+    fiscal_year = models.ForeignKey(FiscalYear, on_delete=models.PROTECT, related_name="payroll_runs", blank=True, null=True)
+    earning_accounting_period = models.ForeignKey(AccountingPeriod, on_delete=models.PROTECT, related_name="earning_payroll_runs", blank=True, null=True)
+    payment_accounting_period = models.ForeignKey(AccountingPeriod, on_delete=models.PROTECT, related_name="payment_payroll_runs", blank=True, null=True)
+    period_mapping_snapshot = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=30, choices=PayrollRunStatus.choices, default=PayrollRunStatus.DRAFT)
     input_profile_ref = models.CharField(max_length=160, default="payroll.input.profile.default.v1")
     snapshot_schema_ref = models.CharField(max_length=160, default="payroll.input.snapshot.v1")
@@ -1690,6 +1928,11 @@ class PayrollRun(UUIDPrimaryKeyModel, TimeStampedModel):
         "pay_group_id",
         "code",
         "name",
+        "run_kind",
+        "fiscal_year_id",
+        "earning_accounting_period_id",
+        "payment_accounting_period_id",
+        "period_mapping_snapshot",
         "input_profile_ref",
         "snapshot_schema_ref",
         "locked_at",
@@ -1702,6 +1945,18 @@ class PayrollRun(UUIDPrimaryKeyModel, TimeStampedModel):
     class Meta:
         ordering = ["-period__start_date", "name"]
         unique_together = [("tenant", "code")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "period", "pay_group"],
+                condition=Q(run_kind=PayrollRunKind.REGULAR) & ~Q(status=PayrollRunStatus.CANCELLED) & Q(pay_group__isnull=False),
+                name="uniq_active_regular_run_group",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "period"],
+                condition=Q(run_kind=PayrollRunKind.REGULAR) & ~Q(status=PayrollRunStatus.CANCELLED) & Q(pay_group__isnull=True),
+                name="uniq_active_regular_run_no_group",
+            ),
+        ]
         verbose_name = "Payroll Run"
         verbose_name_plural = "Payroll Runs"
 
@@ -1713,6 +1968,10 @@ class PayrollRun(UUIDPrimaryKeyModel, TimeStampedModel):
             errors["pay_group"] = "Pay group must belong to the same tenant."
         if self.pay_group_id and self.period_id and self.pay_group.calendar_id != self.period.calendar_id:
             errors["pay_group"] = "Pay group must use the same calendar as the payroll period."
+        for field_name in ["fiscal_year", "earning_accounting_period", "payment_accounting_period"]:
+            period_value = getattr(self, field_name, None)
+            if period_value and period_value.tenant_id != self.tenant_id:
+                errors[field_name] = "Fiscal/accounting period must belong to the same tenant."
         if self.status in {PayrollRunStatus.INPUTS_LOCKED, PayrollRunStatus.CALCULATED, PayrollRunStatus.REVIEW, PayrollRunStatus.APPROVED, PayrollRunStatus.LOCKED} and not self.locked_at:
             errors["locked_at"] = "A locked or post-lock payroll run must have a lock timestamp."
         if self.status == PayrollRunStatus.LOCKED and not self.final_locked_at:
@@ -1749,6 +2008,13 @@ class PayrollInputSnapshot(UUIDPrimaryKeyModel, TimeStampedModel):
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_input_snapshots")
     payroll_run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE, related_name="input_snapshots")
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="payroll_input_snapshots")
+    attendance_close = models.ForeignKey(
+        "attendance.AttendancePeriodClose",
+        on_delete=models.PROTECT,
+        related_name="payroll_input_snapshots",
+        blank=True,
+        null=True,
+    )
     pay_group_assignment = models.ForeignKey(
         PayGroupAssignment,
         on_delete=models.SET_NULL,
@@ -1784,6 +2050,7 @@ class PayrollInputSnapshot(UUIDPrimaryKeyModel, TimeStampedModel):
     IMMUTABLE_FIELDS = [
         "payroll_run_id",
         "employee_id",
+        "attendance_close_id",
         "pay_group_assignment_id",
         "salary_assignment_id",
         "period_start",
@@ -1833,6 +2100,19 @@ class PayrollInputSnapshot(UUIDPrimaryKeyModel, TimeStampedModel):
             errors["payroll_run"] = "Payroll run must belong to the same tenant."
         if self.employee_id and self.tenant_id and self.employee.tenant_id != self.tenant_id:
             errors["employee"] = "Employee must belong to the same tenant."
+        if self.attendance_close_id:
+            close = self.attendance_close
+            current_close_status = type(close).objects.filter(pk=close.pk).values_list("status", flat=True).first()
+            if close.tenant_id != self.tenant_id:
+                errors["attendance_close"] = "Attendance close must belong to the same tenant."
+            elif self.employee_id and close.legal_entity_id != self.employee.legal_entity_id:
+                errors["attendance_close"] = "Attendance close must cover the employee legal entity."
+            elif self.period_start and self.period_end and (
+                close.period_start != self.period_start or close.period_end != self.period_end
+            ):
+                errors["attendance_close"] = "Attendance close must match the payroll input period."
+            elif current_close_status != "closed" and self.snapshot_status != PayrollInputSnapshotStatus.LOCKED:
+                errors["attendance_close"] = "Attendance close must remain closed until payroll inputs are locked."
         if self.pay_group_assignment_id and self.tenant_id and self.pay_group_assignment.tenant_id != self.tenant_id:
             errors["pay_group_assignment"] = "Pay group assignment must belong to the same tenant."
         if self.salary_assignment_id and self.tenant_id and self.salary_assignment.tenant_id != self.tenant_id:
@@ -2372,6 +2652,16 @@ class PayrollAdjustment(UUIDPrimaryKeyModel, TimeStampedModel):
     class Meta:
         ordering = ["-effective_date", "employee__employee_code", "component_code"]
         unique_together = [("payroll_run", "employee", "source_ref", "component_code")]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(submitted_by__isnull=True)
+                    | models.Q(approved_by__isnull=True)
+                    | ~models.Q(submitted_by=models.F("approved_by"))
+                ),
+                name="payroll_adjustment_maker_checker_distinct",
+            ),
+        ]
         verbose_name = "Payroll Adjustment"
         verbose_name_plural = "Payroll Adjustments"
 
@@ -2426,6 +2716,8 @@ class PayrollAdjustment(UUIDPrimaryKeyModel, TimeStampedModel):
             errors["submitted_at"] = "Submitted payroll adjustments must have a submission timestamp."
         if self.status in {PayrollAdjustmentStatus.APPROVED, PayrollAdjustmentStatus.APPLIED} and not self.approved_at:
             errors["approved_at"] = "Approved payroll adjustments must have an approval timestamp."
+        if self.submitted_by_id and self.approved_by_id and self.submitted_by_id == self.approved_by_id:
+            errors["approved_by"] = "Payroll adjustment approval requires a different authorized user from the submitter."
         if self.status == PayrollAdjustmentStatus.REJECTED and not self.rejected_at:
             errors["rejected_at"] = "Rejected payroll adjustments must have a rejection timestamp."
         if self.status == PayrollAdjustmentStatus.APPLIED and not self.applied_at:
@@ -2554,6 +2846,16 @@ class PayrollSettlement(UUIDPrimaryKeyModel, TimeStampedModel):
     class Meta:
         ordering = ["-settlement_date", "employee__employee_code"]
         unique_together = [("payroll_run", "employee", "source_ref")]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(submitted_by__isnull=True)
+                    | models.Q(approved_by__isnull=True)
+                    | ~models.Q(submitted_by=models.F("approved_by"))
+                ),
+                name="payroll_settlement_maker_checker_distinct",
+            ),
+        ]
         verbose_name = "Payroll Settlement"
         verbose_name_plural = "Payroll Settlements"
 
@@ -3551,6 +3853,9 @@ class PayrollFinanceHandoff(UUIDPrimaryKeyModel, TimeStampedModel):
     bank_file_profile_ref = models.CharField(max_length=160, default="payroll.bank_file.profile.default.v1")
     accounting_export_profile_ref = models.CharField(max_length=160, default="payroll.accounting_export.profile.default.v1")
     statutory_pack_ref = models.CharField(max_length=160, default="payroll.statutory_pack.default.v1")
+    posting_accounting_period = models.ForeignKey(AccountingPeriod, on_delete=models.PROTECT, related_name="payroll_finance_handoffs", blank=True, null=True)
+    posting_date = models.DateField(blank=True, null=True)
+    reversal_of = models.ForeignKey("self", on_delete=models.PROTECT, related_name="corrections", blank=True, null=True)
     generated_at = models.DateTimeField(blank=True, null=True)
     generated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -3588,6 +3893,9 @@ class PayrollFinanceHandoff(UUIDPrimaryKeyModel, TimeStampedModel):
         "bank_file_profile_ref",
         "accounting_export_profile_ref",
         "statutory_pack_ref",
+        "posting_accounting_period_id",
+        "posting_date",
+        "reversal_of_id",
         "generated_at",
         "generated_by_id",
         "transmitted_at",
@@ -3619,6 +3927,10 @@ class PayrollFinanceHandoff(UUIDPrimaryKeyModel, TimeStampedModel):
             errors["review"] = "Finance handoff must belong to the same review as the output batch."
         if self.output_batch_id and self.output_batch.status != PayrollOutputBatchStatus.PUBLISHED:
             errors["output_batch"] = "Finance handoff requires a published payroll output batch."
+        if self.posting_accounting_period_id and self.tenant_id and self.posting_accounting_period.tenant_id != self.tenant_id:
+            errors["posting_accounting_period"] = "Posting accounting period must belong to the same tenant."
+        if self.posting_accounting_period_id and self.posting_date and not (self.posting_accounting_period.start_date <= self.posting_date <= self.posting_accounting_period.end_date):
+            errors["posting_date"] = "Posting date must fall inside the selected accounting period."
         if self.status in {
             PayrollFinanceHandoffStatus.GENERATED,
             PayrollFinanceHandoffStatus.TRANSMITTED,

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { useMemo, useState } from "react";
 
 import type { HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun } from "@/lib/types";
@@ -178,8 +180,8 @@ export function PayrollInputExceptionsReportWorkspace({
             <p className="section-copy section-copy-soft">Prioritize blocked snapshots, warning inputs, lock state, and source-hash evidence before payroll close.</p>
           </div>
           <div className="report-command-panel__actions">
-            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
+            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
             <button className="button button--ghost" type="button" onClick={() => window.print()}>Print report</button>
           </div>
         </div>

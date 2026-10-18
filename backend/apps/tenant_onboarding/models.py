@@ -234,6 +234,13 @@ class TenantLaunchRun(UUIDPrimaryKeyModel, TimeStampedModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "run_type", "idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="uniq_tenant_launch_run_idempotency",
+            ),
+        ]
         indexes = [
             models.Index(fields=["tenant", "run_type", "status"]),
             models.Index(fields=["tenant", "blueprint_ref", "blueprint_version"]),

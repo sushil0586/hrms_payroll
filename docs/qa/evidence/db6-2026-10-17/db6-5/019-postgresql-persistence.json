@@ -1,0 +1,183 @@
+{
+  "tenant": "d04e1c48-2356-4d15-be28-270a9a689996",
+  "attendance_records": [
+    {
+      "id": "59435115-44b8-4978-896f-aae4659ba965",
+      "employee__employee_code": "QA-MGR-001",
+      "attendance_date": "2026-10-17",
+      "status": "unknown",
+      "is_locked": false,
+      "notes": ""
+    },
+    {
+      "id": "255bca0b-56e3-4da7-b415-7f8022da42ce",
+      "employee__employee_code": "QA-MGR-001",
+      "attendance_date": "2026-10-16",
+      "status": "unknown",
+      "is_locked": false,
+      "notes": ""
+    },
+    {
+      "id": "fafc2bc4-5bf8-422a-8581-c10ba1ef47bb",
+      "employee__employee_code": "QA-MGR-001",
+      "attendance_date": "2026-10-15",
+      "status": "unknown",
+      "is_locked": false,
+      "notes": ""
+    },
+    {
+      "id": "265f6a73-bc0d-4574-b3f0-766e7e9b2dbf",
+      "employee__employee_code": "QA-MGR-001",
+      "attendance_date": "2026-10-14",
+      "status": "unknown",
+      "is_locked": false,
+      "notes": ""
+    },
+    {
+      "id": "6ca50d95-f8ef-4974-b3d7-71cd041d083d",
+      "employee__employee_code": "QA-MGR-001",
+      "attendance_date": "2026-10-13",
+      "status": "unknown",
+      "is_locked": false,
+      "notes": ""
+    },
+    {
+      "id": "7ad61467-4241-405a-9508-fde1c67c3909",
+      "employee__employee_code": "QA-MGR-001",
+      "attendance_date": "2026-10-12",
+      "status": "unknown",
+      "is_locked": false,
+      "notes": ""
+    }
+  ],
+  "regularizations": [
+    {
+      "id": "bac9ccdc-1331-4a53-9ff1-53570c6df097",
+      "employee__employee_code": "QA-EMP-001",
+      "status": "rejected",
+      "requested_status": "late",
+      "manager_comment": ""
+    },
+    {
+      "id": "d8c9fa36-debd-4856-8294-380d060e18db",
+      "employee__employee_code": "QA-EMP-001",
+      "status": "approved",
+      "requested_status": "remote",
+      "manager_comment": "PW_REG_APPROVAL_1792234579940_APPROVED"
+    },
+    {
+      "id": "933d575d-fd3e-476b-a4d8-71dc5e9a3da2",
+      "employee__employee_code": "QA-EMP-001",
+      "status": "rejected",
+      "requested_status": "present",
+      "manager_comment": ""
+    }
+  ],
+  "shift_assignments": [
+    {
+      "id": "4f756899-f499-411c-97ee-e49379a5c38a",
+      "employee__employee_code": "QA-EMP-001",
+      "assignment_kind": "temporary_override",
+      "effective_from": "2028-01-08",
+      "effective_to": "2028-01-14"
+    }
+  ],
+  "roster_templates": [
+    {
+      "id": "88bd410d-75f3-4571-8bc5-6d953d3d7e03",
+      "code": "P3B3RTCAGAZO",
+      "status": "published",
+      "shift__code": "qa-day"
+    }
+  ],
+  "roster_rollouts": [],
+  "payroll_snapshots": [
+    {
+      "id": "4f30bb26-0b84-4e3c-b908-1372badba525",
+      "snapshot_status": "locked",
+      "locked_at": "2026-10-17 10:49:45.879621+00:00",
+      "attendance_snapshot": {}
+    }
+  ],
+  "audit_events": [
+    {
+      "event_type": "attendance_regularization_rejected",
+      "event_snapshot": {
+        "decision": "rejected",
+        "new_status": "rejected",
+        "employee_id": "3c6b5b6b-0ef5-4f09-8556-7c539a02fdbe",
+        "comment_present": true,
+        "previous_status": "pending",
+        "requested_status": "late",
+        "workflow_reference": "e25c9602-f3f9-4ce5-a810-fc48d95ae378",
+        "attendance_record_id": "246f3b6c-5ab8-4618-8089-e9d61528eaf6",
+        "attendance_regularization_id": "bac9ccdc-1331-4a53-9ff1-53570c6df097"
+      }
+    },
+    {
+      "event_type": "attendance_regularization_approved",
+      "event_snapshot": {
+        "decision": "approved",
+        "new_status": "approved",
+        "employee_id": "3c6b5b6b-0ef5-4f09-8556-7c539a02fdbe",
+        "comment_present": true,
+        "previous_status": "pending",
+        "requested_status": "remote",
+        "workflow_reference": "9737bea9-9ce9-4e7f-8812-d18c19773539",
+        "attendance_record_id": "246f3b6c-5ab8-4618-8089-e9d61528eaf6",
+        "attendance_regularization_id": "d8c9fa36-debd-4856-8294-380d060e18db"
+      }
+    },
+    {
+      "event_type": "attendance_regularization_rejected",
+      "event_snapshot": {
+        "decision": "rejected",
+        "new_status": "rejected",
+        "employee_id": "3c6b5b6b-0ef5-4f09-8556-7c539a02fdbe",
+        "comment_present": true,
+        "previous_status": "pending",
+        "requested_status": "present",
+        "workflow_reference": "",
+        "attendance_record_id": "978f56ce-7c88-40e5-bf4a-24e0fb2be78a",
+        "attendance_regularization_id": "933d575d-fd3e-476b-a4d8-71dc5e9a3da2"
+      }
+    },
+    {
+      "event_type": "attendance_record_updated",
+      "event_snapshot": {
+        "action": "updated",
+        "new_status": "present",
+        "permission": "attendance.records.manage",
+        "employee_id": "3c6b5b6b-0ef5-4f09-8556-7c539a02fdbe",
+        "changed_fields": [
+          "check_in_at",
+          "check_out_at",
+          "early_exit_minutes",
+          "is_locked",
+          "is_regularized",
+          "late_minutes",
+          "notes",
+          "overtime_hours",
+          "shift_id",
+          "source",
+          "status",
+          "work_duration_hours"
+        ],
+        "attendance_date": "2028-04-03",
+        "previous_status": "present",
+        "attendance_record_id": "246f3b6c-5ab8-4618-8089-e9d61528eaf6"
+      }
+    },
+    {
+      "event_type": "attendance_record_created",
+      "event_snapshot": {
+        "action": "created",
+        "status": "present",
+        "permission": "attendance.records.manage",
+        "employee_id": "3c6b5b6b-0ef5-4f09-8556-7c539a02fdbe",
+        "attendance_date": "2028-04-03",
+        "attendance_record_id": "246f3b6c-5ab8-4618-8089-e9d61528eaf6"
+      }
+    }
+  ]
+}

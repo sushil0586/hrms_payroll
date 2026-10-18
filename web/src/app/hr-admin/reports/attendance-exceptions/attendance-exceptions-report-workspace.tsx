@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { useMemo, useState } from "react";
 
 import type { AttendanceRegularizationItem } from "@/lib/types";
@@ -199,8 +201,8 @@ export function AttendanceExceptionsReportWorkspace({ items }: { items: Attendan
             <p className="section-copy section-copy-soft">Prioritize high-risk correction requests, export the evidence pack, or print the current review queue for operations sign-off.</p>
           </div>
           <div className="report-command-panel__actions">
-            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
+            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
             <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
           </div>
         </div>

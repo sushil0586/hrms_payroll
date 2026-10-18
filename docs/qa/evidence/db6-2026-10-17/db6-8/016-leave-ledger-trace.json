@@ -1,0 +1,22 @@
+{
+  "request": {
+    "id": "585a51db-5b11-4f95-9bcb-bdd1bc632863",
+    "leave_policy_id": "0abe6c61-3794-422e-bfa6-2a1d71eaee81",
+    "start_date": "2026-12-16",
+    "end_date": "2026-12-16",
+    "requested_units": "1.00",
+    "status": "approved"
+  },
+  "balance": {
+    "id": "ae3cea5b-9da9-4d97-8e79-2e08b9694b13",
+    "policy_period_id": "None",
+    "opening_balance": "12.00",
+    "accrued_balance": "None",
+    "adjusted_balance": "None",
+    "used_balance": "None",
+    "reserved_balance": "None",
+    "closing_balance": "23.00"
+  },
+  "transactions": [],
+  "allocations": []
+}

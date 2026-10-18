@@ -93,7 +93,12 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
       </section>
 
       <section className="section">
-        <form className="platform-permission-filters" method="get">
+        <form
+          className="platform-permission-filters"
+          data-async-region
+          key={`${query}:${assignableFilter}:${riskFilter}`}
+          method="get"
+        >
           <label className="form-field">
             <span className="muted">Search</span>
             <input className="input-control" name="q" placeholder="Permission key, label, module, role" defaultValue={query} />

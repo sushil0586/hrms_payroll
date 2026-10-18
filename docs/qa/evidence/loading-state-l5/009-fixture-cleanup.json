@@ -1,0 +1,13 @@
+{
+  "cleanup_a": {
+    "tenant_code": "pw-qa-l5-job-isolation-a",
+    "deleted": true,
+    "verified_absent": true
+  },
+  "cleanup_b": {
+    "tenant_code": "pw-qa-l5-job-isolation-b",
+    "deleted": true,
+    "verified_absent": true
+  },
+  "remaining_tenants": []
+}

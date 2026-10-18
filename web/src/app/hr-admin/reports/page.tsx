@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ActionMenu } from "@/components/patterns/action-menu";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDashboard } from "@/lib/api";
 import { reportCatalog } from "@/lib/report-catalog";
@@ -105,9 +106,7 @@ export default async function HrAdminReportsPage() {
               <Link className="button button--secondary" href="/hr-admin/import-history">
                 Import history
               </Link>
-              <Link className="button button--primary" href="/api/hr-admin/reports/workforce" prefetch={false}>
-                Workforce CSV
-              </Link>
+              <AsyncDownloadButton className="button button--primary" href="/api/hr-admin/reports/workforce" fileName="workforce-report.csv">Workforce CSV</AsyncDownloadButton>
               <Link className="button button--secondary" href="/hr-admin/audit">
                 Open audit center
               </Link>

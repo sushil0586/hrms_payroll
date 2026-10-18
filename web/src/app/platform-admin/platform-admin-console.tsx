@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -23,6 +24,7 @@ import { PlatformLaunchWorkspace } from "./platform-launch-workspace";
 
 type Props = {
   initialPanel: PlatformPanel;
+  initialMessage?: string;
   leads: PlatformPublicLead[];
   tenants: PlatformTenantListItem[];
   selectedTenant: PlatformTenantListItem | null;
@@ -506,7 +508,7 @@ function paginate<T>(items: T[], page: number) {
   };
 }
 
-function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string) {
+function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string, feedback?: string) {
   const panelPaths: Record<PlatformPanel, string> = {
     control: "/platform-admin",
     leads: "/platform-admin/leads",
@@ -519,6 +521,7 @@ function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string) {
   };
   const params = new URLSearchParams();
   if (selectedTenantId) params.set("tenantId", selectedTenantId);
+  if (feedback) params.set("feedback", feedback);
   const query = params.toString();
   return query ? `${panelPaths[panel]}?${query}` : panelPaths[panel];
 }
@@ -544,12 +547,12 @@ function leadDomainSuggestion(lead: PlatformPublicLead) {
   return "";
 }
 
-export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTenant, onboarding, policyPacks, summary }: Props) {
+export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads, tenants, selectedTenant, onboarding, policyPacks, summary }: Props) {
   const router = useRouter();
   const createTenantFirstFieldRef = useRef<HTMLInputElement>(null);
   const addContactFirstFieldRef = useRef<HTMLInputElement>(null);
   const [busyRef, setBusyRef] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialMessage);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [generatedPassword, setGeneratedPassword] = useState("");
@@ -875,7 +878,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         "Tenant created.",
       );
       setShowCreateTenantModal(false);
-      router.push(buildPanelHref("onboarding", payload.id));
+      router.push(buildPanelHref("onboarding", payload.id, "tenant-created"));
     } catch (nextError) {
       setError(actionErrorMessage(nextError, "Tenant creation failed. Check your connection and try again."));
     }
@@ -1485,6 +1488,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         pills={panelPills[initialPanel]}
         showPills
       />
+      {busyRef ? (
+        <div className="form-status platform-admin-mutation-status" role="status" aria-live="polite" aria-atomic="true">
+          <span className="async-action-button__spinner" aria-hidden="true" />
+          <span>Saving the platform change. Controls will return when the server confirms it.</span>
+        </div>
+      ) : null}
 
       {initialPanel === "control" ? (
         <section className="section platform-control-metrics">
@@ -2857,9 +2866,9 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <label className="form-field"><span className="muted">Sandbox</span><input aria-label="Sandbox" name="is_sandbox" type="checkbox" defaultChecked /></label>
               <div className="tenant-modal__actions form-field--full">
                 <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Cancel</button>
-                <button className="button button--primary button--pending-stable" disabled={Boolean(busyRef)} type="submit">
-                  {busyRef === "/api/platform/tenants" ? "Creating..." : "Create tenant"}
-                </button>
+                <AsyncActionButton className="button button--primary button--pending-stable" disabled={Boolean(busyRef)} pending={busyRef === "/api/platform/tenants"} pendingLabel="Creating tenant" type="submit">
+                  Create tenant
+                </AsyncActionButton>
               </div>
             </form>
           </div>

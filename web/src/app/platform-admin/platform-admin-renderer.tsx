@@ -188,6 +188,7 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
   return (
     <PlatformAdminConsole
       initialPanel={panel}
+      initialMessage={normalizeParam(params.feedback) === "tenant-created" ? "Tenant created." : ""}
       leads={safeLeads}
       onboarding={(onboardingResult?.data && "tenant_id" in onboardingResult.data ? onboardingResult.data : fallbackOnboarding())}
       policyPacks={safePolicyPacks}

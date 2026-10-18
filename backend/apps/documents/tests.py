@@ -1,14 +1,19 @@
 from datetime import date, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.common.api_views import (
+    _get_employee_document_expiry_runtime,
     _send_document_expiry_attention_reminder,
     create_self_service_employee_document,
     save_hr_admin_employee_document,
 )
-from apps.documents.models import DocumentCategory, DocumentVerificationLog, EmployeeDocumentStatus, VerificationStatus
+from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentVerificationLog, EmployeeDocument, EmployeeDocumentStatus, VerificationStatus
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
 from apps.notifications.models import Notification
@@ -223,6 +228,69 @@ class EmployeeDocumentWorkflowTests(TestCase):
         ).latest("created_at")
         self.assertEqual(notification.payload["expiry_state"], "expiring_soon")
         self.assertEqual(notification.payload["reminder_source"], "test")
+
+    def test_expiry_attention_reminder_is_idempotent_per_document_state_and_day(self):
+        expiring_category = DocumentCategory.objects.create(
+            tenant=self.tenant,
+            code="passport-idempotent",
+            name="Passport Idempotent",
+            requires_expiry_date=True,
+            requires_verification=True,
+            allow_employee_upload=True,
+        )
+        document = create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": expiring_category.id,
+                "title": "Passport",
+                "file": _upload(),
+                "document_number": "P1234567",
+                "issued_on": date(2020, 1, 1),
+                "expires_on": timezone.localdate() + timedelta(days=10),
+            },
+        )
+
+        self.assertTrue(_send_document_expiry_attention_reminder(document=document, reminder_source="system_scan"))
+        self.assertFalse(_send_document_expiry_attention_reminder(document=document, reminder_source="system_scan_retry"))
+        reminders = Notification.objects.filter(
+            tenant=self.tenant,
+            subject_type="employee_document",
+            subject_identifier=str(document.id),
+            payload__reminder_key__isnull=False,
+        )
+        self.assertEqual(reminders.count(), 1)
+
+    def test_expiry_runtime_has_deterministic_day_boundaries(self):
+        document = EmployeeDocument(expires_on=date(2026, 10, 18))
+
+        expired = _get_employee_document_expiry_runtime(document, today=date(2026, 10, 19))
+        due_today = _get_employee_document_expiry_runtime(document, today=date(2026, 10, 18))
+        day_30 = _get_employee_document_expiry_runtime(document, today=date(2026, 9, 18))
+        day_31 = _get_employee_document_expiry_runtime(document, today=date(2026, 9, 17))
+
+        self.assertEqual((expired["state"], expired["days_until_expiry"]), ("expired", -1))
+        self.assertEqual((due_today["state"], due_today["days_until_expiry"]), ("expiring_soon", 0))
+        self.assertEqual((day_30["state"], day_30["days_until_expiry"]), ("expiring_soon", 30))
+        self.assertEqual((day_31["state"], day_31["days_until_expiry"]), ("valid", 31))
+
+    def test_storage_file_is_removed_when_document_row_creation_fails(self):
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            with patch.object(EmployeeDocument.objects, "create", side_effect=RuntimeError("document row failure")):
+                with self.assertRaisesMessage(RuntimeError, "document row failure"):
+                    create_self_service_employee_document(
+                        self.employee,
+                        {
+                            "category_id": self.category.id,
+                            "title": "Failed upload",
+                            "file": _upload(name="failed.pdf", content=b"failed-content"),
+                            "document_number": "FAILED-1",
+                            "issued_on": None,
+                            "expires_on": None,
+                        },
+                    )
+
+            self.assertFalse(DocumentArtifact.objects.filter(tenant=self.tenant, original_filename="failed.pdf").exists())
+            self.assertEqual([path for path in Path(media_root).rglob("*") if path.is_file()], [])
 
     def test_expiry_date_is_required_when_category_demands_it(self):
         expiring_category = DocumentCategory.objects.create(

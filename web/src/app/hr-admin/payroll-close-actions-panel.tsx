@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 type PayrollAction = {
   id: string;
@@ -56,6 +57,10 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Record<string, PayrollJob>>({});
+  const [pollFailures, setPollFailures] = useState<Record<string, number>>({});
+  const pollFailureCountsRef = useRef<Record<string, number>>({});
+  const [pollBlocked, setPollBlocked] = useState<Record<string, string>>({});
+  const [lastJobUpdate, setLastJobUpdate] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -82,19 +87,46 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
   }, [actions]);
 
   useEffect(() => {
-    const active = actions.filter((action) => ["queued", "running"].includes(jobs[action.id]?.status ?? ""));
+    const active = actions.filter((action) =>
+      ["queued", "running"].includes(jobs[action.id]?.status ?? "") && !pollBlocked[action.id],
+    );
     if (!active.length) return;
     let disposed = false;
+    const controllers = new Map<string, AbortController>();
+    let timer: number | undefined;
     const poll = async () => {
       await Promise.all(active.map(async (action) => {
         const current = jobs[action.id];
         if (!current) return;
-        const response = await fetch(`/api/hr-admin/payroll-jobs/${current.id}`, { cache: "no-store" }).catch(() => null);
-        if (!response?.ok) return;
+        const controller = new AbortController();
+        controllers.set(action.id, controller);
+        const response = await fetch(`/api/hr-admin/payroll-jobs/${current.id}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        }).catch(() => null);
+        if (disposed || controller.signal.aborted) return;
+        if (!response?.ok) {
+          if (response && [401, 403, 404].includes(response.status)) {
+            const inaccessible = response.status === 404
+              ? "Payroll job status is no longer available."
+              : "Permission to read this payroll job is no longer available.";
+            setPollBlocked((value) => ({ ...value, [action.id]: inaccessible }));
+            return;
+          }
+          const nextFailureCount = (pollFailureCountsRef.current[action.id] ?? 0) + 1;
+          pollFailureCountsRef.current[action.id] = nextFailureCount;
+          setPollFailures((value) => ({ ...value, [action.id]: nextFailureCount }));
+          return;
+        }
         const payload = await response.json() as { job?: PayrollJob };
         if (!payload.job || disposed) return;
+        pollFailureCountsRef.current[action.id] = 0;
+        setPollFailures((value) => value[action.id] ? { ...value, [action.id]: 0 } : value);
+        setLastJobUpdate((value) => ({ ...value, [action.id]: new Date().toISOString() }));
         window.localStorage.setItem(`payroll-job:${action.endpoint}`, JSON.stringify(payload.job));
-        setJobs((value) => ({ ...value, [action.id]: payload.job! }));
+        setJobs((value) => JSON.stringify(value[action.id]) === JSON.stringify(payload.job)
+          ? value
+          : { ...value, [action.id]: payload.job! });
         if (payload.job.status === "succeeded") {
           setError("");
           setMessage(`${action.label} completed.`);
@@ -104,17 +136,27 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
           setError(payload.job.error?.message || `${action.label} failed.`);
         }
       }));
+      if (!disposed) {
+        const maximumFailures = Math.max(0, ...active.map((action) => pollFailureCountsRef.current[action.id] ?? 0));
+        const delay = Math.min(12_000, 1_500 * (2 ** Math.min(maximumFailures, 3)));
+        timer = window.setTimeout(() => void poll(), delay);
+      }
     };
-    const timer = window.setInterval(() => void poll(), 1500);
+    void poll();
     return () => {
       disposed = true;
-      window.clearInterval(timer);
+      if (timer) window.clearTimeout(timer);
+      controllers.forEach((controller) => controller.abort());
     };
-  }, [actions, jobs, router]);
+  }, [actions, jobs, pollBlocked, router]);
 
   async function retryJob(action: PayrollAction, job: PayrollJob) {
+    if (busyAction) return;
     setBusyAction(action.id);
     setError("");
+    setPollBlocked((value) => ({ ...value, [action.id]: "" }));
+    pollFailureCountsRef.current[action.id] = 0;
+    setPollFailures((value) => ({ ...value, [action.id]: 0 }));
     try {
       const response = await fetch(`/api/hr-admin/payroll-jobs/${job.id}/retry`, { method: "POST" });
       const payload = await response.json().catch(() => ({})) as ActionResult;
@@ -130,6 +172,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
   }
 
   async function runAction(action: PayrollAction) {
+    if (busyAction) return;
     if (action.disabled || !action.endpoint) {
       setMessage("");
       setError(action.disabledReason || "This action is not available for your current role.");
@@ -171,8 +214,11 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
       if (action.background && payload.job) {
         window.localStorage.setItem(`payroll-job:${action.endpoint}`, JSON.stringify(payload.job));
         setJobs((value) => ({ ...value, [action.id]: payload.job! }));
+        setPollBlocked((value) => ({ ...value, [action.id]: "" }));
+        pollFailureCountsRef.current[action.id] = 0;
+        setPollFailures((value) => ({ ...value, [action.id]: 0 }));
       }
-      setMessage(payload.detail || `${action.label} completed.`);
+      setMessage(payload.detail || (payload.job ? `${action.label} accepted and queued.` : `${action.label} completed.`));
       if (!payload.job || payload.job.status === "succeeded") router.refresh();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Payroll action failed.");
@@ -239,18 +285,27 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                   {fieldErrors[`${action.id}:comment`] ? <span className="field-error-text" role="alert">{fieldErrors[`${action.id}:comment`]}</span> : null}
                 </label>
               ) : null}
-              <button
+              <AsyncActionButton
                 className="button button--primary"
                 disabled={isDisabled}
                 onClick={() => runAction(action)}
+                pending={busyAction === action.id || isJobActive}
+                pendingLabel={isJobActive ? (job.status === "queued" ? "Queued" : "Processing") : "Starting"}
                 type="button"
               >
-                {busyAction === action.id || isJobActive ? "Working..." : action.label}
-              </button>
+                {action.label}
+              </AsyncActionButton>
               {job ? (
                 <div className="form-status" role={job.status === "failed" ? "alert" : "status"} aria-live="polite">
                   <strong>{job.status === "queued" ? "Queued" : job.status === "running" ? "Processing" : job.status === "succeeded" ? "Completed" : "Failed"}</strong>
                   <span>{job.stage.replaceAll("_", " ")}</span>
+                  {pollBlocked[action.id] ? (
+                    <span role="alert">{pollBlocked[action.id]}</span>
+                  ) : pollFailures[action.id] ? (
+                    <span>Reconnecting to payroll job status. The job state shown may be delayed.</span>
+                  ) : lastJobUpdate[action.id] ? (
+                    <span>Job status updated {new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(lastJobUpdate[action.id]))}</span>
+                  ) : null}
                   {job.total_items > 0 ? <span>{job.completed_items} of {job.total_items} items completed</span> : null}
                   {job.status === "failed" && job.retryable ? (
                     <button className="button button--secondary" disabled={Boolean(busyAction)} onClick={() => retryJob(action, job)} type="button">

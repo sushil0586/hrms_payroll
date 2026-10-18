@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { FormSection } from "@/components/patterns/form-section";
 import type {
   HrAdminAttendancePolicyAssignmentConflictCheck,
@@ -67,6 +68,8 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminAttendancePolicyAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const [conflictError, setConflictError] = useState("");
+  const [conflictRetry, setConflictRetry] = useState(0);
   const submittingRef = useRef(false);
   const hasEmployeeOverride = Boolean(formValue.employee_id);
   const selectedBranch = options.branches.find((item) => item.id === formValue.branch_id);
@@ -88,6 +91,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
 
   function update<Key extends keyof HrAdminAttendancePolicyAssignmentWriteInput>(key: Key, value: HrAdminAttendancePolicyAssignmentWriteInput[Key]) {
     setConflictCheck(null);
+    setConflictError("");
     setIsCheckingConflicts(false);
     setFieldErrors((current) => ({ ...current, [key as AttendancePolicyAssignmentField]: undefined }));
     setFormValue((current) => {
@@ -125,8 +129,10 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
       return;
     }
 
+    const controller = new AbortController();
     const timeoutId = window.setTimeout(async () => {
       setIsCheckingConflicts(true);
+      setConflictError("");
       try {
         const response = await fetch("/api/hr-admin/attendance-policy-assignments/conflicts", {
           method: "POST",
@@ -135,24 +141,29 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
             ...formValue,
             item_id: itemId ?? null,
           }),
+          signal: controller.signal,
         });
         const payload = (await response.json().catch(() => null)) as HrAdminAttendancePolicyAssignmentConflictCheck | null;
         if (!response.ok || !payload) {
           setConflictCheck(null);
+          setConflictError("Unable to check overlapping attendance assignments.");
           return;
         }
         setConflictCheck(payload);
-      } catch {
+      } catch (requestError) {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
         setConflictCheck(null);
+        setConflictError("Unable to check overlapping attendance assignments.");
       } finally {
-        setIsCheckingConflicts(false);
+        if (!controller.signal.aborted) setIsCheckingConflicts(false);
       }
     }, 250);
 
     return () => {
       window.clearTimeout(timeoutId);
+      controller.abort();
     };
-  }, [formValue, itemId]);
+  }, [conflictRetry, formValue, itemId]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -241,15 +252,18 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
                 onChange={(value) => update("employee_id", value || null)}
               />
               <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
+              <label className="form-field"><span className="muted">Effective from</span><input className="input-control" type="date" value={formValue.effective_from ?? ""} onChange={(e) => update("effective_from", e.target.value || null)} /><FieldHint>Leave blank only for an explicitly classified legacy assignment.</FieldHint></label>
+              <label className="form-field"><span className="muted">Effective to</span><input className="input-control" min={formValue.effective_from ?? undefined} type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} /></label>
             </div>
             {formValue.is_active ? (
-              <div className="notice">
-                <strong>{conflictCheck ? (conflictCheck.has_blocking_conflict ? "Blocking overlap detected." : conflictCheck.has_conflicts ? "Active overlap review." : "Assignment governance check.") : "Checking overlap impact..."}</strong>
+              <div aria-busy={isCheckingConflicts} aria-live="polite" className="notice" role="status">
+                <strong>{conflictError ? "Overlap check unavailable." : conflictCheck ? (conflictCheck.has_blocking_conflict ? "Blocking overlap detected." : conflictCheck.has_conflicts ? "Active overlap review." : "Assignment governance check.") : "Checking overlap impact..."}</strong>
                 <span className="muted">
-                  {isCheckingConflicts && !conflictCheck
+                  {conflictError || (isCheckingConflicts && !conflictCheck
                     ? "Reviewing active attendance assignments for overlapping scope."
-                    : conflictCheck?.summary ?? "This panel will show whether the current scope overlaps with active attendance assignments."}
+                    : conflictCheck?.summary ?? "This panel will show whether the current scope overlaps with active attendance assignments.")}
                 </span>
+                {conflictError ? <button className="button button--secondary button--compact" onClick={() => setConflictRetry((value) => value + 1)} type="button">Retry overlap check</button> : null}
               </div>
             ) : (
               <div className="notice">
@@ -302,7 +316,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
         <div className="form-actions-bar">
           <span className="muted">Assignment changes apply to the rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}</button>
+            <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Saving attendance policy assignment" type="submit">{mode === "create" ? "Create assignment" : "Save changes"}</AsyncActionButton>
             <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>

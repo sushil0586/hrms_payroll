@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
-import type { HrAdminAttendanceRecord, HrAdminAttendanceRecordWriteInput, HrAdminEmployeeOptionSearchResponse, HrAdminEnumOption, HrAdminOptionItem } from "@/lib/types";
+import { submitImportRequest } from "@/lib/ui/import-request";
+import { useLatestEmployeeCodeResolution } from "@/lib/ui/use-latest-employee-code-resolution";
+import type { HrAdminAttendanceRecord, HrAdminAttendanceRecordWriteInput, HrAdminEnumOption, HrAdminOptionItem } from "@/lib/types";
 
 type Props = {
   records: HrAdminAttendanceRecord[];
@@ -193,50 +196,12 @@ function sampleCsv(records: HrAdminAttendanceRecord[], shifts: HrAdminOptionItem
   return `${headers.join(",")}\n${rows.map((row) => row.join(",")).join("\n")}`;
 }
 
-async function resolveEmployeesByCode(employeeCodes: string[]) {
-  const normalizedCodes = Array.from(new Set(employeeCodes.map(normalize).filter(Boolean)));
-  const prefix = normalizedCodes.reduce((left, right) => {
-    let index = 0;
-    while (index < left.length && left[index] === right[index]) index += 1;
-    return left.slice(0, index);
-  }, normalizedCodes[0] ?? "");
-  const employeesByCode = new Map<string, HrAdminOptionItem>();
-  if (prefix.length >= 3) {
-    try {
-      const params = new URLSearchParams({ q: prefix, limit: "250" });
-      const response = await fetch(`/api/hr-admin/employees/option-search?${params.toString()}`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as HrAdminEmployeeOptionSearchResponse | { detail?: string } | null;
-      if (response.ok && payload && "items" in payload) {
-        for (const item of payload.items) employeesByCode.set(normalize(item.employee_code ?? item.name), item);
-      }
-    } catch {
-      // Fall back to exact code lookups below.
-    }
-  }
-  const unresolvedCodes = normalizedCodes.filter((employeeCode) => !employeesByCode.has(employeeCode));
-  const entries = await Promise.all(unresolvedCodes.map(async (employeeCode) => {
-    try {
-      const params = new URLSearchParams({ q: employeeCode, limit: "10" });
-      const response = await fetch(`/api/hr-admin/employees/option-search?${params.toString()}`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as HrAdminEmployeeOptionSearchResponse | { detail?: string } | null;
-      if (!response.ok || !payload || !("items" in payload)) return null;
-      const exactMatch = payload.items.find((item) => normalize(item.employee_code ?? item.name) === employeeCode);
-      return [employeeCode, exactMatch ?? payload.items[0] ?? null] as const;
-    } catch {
-      return null;
-    }
-  }));
-
-  entries.forEach((entry) => {
-    if (entry?.[1]) employeesByCode.set(entry[0], entry[1]);
-  });
-  return employeesByCode;
-}
-
 export function AttendanceRecordImportWorkbench({ records, employees = [], shifts, statusOptions, sourceOptions, canManageRecords = true }: Props) {
+  const resolveLatestEmployeesByCode = useLatestEmployeeCodeResolution();
   const [csvText, setCsvText] = useState(templateCsv());
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [message, setMessage] = useState("");
+  const [lookupFailed, setLookupFailed] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const shiftsByName = useMemo(() => new Map(shifts.map((shift) => [normalize(shift.name), shift])), [shifts]);
@@ -245,6 +210,7 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
   const existingKeys = useMemo(() => new Set(records.map((record) => `${normalize(record.employee_code)}|${record.attendance_date}`)), [records]);
   const readyCount = rows.filter((row) => row.status === "ready").length;
   const createdCount = rows.filter((row) => row.status === "created").length;
+  const hasFailedRows = rows.some((row) => row.status === "failed");
 
   async function preview() {
     const parsed = parseCsv(csvText);
@@ -254,11 +220,24 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
       return;
     }
     setIsPreviewing(true);
+    setLookupFailed(false);
     setMessage("Resolving employee codes for preview...");
     const employeeCodes = Array.from(new Set(parsed.rows.map((row) => normalize(row.employee_code)).filter(Boolean)));
     const seededEmployeesByCode = new Map(employees.map((employee) => [normalize(employee.employee_code ?? employee.name), employee]));
     const missingEmployeeCodes = employeeCodes.filter((employeeCode) => !seededEmployeesByCode.has(employeeCode));
-    const resolvedEmployeesByCode = missingEmployeeCodes.length ? await resolveEmployeesByCode(missingEmployeeCodes) : new Map<string, HrAdminOptionItem>();
+    let resolvedEmployeesByCode: Map<string, HrAdminOptionItem> | null;
+    try {
+      resolvedEmployeesByCode = missingEmployeeCodes.length ? await resolveLatestEmployeesByCode(missingEmployeeCodes) : new Map<string, HrAdminOptionItem>();
+    } catch {
+      setIsPreviewing(false);
+      setLookupFailed(true);
+      setMessage("Employee lookup failed. Check your connection and preview the CSV again.");
+      return;
+    }
+    if (!resolvedEmployeesByCode) {
+      setIsPreviewing(false);
+      return;
+    }
     const employeesByCode = new Map([...seededEmployeesByCode, ...resolvedEmployeesByCode]);
     const batchKeys = new Set<string>();
     const nextRows = parsed.rows.map((row, index) => {
@@ -289,6 +268,7 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
   }
 
   async function commitReadyRows() {
+    if (isCommitting) return;
     if (!canManageRecords) {
       setMessage("You need attendance record management permission to commit imports.");
       return;
@@ -301,12 +281,12 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
       const results = await Promise.all(indexes.map(async (index) => {
         const row = nextRows[index];
         if (!row.payload) return { index, ok: false, message: "Attendance payload is missing." };
-        const response = await fetch("/api/hr-admin/attendance-records", {
+        const response = await submitImportRequest("/api/hr-admin/attendance-records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(row.payload),
         });
-        const payload = await response.json().catch(() => ({}));
+        const payload = response.payload;
         return {
           index,
           ok: response.ok,
@@ -323,7 +303,9 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
       setRows([...nextRows]);
     }
     setIsCommitting(false);
-    setMessage("Commit complete. Open Time to Payroll to verify attendance exceptions.");
+    setMessage(nextRows.some((row) => row.status === "failed")
+      ? "Some attendance rows failed. Review the row messages, then preview the preserved CSV again."
+      : "Commit complete. Open Time to Payroll to verify attendance exceptions.");
     await recordImportBatchAudit({
       import_type: "attendance_records",
       status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
@@ -375,13 +357,11 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
                 }}
               />
             </label>
-            <button className="button button--primary" type="button" disabled={isPreviewing || isCommitting} onClick={preview}>{isPreviewing ? "Previewing..." : "Preview attendance import"}</button>
-            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting || isPreviewing} onClick={commitReadyRows}>
-              {isCommitting ? "Committing..." : "Commit ready attendance rows"}
-            </button>
+            <AsyncActionButton className="button button--primary" type="button" disabled={isCommitting} pending={isPreviewing} pendingLabel="Resolving employee codes" onClick={preview}>Preview attendance import</AsyncActionButton>
+            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount || isPreviewing} pending={isCommitting} pendingLabel="Committing attendance rows" onClick={commitReadyRows}>Commit ready attendance rows</AsyncActionButton>
           </div>
         </div>
-        {message ? <div className="notice notice--success" role="status"><strong>Attendance import update completed.</strong><span>{message}</span></div> : null}
+        {message ? <div className={`notice${hasFailedRows || lookupFailed ? " notice--error" : " notice--success"}`} role={hasFailedRows || lookupFailed ? "alert" : "status"}><strong>{hasFailedRows || lookupFailed ? "Attendance import needs attention." : "Attendance import update completed."}</strong><span>{message}</span></div> : null}
         {!canManageRecords ? <div className="notice"><strong>Read-only attendance view.</strong><span>Imports can be previewed, but committing rows requires attendance record management permission.</span></div> : null}
         {rows.length ? (
           <div className="table-scroll">

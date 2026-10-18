@@ -1,0 +1,158 @@
+{
+  "run": {
+    "id": "d7071c41-d712-4cbc-a34e-c2f401fa597c",
+    "code": "DB610_1792248003643",
+    "status": "locked",
+    "tenant_id": "bd958cf9-455f-42ef-b51f-0812f987e371"
+  },
+  "batch": {
+    "id": "76c8f889-98cb-42a7-ae51-df7db9ec9dc4",
+    "status": "published",
+    "published_at": "2026-10-17T14:41:07.758387+00:00",
+    "totals": {
+      "net_pay": "50000.00",
+      "line_count": 1,
+      "error_count": 0,
+      "employee_count": 1,
+      "gross_earnings": "50000.00",
+      "employee_deductions": "0.00",
+      "employer_contributions": "0.00"
+    },
+    "reconciliation": {
+      "status": "passed",
+      "mismatches": [],
+      "payslip_count": 1,
+      "checked_fields": [
+        "gross_earnings",
+        "employee_deductions",
+        "employer_contributions",
+        "net_pay"
+      ],
+      "mismatch_count": 0,
+      "register_row_count": 1,
+      "matched_employee_count": 1,
+      "missing_register_row_count": 0
+    }
+  },
+  "artifacts": [
+    {
+      "id": "90a4c2d7-a2e3-47f2-90c8-a112779d1f4b",
+      "kind": "accounting_export",
+      "status": "generated",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 454,
+      "checksum_sha256": "3787a65d4e90d3354aa646f8e592d3277e60e5cfb0bfcf7f40454913a9cc03c5",
+      "totals_snapshot": {
+        "net_pay": "50000.00",
+        "employee_count": 1,
+        "gross_earnings": "50000.00",
+        "employee_deductions": "0.00"
+      }
+    },
+    {
+      "id": "a27512a6-00a6-4d56-952e-7172bf5c9e6f",
+      "kind": "bank_advice",
+      "status": "generated",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 243,
+      "checksum_sha256": "099dccfca276b3153d7a0e73cb4c042535e2a406a54b3ac147bcd32365937bb9",
+      "totals_snapshot": {
+        "net_pay": "50000.00",
+        "employee_count": 1
+      }
+    },
+    {
+      "id": "88fd1ce7-e89f-4d12-a180-6cd5bee9bedc",
+      "kind": "payslip",
+      "status": "published",
+      "employee_id": "01409bb4-c8d7-410b-9ca0-c06d702affb9",
+      "is_downloadable": true,
+      "file_size_bytes": 926,
+      "checksum_sha256": "bc499d72deaa718bd45a8909dfbf7f5db337b555bc39fb756c11dfe95fb74387",
+      "totals_snapshot": {
+        "net_pay": "50000.00",
+        "gross_earnings": "50000.00",
+        "employee_deductions": "0.00",
+        "employer_contributions": "0.00"
+      }
+    },
+    {
+      "id": "f26a8414-2775-490d-8148-4d6361b1c679",
+      "kind": "register",
+      "status": "published",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 343,
+      "checksum_sha256": "fc7d62dfb3427c24cb00b2bc1e801a6637cad5410c25798a137233a9b492e1ff",
+      "totals_snapshot": {
+        "net_pay": "50000.00",
+        "line_count": 1,
+        "error_count": 0,
+        "employee_count": 1,
+        "gross_earnings": "50000.00",
+        "employee_deductions": "0.00",
+        "employer_contributions": "0.00"
+      }
+    },
+    {
+      "id": "9d25a539-26a7-44c3-b213-3f7b743f0929",
+      "kind": "statutory_report",
+      "status": "generated",
+      "employee_id": null,
+      "is_downloadable": true,
+      "file_size_bytes": 0,
+      "checksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "totals_snapshot": {
+        "line_count": 0,
+        "statutory_total": "0.00"
+      }
+    }
+  ],
+  "handoff": {
+    "id": "256848ea-902d-45fd-9619-173aef121c74",
+    "status": "generated",
+    "posting_date": "",
+    "accounting_period_id": "",
+    "totals": {
+      "net_pay": "50000.00",
+      "employee_count": 1,
+      "gross_earnings": "50000.00",
+      "statutory_total": "0.00",
+      "bank_advice_total": "50000.00",
+      "employee_deductions": "0.00"
+    }
+  },
+  "totals_reconciled": false,
+  "jobs": [
+    {
+      "id": "19f22a90-10d7-4de3-b66b-20ba0281824b",
+      "operation": "calculate",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:40:27.911487+00:00"
+    },
+    {
+      "id": "ed15e445-e67a-4ba9-b40c-a193b9fd17b9",
+      "operation": "generate_outputs",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:40:57.971673+00:00"
+    },
+    {
+      "id": "47b2fc2b-a210-4ced-b5fc-1bcf6a912dc7",
+      "operation": "publish_outputs",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:41:08.123013+00:00"
+    },
+    {
+      "id": "38bcecc7-6b58-482b-b1a2-20b6b8d8df77",
+      "operation": "generate_finance_handoff",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "completed_at": "2026-10-17 14:41:13.715477+00:00"
+    }
+  ]
+}

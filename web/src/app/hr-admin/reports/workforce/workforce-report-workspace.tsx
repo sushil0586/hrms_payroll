@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
+
 import type { HrAdminEmployeeListItem } from "@/lib/types";
 
 const PAGE_SIZE = 10;
@@ -126,8 +128,8 @@ export function WorkforceReportWorkspace({ employees }: { employees: HrAdminEmpl
             <p className="section-copy section-copy-soft">Review employee structure, manager coverage, and access readiness before exporting or printing the current workforce view.</p>
           </div>
           <div className="report-command-panel__actions">
-            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <AsyncDownloadButton href={exportHref} fileName="workforce-report.csv">Export filtered CSV</AsyncDownloadButton>
+            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="workforce-report-manifest.json">Manifest</AsyncDownloadButton>
             <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
           </div>
         </div>

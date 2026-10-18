@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { AttendanceRegularizationInlineReview } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-inline-review";
 import { AttendanceRegularizationReviewForm } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-review-form";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { useWorkspaceNavigationFeedback } from "@/components/shell/workspace-navigation-feedback";
 import type { AttendanceRegularizationItem, HrAdminEnumOption } from "@/lib/types";
 
 type Props = {
@@ -83,7 +84,7 @@ export function AttendanceRegularizationQueue({
   pagination,
   canReviewRegularizations = true,
 }: Props) {
-  const router = useRouter();
+  const navigate = useWorkspaceNavigationFeedback();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const reviewRegularizationId = searchParams.get("reviewRegularization") ?? "";
@@ -120,11 +121,11 @@ export function AttendanceRegularizationQueue({
     })}`;
   }
 
-  function goToPage(page: number) {
-    router.push(currentQueueHref({ page, reviewRegularization: undefined }));
+  function goToPage(page: number, target?: HTMLElement | null) {
+    navigate(currentQueueHref({ page, reviewRegularization: undefined }), `regularization page ${page}`, target, { scroll: false });
   }
 
-  function clearFilters() {
+  function clearFilters(target?: HTMLElement | null) {
     setSearch("");
     setStatus("all");
     setRequestedStatus("all");
@@ -132,7 +133,7 @@ export function AttendanceRegularizationQueue({
     setFromDate("");
     setToDate("");
     setPageSize("25");
-    router.push(pathname);
+    navigate(pathname, "cleared regularization filters", target, { scroll: false });
   }
 
   return (
@@ -197,8 +198,8 @@ export function AttendanceRegularizationQueue({
           </details>
         </WorkspaceFilterBar>
         <div className="queue-toolbar__actions attendance-toolbar-actions">
-          <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
-          <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+          <button className="button button--primary" onClick={(event) => goToPage(1, event.currentTarget)} type="button">Apply filters</button>
+          <button className="button button--ghost" onClick={(event) => clearFilters(event.currentTarget)} type="button">Clear filters</button>
         </div>
       </section>
 
@@ -332,14 +333,14 @@ export function AttendanceRegularizationQueue({
                 {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
               </select>
             </label>
-            <button className="button button--secondary button--compact" onClick={() => goToPage(1)} type="button">Apply</button>
+            <button className="button button--secondary button--compact" onClick={(event) => goToPage(1, event.currentTarget)} type="button">Apply</button>
           </div>
           {totalPages > 1 ? (
             <div className="pagination-bar__actions">
-              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(1)} type="button">First</button>
-              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(pagination.page - 1)} type="button">Previous</button>
-              <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(pagination.page + 1)} type="button">Next</button>
-              <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(totalPages)} type="button">Last</button>
+              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(1, event.currentTarget)} type="button">First</button>
+              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(pagination.page - 1, event.currentTarget)} type="button">Previous</button>
+              <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(pagination.page + 1, event.currentTarget)} type="button">Next</button>
+              <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(totalPages, event.currentTarget)} type="button">Last</button>
             </div>
           ) : null}
         </div>

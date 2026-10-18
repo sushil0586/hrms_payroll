@@ -75,6 +75,78 @@ class MovementType(models.TextChoices):
     OTHER = "other", "Other"
 
 
+class EmploymentSpellStatus(models.TextChoices):
+    PLANNED = "planned", "Planned"
+    ACTIVE = "active", "Active"
+    SUSPENDED = "suspended", "Suspended"
+    CLOSED = "closed", "Closed"
+
+
+class EmploymentAssignmentStatus(models.TextChoices):
+    PLANNED = "planned", "Planned"
+    ACTIVE = "active", "Active"
+    SUPERSEDED = "superseded", "Superseded"
+    CORRECTED = "corrected", "Corrected"
+
+
+class EmploymentSpell(UUIDPrimaryKeyModel, TimeStampedModel):
+    """One contract/service period for a stable employee identity."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="employment_spells")
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="employment_spells")
+    sequence = models.PositiveIntegerField()
+    started_on = models.DateField()
+    ended_on = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=EmploymentSpellStatus.choices, default=EmploymentSpellStatus.ACTIVE)
+    legal_entity = models.ForeignKey(LegalEntity, on_delete=models.PROTECT, related_name="employment_spells")
+    employment_type = models.ForeignKey(EmploymentType, on_delete=models.PROTECT, related_name="employment_spells", blank=True, null=True)
+    source_reference = models.CharField(max_length=160)
+    continuity_decision = models.CharField(max_length=80, blank=True)
+    approved_by_identifier = models.CharField(max_length=160)
+    approved_at = models.DateTimeField()
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["employee", "started_on"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "employee", "sequence"], name="unique_employment_spell_sequence"),
+            models.CheckConstraint(condition=models.Q(ended_on__isnull=True) | models.Q(ended_on__gte=models.F("started_on")), name="employment_spell_dates_ordered"),
+        ]
+
+
+class EmploymentAssignment(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Approved organization state for one employee and effective range."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="employment_assignments")
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="employment_assignments")
+    employment_spell = models.ForeignKey(EmploymentSpell, on_delete=models.PROTECT, related_name="assignments")
+    effective_from = models.DateField()
+    effective_to = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=EmploymentAssignmentStatus.choices, default=EmploymentAssignmentStatus.ACTIVE)
+    legal_entity = models.ForeignKey(LegalEntity, on_delete=models.PROTECT, related_name="employment_assignments")
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    business_unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    cost_center = models.ForeignKey("organizations.CostCenter", on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    designation = models.ForeignKey(Designation, on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    employment_type = models.ForeignKey(EmploymentType, on_delete=models.PROTECT, related_name="employment_assignments", blank=True, null=True)
+    reporting_manager = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="managed_employment_assignments", blank=True, null=True)
+    source_reference = models.CharField(max_length=160)
+    approved_by_identifier = models.CharField(max_length=160)
+    approved_at = models.DateTimeField()
+    correction_of = models.ForeignKey("self", on_delete=models.PROTECT, related_name="corrections", blank=True, null=True)
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["employee", "-effective_from"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(effective_to__isnull=True) | models.Q(effective_to__gte=models.F("effective_from")), name="employment_assignment_dates_ordered"),
+        ]
+        indexes = [models.Index(fields=["tenant", "employee", "effective_from", "effective_to"])]
+
+
 class EmployeeLifecycleEvent(UUIDPrimaryKeyModel, TimeStampedModel):
     """Generic lifecycle event ledger for auditability and future workflows."""
 
@@ -205,6 +277,13 @@ class EmployeeMovement(UUIDPrimaryKeyModel, TimeStampedModel):
     reason = models.TextField(blank=True)
     workflow_reference = models.CharField(max_length=120, blank=True)
     current_snapshot = models.JSONField(default=dict, blank=True)
+    resulting_assignment = models.OneToOneField(
+        EmploymentAssignment,
+        on_delete=models.PROTECT,
+        related_name="source_movement",
+        blank=True,
+        null=True,
+    )
 
     from_legal_entity = models.ForeignKey(
         LegalEntity,

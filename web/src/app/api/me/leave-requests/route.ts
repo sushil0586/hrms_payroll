@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       Authorization: `Token ${token}`,
       ...(isMultipart ? {} : { "Content-Type": "application/json" }),
       "X-Request-ID": request.headers.get("x-request-id") ?? "",
+      "Idempotency-Key": request.headers.get("idempotency-key") ?? "",
     },
     body,
     cache: "no-store",

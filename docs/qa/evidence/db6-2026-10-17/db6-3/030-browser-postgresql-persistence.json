@@ -1,0 +1,56 @@
+{
+  "tenant_id": "0c2d6bbf-f3df-4145-9036-175a0d413540",
+  "calendars": [
+    {
+      "id": "a16f24e7-6203-4507-9df6-abf026ceb327",
+      "code": "db6-apr-mar",
+      "legal_entity_id": null,
+      "start": "04-01",
+      "effective_from": "2026-04-01"
+    },
+    {
+      "id": "dfcfce76-86c2-469d-af43-6a33bd8875aa",
+      "code": "db6-calendar-year",
+      "legal_entity_id": "08fc8471-2496-4223-b477-71c08aec1895",
+      "start": "01-01",
+      "effective_from": "2026-01-01"
+    }
+  ],
+  "years": [
+    {
+      "id": "f7a53736-263b-417b-a830-d762e6725685",
+      "calendar_id": "a16f24e7-6203-4507-9df6-abf026ceb327",
+      "code": "FY2026-27",
+      "start_date": "2026-04-01",
+      "end_date": "2027-03-31",
+      "status": "open"
+    }
+  ],
+  "periods": [
+    {
+      "id": "0a3b0067-3479-4d65-aa74-fc2fc3a539e1",
+      "fiscal_year_id": "f7a53736-263b-417b-a830-d762e6725685",
+      "code": "2026-04",
+      "start_date": "2026-04-01",
+      "end_date": "2026-04-30",
+      "status": "open",
+      "reopen_count": 1,
+      "events": [
+        {
+          "id": "4edbbb6e-2b5c-4547-82b3-0284d581f9bc",
+          "action": "close",
+          "previous": "open",
+          "next": "closed",
+          "request_key": "browser-close-0a3b0067-3479-4d65-aa74-fc2fc3a539e1-0"
+        },
+        {
+          "id": "701dfef4-3576-4ddd-9c8e-6e64e99ffa86",
+          "action": "reopen",
+          "previous": "closed",
+          "next": "open",
+          "request_key": "browser-reopen-0a3b0067-3479-4d65-aa74-fc2fc3a539e1-1"
+        }
+      ]
+    }
+  ]
+}

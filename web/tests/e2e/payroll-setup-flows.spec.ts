@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated } from "../helpers/staging-auth";
+import { gotoAuthenticated, requestWithBrowserSession } from "../helpers/staging-auth";
 
 function uniqueCode(prefix: string) {
   return `PW_${prefix}_${Date.now().toString(36)}`.toUpperCase();
@@ -44,8 +44,10 @@ async function openPayrollActionTab(page: Page, name: RegExp | string) {
 async function createLegalEntityWithoutBranches(page: Page) {
   const code = uniqueCode("PG_LE");
   const name = `Payroll Scope ${code}`;
-  const response = await page.request.post("/api/hr-admin/organization/legal_entities", {
-    data: {
+  const response = await requestWithBrowserSession(page, "/api/hr-admin/organization/legal_entities", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
       code,
       name,
       is_active: true,
@@ -54,10 +56,9 @@ async function createLegalEntityWithoutBranches(page: Page) {
       timezone: "Asia/Kolkata",
       primary_email: `${code.toLowerCase()}@example.test`,
       primary_phone: "+91 9876543210",
-    },
+    }),
   });
-  const payload = await response.json().catch(() => ({}));
-  expect(response.ok(), `legal entity setup failed: ${JSON.stringify(payload)}`).toBeTruthy();
+  expect(response.status, `legal entity setup failed: ${response.body}`).toBe(201);
   return { code, name };
 }
 

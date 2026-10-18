@@ -51,7 +51,7 @@ export function createEmptyWorkflowStep(
     scope_type: defaults?.scope_type ?? "direct_reports",
     auto_approve_after_hours: 0,
     escalate_after_hours: 0,
-    allow_delegate: true,
+    allow_delegate: false,
     allow_send_back: true,
     allow_comment: true,
     rule_snapshot: {},

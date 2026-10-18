@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
+import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminPolicyOptions, HrAdminShiftRosterTemplateWriteInput } from "@/lib/types";
 
@@ -62,10 +62,10 @@ export function ShiftRosterTemplateForm({
   successHref = "/hr-admin/shift-roster-templates",
   compact = false,
 }: Props) {
-  const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   function update<Key extends keyof HrAdminShiftRosterTemplateWriteInput>(key: Key, value: HrAdminShiftRosterTemplateWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -145,21 +145,31 @@ export function ShiftRosterTemplateForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(mode === "create" ? "/api/hr-admin/shift-roster-templates" : `/api/hr-admin/shift-roster-templates/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/shift-roster-templates" : `/api/hr-admin/shift-roster-templates/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
-    router.push(successHref);
-    router.refresh();
+    window.location.assign(successHref);
   }
 
   return (
@@ -240,8 +250,8 @@ export function ShiftRosterTemplateForm({
         <div className="form-actions-bar">
           <span className="muted">Draft templates can be tested in rollout preview first. Published and locked templates are safer for operational rollout.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create template" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
+            <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Saving roster template" type="submit">{mode === "create" ? "Create template" : "Save changes"}</AsyncActionButton>
+            <button className="button button--secondary" onClick={() => (cancelHref ? window.location.assign(cancelHref) : window.history.back())} type="button">Cancel</button>
           </div>
         </div>
       </section>

@@ -111,8 +111,8 @@ async function exerciseManagerDecision(
   await expectDialogStable(page, options.dialogName);
 
   await approveButton.click();
-  await expect(dialog).toBeHidden();
-  await expect(page.getByRole("button", { name: "Review" }).first()).toBeVisible();
+  await expect(dialog.getByText(/Request approved|Cancellation request approved/).first()).toBeVisible();
+  await expect(approveButton).toBeDisabled();
   await page.unroute(options.approveRoute);
 }
 

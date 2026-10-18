@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { PayslipDetailAction } from "@/app/ess/payslips/payslip-detail-action";
 import { getEssPayrollPayslips } from "@/lib/api";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -226,9 +227,9 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                         <div className="table-actions">
                           <PayslipDetailAction payslip={payslip} />
                           {payslip.download_url ? (
-                            <a className="button button--secondary" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
+                            <AsyncDownloadButton href={`/api/me/payroll-payslips/${payslip.id}/download`} fileName={`${payslip.period_name}-payslip.pdf`}>
                               Download payslip
-                            </a>
+                            </AsyncDownloadButton>
                           ) : null}
                         </div>
                       </td>
