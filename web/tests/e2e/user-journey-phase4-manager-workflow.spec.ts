@@ -67,8 +67,9 @@ test.describe.serial("User journey phase 4: manager workspace workflow", () => {
     await page.setViewportSize({ width: 1440, height: 960 });
 
     await openManagerPage(page, "/mss/notifications", /Notifications/i);
-    await expect(page.getByText(/Inbox filters/i).first()).toBeVisible();
-    await expect(page.getByText(/Inbox list|No notifications match/i).first()).toBeVisible();
+    // MSS owns explicit alert headings (the shared component defaults to Inbox).
+    await expect(page.getByRole("heading", { name: "Alert filters", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Team alert list", exact: true })).toBeVisible();
     await expectLinkHref(page, /^Approvals$/i, /\/mss\/approvals$/);
     await expectLinkHref(page, /ESS inbox/i, /\/ess\/notifications$/);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
@@ -9,16 +9,19 @@ import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 type Props = {
   endpoint: string;
   isRead: boolean;
+  onSaved?: (readAt: string | null) => void;
 };
 
-export function NotificationReadToggle({ endpoint, isRead }: Props) {
+export function NotificationReadToggle({ endpoint, isRead, onSaved }: Props) {
   const { isRefreshing, refresh } = useRefreshAfterMutation();
+  const inFlight = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   async function handleToggle() {
-    if (isSubmitting || isRefreshing) return;
+    if (inFlight.current || isSubmitting || isRefreshing) return;
+    inFlight.current = true;
     setIsSubmitting(true);
     setError("");
     let response: Response;
@@ -32,6 +35,7 @@ export function NotificationReadToggle({ endpoint, isRead }: Props) {
       const message = "Unable to reach the server. Check your connection and retry.";
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
+      inFlight.current = false;
       setIsSubmitting(false);
       return;
     }
@@ -43,12 +47,22 @@ export function NotificationReadToggle({ endpoint, isRead }: Props) {
           : "Unable to update read state.";
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
+      inFlight.current = false;
       setIsSubmitting(false);
       return;
     }
-    setToast({ title: "Action saved.", message: isRead ? "Notification marked unread." : "Notification marked read.", tone: "success" });
+    const saved = await response.json().catch(() => null);
+    if (!saved || typeof saved !== "object" || !("read_at" in saved)) {
+      setError("The server response could not be confirmed. Refresh the inbox before retrying.");
+      inFlight.current = false;
+      setIsSubmitting(false);
+      return;
+    }
+    setToast({ title: "Action saved.", message: saved.read_at ? "Notification marked read." : "Notification marked unread.", tone: "success" });
+    onSaved?.(saved.read_at ?? null);
+    inFlight.current = false;
     setIsSubmitting(false);
-    refresh();
+    if (!onSaved) refresh();
   }
 
   useEffect(() => {
@@ -60,8 +74,8 @@ export function NotificationReadToggle({ endpoint, isRead }: Props) {
   return (
     <div className="record-card__actions">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <AsyncActionButton className="button button--secondary" pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification" : "Saving read state"} onClick={handleToggle} type="button">{isRead ? "Mark unread" : "Mark read"}</AsyncActionButton>
-      {error ? <span className="muted">{error}</span> : null}
+      <AsyncActionButton preserveFocusWhenPending className="button button--secondary" pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification" : "Saving read state"} onClick={handleToggle} type="button">{isRead ? "Mark unread" : "Mark read"}</AsyncActionButton>
+      {error ? <span role="alert" className="muted">{error}</span> : null}
     </div>
   );
 }

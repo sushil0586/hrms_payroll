@@ -13058,6 +13058,8 @@ def test_employee_cannot_submit_backdated_leave_when_policy_blocks_it(api_client
     )
 
     start_date = timezone.localdate() - timedelta(days=2)
+    while start_date.weekday() >= 5:
+        start_date -= timedelta(days=1)
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -14173,7 +14175,7 @@ def test_employee_cancellation_request_rejection_restores_approved_leave(api_cli
 
     employee_token = login(api_client, "riya.sharma")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
-    start_date = timezone.localdate() + timedelta(days=34)
+    start_date = next_weekday(34)
     create_response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -14363,7 +14365,7 @@ def test_employee_cannot_cancel_approved_leave_without_required_attachment(api_c
 
     employee_token = login(api_client, "riya.sharma")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
-    start_date = timezone.localdate() + timedelta(days=40)
+    start_date = next_weekday(40)
     create_response = api_client.post(
         "/api/v1/me/leave-requests/",
         {

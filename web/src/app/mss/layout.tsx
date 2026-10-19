@@ -1,3 +1,5 @@
+import { WorkspaceHydrationBoundary } from "@/components/shell/workspace-hydration-boundary";
+import { WorkspaceLoading } from "@/components/patterns/workspace-loading";
 import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
 import { getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
@@ -29,11 +31,12 @@ export default async function MssLayout({ children }: { children: React.ReactNod
   });
 
   return (
+    <WorkspaceHydrationBoundary fallback={<WorkspaceLoading label="Loading manager workspace" />}>
     <WorkspaceChrome
       footerDescription="Pending decisions, exceptions, and queue context for managers."
       navGroups={menuSource.navGroups}
       navItems={menuSource.navItems}
-      productLabel="Nexora"
+      productLabel="Accerio"
       quickLinks={[
         ...menuSource.quickLinks,
         ...(canAccessHrAdmin ? [{ href: "/hr-admin", label: "HR Admin" }] : []),
@@ -46,5 +49,6 @@ export default async function MssLayout({ children }: { children: React.ReactNod
     >
       {children}
     </WorkspaceChrome>
+    </WorkspaceHydrationBoundary>
   );
 }

@@ -2,6 +2,8 @@ import type {
   AttendanceRegularizationItem,
   AttendanceDerivationSummary,
   EmployeeDashboard,
+  EmployeeProfile,
+  EssAttendanceMonth,
   EssAttendanceRecordOption,
   EssAttendanceRegularizationListResponse,
   EssDocumentCenterResponse,
@@ -168,7 +170,7 @@ function buildApiError(path: string, detail: string) {
   return new Error(`[api] ${path}: ${detail}`);
 }
 
-async function apiGet<T>(path: string): Promise<{ data: T; state: ApiState }> {
+async function apiGet<T>(path: string, timeoutMs?: number): Promise<{ data: T; state: ApiState }> {
   if (!API_BASE_URL) {
     if (DEMO_DATA_ENABLED) {
       return { data: getDemoData<T>(path), state: "demo" };
@@ -188,6 +190,7 @@ async function apiGet<T>(path: string): Promise<{ data: T; state: ApiState }> {
         Authorization: `Token ${token}`,
       },
       cache: "no-store",
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });
 
     if (result.status === 401) {
@@ -220,6 +223,34 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   return queryString ? `?${queryString}` : "";
 }
 
+/** Independent self reads: profile does not depend on attendance or request history. */
+export async function getEssProfile() {
+  return apiGet<EmployeeProfile>("/me/profile/", 15_000);
+}
+
+export async function getEssOverview() {
+  return apiGet<EmployeeDashboard>("/me/dashboard/", 15_000);
+}
+
+export async function getEssAttendanceMonth(params: { month: string; page: number; page_size: number }) {
+  const result = await apiGet<EssAttendanceMonth>(`/me/attendance-records/?month=${encodeURIComponent(params.month)}&page=${params.page}&page_size=${params.page_size}`, 15_000);
+  if (result.state === "demo") {
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : "2026-10";
+    const end = new Date(`${month}-01T00:00:00Z`);
+    end.setUTCMonth(end.getUTCMonth() + 1, 0);
+    return { state: "demo" as const, data: { month, period_start: `${month}-01`, period_end: end.toISOString().slice(0, 10), timezone: "UTC", today: "2026-10-18", days: [], items: [], total_count: 0, total_pages: 1, page: 1, page_size: params.page_size, has_next: false, has_previous: false, raw_punch_history_available: false, summary: { recorded_days: 0, worked_hours: "0.00", locked_days: 0, pending_corrections: 0 } } satisfies EssAttendanceMonth };
+  }
+  return result;
+}
+
+export async function getEssRegularizationDetail(id: string) {
+  return apiGet<AttendanceRegularizationItem>(`/me/attendance-regularizations/${encodeURIComponent(id)}/`, 15_000);
+}
+
+export async function getEssRegularizations(params: { status?: string; page?: number; page_size?: number }) {
+  return apiGet<EssAttendanceRegularizationListResponse>(`/me/attendance-regularizations/${buildQueryString(params)}`, 15_000);
+}
+
 export async function getEssDashboard(params?: {
   leave_status?: string;
   leave_page?: number;
@@ -250,6 +281,30 @@ export async function getEssDashboard(params?: {
   };
 }
 
+// Leave workspace reads only its own contracts; do not load legacy attendance options.
+export async function getEssLeaveWorkspace(params: { status: string; page: number; requestId?: string }) {
+  const [dashboard, requests, types, detail] = await Promise.all([
+    apiGet<EmployeeDashboard>("/me/dashboard/", 15_000),
+    apiGet<EssLeaveRequestListResponse>(`/me/leave-requests/${buildQueryString({ status: params.status === "all" ? undefined : params.status, page: params.page, page_size: 10 })}`, 15_000),
+    apiGet<EssLeaveTypeOption[]>("/me/leave-types/", 15_000),
+    params.requestId ? apiGet<LeaveRequestItem>(`/me/leave-requests/${params.requestId}/`, 15_000) : Promise.resolve(null),
+  ]);
+  const lastPage = Math.max(1, Math.ceil(requests.data.total_count / requests.data.page_size));
+  const history = params.page > lastPage
+    ? await apiGet<EssLeaveRequestListResponse>(`/me/leave-requests/${buildQueryString({ status: params.status === "all" ? undefined : params.status, page: lastPage, page_size: 10 })}`, 15_000)
+    : requests;
+  return { dashboard: dashboard.data, requests: history.data, types: types.data, detail: detail?.data ?? null,
+    state: dashboard.state === "live" && history.state === "live" && types.state === "live" ? "live" as const : "demo" as const };
+}
+
+/** Source-specific pagination and status: never synthesizes a universal approval state. */
+export async function getEssRequestHistory(params: { type: "leave" | "attendance"; status: string; page: number }) {
+  const query = buildQueryString({status: params.status === "all" ? undefined : params.status, page: params.page, page_size: 10});
+  return params.type === "leave"
+    ? apiGet<EssLeaveRequestListResponse>(`/me/leave-requests/${query}`, 15_000)
+    : apiGet<EssAttendanceRegularizationListResponse>(`/me/attendance-regularizations/${query}`, 15_000);
+}
+
 export async function getEssRequestOptions() {
   const [leaveTypes, attendanceRecords] = await Promise.all([
     apiGet<EssLeaveTypeOption[]>("/me/leave-types/"),
@@ -271,7 +326,7 @@ export async function getEssDocumentCenter(params?: {
   category_id?: string;
   expiry_filter?: string;
 }) {
-  return apiGet<EssDocumentCenterResponse>(`/me/document-center/${buildQueryString(params ?? {})}`);
+  return apiGet<EssDocumentCenterResponse>(`/me/document-center/${buildQueryString(params ?? {})}`, 15_000);
 }
 
 export async function getEssPayrollPayslips(params?: {
@@ -280,8 +335,8 @@ export async function getEssPayrollPayslips(params?: {
   q?: string;
   year?: string;
   selected_id?: string;
-}) {
-  return apiGet<EssPayrollPayslipListResponse>(`/me/payroll-payslips/${buildQueryString(params ?? {})}`);
+}, timeoutMs?: number) {
+  return apiGet<EssPayrollPayslipListResponse>(`/me/payroll-payslips/${buildQueryString(params ?? {})}`, timeoutMs);
 }
 
 export async function getEssNotifications(params?: {
@@ -14012,6 +14067,8 @@ function getDemoData<T>(path: string): T {
       return demoHrAdminEmployees as T;
     case "/hr-admin/organization/":
       return demoHrAdminOrganizationSnapshot as T;
+    case "/me/profile/":
+      return demoDashboard.profile as T;
     case "/me/dashboard/":
       return demoDashboard as T;
     case "/me/leave-types/":

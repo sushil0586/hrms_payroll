@@ -1,10 +1,12 @@
 type WorkspaceLoadingProps = {
   label: string;
+  embedded?: boolean;
 };
 
-export function WorkspaceLoading({ label }: WorkspaceLoadingProps) {
+export function WorkspaceLoading({ label, embedded = false }: WorkspaceLoadingProps) {
+  const Container = embedded ? "div" : "main";
   return (
-    <main aria-busy="true" aria-label={label} className="shell app-loading-shell" role="status">
+    <Container aria-busy="true" aria-label={label} className="shell app-loading-shell" role="status">
       <span className="sr-only">{label}</span>
       <section aria-hidden="true" className="page-header-surface page-header-surface--compact loading-card">
         <div className="loading-line loading-line--eyebrow" />
@@ -49,6 +51,6 @@ export function WorkspaceLoading({ label }: WorkspaceLoadingProps) {
           ))}
         </div>
       </section>
-    </main>
+    </Container>
   );
 }

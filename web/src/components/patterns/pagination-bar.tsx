@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 type Props = {
+  navigationMode?: "document";
   page: number;
   pageSize: number;
   totalCount: number;
@@ -21,13 +22,16 @@ function PaginationAction({
   href,
   label,
   onClick,
+  navigationMode,
 }: {
+  navigationMode?: "document";
   disabled: boolean;
   href?: string;
   label: string;
   onClick?: () => void;
 }) {
   if (!disabled && href) {
+    if (navigationMode === "document") return <a data-navigation-mode="document" className="button button--secondary" href={href}>{label}</a>;
     return (
       <Link className="button button--secondary" href={href}>
         {label}
@@ -43,6 +47,7 @@ function PaginationAction({
 }
 
 export function PaginationBar({
+  navigationMode,
   page,
   pageSize,
   totalCount,
@@ -79,10 +84,10 @@ export function PaginationBar({
         </div>
         {totalPages > 1 ? (
           <div className="pagination-bar__actions">
-            <PaginationAction disabled={!hasPrevious} href={firstHref} label="First" onClick={onFirst} />
-            <PaginationAction disabled={!hasPrevious} href={previousHref} label="Previous" onClick={onPrevious} />
-            <PaginationAction disabled={!hasNext} href={nextHref} label="Next" onClick={onNext} />
-            <PaginationAction disabled={!hasNext} href={lastHref} label="Last" onClick={onLast} />
+            <PaginationAction navigationMode={navigationMode} disabled={!hasPrevious} href={firstHref} label="First" onClick={onFirst} />
+            <PaginationAction navigationMode={navigationMode} disabled={!hasPrevious} href={previousHref} label="Previous" onClick={onPrevious} />
+            <PaginationAction navigationMode={navigationMode} disabled={!hasNext} href={nextHref} label="Next" onClick={onNext} />
+            <PaginationAction navigationMode={navigationMode} disabled={!hasNext} href={lastHref} label="Last" onClick={onLast} />
           </div>
         ) : null}
       </div>

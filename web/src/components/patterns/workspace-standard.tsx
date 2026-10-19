@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 type Tone = "default" | "success" | "warning" | "danger" | "info" | "neutral";
 
@@ -74,14 +75,15 @@ type WorkspaceDataTableProps = {
   children: ReactNode;
   className?: string;
   ariaLabel?: string;
+  scrollLabel?: string;
 };
 
-export function WorkspaceDataTable({ children, className = "", ariaLabel }: WorkspaceDataTableProps) {
-  return (
-    <div className={`workspace-data-table${className ? ` ${className}` : ""}`}>
-      <table aria-label={ariaLabel}>{children}</table>
-    </div>
-  );
+export function WorkspaceDataTable({ children, className = "", ariaLabel, scrollLabel }: WorkspaceDataTableProps) {
+  const table = <table aria-label={ariaLabel}>{children}</table>;
+  const tableClass = `workspace-data-table${className ? ` ${className}` : ""}`;
+  return scrollLabel
+    ? <WorkspaceTableScrollRegion label={scrollLabel} className={tableClass}>{table}</WorkspaceTableScrollRegion>
+    : <div className={tableClass}>{table}</div>;
 }
 
 export function WorkspaceStatusBadge({

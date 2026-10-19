@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useConfirmedPayslip } from "./payslip-read-state";
+
+import { useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 import { PayslipReadReceiptAction } from "@/app/ess/payslips/payslip-read-receipt-action";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
+import { WorkspaceInformation } from "@/components/patterns/workspace-information";
+import { essDocumentDate, essMoney } from "@/lib/ui/employee-document-format";
 import type { EssPayrollPayslip } from "@/lib/types";
 
 function titleCase(value: string) {
@@ -16,42 +21,13 @@ function getLineValue(line: Record<string, unknown>, key: string) {
   return value === null || value === undefined || value === "" ? "Not available" : String(value);
 }
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return "Pending";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
 function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Pending";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatMoney(value: unknown, currency = "INR") {
-  const numericValue = Number(value ?? 0);
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(numericValue) ? numericValue : 0);
+  return value ? `${essDocumentDate(value)} ${value.slice(11, 16)} UTC` : "Not recorded";
 }
 
 function formatFileSize(value: number) {
   if (!value) {
-    return "Pending";
+    return "Not recorded";
   }
   if (value < 1024) {
     return `${value} B`;
@@ -62,16 +38,11 @@ function formatFileSize(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function DetailRow({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="detail-row">
-      <span className="detail-label">{label}</span>
-      <span className="detail-value">{value}</span>
-    </div>
-  );
-}
 
-export function PayslipDetailAction({ payslip, variant = "secondary" }: { payslip: EssPayrollPayslip; variant?: "primary" | "secondary" }) {
+export function PayslipDetailAction({ payslip: initialPayslip, variant = "secondary" }: { payslip: EssPayrollPayslip; variant?: "primary" | "secondary" }) {
+  const payslip = useConfirmedPayslip(initialPayslip);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const [isOpen, setIsOpen] = useState(false);
   const renderModel = payslip.render_model;
   const taxSheet = renderModel?.tax_sheet;
@@ -80,142 +51,86 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
   const proofSummary = taxSheet?.proof_status_summary ? Object.entries(taxSheet.proof_status_summary)
     .map(([key, value]) => `${titleCase(key)} ${String(value)}`)
     .join(", ") : "";
-  const modal = isOpen && typeof document !== "undefined"
+  const modal = isOpen && mounted
     ? createPortal(
         <HrAdminActionModal
-          className="ess-payslip-modal"
+          className="accerio-dialog"
+          explicitTabOrder
           closeHref="/ess/payslips"
-          description={`${payslip.title} / Paid ${formatDate(payslip.pay_date)}`}
+          description={`${payslip.title} / Pay date ${essDocumentDate(payslip.pay_date)}`}
           eyebrow="Payslip detail"
           footer={(
             <>
               {payslip.download_url ? (
-                <a className="button button--primary" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
-                  Download payslip
-                </a>
+                <AsyncDownloadButton className="button button--primary" href={`/api/me/payroll-payslips/${payslip.id}/download`} fileName={payslip.file_name || "payslip"}>Download payslip</AsyncDownloadButton>
               ) : (
                 <span className="payroll-output-download-state">Download blocked</span>
               )}
               <PayslipReadReceiptAction
                 endpoint={`/api/me/payroll-payslips/${payslip.id}/read`}
                 isReadAcknowledged={payslip.access_summary.is_read_acknowledged}
+                onActionStart={() => closeButtonRef.current?.focus({ preventScroll: true })}
               />
-              <button className="button button--secondary" onClick={() => setIsOpen(false)} type="button">Close</button>
+              <button className="button button--secondary" ref={closeButtonRef} onClick={() => setIsOpen(false)} type="button">Close</button>
             </>
           )}
           labelledBy={`payslip-detail-${payslip.id}`}
           onClose={() => setIsOpen(false)}
           title={payslip.period_name}
         >
-            <div className="ess-payslip-modal-summary">
-              <article>
-                <span>Gross earnings</span>
-                <strong>{formatMoney(payslip.totals_snapshot.gross_earnings)}</strong>
-              </article>
-              <article>
-                <span>Deductions</span>
-                <strong>{formatMoney(payslip.totals_snapshot.employee_deductions)}</strong>
-              </article>
-              <article>
-                <span>Net pay</span>
-                <strong>{formatMoney(payslip.totals_snapshot.net_pay)}</strong>
-              </article>
-            </div>
-
-            <div className="ess-payslip-modal-grid">
-              <section className="ess-payslip-detail-section">
-                <span className="workspace-card__eyebrow">Payment summary</span>
-                <div className="detail-grid">
-                  <DetailRow label="Period start" value={formatDate(payslip.period_start_date)} />
-                  <DetailRow label="Period end" value={formatDate(payslip.period_end_date)} />
-                  <DetailRow label="Published by" value={payslip.published_by_name ?? "Payroll team"} />
-                  <DetailRow label="File" value={payslip.file_name || "Generated payslip file"} />
-                </div>
-              </section>
-
-              <section className="ess-payslip-detail-section">
-                <span className="workspace-card__eyebrow">Access trail</span>
-                <div className="detail-grid">
-                  <DetailRow label="Notifications" value={String(payslip.access_summary.notification_count)} />
-                  <DetailRow label="Downloads" value={String(payslip.access_summary.download_count)} />
-                  <DetailRow label="Read receipt" value={payslip.access_summary.is_read_acknowledged ? formatDateTime(payslip.access_summary.first_read_at) : "Pending"} />
-                  <DetailRow label="Latest notification" value={formatDateTime(payslip.access_summary.latest_notification_at)} />
-                </div>
-              </section>
-
-              <section className="ess-payslip-detail-section">
-                <span className="workspace-card__eyebrow">Storage governance</span>
-                <div className="detail-grid">
-                  <DetailRow label="Provider" value={payslip.storage_provider_ref} />
-                  <DetailRow label="Strategy" value={payslip.download_strategy_ref} />
-                  <DetailRow label="Signed URL" value={payslip.supports_signed_url ? `${payslip.signed_url_expires_in_seconds}s` : "Streamed"} />
-                  <DetailRow label="Retention" value={payslip.retention_policy_ref} />
-                  <DetailRow label="Checksum" value={payslip.checksum_sha256 ? `${payslip.checksum_sha256.slice(0, 18)}...` : "Pending"} />
-                  <DetailRow label="Size" value={formatFileSize(payslip.file_size_bytes)} />
-                </div>
-              </section>
-
-              <section className="ess-payslip-detail-section">
-                <span className="workspace-card__eyebrow">Tax sheet</span>
-                {taxSheet?.available ? (
-                  <div className="detail-grid">
-                    <DetailRow label="Tax regime" value={taxSheet.tax_regime || "As per payroll setup"} />
-                    <DetailRow label="This period" value={taxSheet.current_period_tax} />
-                    <DetailRow label="Year to date" value={taxSheet.ytd_tax} />
-                    <DetailRow label="Taxable earnings" value={taxSheet.taxable_earnings} />
-                    <DetailRow label="Readiness" value={titleCase(taxSheet.readiness_status || "pending")} />
-                    <DetailRow label="Source hashes" value={String(taxSheet.source_hash_count ?? 0)} />
-                    <DetailRow label="Proofs" value={proofSummary || "No proof summary attached"} />
-                  </div>
-                ) : (
-                  <p className="section-copy section-copy-soft">Tax sheet will appear here once payroll publishes tax calculation evidence with the payslip.</p>
-                )}
-              </section>
-
+            <WorkspaceInformation fields={[["Gross earnings", essMoney(payslip.totals_snapshot.gross_earnings)], ["Deductions", essMoney(payslip.totals_snapshot.employee_deductions)], ["Net pay", essMoney(payslip.totals_snapshot.net_pay)]]} />
+            <div className="queue-list">
               <section className="ess-payslip-detail-section">
                 <span className="workspace-card__eyebrow">Payslip lines</span>
                 <div className="payroll-rule-snapshot-list">
                   {visibleSections.length ? (
                     visibleSections.map((section) => (
                       <div className="payroll-rule-snapshot-group" key={section.key}>
-                        <div className="detail-row">
-                          <span className="detail-label">{section.label}</span>
-                          <span className="detail-value">{section.total}</span>
-                        </div>
-                        {section.lines.slice(0, 6).map((line) => (
-                          <div className="detail-row" key={`${section.key}-${line.component_code}`}>
-                            <span className="detail-label">{line.component_name}</span>
-                            <span className="detail-value">{line.amount}</span>
-                          </div>
-                        ))}
+                        <h3 className="section-heading-soft">{section.label} · {section.total}</h3>
+                        <WorkspaceInformation fields={section.lines.map((line) => [line.component_name, line.amount])} />
                       </div>
                     ))
                   ) : payslip.line_snapshot.length ? (
-                    payslip.line_snapshot.map((line, index) => (
-                      <div className="detail-row" key={`${getLineValue(line, "component_code")}-${index}`}>
-                        <span className="detail-label">{getLineValue(line, "component_name")}</span>
-                        <span className="detail-value">
-                          {formatMoney(line.amount)} / {titleCase(getLineValue(line, "line_type"))}
-                        </span>
-                      </div>
-                    ))
+                    <WorkspaceInformation fields={payslip.line_snapshot.map((line) => [getLineValue(line, "component_name"), `${essMoney(line.amount)} · ${titleCase(getLineValue(line, "line_type"))}`])} />
                   ) : (
                     <p className="section-copy section-copy-soft">No calculation lines were attached to this payslip.</p>
                   )}
                 </div>
               </section>
+              <section className="ess-payslip-detail-section">
+                <span className="workspace-card__eyebrow">Period details</span>
+                <WorkspaceInformation fields={[["Period start", essDocumentDate(payslip.period_start_date)], ["Period end", essDocumentDate(payslip.period_end_date)], ["Published by", payslip.published_by_name ?? "Not recorded"], ["File", payslip.file_name || "Not recorded"]]} />
+              </section>
+
+              <details>
+                <summary tabIndex={0}>Access and file information</summary>
+                <div className="queue-list">
+              <section className="ess-payslip-detail-section">
+                <span className="workspace-card__eyebrow">Access trail</span>
+                <WorkspaceInformation fields={[["Notifications", String(payslip.access_summary.notification_count)], ["Downloads", String(payslip.access_summary.download_count)], ["Read receipt", payslip.access_summary.is_read_acknowledged ? formatDateTime(payslip.access_summary.first_read_at) : "Not acknowledged"], ["Latest notification", formatDateTime(payslip.access_summary.latest_notification_at)]]} />
+              </section>
+
+              <section className="ess-payslip-detail-section">
+                <span className="workspace-card__eyebrow">Storage governance</span>
+                <WorkspaceInformation fields={[["Provider", payslip.storage_provider_ref], ["Strategy", payslip.download_strategy_ref], ["Signed URL", payslip.supports_signed_url ? `${payslip.signed_url_expires_in_seconds}s` : "Streamed"], ["Retention", payslip.retention_policy_ref], ["Checksum", payslip.checksum_sha256 ? `${payslip.checksum_sha256.slice(0, 18)}...` : "Pending"], ["Size", formatFileSize(payslip.file_size_bytes)]]} />
+              </section>                </div>
+              </details>
+
+              <section className="ess-payslip-detail-section">
+                <span className="workspace-card__eyebrow">Tax sheet</span>
+                {taxSheet?.available ? (
+                  <WorkspaceInformation fields={[["Tax regime", taxSheet.tax_regime || "As per payroll setup"], ["This period", taxSheet.current_period_tax], ["Year to date", taxSheet.ytd_tax], ["Taxable earnings", taxSheet.taxable_earnings], ["Readiness", titleCase(taxSheet.readiness_status || "pending")], ["Source hashes", String(taxSheet.source_hash_count ?? 0)], ["Proofs", proofSummary || "No proof summary attached"]]} />
+                ) : (
+                  <p className="section-copy section-copy-soft">Tax sheet will appear here once payroll publishes tax calculation evidence with the payslip.</p>
+                )}
+              </section>
+
+
 
               <section className="ess-payslip-detail-section">
                 <span className="workspace-card__eyebrow">Day-count basis</span>
                 {dayCountBasis?.available ? (
-                  <div className="detail-grid">
-                    <DetailRow label="Source" value={titleCase(dayCountBasis.source || "schedule_spine")} />
-                    <DetailRow label="Calendar days" value={String(dayCountBasis.calendar_days)} />
-                    <DetailRow label="Working days" value={String(dayCountBasis.working_days)} />
-                    <DetailRow label="Weekly offs" value={String(dayCountBasis.weekly_off_days)} />
-                    <DetailRow label="Holidays" value={String(dayCountBasis.holiday_days)} />
-                    <DetailRow label="Readiness" value={titleCase(dayCountBasis.readiness_status || "ready")} />
-                  </div>
+                  <WorkspaceInformation fields={[["Source", titleCase(dayCountBasis.source || "schedule_spine")], ["Calendar days", String(dayCountBasis.calendar_days)], ["Working days", String(dayCountBasis.working_days)], ["Weekly offs", String(dayCountBasis.weekly_off_days)], ["Holidays", String(dayCountBasis.holiday_days)], ["Readiness", titleCase(dayCountBasis.readiness_status || "ready")]]} />
                 ) : (
                   <p className="section-copy section-copy-soft">Payroll has not attached roster and holiday day-count evidence to this payslip yet.</p>
                 )}
@@ -223,13 +138,8 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
 
               {renderModel ? (
                 <section className="ess-payslip-detail-section">
-                  <span className="workspace-card__eyebrow">PDF readiness</span>
-                  <div className="detail-grid">
-                    <DetailRow label="Template" value={renderModel.template_ref || "Default payslip template"} />
-                    <DetailRow label="Employee" value={renderModel.employee.code || renderModel.employee.name || "Employee"} />
-                    <DetailRow label="Hidden lines" value={String(renderModel.quality.hidden_line_count)} />
-                    <DetailRow label="Tax sheet" value={taxSheet?.available ? "Attached" : "Not attached"} />
-                  </div>
+                  <span className="workspace-card__eyebrow">Template information</span>
+                  <WorkspaceInformation fields={[["Template", renderModel.template_ref || "Default payslip template"], ["Employee", renderModel.employee.code || renderModel.employee.name || "Employee"], ["Hidden lines", String(renderModel.quality.hidden_line_count)], ["Tax sheet", taxSheet?.available ? "Attached" : "Not attached"]]} />
                 </section>
               ) : null}
 

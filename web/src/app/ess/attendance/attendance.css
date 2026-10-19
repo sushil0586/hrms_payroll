@@ -1,0 +1,9 @@
+.ess-attendance-toolbar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; margin-bottom: 16px; }
+.ess-attendance-toolbar label { display: grid; gap: 6px; font-size: 13px; }
+.ess-attendance-toolbar a { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 8px; }
+.ess-attendance-toolbar a[aria-current="page"] { background: var(--ds-brand-soft); border-radius: 8px; font-weight: 700; }
+.ess-attendance-table { min-width: 620px; }
+.ess-attendance .is-selected { background: var(--ds-brand-soft); }
+.ess-attendance .workspace-table-scroll { overflow-x: auto; }
+.ess-attendance .ess-section-note + .button { margin-top: 12px; }
+@media (max-width: 767px) { .ess-attendance-toolbar { gap: 8px; } }

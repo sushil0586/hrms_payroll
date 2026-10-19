@@ -44,7 +44,7 @@ export function useWorkspaceNavigationFeedback() {
   return useContext(NavigationFeedbackContext)?.navigate ?? (() => undefined);
 }
 
-function NavigationFeedbackBoundary({ children, routeKey }: { children: ReactNode; routeKey: string }) {
+function NavigationFeedbackBoundary({ children, routeKey, documentNavigation }: { children: ReactNode; routeKey: string; documentNavigation: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState<PendingNavigation | null>(null);
   const activeRegionRef = useRef<HTMLElement | null>(null);
@@ -62,6 +62,13 @@ function NavigationFeedbackBoundary({ children, routeKey }: { children: ReactNod
 
   const navigate = useCallback((href: string, label: string, target: HTMLElement | null = null, options?: { scroll?: boolean }) => {
     const url = new URL(href, window.location.href);
+    if (documentNavigation) {
+      // A fresh authorized read avoids a completed RSC response leaving stale visible content.
+      if (url.pathname !== window.location.pathname) sessionStorage.setItem(FOCUS_INTENT_KEY, destinationKey(url));
+      const destination = new URL(`${url.pathname}${url.search}${url.hash}`, window.location.origin);
+      window.location.assign(destination.href);
+      return;
+    }
     const nextRegion = target ? localRegion(target) : null;
     if (activeRegionRef.current && activeRegionRef.current !== nextRegion) {
       activeRegionRef.current.removeAttribute("aria-busy");
@@ -81,7 +88,7 @@ function NavigationFeedbackBoundary({ children, routeKey }: { children: ReactNod
     });
     if (url.pathname !== window.location.pathname) sessionStorage.setItem(FOCUS_INTENT_KEY, destinationKey(url));
     router.push(`${url.pathname}${url.search}${url.hash}`, { scroll: options?.scroll });
-  }, [router]);
+  }, [documentNavigation, router]);
 
   useEffect(() => {
     if (sessionStorage.getItem(FOCUS_INTENT_KEY) !== routeKey) return;
@@ -135,14 +142,20 @@ function NavigationFeedbackBoundary({ children, routeKey }: { children: ReactNod
     if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.dataset.navigationMode === "document") return;
     const url = new URL(anchor.href, window.location.href);
     if (url.origin !== window.location.origin || isSameDocumentHash(url)) return;
-    if (`${url.pathname}${url.search}` === `${window.location.pathname}${window.location.search}`) return;
+    if (`${url.pathname}${url.search}` === `${window.location.pathname}${window.location.search}`) {
+      // In document-navigation workspaces an active link is a no-op. Let its
+      // local click handler close the mobile menu, without starting a redundant
+      // RSC refresh that can outlive the next document navigation in WebKit.
+      if (documentNavigation) event.preventDefault();
+      return;
+    }
     event.preventDefault();
     navigate(url.href, navigationLabel(anchor), anchor);
   }
 
   function handleSubmit(event: FormEvent<HTMLDivElement>) {
     const form = event.target as HTMLFormElement;
-    if (!(form instanceof HTMLFormElement)) return;
+    if (!(form instanceof HTMLFormElement) || form.dataset.navigationMode === "document") return;
     const declaredMethod = form.getAttribute("method")?.toLowerCase();
     const isServerQueryForm = declaredMethod === "get" || (!declaredMethod && form.hasAttribute("action"));
     if (!isServerQueryForm) return;
@@ -181,9 +194,9 @@ function NavigationFeedbackBoundary({ children, routeKey }: { children: ReactNod
   );
 }
 
-export function WorkspaceNavigationFeedback({ children }: { children: ReactNode }) {
+export function WorkspaceNavigationFeedback({ children, documentNavigation = false }: { children: ReactNode; documentNavigation?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const query = searchParams.toString();
-  return <NavigationFeedbackBoundary routeKey={query ? `${pathname}?${query}` : pathname}>{children}</NavigationFeedbackBoundary>;
+  return <NavigationFeedbackBoundary documentNavigation={documentNavigation} routeKey={query ? `${pathname}?${query}` : pathname}>{children}</NavigationFeedbackBoundary>;
 }

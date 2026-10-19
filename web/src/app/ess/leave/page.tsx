@@ -1,33 +1,17 @@
 import { LeaveWorkspace } from "@/app/ess/leave/leave-workspace";
-import { getEssDashboard, getEssRequestOptions } from "@/lib/api";
+import { getEssLeaveWorkspace } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
-type PageProps = {
-  searchParams?: Promise<Record<string, SearchParamValue>>;
-};
-
-function normalizeParam(value: SearchParamValue) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-export default async function EssLeavePage({ searchParams }: PageProps) {
+export default async function EssLeavePage({ searchParams }: { searchParams?: Promise<Record<string, SearchParamValue>> }) {
   const currentParams = (await searchParams) ?? {};
-  const status = normalizeParam(currentParams.status) ?? "all";
-  const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const [{ dashboard, leaveRequests, state }, requestOptions] = await Promise.all([
-    getEssDashboard({ leave_status: status, leave_page: page }),
-    getEssRequestOptions(),
-  ]);
-  const workspaceState = state === "live" ? "live" : "demo";
-
-  return (
-    <LeaveWorkspace
-      balances={dashboard.leave.balances}
-      currentParams={currentParams}
-      isDemo={workspaceState === "demo" || requestOptions.state === "demo"}
-      leaveRequests={leaveRequests}
-      leaveTypes={requestOptions.leaveTypes}
-      state={workspaceState}
-    />
-  );
+  const first = (value: SearchParamValue) => Array.isArray(value) ? value[0] : value;
+  const requestedStatus = first(currentParams.status) ?? "all";
+  const status = ["all", "pending", "partially_approved", "approved", "rejected", "withdrawn", "cancelled"].includes(requestedStatus) ? requestedStatus : "all";
+  const rawPage = Number(first(currentParams.page));
+  const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+  const rawRequest = first(currentParams.requestId);
+  const requestId = rawRequest && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawRequest) ? rawRequest : undefined;
+  const result = await getEssLeaveWorkspace({ status, page, requestId });
+  return <LeaveWorkspace balances={result.dashboard.leave.balances} currentParams={{ ...currentParams, status }}
+    linkedDetail={result.detail} isDemo={result.state !== "live"} leaveRequests={result.requests} leaveTypes={result.types} state={result.state} />;
 }

@@ -1,20 +1,22 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+
+import { WorkspaceCalendar } from "@/components/patterns/workspace-calendar";
+import { EssFields } from "../ess-profile-summary";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
 import type {
   AttendanceRegularizationItem,
-  EmployeeDashboard,
+  EssAttendanceMonth,
   EssAttendanceRecordOption,
   EssAttendanceRegularizationListResponse,
 } from "@/lib/types";
@@ -22,12 +24,12 @@ import type {
 type SearchParamValue = string | string[] | undefined;
 
 type Props = {
-  attendanceRecords: EssAttendanceRecordOption[];
+  invalidMonth: boolean;
+  linkedRequest: AttendanceRegularizationItem | null;
+  attendance: EssAttendanceMonth;
   currentParams: Record<string, SearchParamValue>;
-  dashboard: EmployeeDashboard;
   isDemo: boolean;
   regularizations: EssAttendanceRegularizationListResponse;
-  state: "demo" | "live";
 };
 
 type Feedback = {
@@ -37,15 +39,50 @@ type Feedback = {
 
 type AttendanceRegularizationField = "attendance_record_id" | "requested_check_out_at" | "reason";
 
+const subscribeToHydration = () => () => undefined;
+const clientHydrationSnapshot = () => true;
+const serverHydrationSnapshot = () => false;
+
+function scrollAttendanceTable(event: ReactKeyboardEvent<HTMLDivElement>) {
+  const region = event.currentTarget;
+  if (event.target !== region || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || region.scrollWidth <= region.clientWidth) return;
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  region.scrollBy({ left: (event.key === "ArrowRight" ? 1 : -1) * Math.max(80, Math.round(region.clientWidth * 0.7)), behavior: "instant" });
+}
+
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const fullMonthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 function formatDate(value: string | null) {
   if (!value) return "Not available";
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return `${day} ${monthNames[Number(month) - 1]} ${year}`;
+}
+
+// Assemble numeric parts ourselves: Safari's locale punctuation/day-period text
+// differs from Node ICU and otherwise causes React hydration to discard the tree.
+function attendanceTimestamp(value: string | null | undefined, zone: string) {
+  if (!value) return "Not recorded";
+  const instant = new Date(value);
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(instant).map((part) => [part.type, part.value]));
+  const wall = new Date(0);
+  wall.setUTCFullYear(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+  wall.setUTCHours(Number(parts.hour), Number(parts.minute), 0, 0);
+  const offset = Math.round((wall.getTime() - Math.floor(instant.getTime() / 60_000) * 60_000) / 60_000);
+  const absolute = Math.abs(offset);
+  const offsetLabel = offset === 0 ? "UTC" : `UTC${offset < 0 ? "-" : "+"}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
+  return `${parts.day.padStart(2, "0")} ${monthNames[Number(parts.month) - 1]} ${parts.year}, ${parts.hour.padStart(2, "0")}:${parts.minute.padStart(2, "0")} ${offsetLabel}`;
 }
 
 function formatDateTime(value: string | null | undefined) {
-  if (!value) return "Not available";
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return attendanceTimestamp(value, "UTC");
 }
+
+const calendarStatusCode: Record<string, string> = { present: "P", absent: "A", half_day: "½", late: "L", remote: "R", weekly_off: "Off", holiday: "H", on_leave: "Lv", unknown: "?" };
 
 function formatStatus(value: string) {
   return value.replaceAll("_", " ");
@@ -211,13 +248,16 @@ function AttendanceRegularizationModal({
   attendanceRecords,
   isDemo,
   onClose,
+  initialRecordId,
+  onSubmitted,
 }: {
+  initialRecordId?: string;
+  onSubmitted: () => void;
   attendanceRecords: EssAttendanceRecordOption[];
   isDemo: boolean;
   onClose: () => void;
 }) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
-  const defaultAttendanceRecord = attendanceRecords.find((record) => !record.is_locked)?.id ?? attendanceRecords[0]?.id ?? "";
+  const defaultAttendanceRecord = initialRecordId || (attendanceRecords.find((record) => !record.is_locked)?.id ?? attendanceRecords[0]?.id ?? "");
   const [selectedRecordId, setSelectedRecordId] = useState(defaultAttendanceRecord);
   const [requestedStatus, setRequestedStatus] = useState("present");
   const [checkIn, setCheckIn] = useState("");
@@ -230,7 +270,7 @@ function AttendanceRegularizationModal({
   const submittingRef = useRef(false);
   const selectedRecord = attendanceRecords.find((record) => record.id === selectedRecordId) ?? null;
   const selectedPayrollImpact = selectedRecord?.derivation_summary?.payroll_impact;
-  const hasTimeOrderRisk = Boolean(checkIn && checkOut && new Date(checkOut) < new Date(checkIn));
+  const hasTimeOrderRisk = Boolean(checkIn && checkOut && new Date(`${checkOut}Z`) < new Date(`${checkIn}Z`));
   const isSubmitBlocked = submitting || !attendanceRecords.length || Boolean(selectedRecord?.is_locked) || !reason.trim() || hasTimeOrderRisk;
 
   function clearFieldError(field: AttendanceRegularizationField) {
@@ -248,7 +288,7 @@ function AttendanceRegularizationModal({
     setFieldErrors({});
     const nextErrors: FieldErrors<AttendanceRegularizationField> = {
       attendance_record_id: requireValue(selectedRecordId, "Select the attendance day that needs correction."),
-      requested_check_out_at: validateDateOrder(checkIn, checkOut, "Requested check-out cannot be earlier than requested check-in."),
+      requested_check_out_at: validateDateOrder(checkIn ? `${checkIn}Z` : "", checkOut ? `${checkOut}Z` : "", "Requested check-out cannot be earlier than requested check-in."),
       reason: requireText(reason, "Enter the reason for this attendance correction."),
     };
     if (selectedRecord?.is_locked) {
@@ -273,8 +313,8 @@ function AttendanceRegularizationModal({
     const requestPayload = {
       attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
       requested_status: String(formData.get("requested_status") ?? "present"),
-      requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
-      requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
+      requested_check_in_at: checkIn ? `${checkIn}Z` : null,
+      requested_check_out_at: checkOut ? `${checkOut}Z` : null,
       reason: String(formData.get("reason") ?? ""),
     };
     const mutationScope = "ess.attendance.regularization.submit";
@@ -310,8 +350,8 @@ function AttendanceRegularizationModal({
     setToast({ title: "Submitted successfully.", message, tone: "success" });
     form.reset();
     submittingRef.current = false;
+    onSubmitted();
     onClose();
-    refresh();
   }
 
   useEffect(() => {
@@ -322,8 +362,10 @@ function AttendanceRegularizationModal({
 
   return (
     <HrAdminActionModal
+      className="accerio-dialog"
+      explicitTabOrder
       closeHref="/ess/attendance"
-      description="Choose the day that needs correction, explain what changed, and send it for approval."
+      description="Choose the day, explain the correction and submit for approval. Requested times use UTC, regardless of your browser timezone."
       eyebrow="ESS attendance"
       labelledBy="ess-attendance-regularize-modal"
       onClose={onClose}
@@ -395,8 +437,8 @@ function AttendanceRegularizationModal({
               <AsyncActionButton
                 className="button button--primary"
                 disabled={isSubmitBlocked}
-                pending={submitting || isRefreshing}
-                pendingLabel={isRefreshing ? "Refreshing attendance" : "Submitting correction"}
+                pending={submitting}
+                pendingLabel="Submitting correction"
                 type="submit"
               >
                 Submit correction
@@ -441,6 +483,8 @@ function AttendanceRegularizationModal({
 function AttendanceDetailModal({ item, onClose }: { item: AttendanceRegularizationItem; onClose: () => void }) {
   return (
     <HrAdminActionModal
+      className="accerio-dialog"
+      explicitTabOrder
       closeHref="/ess/attendance"
       description={`${formatStatus(item.current_status)} to ${formatStatus(item.requested_status)} - ${formatStatus(item.status)}`}
       eyebrow="Regularization detail"
@@ -471,247 +515,146 @@ function AttendanceDetailModal({ item, onClose }: { item: AttendanceRegularizati
   );
 }
 
-export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboard, isDemo, regularizations, state }: Props) {
+export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail, attendance: initialAttendance, currentParams, isDemo, regularizations: initialRegularizations }: Props) {
+  const router = useRouter();
+  const correctionActionRef = useRef<HTMLButtonElement | null>(null);
+  const refreshVersion = useRef(0);
+  const [fresh, setFresh] = useState<{ source: EssAttendanceMonth; attendance: EssAttendanceMonth; regularizations: EssAttendanceRegularizationListResponse } | null>(null);
+  const attendance = fresh?.source === initialAttendance ? fresh.attendance : initialAttendance;
+  const regularizations = fresh?.source === initialAttendance ? fresh.regularizations : initialRegularizations;
+  const [refreshingSource, setRefreshingSource] = useState<EssAttendanceMonth | null>(null);
+  const isRefreshing = refreshingSource === initialAttendance;
+  const [refreshFailure, setRefreshFailure] = useState<{ source: EssAttendanceMonth; message: string } | null>(null);
+  const refreshError = refreshFailure?.source === initialAttendance ? refreshFailure.message : null;
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const [regularizeOpen, setRegularizeOpen] = useState(false);
+  const [initialRecordId, setInitialRecordId] = useState<string>();
   const [clickedRegularization, setClickedRegularization] = useState<AttendanceRegularizationItem | null>(null);
-  const [dismissedRegularizationId, setDismissedRegularizationId] = useState<string | null>(null);
-  const [historyQuery, setHistoryQuery] = useState("");
+  const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const searchParams = useSearchParams();
+  const view = searchParams.get("view") === "list" ? "list" : "calendar";
+  const params = { ...currentParams, ...Object.fromEntries(searchParams.entries()), month: attendance.month };
+  const href = (updates: Record<string, string | undefined>) => buildHref(params, updates);
+  const eligible = attendance.days.filter((day) => day.can_regularize && day.derivation_summary).map((day) => ({ ...day, derivation_summary: day.derivation_summary! }));
+  const dayParam = searchParams.get("day");
+  const selectedDate = dayParam?.startsWith(`${attendance.month}-`) && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) && dayParam >= attendance.period_start && dayParam <= attendance.period_end ? dayParam : (attendance.today.startsWith(`${attendance.month}-`) ? attendance.today : attendance.days[0]?.attendance_date ?? attendance.period_start);
+  const selectedDay = attendance.days.find((day) => day.attendance_date === selectedDate) ?? null;
+  const linkedRequest = (linkedDetail?.id !== dismissedRequestId ? linkedDetail : null) ?? regularizations.items.find((item) => item.id === normalizeParam(currentParams.regId) && item.id !== dismissedRequestId) ?? null;
+  const selectedRequest = clickedRegularization ?? linkedRequest;
+  const pending = regularizations.status_counts.pending ?? 0;
   const status = normalizeParam(currentParams.status) ?? "all";
-  const selectedRegularizationId = normalizeParam(currentParams.regId);
-  const page = Math.max(Number(normalizeParam(currentParams.page) || String(regularizations.page)) || regularizations.page, 1);
-  const tabs = ["all", "pending", "approved", "rejected"];
-  const totalPages = Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size));
-  const linkedRegularization = selectedRegularizationId && selectedRegularizationId !== dismissedRegularizationId
-    ? regularizations.items.find((item) => item.id === selectedRegularizationId) ?? null
-    : null;
-  const selectedRegularization = clickedRegularization ?? linkedRegularization;
-  const normalizedQuery = historyQuery.trim().toLowerCase();
-  const visibleRegularizations = regularizations.items.filter((item) => {
-    if (!normalizedQuery) return true;
-    return [
-      item.attendance_date,
-      item.current_status,
-      item.requested_status,
-      item.status,
-      item.reason,
-      item.manager_comment ?? "",
-      item.rejection_reason ?? "",
-    ].some((value) => value.toLowerCase().includes(normalizedQuery));
-  });
-  const pendingCount = regularizations.status_counts.pending ?? 0;
-  const approvedCount = regularizations.status_counts.approved ?? 0;
-  const rejectedCount = regularizations.status_counts.rejected ?? 0;
-  const unlockedRecordCount = attendanceRecords.filter((record) => !record.is_locked).length;
-  const modal = typeof document !== "undefined"
-    ? (
-        <>
-          {regularizeOpen ? createPortal(
-            <AttendanceRegularizationModal
-              attendanceRecords={attendanceRecords}
-              isDemo={isDemo}
-              onClose={() => setRegularizeOpen(false)}
-            />,
-            document.body,
-          ) : null}
-          {selectedRegularization ? createPortal(
-            <AttendanceDetailModal
-              item={selectedRegularization}
-              onClose={() => {
-                setDismissedRegularizationId(selectedRegularization.id);
-                setClickedRegularization(null);
-              }}
-            />,
-            document.body,
-          ) : null}
-        </>
-      )
-    : null;
+  const dateTime = (value: string | null) => attendanceTimestamp(value, attendance.timezone);
+  const offset = (new Date(`${attendance.period_start}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const dayCount = Number(attendance.period_end.slice(8));
+  const periodLabel = `${fullMonthNames[Number(attendance.month.slice(5)) - 1]} ${attendance.month.slice(0, 4)}`;
+  function adjacentMonth(delta: number) {
+    const date = new Date(`${attendance.period_start}T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() + delta);
+    return date.toISOString().slice(0, 7);
+  }
+  async function refreshRecords() {
+    const version = ++refreshVersion.current;
+    setRefreshingSource(initialAttendance);
+    setRefreshFailure(null);
+    try {
+      const recordsQuery = new URLSearchParams({ month: attendance.month, page: String(attendance.page), page_size: String(attendance.page_size) });
+      const historyQuery = new URLSearchParams({ status, page: String(regularizations.page), page_size: String(regularizations.page_size) });
+      const results = await Promise.all([
+        fetch(`/api/me/attendance-records?${recordsQuery}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) }),
+        fetch(`/api/me/attendance-regularizations?${historyQuery}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) }),
+      ]);
+      if (results.some((result) => result.status === 401)) { router.replace("/login"); return; }
+      if (results.some((result) => !result.ok)) throw new Error("Refresh failed");
+      const [nextAttendance, nextHistory] = await Promise.all(results.map((result) => result.json()));
+      if (version !== refreshVersion.current) return;
+      setFresh({ source: initialAttendance, attendance: nextAttendance as EssAttendanceMonth, regularizations: nextHistory as EssAttendanceRegularizationListResponse });
+    } catch {
+      if (version !== refreshVersion.current) return;
+      setRefreshFailure({ source: initialAttendance, message: "The correction was submitted, but updated records could not be loaded. Showing the last loaded records. Retry refresh; do not resubmit the correction." });
+    } finally {
+      if (version === refreshVersion.current) setRefreshingSource((source) => source === initialAttendance ? null : source);
+    }
+  }
+  function selectLocal(event: MouseEvent<HTMLAnchorElement>, updates: Record<string, string>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    const target = href(updates);
+    if (`${window.location.pathname}${window.location.search}` !== target) window.history.pushState(null, "", target);
+  }
+  function requestCorrection(id?: string, opener?: HTMLButtonElement) {
+    (opener ?? correctionActionRef.current)?.focus();
+    setInitialRecordId(id);
+    setRegularizeOpen(true);
+  }
+  useEffect(() => {
+    function openLinkedAction() {
+      if (window.location.hash !== "#regularize-attendance") return;
+      if (eligible.length && !isRefreshing && !refreshError) { correctionActionRef.current?.focus(); setRegularizeOpen(true); }
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
+    }
+    openLinkedAction();
+    window.addEventListener("hashchange", openLinkedAction);
+    return () => window.removeEventListener("hashchange", openLinkedAction);
+  }, [eligible.length, isRefreshing, refreshError]);
 
   return (
-    <main className="shell shell--workspace ess-experience-shell">
-      <section className="workspace-control-header">
-        <div className="workspace-control-header__copy">
-          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live ESS" : "Demo ESS"} / Attendance</span>
-          <h1>Attendance</h1>
-          <p>Review today, request corrections, and track every approval decision from one workspace.</p>
-        </div>
-        <div className="workspace-control-header__actions">
-          <button className="button button--primary" onClick={() => setRegularizeOpen(true)} type="button">Regularize attendance</button>
-          <Link className="button button--secondary" href="/ess">Overview</Link>
-        </div>
-      </section>
-
-      <div className="attendance-summary-strip" aria-label="Attendance summary">
-        <span><strong>{formatStatus(dashboard.attendance.today.status)}</strong> today</span>
-        <span><strong>{pendingCount}</strong> pending</span>
-        <span><strong>{approvedCount}</strong> approved</span>
-        <span><strong>{unlockedRecordCount}</strong> days editable</span>
+    <main className="shell shell--workspace ess-experience-shell ess-compact ess-attendance">
+      <WorkspaceStandardHeader title="Attendance" description="Review your recorded days and request an authorized correction." actions={<><button className="button button--primary" disabled={!eligible.length || isDemo || isRefreshing || Boolean(refreshError)} ref={correctionActionRef} onClick={(event) => requestCorrection(undefined, event.currentTarget)} type="button">Regularize attendance</button><a data-navigation-mode="document" className="button button--secondary" href="/ess">Overview</a></>} />
+      <p className="sr-only" id="ess-attendance-table-scroll-help">When this table region is focused, use Left and Right arrow keys to scroll its columns.</p>
+      {invalidMonth ? <p className="notice notice--error" role="alert">The requested month is invalid. Showing the current tenant month; choose a month below to continue.</p> : null}
+      {isRefreshing ? <p role="status" className="notice">Refreshing attendance and correction history…</p> : null}
+      {refreshError ? <div role="alert" className="notice notice--error"><p>{refreshError}</p><button className="button button--secondary" disabled={isRefreshing} onClick={() => void refreshRecords()} type="button">Retry refresh</button></div> : null}
+      {submitted ? <p className="notice notice--success" role="status">Attendance regularization submitted. Track the approval in Regularizations below.</p> : null}
+      {isDemo ? <p className="notice">Preview mode. Corrections are unavailable.</p> : null}
+      <div className="attendance-summary-strip" aria-label="Attendance period summary">
+        <span><strong>{attendance.summary.recorded_days}</strong> recorded days</span>
+        <span><strong>{attendance.summary.worked_hours}</strong> recorded hours</span>
+        <span><strong>{attendance.summary.locked_days}</strong> finalized days</span>
+        <span><strong>{attendance.summary.pending_corrections}</strong> awaiting approval in this period</span>
       </div>
-
-      <section className="workspace-section">
-        <div className="workspace-section__header">
-          <div>
-            <h2>Attendance snapshot</h2>
-            <p>Today, month-to-date, and correction readiness for your active attendance calendar.</p>
-          </div>
-          <span className={statusClass(dashboard.attendance.today.status)}>{formatStatus(dashboard.attendance.today.status)}</span>
-        </div>
-        <div className="workspace-summary-grid attendance-summary-grid">
-          <article className="workspace-summary-card">
-            <div>
-              <span className="workspace-summary-card__icon" aria-hidden="true">TD</span>
-              <h3>Today</h3>
-            </div>
-            <strong>{formatStatus(dashboard.attendance.today.status)}</strong>
-            <p>{formatDate(dashboard.attendance.today.date)} • {dashboard.attendance.today.shift || "Shift not assigned"}</p>
-            <div className="workspace-summary-card__meta">
-              <span>In: {formatDateTime(dashboard.attendance.today.check_in_at)}</span>
-              <span>Out: {formatDateTime(dashboard.attendance.today.check_out_at)}</span>
-            </div>
-          </article>
-          <article className="workspace-summary-card">
-            <div>
-              <span className="workspace-summary-card__icon" aria-hidden="true">MT</span>
-              <h3>Month to date</h3>
-            </div>
-            <strong>{dashboard.attendance.month_to_date.present_days} present</strong>
-            <p>{dashboard.attendance.month_to_date.work_duration_hours} hours recorded this month.</p>
-            <div className="workspace-summary-card__meta">
-              <span>Absent: {dashboard.attendance.month_to_date.absent_days}</span>
-              <span>Late: {dashboard.attendance.month_to_date.late_days}</span>
-            </div>
-          </article>
-          <article className="workspace-summary-card">
-            <div>
-              <span className="workspace-summary-card__icon" aria-hidden="true">FX</span>
-              <h3>Correction queue</h3>
-            </div>
-            <strong>{pendingCount} pending</strong>
-            <p>Corrections need manager approval before HR or payroll can use them.</p>
-            <div className="workspace-summary-card__meta">
-              <span>Approved: {approvedCount}</span>
-              <span>Rejected: {rejectedCount}</span>
-              <span>Editable days: {unlockedRecordCount}</span>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="workspace-section">
-        <article className="workspace-data-panel attendance-requests-panel">
-          <div className="workspace-data-panel__header">
-            <div>
-              <h2>Regularizations</h2>
-              <p>Track correction requests, approval owner, manager notes, and final decisions.</p>
-            </div>
-            <button className="button button--secondary" onClick={() => setRegularizeOpen(true)} type="button">New correction</button>
-          </div>
-          <div className="workspace-status-tabs">
-            {tabs.map((tab) => (
-              <Link className={`workspace-status-tab ${status === tab ? "workspace-status-tab--active" : ""}`} href={buildHref(currentParams, { status: tab, regId: undefined, page: "1" })} key={tab}>
-                <span>{formatStatus(tab)}</span>
-                <strong>{regularizations.status_counts[tab as keyof typeof regularizations.status_counts] ?? 0}</strong>
-              </Link>
-            ))}
-          </div>
-          <div className="workspace-filter-disclosure">
-            <div className="queue-toolbar__header">
-              <span className="queue-summary-chip"><strong>{visibleRegularizations.length}</strong> shown</span>
-            </div>
-            <WorkspaceFilterBar>
-              <label className="form-field">
-                <span>Search</span>
-                <input
-                  className="input-control"
-                  onChange={(event) => setHistoryQuery(event.target.value)}
-                  placeholder="Date, status, reason, or manager note"
-                  value={historyQuery}
-                />
-              </label>
-              <button className="button button--secondary" disabled={!historyQuery.trim()} onClick={() => setHistoryQuery("")} type="button">Clear search</button>
-            </WorkspaceFilterBar>
-          </div>
-          <div className="employee-directory-table-wrap">
-            <table className="workspace-table attendance-directory-table attendance-request-table" aria-label="Attendance regularization history">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Correction</th>
-                  <th>Status</th>
-                  <th>Submitted</th>
-                  <th>Approver</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRegularizations.length ? (
-                  visibleRegularizations.map((item) => {
-                    const waitingLabel = getApprovalWaitingLabel(item);
-                    return (
-                      <tr key={item.id}>
-                        <td>
-                          <div className="workspace-table__primary-cell">
-                            <strong>{formatDate(item.attendance_date)}</strong>
-                            <span>{item.workflow_reference || "Workflow pending"}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="workspace-table__primary-cell">
-                            <strong>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)}</strong>
-                            <span>{item.reason || "No reason provided."}</span>
-                          </div>
-                        </td>
-                        <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{formatStatus(item.status)}</WorkspaceStatusBadge></td>
-                        <td>{formatDateTime(item.applied_at ?? item.created_at)}</td>
-                        <td>
-                          <div className="workspace-table__primary-cell">
-                            <strong>{getRegularizationOwnerLabel(item)}</strong>
-                            <span>{waitingLabel || item.manager_comment || item.rejection_reason || "Decision history available"}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <button
-                            className="button button--secondary"
-                            onClick={() => {
-                              setDismissedRegularizationId(null);
-                              setClickedRegularization(item);
-                            }}
-                            type="button"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={6}>
-                      <div className="notice workspace-empty-state">
-                        <strong>{regularizations.items.length ? "No regularizations match this search." : "No regularizations in this view."}</strong>
-                        <span className="muted">{regularizations.items.length ? "Clear search or try another status tab." : "Try another status tab once more data is available."}</span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </article>
-        <PaginationBar
-          firstHref={buildHref(currentParams, { regId: undefined, page: "1" })}
-          hasNext={regularizations.has_next}
-          hasPrevious={regularizations.has_previous}
-          lastHref={buildHref(currentParams, { regId: undefined, page: String(totalPages) })}
-          nextHref={buildHref(currentParams, { regId: undefined, page: String(page + 1) })}
-          page={regularizations.page}
-          pageSize={regularizations.page_size}
-          previousHref={buildHref(currentParams, { regId: undefined, page: String(Math.max(1, page - 1)) })}
-          totalCount={regularizations.total_count}
-        />
-      </section>
-
-      {modal}
+      <WorkspaceStandardPanel title="Attendance period" description={`${formatDate(attendance.period_start)} – ${formatDate(attendance.period_end)} · Times: ${attendance.timezone} · Today: ${formatDate(attendance.today)}`}>
+        <form data-navigation-mode="document" action="/ess/attendance" method="get" className="ess-attendance-toolbar">
+          <label>Month<input className="input-control" name="month" type="month" min="0001-01" max="9999-12" required defaultValue={attendance.month} key={attendance.month} /></label>
+          <input type="hidden" name="view" value={view} />
+          <label>Rows per page<select className="input-control" name="page_size" defaultValue={attendance.page_size} key={attendance.page_size}>{[5, 10, 20, 31].map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+          <button className="button button--secondary" type="submit">Show period</button>
+          <a data-navigation-mode="document" className="button button--secondary" href="/ess/attendance">Current period</a>
+        </form>
+        <nav className="ess-attendance-toolbar" aria-label="Attendance view and month">
+          {attendance.month !== "0001-01" ? <a data-navigation-mode="document" href={href({ month: adjacentMonth(-1), day: undefined, page: "1" })}>Previous month</a> : null}
+          <strong>{periodLabel}</strong>
+          {attendance.month !== "9999-12" ? <a data-navigation-mode="document" href={href({ month: adjacentMonth(1), day: undefined, page: "1" })}>Next month</a> : null}
+          <a data-navigation-mode="document" href={href({ view: "calendar" })} onClick={(event) => selectLocal(event, { view: "calendar" })} aria-current={view === "calendar" ? "page" : undefined}>Calendar</a>
+          <a data-navigation-mode="document" href={href({ view: "list" })} onClick={(event) => selectLocal(event, { view: "list" })} aria-current={view === "list" ? "page" : undefined}>List</a>
+        </nav>
+        {!attendance.days.length ? <p className="ess-empty" role="status">No attendance records in this period. Missing days are not inferred as absences.</p> : null}
+        {view === "calendar" ? <WorkspaceCalendar offset={offset} onSelect={(event, day) => selectLocal(event, { day })} days={Array.from({ length: dayCount }, (_, index) => {
+          const day = `${attendance.month}-${String(index + 1).padStart(2, "0")}`;
+          const record = attendance.days.find((item) => item.attendance_date === day);
+          return { date: day, number: index + 1, status: record ? formatStatus(record.status) : "No record", shortStatus: record ? calendarStatusCode[record.status] ?? "?" : "—", finalized: Boolean(record?.is_locked), selected: day === selectedDate, href: href({ day }), label: `${day}: ${record ? formatStatus(record.status) : "No record"}${record?.is_locked ? ", finalized" : ""}` };
+        })} /> : <>
+          <div className="workspace-table-scroll" role="region" aria-label="Attendance records" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance days"><thead><tr><th scope="col">Day</th><th scope="col">Status</th><th scope="col">Shift</th><th scope="col">Recorded hours</th><th scope="col">Protection</th></tr></thead><tbody>{attendance.items.map((day) => <tr key={day.id} className={day.attendance_date === selectedDate ? "is-selected" : ""}><th scope="row"><a data-navigation-mode="document" onClick={(event) => selectLocal(event, { day: day.attendance_date })} aria-current={day.attendance_date === selectedDate ? "date" : undefined} href={href({ day: day.attendance_date })}>{formatDate(day.attendance_date)}</a></th><td>{formatStatus(day.status)}</td><td>{day.shift || "Not recorded"}</td><td>{day.work_duration_hours}</td><td>{day.is_locked ? "Finalized" : "Not finalized"}</td></tr>)}</tbody></table></div>
+          <div aria-label="Attendance pagination"><PaginationBar navigationMode="document" page={attendance.page} pageSize={attendance.page_size} totalCount={attendance.total_count} hasNext={attendance.has_next} hasPrevious={attendance.has_previous} firstHref={href({ page: "1" })} lastHref={href({ page: String(attendance.total_pages) })} previousHref={href({ page: String(Math.max(1, attendance.page - 1)) })} nextHref={href({ page: String(attendance.page + 1) })} /></div>
+        </>}
+      </WorkspaceStandardPanel>
+      <WorkspaceStandardPanel title={`Day details · ${formatDate(selectedDate)}`} description="Recorded attendance values; raw punches cannot be edited here.">
+        {selectedDay ? <>
+          <EssFields fields={[["Status", formatStatus(selectedDay.status)], ["Shift", selectedDay.shift], ["Recorded check-in", dateTime(selectedDay.check_in_at)], ["Recorded check-out", dateTime(selectedDay.check_out_at)], ["Working hours", selectedDay.work_duration_hours], ["Overtime recorded (hours)", selectedDay.overtime_hours], ["Late (minutes)", String(selectedDay.late_minutes)], ["Early exit (minutes)", String(selectedDay.early_exit_minutes)], ["Holiday", selectedDay.holiday || selectedDay.derivation_summary?.holiday_name], ["Schedule context", selectedDay.derivation_summary?.schedule_day_type ? formatStatus(selectedDay.derivation_summary.schedule_day_type) : "Historical schedule context unavailable"], ["Protection", selectedDay.is_locked ? "Finalized / read only" : "Not finalized"], ["Regularized", selectedDay.is_regularized ? "Yes" : "No"]]} />
+          {selectedDay.derivation_summary ? <div className="ess-section-note"><strong>Current policy context for this date</strong><ul>{[...selectedDay.derivation_summary.reasons, ...selectedDay.derivation_summary.warnings].map((reason, index) => <li key={index}>{reason}</li>)}</ul></div> : <p className="ess-section-note">Finalized values are shown as stored. Current policy is not used to reconstruct historical explanations.</p>}
+          <p className="ess-section-note">Raw punch history is unavailable. These are the recorded daily check-in and check-out values. Overtime shown here is recorded time, not a payment entitlement.</p>
+          {selectedDay.can_regularize && !isDemo ? <button disabled={isRefreshing || Boolean(refreshError)} className="button button--secondary" onClick={(event) => requestCorrection(selectedDay.id, event.currentTarget)} type="button">Request correction for this day</button> : <p className="ess-section-note" role="note">{selectedDay.regularization_unavailable_reason || "Corrections are unavailable in preview mode."}</p>}
+        </> : <p className="ess-empty">No attendance record for this day. A correction requires an existing eligible record.</p>}
+        {!eligible.length ? <p className="ess-section-note">No eligible records in this period. Finalized days and requests awaiting approval cannot be resubmitted.</p> : null}
+      </WorkspaceStandardPanel>
+      <WorkspaceStandardPanel title="Regularizations" description={`All periods · ${pending} awaiting approval. View request details and the recorded decision.`}>
+        <nav className="ess-attendance-toolbar" aria-label="Regularization status">{["all", "pending", "approved", "rejected"].map((item) => <a data-navigation-mode="document" key={item} href={href({ status: item, reg_page: "1", regId: undefined })} aria-current={status === item ? "page" : undefined}>{formatStatus(item)} ({regularizations.status_counts[item as keyof typeof regularizations.status_counts] ?? 0})</a>)}</nav>
+        <div className="workspace-table-scroll" role="region" aria-label="Correction history" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance regularization history"><thead><tr><th scope="col">Day</th><th scope="col">Requested status</th><th scope="col">Approval status</th><th scope="col">Approver / note</th><th scope="col">Details</th></tr></thead><tbody>{regularizations.items.map((item) => <tr key={item.id}><th scope="row">{formatDate(item.attendance_date)}</th><td>{formatStatus(item.requested_status)}</td><td><WorkspaceStatusBadge tone={statusTone(item.status)}>{formatStatus(item.status)}</WorkspaceStatusBadge></td><td>{getRegularizationOwnerLabel(item)}<br />{item.manager_comment || item.rejection_reason || getApprovalWaitingLabel(item)}</td><td><button className="button button--secondary" type="button" onClick={(event) => { event.currentTarget.focus(); setDismissedRequestId(null); setClickedRegularization(item); }}>View</button></td></tr>)}</tbody></table></div>
+        {!regularizations.items.length ? <p className="ess-empty">No regularizations in this view.</p> : null}
+        <div aria-label="Regularization pagination"><PaginationBar navigationMode="document" page={regularizations.page} pageSize={regularizations.page_size} totalCount={regularizations.total_count} hasNext={regularizations.has_next} hasPrevious={regularizations.has_previous} firstHref={href({ reg_page: "1", regId: undefined })} lastHref={href({ reg_page: String(Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size))), regId: undefined })} previousHref={href({ reg_page: String(Math.max(1, regularizations.page - 1)), regId: undefined })} nextHref={href({ reg_page: String(regularizations.page + 1), regId: undefined })} /></div>
+      </WorkspaceStandardPanel>
+      {hydrated && regularizeOpen ? createPortal(<AttendanceRegularizationModal attendanceRecords={eligible} initialRecordId={initialRecordId} isDemo={isDemo} onClose={() => setRegularizeOpen(false)} onSubmitted={() => { setSubmitted(true); void refreshRecords(); }} />, document.body) : null}
+      {hydrated && selectedRequest ? createPortal(<AttendanceDetailModal item={selectedRequest} onClose={() => { setDismissedRequestId(selectedRequest.id); setClickedRegularization(null); }} />, document.body) : null}
     </main>
   );
 }

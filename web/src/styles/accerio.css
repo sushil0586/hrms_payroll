@@ -1,0 +1,201 @@
+/* Accerio foundation. Semantic palette is opt-in; admin workflows keep their existing theme. */
+:root {
+  --ds-brand: #5145b8;
+  --ds-brand-rgb: 81, 69, 184;
+  --ds-brand-soft-rgb: 239, 237, 252;
+  --ds-brand-hover: #403490;
+  --ds-brand-soft: #efedfc;
+  --ds-canvas: #f6f7fb;
+  --ds-surface: #ffffff;
+  --ds-surface-subtle: #f8f9fc;
+  --ds-text: #202638;
+  --ds-text-muted: #566176;
+  --ds-border: #dce1eb;
+  --ds-border-soft: #e9ecf3;
+  --ds-control-border: #7d879b;
+  --ds-success: #166448;
+  --ds-success-soft: #e8f5ee;
+  --ds-info: #245b96;
+  --ds-info-soft: #eaf2fc;
+  --ds-warning: #855314;
+  --ds-warning-soft: #fff4dc;
+  --ds-danger: #ac3044;
+  --ds-danger-soft: #fcecf0;
+  --ds-radius-control: 8px;
+  --ds-radius-panel: 14px;
+  --ds-shadow: 0 2px 8px rgb(32 38 56 / 4%);
+  --ds-focus: 0 0 0 3px var(--ds-brand-soft);
+}
+.accerio-workspace, .accerio-dialog {
+  --accent: var(--ds-brand);
+  --workspace-accent-rgb: var(--ds-brand-rgb);
+  --workspace-accent-soft-rgb: var(--ds-brand-soft-rgb);
+  --color-accent-primary: var(--ds-brand);
+  --color-text-primary: var(--ds-text);
+  --color-text-secondary: var(--ds-text-muted);
+  --text: var(--ds-text);
+  --muted: var(--ds-text-muted);
+  --line: var(--ds-border);
+  font-family: var(--font-sans);
+  color: var(--ds-text);
+}
+.accerio-workspace.app-shell--workspace { background: var(--ds-canvas); grid-template-columns: 224px minmax(0,1fr); padding: 0; gap: 0; }
+.accerio-workspace .app-main--workspace { padding: 0; min-width: 0; }
+.accerio-workspace .app-sidebar--workspace { background: var(--ds-surface); border: 0; border-right: 1px solid var(--ds-border); border-radius: 0; box-shadow: none; padding: var(--space-5) var(--space-3); }
+.accerio-workspace .app-sidebar__brand { padding: var(--space-3); margin-bottom: var(--space-5); border-color: var(--ds-border); }
+.accerio-workspace .app-sidebar__brand strong { font-size: var(--type-size-2xl); letter-spacing: -.04em; color: var(--ds-text); }
+.accerio-workspace .brand-mark { background: var(--ds-brand); border-radius: var(--ds-radius-control); box-shadow: none; }
+.accerio-workspace .nav-item { border: 1px solid transparent; border-radius: var(--ds-radius-control); min-height: 44px; margin-block: var(--space-1); background: transparent; color: var(--ds-text-muted); box-shadow: none; }
+.accerio-workspace .nav-item:hover { background: var(--ds-surface-subtle); }
+.accerio-workspace .nav-item--active { background: var(--ds-brand-soft); color: var(--ds-brand); border-color: var(--ds-brand-soft); }
+.accerio-workspace .nav-item__glyph { background: var(--ds-surface-subtle); color: inherit; border: 1px solid var(--ds-border-soft); border-radius: var(--ds-radius-control); }
+.accerio-workspace .nav-item__content strong { font-size: var(--type-size-base); color: inherit; }
+.accerio-workspace .nav-item__content small { color: var(--ds-text-muted); }
+.accerio-workspace .app-topbar--workspace { height: auto; min-height: 64px; margin: 0; padding: var(--space-3) var(--space-5); background: var(--ds-surface); border: 0; border-bottom: 1px solid var(--ds-border); border-radius: 0; box-shadow: none; }
+.accerio-workspace .app-content--workspace { padding: 0; }
+.accerio-workspace :is(.button,input,select,textarea) { border-radius: var(--ds-radius-control); font: inherit; }
+.accerio-workspace :is(input,select,textarea) { min-height: 44px; background: var(--ds-surface); color: var(--ds-text); border-color: var(--ds-control-border); }
+.accerio-workspace .button { min-height: 40px; font-size: var(--type-size-md); font-weight: 600; box-shadow: none; }
+.accerio-workspace .button--primary { background: var(--ds-brand); color: var(--ds-surface); border-color: var(--ds-brand); }
+.accerio-workspace .button--primary:hover { background: var(--ds-brand-hover); }
+.accerio-workspace .button--secondary { background: var(--ds-surface); color: var(--ds-text); border: 1px solid var(--ds-border); }
+.accerio-workspace :is(a,button,input,select,textarea,summary,[tabindex]):focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 3px; box-shadow: var(--ds-focus); }
+.accerio-workspace .workspace-standard-panel { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); box-shadow: var(--ds-shadow); }
+.accerio-workspace .workspace-standard-header { background: transparent; box-shadow: none; border: 0; }
+.accerio-workspace .workspace-status-badge { border-radius: var(--radius-pill); background: var(--ds-surface-subtle); color: var(--ds-text-muted); }
+.accerio-workspace .workspace-status-badge--success { background: var(--ds-success-soft); color: var(--ds-success); }
+.accerio-workspace .workspace-status-badge--warning { background: var(--ds-warning-soft); color: var(--ds-warning); }
+.accerio-workspace .workspace-status-badge--danger { background: var(--ds-danger-soft); color: var(--ds-danger); }
+.accerio-workspace .workspace-status-badge--info { background: var(--ds-info-soft); color: var(--ds-info); }
+.accerio-workspace .workspace-table th { background: var(--ds-surface-subtle); color: var(--ds-text-muted); font-weight: 600; }
+.accerio-workspace .workspace-table td { border-color: var(--ds-border-soft); }
+.accerio-workspace .workspace-table tbody tr:hover { background: var(--ds-surface-subtle); }
+/* Action groups must wrap rather than inherit table text truncation. */
+.accerio-workspace .shell--workspace table.workspace-table td > .table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  overflow: visible;
+  white-space: normal;
+}
+.accerio-workspace .ess-service-list li { padding: var(--space-3); border: 1px solid var(--ds-border-soft); border-radius: var(--ds-radius-control); background: var(--ds-surface-subtle); }
+.accerio-workspace .ess-service-list a { text-decoration: none; gap: var(--space-2); }
+.accerio-workspace .ess-identity { border-radius: var(--ds-radius-panel); box-shadow: var(--ds-shadow); border-left: 3px solid var(--ds-brand); }
+.accerio-workspace .ess-compact { gap: var(--space-5); }
+.accerio-workspace .ess-attendance-calendar__day { color: var(--ds-text-muted); background: var(--ds-surface); transition: border-color var(--motion-fast) var(--ease-standard); }
+.accerio-workspace .ess-attendance-calendar__day:hover { border-color: var(--ds-brand); }
+.accerio-workspace .ess-attendance-calendar__day.is-selected { background: var(--ds-brand-soft); }
+@media (max-width: 1100px) { .accerio-workspace.app-shell--workspace { grid-template-columns: 196px minmax(0,1fr); } }
+@media (max-width: 900px) { .accerio-workspace.app-shell--workspace { grid-template-columns: minmax(0,1fr); } .accerio-workspace .app-sidebar--workspace { display: none; } .accerio-workspace .mobile-workspace-nav { display: block; } }
+@media (max-width: 767px) { .accerio-workspace .app-topbar--workspace { padding: var(--space-3); flex-wrap: wrap; } .accerio-workspace .button { min-height: 44px; } }
+
+/* Shared presentation styles, also usable by MSS consumers. */
+.ess-identity { display: flex; align-items: center; gap: 14px; padding: 16px 20px; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: 12px; min-width: 0; }
+.ess-identity__avatar { flex: 0 0 48px; height: 48px; display: grid; place-items: center; background: var(--ds-brand-soft); color: var(--ds-brand); border-radius: 12px; font-size: 18px; font-weight: 700; }
+.ess-identity > div { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.ess-identity strong { font-size: 18px; color: var(--ds-text); }
+.ess-identity > div > span { font-size: 13px; color: var(--ds-text-muted); }
+.ess-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px 24px; margin: 0; }
+.ess-fields > div { min-width: 0; }
+.ess-fields dt { font-size: 12px; color: var(--ds-text-muted); margin-bottom: 4px; }
+.ess-fields dd { font-size: 14px; font-weight: 600; color: var(--ds-text); margin: 0; overflow-wrap: anywhere; }
+.ess-service-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 20px; }
+.ess-service-list li { min-width: 0; }
+.ess-service-list a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; }
+.ess-service-list p { margin: 0; }
+.accerio-workspace .ess-compact .workspace-standard-panel { border-radius: var(--ds-radius-panel); box-shadow: var(--ds-shadow); }
+.accerio-workspace .attendance-summary-strip { display: grid; align-items: stretch; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: var(--space-3); padding: 0; margin: 0; background: transparent; border: 0; box-shadow: none; }
+.accerio-workspace .attendance-summary-strip > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-4); background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); color: var(--ds-text-muted); font-size: var(--type-size-sm); }
+.accerio-workspace .attendance-summary-strip strong { color: var(--ds-text); font-size: var(--type-size-2xl); line-height: var(--type-leading-title); }
+.accerio-workspace .user-chip__avatar { background: var(--ds-brand-soft); color: var(--ds-brand); }
+.accerio-workspace nav.ess-attendance-toolbar { align-items: center; }
+.accerio-workspace .ess-balance-table thead th { white-space: nowrap; font-size: var(--type-size-xs); }
+.accerio-workspace .ess-fields dd { line-height: var(--type-leading-copy); }
+.accerio-workspace .ess-attendance-calendar__day strong { color: var(--ds-text); }
+.accerio-workspace .ess-attendance-calendar__day.is-selected strong { color: var(--ds-brand); }
+/* Portalled dialogs explicitly opt in because they live outside WorkspaceChrome. */
+.accerio-dialog { color: var(--ds-text); background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); }
+.accerio-dialog :is(input,select,textarea) { background: var(--ds-surface); color: var(--ds-text); border: 1px solid var(--ds-control-border); border-radius: var(--ds-radius-control); min-height: 44px; }
+.accerio-dialog .button--primary { background: var(--ds-brand); color: var(--ds-surface); border-color: var(--ds-brand); }
+.accerio-dialog :is(button,input,select,textarea,a):focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 3px; }
+@media (min-width: 768px) and (max-width: 1100px) { .accerio-workspace .ess-services-panel { grid-column: 1 / -1; } .accerio-workspace .ess-service-list { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 767px) { .accerio-workspace .attendance-summary-strip { grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-2); } .accerio-workspace .attendance-summary-strip > span { padding: var(--space-3); } }
+@media (max-width: 360px) { .ess-fields { grid-template-columns: minmax(0,1fr); } .ess-service-list { grid-template-columns: minmax(0,1fr); } }
+
+/* Shared calendar baseline. */
+.ess-attendance-calendar, .ess-attendance-weekdays { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 6px; }
+.ess-attendance-weekdays { padding-block: 8px; color: var(--ds-text-muted); font-size: 12px; text-align: center; }
+.ess-attendance-calendar__day { min-height: 80px; padding: 10px; display: flex; flex-direction: column; gap: 5px; border: 1px solid var(--ds-border); border-radius: 8px; text-decoration: none; overflow-wrap: anywhere; }
+.ess-attendance-calendar__day span, .ess-attendance-calendar__day small { font-size: 12px; }
+.ess-attendance-calendar__day.is-selected { background: var(--ds-brand-soft); border: 2px solid var(--ds-brand); }
+.ess-attendance-calendar__short, .ess-attendance-calendar__key { display: none; }
+.ess-service-list { list-style: none; padding: 0; margin: 0; }
+@media (max-width: 767px) {
+.ess-attendance-calendar__full { display: none; }
+.ess-attendance-calendar__short { display: block; white-space: nowrap; }
+.ess-attendance-calendar__key { display: block; margin-top: var(--space-3); font-size: var(--type-size-md); }
+.ess-attendance-calendar__key summary { min-height: 44px; padding-block: var(--space-3); cursor: pointer; }
+.ess-attendance-calendar, .ess-attendance-weekdays { gap: 3px; }
+.ess-attendance-calendar__day { padding: 5px 3px; min-height: 78px; }
+.ess-attendance-calendar__day :is(span,small) { font-size: var(--type-size-sm); line-height: 1.3; }
+}
+.accerio-workspace .brand-mark--calm::before { content: "A"; color: var(--ds-surface); font-size: var(--type-size-lg); font-weight: 700; }
+.accerio-workspace .nav-item--active::before { background: var(--ds-brand); }
+/* Search shares form target sizing without overflowing its legacy chip frame. */
+.accerio-workspace .search-chip--calm { height: auto; min-height: 44px; padding-block: 0; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); }
+.accerio-workspace .workspace-search__input { min-height: 42px; background: transparent; }
+.accerio-workspace .brand-mark--calm { display: grid; place-items: center; grid-template-columns: 1fr; gap: 0; width: 32px; height: 32px; padding: 0; }
+.accerio-workspace .nav-item--active .nav-item__glyph { background: var(--ds-brand-soft); color: var(--ds-brand); border-color: var(--ds-border); }
+.accerio-workspace .attendance-summary-strip > span:last-child { border-right: 1px solid var(--ds-border); }
+.accerio-workspace .loading-card { background: var(--ds-surface); border-color: var(--ds-border); border-radius: var(--ds-radius-panel); }
+.accerio-workspace .loading-line { background: var(--ds-brand-soft); }
+.accerio-workspace .notice--error, .accerio-dialog .notice--error { background: var(--ds-danger-soft); color: var(--ds-danger); border-color: var(--ds-danger); }
+.accerio-workspace .notice--success, .accerio-dialog .notice--success { background: var(--ds-success-soft); color: var(--ds-success); border-color: var(--ds-success); }
+@media (max-width: 1100px) { .accerio-workspace .ess-dashboard-grid { grid-template-columns: minmax(0,1fr); } }
+.accerio-workspace .ess-compact table.ess-balance-table { table-layout: auto; }
+/* Anchor mobile navigation to the full header, independent of action wrapping. */
+@media (max-width: 900px) {
+  .accerio-workspace .app-topbar--workspace { position: relative; z-index: 30; }
+  .accerio-workspace .app-topbar--workspace .topbar-actions--workspace,
+  .accerio-workspace .app-topbar--workspace .mobile-workspace-nav { position: static; }
+  .accerio-workspace .app-topbar--workspace .mobile-workspace-nav__panel { position: absolute; top: calc(100% + var(--space-2)); left: var(--space-3); right: var(--space-3); width: auto; max-width: none; max-height: min(65dvh, calc(100dvh - 100% - var(--space-4))); overflow: auto; background: var(--ds-surface); color: var(--ds-text); border-color: var(--ds-border); border-radius: var(--ds-radius-panel); box-shadow: var(--ds-shadow); }
+}
+.accerio-workspace .mobile-workspace-nav__link { background: var(--ds-surface-subtle); color: var(--ds-text); border-color: var(--ds-border-soft); }
+.accerio-workspace .mobile-workspace-nav__link--active { background: var(--ds-brand-soft); color: var(--ds-brand); border-color: var(--ds-brand); }
+
+/* Portalled Accerio dialogs: only the body scrolls; header/actions stay reachable. */
+.accerio-dialog.hr-admin-action-modal {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  width: min(960px, calc(100vw - 28px));
+  max-width: 100%;
+  max-height: min(92dvh, 760px);
+}
+.accerio-dialog.hr-admin-action-modal--with-tabs { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.accerio-dialog .hr-admin-action-modal__header > div { min-width: 0; overflow-wrap: anywhere; }
+.accerio-dialog .hr-admin-action-modal__body { min-width: 0; overflow-wrap: anywhere; }
+.accerio-dialog .hr-admin-action-modal__footer { flex-wrap: wrap; }
+/* At high native zoom / short landscape heights, preserve readable content
+   by scrolling the complete dialog instead of squeezing its body to one line. */
+@media (max-height: 480px) {
+  .accerio-dialog.hr-admin-action-modal { display: block; overflow-y: auto; }
+  .accerio-dialog .hr-admin-action-modal__body { overflow: visible; }
+}
+@media (max-width: 480px) {
+  .accerio-dialog .hr-admin-action-modal__footer > * { flex: 1 1 auto; min-width: 0; }
+  .accerio-dialog .hr-admin-action-modal__footer .button { white-space: normal; min-height: 44px; }
+}
+
+/* ESS-6: legacy table/label selectors must not override semantic contrast tokens. */
+.accerio-workspace .nav-group__title,
+.accerio-workspace .shell--workspace .form-field > :is(span, .muted):not(.field-error-text),
+.accerio-dialog .form-field > :is(span, .muted):not(.field-error-text) { color: var(--ds-text-muted); }
+.accerio-workspace .shell--workspace table.workspace-table td > span:not(.workspace-status-badge),
+.accerio-workspace .shell--workspace table.workspace-table td.workspace-table__primary-cell a span,
+.accerio-workspace .shell--workspace table.workspace-table td.workspace-table__primary-cell > div > span:not(.workspace-status-badge) { color: var(--ds-text-muted); }
+.accerio-workspace .shell--workspace table.workspace-table td .workspace-status-badge--success { color: var(--ds-success); }
+.accerio-workspace .shell--workspace table.workspace-table td .workspace-status-badge--warning { color: var(--ds-warning); }
+.accerio-workspace .shell--workspace table.workspace-table td .workspace-status-badge--danger { color: var(--ds-danger); }
+.accerio-workspace .shell--workspace table.workspace-table td .workspace-status-badge--info { color: var(--ds-info); }
+
+.accerio-dialog .detail-label { color: var(--ds-text-muted); }

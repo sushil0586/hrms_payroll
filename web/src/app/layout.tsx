@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "../styles/accerio.css";
 
 export const metadata: Metadata = {
   title: "PeopleOps Control Center",

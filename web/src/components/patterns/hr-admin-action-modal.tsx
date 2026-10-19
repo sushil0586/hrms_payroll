@@ -15,6 +15,8 @@ type HrAdminActionModalProps = {
   tabs?: string[];
   className?: string;
   onClose?: () => void;
+  explicitTabOrder?: boolean;
+  focusableBody?: boolean;
 };
 
 const focusableSelector = [
@@ -37,6 +39,8 @@ export function HrAdminActionModal({
   tabs = [],
   className = "",
   onClose,
+  explicitTabOrder = false,
+  focusableBody = false,
 }: HrAdminActionModalProps) {
   const router = useRouter();
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -45,13 +49,16 @@ export function HrAdminActionModal({
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const dialog = dialogRef.current;
     const focusable = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)) : [];
     const firstInput = focusable.find((item) => item.matches("input, select, textarea"));
     (firstInput ?? focusable[0] ?? dialog)?.focus();
 
     return () => {
-      previousFocusRef.current?.focus();
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus({ preventScroll: true });
     };
   }, []);
 
@@ -90,6 +97,19 @@ export function HrAdminActionModal({
       return;
     }
 
+    // Safari may skip buttons in native Tab order. Opt-in consumers can keep
+    // traversal inside the dialog without changing other workspaces. Native
+    // date/time inputs retain internal segment navigation; these consumers
+    // place them between ordinary form controls, never at the trap boundary.
+    const active = document.activeElement;
+    const nativeSegments = active instanceof HTMLInputElement && ["date", "time", "datetime-local"].includes(active.type);
+    if (explicitTabOrder && !nativeSegments) {
+      event.preventDefault();
+      const index = focusable.findIndex((item) => item === active);
+      const next = event.shiftKey ? (index <= 0 ? focusable.length - 1 : index - 1) : (index + 1) % focusable.length;
+      focusable[next]?.focus();
+      return;
+    }
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (event.shiftKey && document.activeElement === first) {
@@ -106,7 +126,7 @@ export function HrAdminActionModal({
       <section
         aria-labelledby={labelledBy}
         aria-modal="true"
-        className={`hr-admin-action-modal employee-create-modal employee-maintenance-modal${className ? ` ${className}` : ""}`}
+        className={`hr-admin-action-modal employee-create-modal employee-maintenance-modal${tabs.length ? " hr-admin-action-modal--with-tabs" : ""}${className ? ` ${className}` : ""}`}
         onChange={() => setIsDirty(true)}
         onInput={() => setIsDirty(true)}
         onKeyDown={handleKeyDown}
@@ -133,7 +153,7 @@ export function HrAdminActionModal({
             ))}
           </div>
         ) : null}
-        <div className="hr-admin-action-modal__body employee-create-modal__body">{children}</div>
+        <div className="hr-admin-action-modal__body employee-create-modal__body" tabIndex={focusableBody ? 0 : -1} role="region" aria-label={`${title} content`}>{children}</div>
         {footer ? <footer className="hr-admin-action-modal__footer">{footer}</footer> : null}
       </section>
     </div>

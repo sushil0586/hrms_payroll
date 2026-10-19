@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
@@ -9,16 +9,18 @@ import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceCalendar } from "@/components/patterns/workspace-calendar";
+import { WorkspaceInformation } from "@/components/patterns/workspace-information";
+import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
 
 type SearchParamValue = string | string[] | undefined;
 
 type Props = {
   balances: LeaveBalance[];
+  linkedDetail: LeaveRequestItem | null;
   currentParams: Record<string, SearchParamValue>;
   isDemo: boolean;
   leaveRequests: EssLeaveRequestListResponse;
@@ -35,12 +37,18 @@ type LeaveApplyField = "leave_type_id" | "start_date" | "end_date" | "attachment
 
 function formatDate(value: string | null) {
   if (!value) return "Not available";
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+  const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${String(date.getUTCDate()).padStart(2, "0")} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "Not available";
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  const iso = date.toISOString();
+  return `${formatDate(iso.slice(0, 10))} ${iso.slice(11, 16)} UTC`;
 }
 
 function statusClass(status: string) {
@@ -69,6 +77,7 @@ function buildHref(currentParams: Record<string, SearchParamValue>, updates: Rec
     const normalized = normalizeParam(value);
     if (normalized) params.set(key, normalized);
   });
+  params.delete("requestId");
   Object.entries(updates).forEach(([key, value]) => {
     if (value) params.set(key, value);
     else params.delete(key);
@@ -85,18 +94,9 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to submit leave request.");
 }
 
-function parseNumeric(value: string | null | undefined) {
-  const parsed = Number(value ?? "0");
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatUnits(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
 function parseDateOnly(value: string) {
   if (!value) return null;
-  const parsed = new Date(`${value}T00:00:00`);
+  const parsed = new Date(`${value}T00:00:00Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
@@ -136,11 +136,6 @@ function rangesOverlap(leftStart: string, leftEnd: string, rightStart: string, r
   return startA <= endB && startB <= endA;
 }
 
-function getRequestTimestamp(item: LeaveRequestItem) {
-  const value = item.updated_at ?? item.approved_at ?? item.applied_at ?? item.created_at ?? item.start_date;
-  return new Date(value).getTime();
-}
-
 function getRequestPeriod(item: LeaveRequestItem, today: Date) {
   const startDate = parseDateOnly(item.start_date);
   const endDate = parseDateOnly(item.end_date);
@@ -154,7 +149,7 @@ function isRequestInYear(item: LeaveRequestItem, year: number) {
   const startDate = parseDateOnly(item.start_date);
   const endDate = parseDateOnly(item.end_date);
   if (!startDate || !endDate) return false;
-  return startDate.getFullYear() === year || endDate.getFullYear() === year;
+  return startDate <= new Date(Date.UTC(year, 11, 31)) && endDate >= new Date(Date.UTC(year, 0, 1));
 }
 
 function getCurrentApprovalStep(item: LeaveRequestItem) {
@@ -180,9 +175,7 @@ function getRequestOwnerLabel(item: LeaveRequestItem) {
 }
 
 function getPrimaryBalanceLabel(balance: LeaveBalance) {
-  const available = parseNumeric(balance.closing_balance);
-  const formatted = formatUnits(available);
-  return `${formatted} ${formatted === "1" ? "day" : "days"}`;
+  return `${balance.closing_balance} units available`;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -383,14 +376,15 @@ function LeaveApplyModal({
   leaveRequests,
   leaveTypes,
   onClose,
+  onSubmitted,
 }: {
+  onSubmitted: (requestId: string) => void;
   balances: LeaveBalance[];
   isDemo: boolean;
   leaveRequests: LeaveRequestItem[];
   leaveTypes: EssLeaveTypeOption[];
   onClose: () => void;
 }) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [leaveTypeId, setLeaveTypeId] = useState(leaveTypes[0]?.id ?? "");
   const [startDate, setStartDate] = useState(today);
@@ -419,7 +413,6 @@ function LeaveApplyModal({
     () => estimateRequestedUnits(startDate, endDate, startPortion, endPortion),
     [endDate, endPortion, startDate, startPortion],
   );
-  const balanceAvailable = parseNumeric(matchingBalance?.closing_balance);
   const overlappingRequest = useMemo(
     () => leaveRequests.find((request) => (
       ["approved", "pending", "partially_approved"].includes(request.status)
@@ -455,10 +448,6 @@ function LeaveApplyModal({
       attachment_reference: attachmentRequired && !selectedFile ? requireText(evidenceReference, "Upload evidence or enter an evidence reference for this leave type.") : undefined,
       reason: requireText(String(formData.get("reason") ?? ""), "Enter the reason for this leave request."),
     };
-    if (overlappingRequest) {
-      nextErrors.start_date = "This date range overlaps an existing approved or pending leave request.";
-      nextErrors.end_date = "Choose dates outside the existing leave request.";
-    }
     if (hasFieldErrors(nextErrors)) {
       const message = "Review the highlighted leave fields and try again.";
       setFieldErrors(nextErrors);
@@ -480,6 +469,8 @@ function LeaveApplyModal({
       leave_type_id: leaveTypeId,
       start_date: startDate,
       end_date: endDate,
+      start_day_portion: startPortion,
+      end_day_portion: endPortion,
       reason: String(formData.get("reason") ?? ""),
       attachment_reference: evidenceReference,
       attachment: selectedFile ? [selectedFile.name, selectedFile.size, selectedFile.lastModified] : null,
@@ -500,8 +491,8 @@ function LeaveApplyModal({
       return;
     }
     const payload = await response.json().catch(() => ({}));
-    setSubmitting(false);
     if (!response.ok) {
+      setSubmitting(false);
       const message = getErrorMessage(payload);
       setFeedback({ tone: "error", message });
       setToast({ title: "Submission failed.", message, tone: "error" });
@@ -513,9 +504,8 @@ function LeaveApplyModal({
     setFeedback({ tone: "success", message });
     setToast({ title: "Submitted successfully.", message, tone: "success" });
     form.reset();
-    submittingRef.current = false;
-    onClose();
-    refresh();
+    // Keep the submission locked until the fresh authorized history read completes.
+    onSubmitted(typeof payload.id === "string" ? payload.id : "");
   }
 
   useEffect(() => {
@@ -526,6 +516,8 @@ function LeaveApplyModal({
 
   return (
     <HrAdminActionModal
+      className="accerio-dialog"
+      explicitTabOrder
       closeHref="/ess/leave"
       description="Choose the leave type and dates. Add evidence only when this policy asks for it."
       eyebrow="ESS leave"
@@ -632,9 +624,9 @@ function LeaveApplyModal({
               <span className="muted">After you submit, approval goes to your manager when required.</span>
               <AsyncActionButton
                 className="button button--primary"
-                disabled={submitting || isRefreshing || !leaveTypes.length || !requestEstimate.valid || !evidenceReady || Boolean(overlappingRequest)}
-                pending={submitting || isRefreshing}
-                pendingLabel={isRefreshing ? "Refreshing leave history" : "Submitting leave"}
+                disabled={submitting || !leaveTypes.length || !requestEstimate.valid || !evidenceReady}
+                pending={submitting}
+                pendingLabel="Submitting leave"
                 type="submit"
               >
                 Submit leave
@@ -645,10 +637,10 @@ function LeaveApplyModal({
             <div>
               <span className="detail-label">Request summary</span>
               <h3>{selectedLeaveType?.name ?? "Choose leave type"}</h3>
-              <p>{requestEstimate.valid ? `${formatUnits(requestEstimate.calendarDays)} calendar days selected` : "Select a valid date range"}</p>
+              <p>{requestEstimate.valid ? `${String(requestEstimate.calendarDays)} calendar days selected` : "Select a valid date range"}</p>
             </div>
             <div className="leave-summary-metrics">
-              <DetailRow label="Available" value={matchingBalance ? formatUnits(balanceAvailable) : "Not mapped"} />
+              <DetailRow label="Available" value={matchingBalance?.closing_balance ?? "Not mapped"} />
               <DetailRow label="Balance after request" value={matchingBalance && requestEstimate.valid ? "Checked on submit" : "Pending"} />
               <DetailRow label="Calendar days" value={requestEstimate.valid ? String(requestEstimate.calendarDays) : "Pending"} />
               <DetailRow label="Evidence" value={attachmentRequired ? "Required" : "Optional"} />
@@ -657,7 +649,7 @@ function LeaveApplyModal({
               <strong>What happens next</strong>
               <span>{selectedLeaveType?.unit ? `Unit: ${selectedLeaveType.unit.replaceAll("_", " ")}.` : "Unit validation happens on submit."}</span>
               <span>{attachmentRequired ? "Evidence must be attached before submitting." : "Evidence is optional for this leave type."}</span>
-              <span>{selectedLeaveType?.allow_negative_balance ? "This leave type can be requested even without available balance." : "Final balance check uses the mapped leave and attendance policy."}</span>
+              <span>{selectedLeaveType?.allow_negative_balance ? "This leave type permits negative balance; the assigned policy is checked on submit." : "Final balance check uses the mapped leave and attendance policy."}</span>
             </div>
             {!requestEstimate.valid ? (
               <div className="notice">
@@ -668,7 +660,7 @@ function LeaveApplyModal({
             {overlappingRequest ? (
               <div className="notice">
                 <strong>Leave already exists in this range.</strong>
-                <span className="muted">You already have {overlappingRequest.leave_type} from {formatDate(overlappingRequest.start_date)} to {formatDate(overlappingRequest.end_date)}. Change the dates before submitting.</span>
+                <span className="muted">You already have {overlappingRequest.leave_type} from {formatDate(overlappingRequest.start_date)} to {formatDate(overlappingRequest.end_date)}. The server checks day portions and policy before accepting your request.</span>
               </div>
             ) : null}
             <div className="notice notice--success">
@@ -681,9 +673,11 @@ function LeaveApplyModal({
   );
 }
 
-function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: LeaveRequestItem; onClose: () => void }) {
+function LeaveDetailModal({ isDemo, item, onClose, onCompleted }: { isDemo: boolean; item: LeaveRequestItem; onClose: () => void; onCompleted: () => void }) {
   return (
     <HrAdminActionModal
+      className="accerio-dialog"
+      explicitTabOrder
       closeHref="/ess/leave"
       description={`${formatDate(item.start_date)} to ${formatDate(item.end_date)} - ${item.requested_units} units`}
       eyebrow="Leave request detail"
@@ -699,12 +693,13 @@ function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: Le
         <section className="ess-modal-section">
           <h3 className="section-heading-soft">Request details</h3>
           <div className="detail-grid">
+            <DetailRow label="Request kind" value={item.request_action === "cancellation_request" ? "Cancellation awaiting approval" : "Leave application"} />
             <DetailRow label="Requested units" value={item.requested_units} />
             <DetailRow label="Approved units" value={item.approved_units} />
             <DetailRow label="Policy" value={item.policy_name || "Not mapped"} />
             <DetailRow label="Applied at" value={formatDateTime(item.applied_at)} />
             <DetailRow label="Reason" value={item.reason || "No reason provided."} />
-            <DetailRow label="Attendance collision" value={item.attendance_collision_summary?.collision_count ? `${item.attendance_collision_summary.collision_count} payroll-impacting overlap` : "Clear"} />
+            <DetailRow label="Attendance collision" value={item.attendance_collision_summary?.collision_count ? `${item.attendance_collision_summary.collision_count} payroll-impacting overlap` : item.attendance_collision_summary ? "No recorded collision" : "Not provided"} />
             <DetailRow label="Workflow" value={item.workflow_reference || "Not available"} />
           </div>
         </section>
@@ -713,13 +708,37 @@ function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: Le
           <h3 className="section-heading-soft">Evidence</h3>
           <LeaveEvidence item={item} />
         </section>
-        <LeaveRequestLifecycleActions isDemo={isDemo} item={item} onCompleted={onClose} />
+        <LeaveRequestLifecycleActions isDemo={isDemo} item={item} onCompleted={onCompleted} />
     </HrAdminActionModal>
   );
 }
 
-export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests, leaveTypes, state }: Props) {
+export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, leaveRequests, leaveTypes, state }: Props) {
   const [applyOpen, setApplyOpen] = useState(false);
+  const [submissionSaved] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const id = sessionStorage.getItem("ess.leave.submitted-request");
+      return Boolean(id && leaveRequests.items.some(item => item.id === id));
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    // Consume the verified one-shot flash; storage must not block the authoritative read.
+    try { sessionStorage.removeItem("ess.leave.submitted-request"); } catch { /* Storage unavailable. */ }
+  }, []);
+  useEffect(() => {
+    function openLinkedAction() {
+      if (window.location.hash !== "#apply-leave") return;
+      setApplyOpen(true);
+      // Consume the launch intent so refresh does not reopen a dismissed form.
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
+    }
+    openLinkedAction();
+    window.addEventListener("hashchange", openLinkedAction);
+    return () => window.removeEventListener("hashchange", openLinkedAction);
+  }, []);
   const [clickedRequest, setClickedRequest] = useState<LeaveRequestItem | null>(null);
   const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
   const [historyQuery, setHistoryQuery] = useState("");
@@ -727,7 +746,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
   const [historyPeriod, setHistoryPeriod] = useState("all");
   const status = normalizeParam(currentParams.status) ?? "all";
   const selectedRequestId = normalizeParam(currentParams.requestId);
-  const page = Math.max(Number(normalizeParam(currentParams.page) || String(leaveRequests.page)) || leaveRequests.page, 1);
+  const page = leaveRequests.page;
   const tabs = ["all", "pending", "partially_approved", "approved", "rejected", "withdrawn", "cancelled"];
   const totalPages = Math.max(1, Math.ceil(leaveRequests.total_count / leaveRequests.page_size));
   const today = useMemo(() => parseDateOnly(new Date().toISOString().slice(0, 10)) ?? new Date(), []);
@@ -747,41 +766,45 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
       ].some((value) => value.toLowerCase().includes(normalizedQuery));
       const matchesType = historyLeaveType === "all" || item.leave_type === historyLeaveType;
       const itemPeriod = getRequestPeriod(item, today);
-      const matchesPeriod = historyPeriod === "all" || historyPeriod === itemPeriod || (historyPeriod === "this_year" && isRequestInYear(item, today.getFullYear()));
+      const matchesPeriod = historyPeriod === "all" || historyPeriod === itemPeriod || (historyPeriod === "this_year" && isRequestInYear(item, today.getUTCFullYear()));
       return matchesQuery && matchesType && matchesPeriod;
     });
   }, [historyLeaveType, historyPeriod, historyQuery, leaveRequests.items, today]);
-  const upcomingRequest = useMemo(
-    () => leaveRequests.items
-      .filter((item) => ["approved", "partially_approved", "pending"].includes(item.status))
-      .filter((item) => {
-        const startDate = parseDateOnly(item.start_date);
-        return Boolean(startDate && startDate >= today);
-      })
-      .sort((left, right) => left.start_date.localeCompare(right.start_date))[0] ?? null,
-    [leaveRequests.items, today],
-  );
-  const recentDecision = useMemo(
-    () => leaveRequests.items
-      .filter((item) => item.status !== "pending")
-      .sort((left, right) => getRequestTimestamp(right) - getRequestTimestamp(left))[0] ?? null,
-    [leaveRequests.items],
-  );
-  const attachmentCount = leaveRequests.items.reduce((total, item) => total + (item.attachments?.length ?? 0) + (item.attachment_reference ? 1 : 0), 0);
-  const pendingCount = leaveRequests.status_counts.pending ?? 0;
-  const approvedCount = leaveRequests.status_counts.approved ?? 0;
   const filtersActive = Boolean(historyQuery.trim() || historyLeaveType !== "all" || historyPeriod !== "all");
-  const totalAvailableBalance = balances.reduce((total, balance) => total + parseNumeric(balance.closing_balance), 0);
-  const totalReservedBalance = balances.reduce((total, balance) => total + parseNumeric(balance.reserved_amount), 0);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [selectedDay, setSelectedDay] = useState("");
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const monthStart = new Date(`${calendarMonth}-01T00:00:00Z`);
+  const calendarDays = Number.isNaN(monthStart.getTime()) ? [] : Array.from({ length: new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate() }, (_, index) => {
+    const date = `${calendarMonth}-${String(index + 1).padStart(2, "0")}`;
+    const matches = visibleRequests.filter(item => item.start_date <= date && item.end_date >= date);
+    return { date, number: index + 1, label: `${date}: ${matches.length} loaded request${matches.length === 1 ? "" : "s"}`,
+      status: matches.length ? `${matches.length} request${matches.length === 1 ? "" : "s"}` : "No loaded requests",
+      shortStatus: matches.length ? String(matches.length) : "—", finalized: false, selected: selectedDay === date, href: `#leave-day-details` };
+  });
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
   const linkedRequest = selectedRequestId && selectedRequestId !== dismissedRequestId
-    ? leaveRequests.items.find((item) => item.id === selectedRequestId) ?? null
+    ? linkedDetail ?? leaveRequests.items.find((item) => item.id === selectedRequestId) ?? null
     : null;
   const selectedRequest = clickedRequest ?? linkedRequest;
-  const modal = typeof document !== "undefined"
+  const modal = hydrated
     ? (
         <>
           {applyOpen ? createPortal(
             <LeaveApplyModal
+              onSubmitted={(requestId) => {
+                try {
+                  if (requestId) sessionStorage.setItem("ess.leave.submitted-request", requestId);
+                } catch {
+                  // The saved request still appears in the fresh history if storage is unavailable.
+                }
+                const destination = new URL(window.location.href);
+                destination.searchParams.set("status", "all");
+                destination.searchParams.set("page", "1");
+                destination.searchParams.delete("requestId");
+                destination.hash = "";
+                window.location.replace(destination.href);
+              }}
               balances={balances}
               isDemo={isDemo}
               leaveRequests={leaveRequests.items}
@@ -794,6 +817,13 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
             <LeaveDetailModal
               isDemo={isDemo}
               item={selectedRequest}
+              onCompleted={() => {
+                // Reconcile history and entitlement balances from one fresh SSR read.
+                // A completed POST must not depend on a dropped client refresh transition.
+                const destination = new URL(window.location.href);
+                destination.searchParams.delete("requestId");
+                window.location.replace(`${destination.pathname}${destination.search}${destination.hash}`);
+              }}
               onClose={() => {
                 setDismissedRequestId(selectedRequest.id);
                 setClickedRequest(null);
@@ -806,97 +836,28 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
     : null;
 
   return (
-    <main className="shell shell--workspace ess-experience-shell">
-      <section className="workspace-control-header">
-        <div className="workspace-control-header__copy">
-          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live ESS" : "Demo ESS"} / Leave</span>
-          <h1>Leave</h1>
-          <p>Review balances, apply for leave, and track every approval step from one focused workspace.</p>
+    <main className="shell shell--workspace ess-experience-shell ess-compact">
+      <WorkspaceStandardHeader eyebrow={`${state === "live" ? "Employee" : "Demo"} / Time off`} title="Leave"
+        description="Plan time away, check entitlements and follow your requests."
+        actions={<><button className="button button--primary" onClick={(event) => { event.currentTarget.focus(); setApplyOpen(true); }} type="button">Apply leave</button><Link prefetch={false} className="button button--secondary" href="/ess">Overview</Link></>} />
+      {hydrated && submissionSaved ? <div className="notice notice--success" role="status">Leave request submitted. Review its status in your history.</div> : null}
+      <WorkspaceStandardPanel title="Your entitlements" description="Current policy balances. Contact HR for leave-year dates, expiry and applicable holidays.">
+        <div className="workspace-summary-grid" aria-label="Leave balance cards">
+          {balances.map((balance, index) => <article className="workspace-standard-panel workspace-summary-card" key={`${balance.leave_type}-${index}`}>
+            <h3>{balance.leave_type}</h3><strong>{getPrimaryBalanceLabel(balance)}</strong><p>{balance.policy_name || "Policy not provided"}</p>
+            <WorkspaceInformation fields={[["Used", balance.consumed_amount], ["Reserved", balance.reserved_amount]]} />
+          </article>)}
+          {!balances.length ? <p role="status">No leave balance is assigned yet. Ask HR to review your leave policies.</p> : null}
         </div>
-        <div className="workspace-control-header__actions">
-          <button className="button button--primary" onClick={() => setApplyOpen(true)} type="button">Apply leave</button>
-          <Link className="button button--secondary" href="/ess">Overview</Link>
-        </div>
-      </section>
-
-      <div className="attendance-summary-strip" aria-label="Leave summary">
-        <span><strong>{formatUnits(totalAvailableBalance)}</strong> available</span>
-        <span><strong>{pendingCount}</strong> pending</span>
-        <span><strong>{approvedCount}</strong> approved</span>
-        <span><strong>{formatUnits(totalReservedBalance)}</strong> reserved</span>
-      </div>
-
-      <section className="workspace-section">
-        <div className="workspace-section__header">
-          <div>
-            <h2>Balance snapshot</h2>
-            <p>Balances come from the leave policies assigned to your employee profile.</p>
-          </div>
-          <span className="queue-summary-chip">{balances.length} mapped</span>
-        </div>
-        <div className="workspace-summary-grid balance-grid" aria-label="Leave balance cards">
-          {balances.length ? (
-            balances.map((balance) => (
-              <article className="workspace-summary-card ess-balance-card" key={balance.leave_type}>
-                <div>
-                  <span className="workspace-summary-card__icon" aria-hidden="true">{balance.leave_type.slice(0, 2).toUpperCase()}</span>
-                  <h3>{balance.leave_type}</h3>
-                </div>
-                <strong>{getPrimaryBalanceLabel(balance)}</strong>
-                <p>{balance.policy_name || "Policy pending"}</p>
-                <div className="workspace-summary-card__meta">
-                  <span>Available: {balance.closing_balance}</span>
-                  <span>Used: {balance.consumed_amount}</span>
-                  <span>Reserved: {balance.reserved_amount}</span>
-                </div>
-              </article>
-            ))
-          ) : (
-            <div className="notice">
-              <strong>No leave balance is assigned yet.</strong>
-              <span className="muted">Ask HR to assign the right leave policies for your role.</span>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="workspace-section">
-        <div className="leave-history-snapshot" aria-label="Leave history snapshot">
-          <article className="leave-history-card">
-            <span className="detail-label">Upcoming leave</span>
-            <strong>{upcomingRequest ? formatDate(upcomingRequest.start_date) : "None planned"}</strong>
-            <small>{upcomingRequest ? `${upcomingRequest.leave_type} • ${formatStatus(upcomingRequest.status)}` : "Approved or pending future leave appears here."}</small>
-          </article>
-          <article className="leave-history-card">
-            <span className="detail-label">Waiting for review</span>
-            <strong>{pendingCount}</strong>
-            <small>{pendingCount === 1 ? "Request needs manager action." : "Requests need manager action."}</small>
-          </article>
-          <article className="leave-history-card">
-            <span className="detail-label">Recent decision</span>
-            <strong>{recentDecision ? formatStatus(recentDecision.status) : "No decision yet"}</strong>
-            <small>{recentDecision ? `${recentDecision.leave_type} • ${formatDateTime(recentDecision.updated_at ?? recentDecision.approved_at ?? recentDecision.applied_at)}` : "Manager decisions will appear after approval."}</small>
-          </article>
-          <article className="leave-history-card">
-            <span className="detail-label">Evidence files</span>
-            <strong>{attachmentCount}</strong>
-            <small>Files or references attached in this loaded view.</small>
-          </article>
-        </div>
-        <article className="workspace-data-panel leave-requests-panel">
-          <div className="workspace-data-panel__header">
-            <div>
-              <h2>My leave requests</h2>
-              <p>Track submitted requests, approval owner, evidence, and final decisions.</p>
-            </div>
-            <button className="button button--secondary" onClick={() => setApplyOpen(true)} type="button">New request</button>
-          </div>
+      </WorkspaceStandardPanel>
+      <WorkspaceStandardPanel title="My leave requests" description="Status totals cover all requests. Filters and calendar apply to this page.">
+        <div>
           <div className="workspace-status-tabs">
             {tabs.map((tab) => (
-              <Link className={`workspace-status-tab ${status === tab ? "workspace-status-tab--active" : ""}`} href={buildHref(currentParams, { status: tab, page: "1" })} key={tab}>
+              <a data-navigation-mode="document" aria-current={status === tab ? "page" : undefined} className={`workspace-status-tab ${status === tab ? "workspace-status-tab--active" : ""}`} href={buildHref(currentParams, { status: tab, page: "1" })} key={tab}>
                 <span>{tab.replace("_", " ")}</span>
                 <strong>{leaveRequests.status_counts[tab as keyof typeof leaveRequests.status_counts] ?? 0}</strong>
-              </Link>
+              </a>
             ))}
           </div>
           <div className="workspace-filter-disclosure">
@@ -905,9 +866,10 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
             </div>
             <WorkspaceFilterBar>
               <label className="form-field">
-                <span>Search</span>
+                <span>Search this page</span>
                 <input
                   className="input-control"
+                  disabled={!hydrated}
                   onChange={(event) => setHistoryQuery(event.target.value)}
                   placeholder="Type, policy, status, or reason"
                   value={historyQuery}
@@ -915,7 +877,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
               </label>
               <label className="form-field">
                 <span>Type</span>
-                <select className="input-control" onChange={(event) => setHistoryLeaveType(event.target.value)} value={historyLeaveType}>
+                <select disabled={!hydrated} className="input-control" onChange={(event) => setHistoryLeaveType(event.target.value)} value={historyLeaveType}>
                   <option value="all">All types</option>
                   {leaveTypeOptions.map((leaveType) => (
                     <option key={leaveType} value={leaveType}>{leaveType}</option>
@@ -923,12 +885,13 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
                 </select>
               </label>
               <label className="form-field">
-                <span>Period</span>
-                <select className="input-control" onChange={(event) => setHistoryPeriod(event.target.value)} value={historyPeriod}>
+                <span>Dates on this page</span>
+                <select disabled={!hydrated} className="input-control" onChange={(event) => setHistoryPeriod(event.target.value)} value={historyPeriod}>
                   <option value="all">All periods</option>
-                  <option value="upcoming">Upcoming</option>
-                  <option value="past">Past</option>
-                  <option value="this_year">This year</option>
+                  <option value="upcoming">Upcoming (UTC)</option>
+                  <option value="past">Past (UTC)</option>
+                  <option value="current">In progress (UTC)</option>
+                  <option value="this_year">Calendar year (UTC)</option>
                 </select>
               </label>
               <button
@@ -945,7 +908,17 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
               </button>
             </WorkspaceFilterBar>
           </div>
-          <div className="employee-directory-table-wrap">
+          <button className="button button--secondary" type="button" aria-expanded={calendarVisible} onClick={() => setCalendarVisible(!calendarVisible)}>{calendarVisible ? "Hide calendar" : "Show calendar"}</button>
+          {calendarVisible ? <>
+            <label className="form-field"><span>Calendar month</span><input className="input-control" type="month" value={calendarMonth} onChange={event => { if (/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) { setCalendarMonth(event.target.value); setSelectedDay(""); } }} /></label>
+            <WorkspaceCalendar label="Leave request calendar" statusKey="Numbers count requests on this page, including withdrawn or cancelled requests. — No loaded request. Dates do not indicate chargeable units or holiday entitlement."
+              offset={(monthStart.getUTCDay() + 6) % 7} days={calendarDays} onSelect={(event, date) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setSelectedDay(date); }} />
+            <section id="leave-day-details" aria-label="Selected leave day" aria-live="polite"><h3>{selectedDay ? formatDate(selectedDay) : "Select a day"}</h3>
+              {selectedDay ? visibleRequests.filter(item => item.start_date <= selectedDay && item.end_date >= selectedDay).map(item => <p key={item.id}><button className="button button--secondary" onClick={() => setClickedRequest(item)} type="button">{item.leave_type} · {formatStatus(item.status)}</button></p>) : null}
+              {selectedDay && !visibleRequests.some(item => item.start_date <= selectedDay && item.end_date >= selectedDay) ? <p>No requests on this loaded page for this date.</p> : null}
+            </section>
+          </> : null}
+          <div className="employee-directory-table-wrap" role="region" aria-label="Scrollable leave history" tabIndex={0}>
             <table className="workspace-table attendance-directory-table leave-request-table" aria-label="Leave request history">
               <thead>
                 <tr>
@@ -972,6 +945,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
                         <td>
                           <div className="workspace-table__primary-cell">
                             <strong>{request.leave_type}</strong>
+                            {request.request_action === "cancellation_request" ? <span>Cancellation awaiting approval</span> : null}
                             <span>{request.policy_name || "Policy pending"}</span>
                           </div>
                         </td>
@@ -985,6 +959,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
                         </td>
                         <td>
                           <button
+                            aria-label={`View ${request.leave_type} from ${request.start_date}`}
                             className="button button--secondary"
                             onClick={() => {
                               setDismissedRequestId(null);
@@ -1011,8 +986,9 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
               </tbody>
             </table>
           </div>
-        </article>
+        </div>
         <PaginationBar
+          navigationMode="document"
           firstHref={buildHref(currentParams, { page: "1" })}
           hasNext={leaveRequests.has_next}
           hasPrevious={leaveRequests.has_previous}
@@ -1023,7 +999,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
           previousHref={buildHref(currentParams, { page: String(Math.max(1, page - 1)) })}
           totalCount={leaveRequests.total_count}
         />
-      </section>
+      </WorkspaceStandardPanel>
 
       {modal}
     </main>

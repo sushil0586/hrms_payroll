@@ -79,9 +79,13 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
       message: action === "withdraw" ? "Leave request withdrawn." : item.cancel_requires_reapproval ? "Cancellation request submitted." : "Approved leave cancelled.",
       tone: "success",
     });
+    if (onCompleted) {
+      // Keep the submission locked until the successful POST's read navigation completes.
+      onCompleted();
+      return;
+    }
     setIsSubmitting(null);
     isSubmittingRef.current = false;
-    onCompleted?.();
     refresh();
   }
 

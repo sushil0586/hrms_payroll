@@ -169,10 +169,10 @@ async function expectEssCertified(page: Page) {
     await expect(page.getByRole("link", { name: action }).first()).toBeVisible();
   }
   await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible();
-  for (const metric of ["Pending leave", "Attendance fixes", "Hours this month", "Today"]) {
+  for (const metric of ["Leave requests", "Attendance fixes", "Month to date hours", "Today"]) {
     await expect(page.locator("main").getByText(metric).first()).toBeVisible();
   }
-  for (const heading of ["Today's actions", "What do you want to do?", "My profile", "Today", "Leave balances"]) {
+  for (const heading of ["Awaiting approval", "Employee services", "Today", "Leave balances"]) {
     await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
   }
   await expectNoHorizontalOverflow(page);

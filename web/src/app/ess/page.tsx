@@ -1,288 +1,51 @@
+import { WorkspaceQuickActions } from "@/components/patterns/workspace-information";
 import Link from "next/link";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
-import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
-import { getEssDashboard } from "@/lib/api";
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string | null | undefined) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function statusClass(status: string) {
-  return `status status--${status}`;
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-row">
-      <span className="detail-label">{label}</span>
-      <span className="detail-value">{value}</span>
-    </div>
-  );
-}
-
-type EssActionStatus = "ready" | "warning";
-
-const essActionStatusLabel: Record<EssActionStatus, string> = {
-  ready: "Ready",
-  warning: "Review",
-};
-
-function essActionTone(status: EssActionStatus) {
-  return status === "ready" ? "success" : "warning";
-}
-
-function essActionStatus(value: number): EssActionStatus {
-  return value > 0 ? "warning" : "ready";
-}
+import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { getEssOverview } from "@/lib/api";
+import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
+import { EssFields, EssIdentity, essDate, essStatus } from "./ess-profile-summary";
 
 export default async function EssPage() {
-  const { dashboard, leaveRequests, regularizations, state } = await getEssDashboard({
-    leave_page_size: 3,
-    regularization_page_size: 3,
-  });
-  const pendingLeaveCount = dashboard.leave.pending_requests_count;
-  const pendingRegularizationCount = dashboard.attendance.pending_regularizations_count;
-  const commandActions = [
-    {
-      label: "Leave requests",
-      value: pendingLeaveCount,
-      detail: pendingLeaveCount ? "Requests waiting for approval or follow-up." : "No leave request needs your action.",
-      href: "/ess/leave?status=pending",
-      action: pendingLeaveCount ? "Review" : "Open",
-      status: essActionStatus(pendingLeaveCount),
-    },
-    {
-      label: "Attendance fixes",
-      value: pendingRegularizationCount,
-      detail: pendingRegularizationCount ? "Corrections waiting for manager review." : "No attendance correction is pending.",
-      href: "/ess/attendance?status=pending",
-      action: pendingRegularizationCount ? "Review" : "Open",
-      status: essActionStatus(pendingRegularizationCount),
-    },
-    {
-      label: "Documents",
-      value: "Open",
-      detail: "Upload employee documents and track verification status.",
-      href: "/ess/documents",
-      action: "Open",
-      status: "ready" as const,
-    },
-    {
-      label: "Payslips",
-      value: "View",
-      detail: "Download payroll files and acknowledge reads.",
-      href: "/ess/payslips",
-      action: "Open",
-      status: "ready" as const,
-    },
-  ];
-  const activeSignals = commandActions.filter((item) => item.status !== "ready").length;
-  const latestLeaveRequest = leaveRequests.items[0] ?? null;
-  const latestRegularization = regularizations.items[0] ?? null;
-  const quickActions = [
-    { label: "Apply leave", href: "/ess/leave#apply-leave", tone: "primary" },
-    { label: "Regularize attendance", href: "/ess/attendance#regularize-attendance", tone: "secondary" },
-    { label: "Documents", href: "/ess/documents", tone: "secondary" },
-    { label: "Payslips", href: "/ess/payslips", tone: "secondary" },
-    { label: "Tax declarations", href: "/ess/statutory-declarations", tone: "secondary" },
-    { label: "Notifications", href: "/ess/notifications", tone: "secondary" },
+  const session = await requireWorkspaceAccess({ workspace: "ess" });
+  const { data: dashboard, state } = await getEssOverview();
+  const can = (permission: string) => state === "demo" || sessionHasPermission(session, permission);
+  const canLeave = can("leave.view");
+  const canAttendance = can("attendance.view");
+  const today = dashboard.attendance.today;
+  const shortcuts = [
+    ...(can("leave.requests.create") ? [{ label: "Apply leave", href: "/ess/leave#apply-leave", detail: "Choose dates and review your request." }] : []),
+    ...(can("attendance.regularization.request") ? [{ label: "Regularize attendance", href: "/ess/attendance#regularize-attendance", detail: "Request a correction to an eligible record." }] : []),
+    ...(can("documents.view") ? [{ label: "Documents", href: "/ess/documents", detail: "Requirements, permitted uploads and verification." }] : []),
+    { label: "Payslips", href: "/ess/payslips", detail: "View and download your published payslips." },
+    ...(can("statutory.declarations.view") || can("statutory.declarations.manage") ? [{ label: "Tax declarations", href: "/ess/statutory-declarations", detail: "Review your declaration and permitted updates." }] : []),
+    ...(can("notifications.view") ? [{ label: "Notifications", href: "/ess/notifications", detail: "Read your employee updates." }] : []),
   ];
 
   return (
-    <main className="shell shell--workspace ess-experience-shell shell--ess-home">
-      <section className="workspace-control-header">
-        <div className="workspace-control-header__copy">
-          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live ESS" : "Demo ESS"} / Self service</span>
-          <h1>My workspace</h1>
-          <p>Start with personal actions that need attention, then open a focused page for leave, attendance, documents, payslips, tax, or notifications.</p>
-        </div>
-        <div className="workspace-control-header__actions">
-          <Link className="button button--primary" href="/ess/leave#apply-leave">Apply leave</Link>
-          <Link className="button button--secondary" href="/ess/attendance#regularize-attendance">Regularize attendance</Link>
-          <Link className="button button--secondary" href="/ess/notifications">Inbox</Link>
-        </div>
-        <div className="workspace-control-header__metrics" aria-label="Employee summary">
-          <span className="queue-summary-chip"><strong>{dashboard.profile.employee_code}</strong> employee</span>
-          <span className="queue-summary-chip"><strong>{dashboard.profile.department || "No department"}</strong></span>
-          <span className="queue-summary-chip"><strong>{dashboard.profile.reporting_manager || "No manager"}</strong> manager</span>
-        </div>
-      </section>
-
-      <section className="workspace-section">
-        <div className="attendance-summary-strip" aria-label="ESS summary">
-          <span><strong>{pendingLeaveCount}</strong> pending leave</span>
-          <span><strong>{pendingRegularizationCount}</strong> attendance fixes</span>
-          <span><strong>{dashboard.attendance.month_to_date.work_duration_hours}</strong> hours this month</span>
-          <span><strong>{dashboard.attendance.today.status.replace("_", " ")}</strong> today</span>
-        </div>
-      </section>
-
-      <section className="workspace-section ess-home-grid" data-testid="ess-control-center">
-        <article className="workspace-data-panel ess-home-card ess-home-card--primary">
-          <div className="workspace-data-panel__header ess-home-card__header">
-            <div>
-              <span className="workspace-card__eyebrow">Needs attention</span>
-              <h2>Today&apos;s actions</h2>
-              <p>Only actions that may need employee input or review appear here.</p>
-            </div>
-            <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
-          </div>
-          <div className="workspace-table-scroll">
-            <table className="workspace-table attendance-directory-table ess-action-list" aria-label="Today actions">
-              <thead>
-                <tr>
-                  <th>State</th>
-                  <th>Action</th>
-                  <th>Count</th>
-                  <th>Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {commandActions.map((item) => (
-                  <tr key={item.label}>
-                    <td><WorkspaceStatusBadge tone={essActionTone(item.status)}>{essActionStatusLabel[item.status]}</WorkspaceStatusBadge></td>
-                    <td className="workspace-table__primary-cell">
-                      <div>
-                        <strong>{item.label}</strong>
-                        <span>{item.detail}</span>
-                      </div>
-                    </td>
-                    <td><span className="record-chip">{item.value}</span></td>
-                    <td><Link className="button button--secondary" href={item.href}>{item.action}</Link></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className="workspace-data-panel ess-home-card">
-          <div className="workspace-data-panel__header ess-home-card__header">
-            <div>
-              <span className="workspace-card__eyebrow">Quick actions</span>
-              <h2>What do you want to do?</h2>
-              <p>Use one focused page for each employee task.</p>
-            </div>
-            <WorkspaceStatusBadge tone={essActionTone(activeSignals ? "warning" : "ready")}>{activeSignals ? "Review" : "Ready"}</WorkspaceStatusBadge>
-          </div>
-          <div className="ess-shortcut-grid">
-            {quickActions.map((item) => (
-              <Link className={`button button--${item.tone}`} href={item.href} key={item.label}>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="workspace-section ess-snapshot-grid">
-        <article className="workspace-data-panel ess-profile-card">
-          <div className="workspace-data-panel__header">
-            <div>
-              <h2>My profile</h2>
-              <p>Employee details used for personal workflows.</p>
-            </div>
-          </div>
-          <div className="ess-profile-summary">
-            <div>
-              <span className="workspace-card__eyebrow">{dashboard.profile.employee_code}</span>
-              <strong>{dashboard.profile.full_name}</strong>
-              <span>{dashboard.profile.designation || "No designation"} • {dashboard.profile.department || "No department"}</span>
-            </div>
-            <div className="detail-grid">
-              <DetailRow label="Legal entity" value={dashboard.profile.legal_entity || "Not mapped"} />
-              <DetailRow label="Branch" value={dashboard.profile.branch || "Not mapped"} />
-              <DetailRow label="Location" value={dashboard.profile.location || "Not mapped"} />
-              <DetailRow label="Manager" value={dashboard.profile.reporting_manager || "Not mapped"} />
-            </div>
-          </div>
-        </article>
-
-        <article className="workspace-data-panel ess-today-card">
-          <div className="workspace-data-panel__header">
-            <div>
-              <h2>Today</h2>
-              <p>Personal day snapshot.</p>
-            </div>
-            <span className={statusClass(dashboard.attendance.today.status)}>{dashboard.attendance.today.status.replace("_", " ")}</span>
-          </div>
-          <div className="detail-grid">
-            <DetailRow label="Date" value={formatDate(dashboard.attendance.today.date)} />
-            <DetailRow label="Shift" value={dashboard.attendance.today.shift || "Not assigned"} />
-            <DetailRow label="Check-in" value={formatDateTime(dashboard.attendance.today.check_in_at)} />
-            <DetailRow label="Month hours" value={String(dashboard.attendance.month_to_date.work_duration_hours)} />
-            <DetailRow label="Latest leave" value={latestLeaveRequest ? `${latestLeaveRequest.leave_type} - ${latestLeaveRequest.status.replace("_", " ")}` : "No request available"} />
-            <DetailRow label="Latest attendance fix" value={latestRegularization ? `${formatDate(latestRegularization.attendance_date)} - ${latestRegularization.status.replace("_", " ")}` : "No correction available"} />
-          </div>
-        </article>
-      </section>
-
-      <section className="workspace-section">
-        <div className="workspace-section__header">
-          <div>
-            <h2>Leave balances</h2>
-            <p>A compact balance snapshot. Open Leave for request history and application.</p>
-          </div>
-          <Link className="button button--secondary" href="/ess/leave#apply-leave">Apply leave</Link>
-        </div>
-        <div className="workspace-summary-grid balance-grid">
-          {dashboard.leave.balances.length ? (
-            dashboard.leave.balances.map((balance) => (
-              <article className="workspace-summary-card ess-balance-card" key={balance.leave_type}>
-                <div>
-                  <span className="workspace-summary-card__icon" aria-hidden="true">{balance.leave_type.slice(0, 2).toUpperCase()}</span>
-                  <h3>{balance.leave_type}</h3>
-                </div>
-                <strong>{balance.closing_balance}</strong>
-                <p className="muted">{balance.policy_name}</p>
-                <div className="workspace-summary-card__meta">
-                  <span>Available: {balance.closing_balance}</span>
-                  <span>Used: {balance.consumed_amount}</span>
-                  <span>Reserved: {balance.reserved_amount}</span>
-                </div>
-              </article>
-            ))
-          ) : (
-            <div className="notice">
-              <strong>No leave balances are mapped yet.</strong>
-              <span className="muted">Contact HR if you expected leave balances here.</span>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {state === "demo" ? (
-        <section className="workspace-section">
-          <div className="notice">
-            <strong>Web preview is running in demo mode.</strong>
-            <span className="muted">
-              Set `HRMS_API_BASE_URL` and a working `HRMS_API_BEARER_TOKEN` in the web environment file to use live data.
-            </span>
-          </div>
-        </section>
-      ) : null}
+    <main className="shell shell--workspace ess-experience-shell ess-compact" id="ess-main">
+      <WorkspaceStandardHeader title="My workspace" description="Your working day, requests and employee services." actions={<Link prefetch={false} className="button button--secondary" href="/ess/profile">My Profile</Link>} />
+      <EssIdentity profile={dashboard.profile} />
+      {state === "demo" ? <p className="notice">Preview data · Sign in to a connected workspace for your employee information.</p> : null}
+      <div className="ess-dashboard-grid" data-testid="ess-control-center">
+        {canAttendance ? <WorkspaceStandardPanel title="Today" description="Attendance times shown in UTC." actions={<Link prefetch={false} href="/ess/attendance">View attendance</Link>} meta={<WorkspaceStatusBadge tone="neutral">{essStatus(today.status)}</WorkspaceStatusBadge>}>
+          <EssFields fields={[["Date", essDate(today.date)], ["Shift", today.shift || "Not assigned"], ["Check-in", today.check_in_at ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" }).format(new Date(today.check_in_at)) : "Not recorded"], ["Month to date hours", String(dashboard.attendance.month_to_date.work_duration_hours)]]} />
+        </WorkspaceStandardPanel> : null}
+        {canLeave ? <WorkspaceStandardPanel title="Leave balances" description={`Leave year ${dashboard.leave.period_year}`} actions={<Link prefetch={false} href="/ess/leave">View leave</Link>}>
+          {dashboard.leave.balances.length ? <WorkspaceTableScrollRegion className="workspace-table-scroll" label="Leave balance details"><table className="workspace-table ess-balance-table" aria-label="Leave balances"><thead><tr><th scope="col">Leave type</th><th scope="col">Available</th><th scope="col">Used</th><th scope="col">Reserved</th></tr></thead><tbody>{dashboard.leave.balances.map((balance, index) => <tr key={`${balance.leave_type}-${index}`}><th scope="row">{balance.leave_type}<small>{balance.policy_name}</small></th><td>{balance.closing_balance}</td><td>{balance.consumed_amount}</td><td>{balance.reserved_amount}</td></tr>)}</tbody></table></WorkspaceTableScrollRegion> : <p className="ess-empty">No leave balances are mapped yet. Contact HR if you expected an entitlement.</p>}
+        </WorkspaceStandardPanel> : null}
+        {canLeave || canAttendance ? <WorkspaceStandardPanel title="Awaiting approval" description="Requests waiting for review by your approver.">
+          <ul className="ess-request-list">
+            {canLeave ? <li><div><strong>Leave requests</strong><span>{dashboard.leave.pending_requests_count} pending</span></div><Link prefetch={false} href="/ess/leave?status=pending">View pending leave</Link></li> : null}
+            {canAttendance ? <li><div><strong>Attendance fixes</strong><span>{dashboard.attendance.pending_regularizations_count} pending</span></div><Link prefetch={false} href="/ess/attendance?status=pending">View pending corrections</Link></li> : null}
+          </ul>
+          {(!canLeave || dashboard.leave.pending_requests_count === 0) && (!canAttendance || dashboard.attendance.pending_regularizations_count === 0) ? <p className="ess-empty">No requests awaiting approval.</p> : null}
+        </WorkspaceStandardPanel> : null}
+        <WorkspaceStandardPanel className="ess-services-panel" title="Employee services" description="Open a service to view details or take an available action.">
+          <WorkspaceQuickActions actions={shortcuts} />
+        </WorkspaceStandardPanel>
+      </div>
     </main>
   );
 }

@@ -6877,6 +6877,9 @@ class MeAttendanceRecordListView(EmployeeContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        if "month" in request.query_params:
+            from apps.common.ess_attendance import employee_attendance_month
+            return response.Response(employee_attendance_month(employee, request.query_params))
         ensure_employee_attendance_records(employee)
         records = (
             AttendanceRecord.objects.filter(employee=employee)

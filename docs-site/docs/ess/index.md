@@ -2,7 +2,7 @@
 
 Employee Self Service is the employee workspace for personal HR, payroll, document, leave, attendance, tax, and notification work.
 
-![Employee self service overview](../assets/screenshots/ess/overview.png)
+![Employee self service overview](../assets/screenshots/ess/overview-ess1.png)
 
 ## On This Page
 
@@ -22,7 +22,8 @@ Employee Self Service is the employee workspace for personal HR, payroll, docume
 
 | I need to | Open | Verify before finishing |
 | --- | --- | --- |
-| Know what needs my attention today | Overview | Priority cards, unread alerts, leave/attendance exceptions, and document blockers. |
+| Review my working day and waiting requests | Overview | Attendance, leave balances and requests awaiting an approver. |
+| Check my employee information | My Profile | Personal, contact and current employment information; contact HR for corrections. |
 | Apply leave or check balance | [Leave](leave.md) | Leave type, available balance, evidence rule, date range, and approval status. |
 | Correct attendance | [Attendance](attendance.md) | Attendance date, lock state, corrected time, reason, and manager approval state. |
 | Download salary proof | [Payslips](payslips.md) | Correct payroll month, employee name/code, net pay, and published/download status. |
@@ -35,7 +36,7 @@ Employee Self Service is the employee workspace for personal HR, payroll, docume
 
 | Area | Purpose | Best next action |
 | --- | --- | --- |
-| Overview | See personal profile status, today’s attendance, leave balances, pending requests, and quick links. | Start here when you are unsure what needs action. |
+| Overview | See employee identity, today’s attendance, leave balances, requests awaiting approval, and service links. | Start here when you are unsure what needs action. |
 | Leave | Check balances, apply leave, attach evidence, and track approvals. | Open when planning time off or fixing a leave request issue. |
 | Attendance | Review daily attendance, exceptions, and regularization requests. | Open when a punch, absence, or work-hour record looks wrong. |
 | Payslips | View published payslips, payment summaries, read receipts, and download files. | Open after payroll is published or when salary proof is needed. |
@@ -49,9 +50,9 @@ Employees should be able to recognize these areas immediately on the ESS overvie
 
 | Screen label | What it means |
 | --- | --- |
-| Today's actions | The priority list of employee tasks that may need attention today. |
-| What do you want to do? | Quick action shortcuts for common self-service work. |
-| My profile | Employee identity and profile context pulled from HR Admin. |
+| Awaiting approval | Your requests waiting for an approver; these are not employee tasks. |
+| Employee services | Quick action shortcuts for common self-service work. |
+| My Profile | A dedicated read-only employee profile with personal, contact, employment and payroll-service sections. |
 | Today | Current attendance snapshot. |
 | Leave balances | Available leave snapshot before applying. |
 
@@ -70,14 +71,13 @@ ESS pages follow one common pattern so employees do not need to learn a new scre
 
 ## How To Use The Overview
 
-The overview is meant to answer one question: “What do I need to do today?”
+The overview brings your working day and employee services together.
 
-- Check **Today’s priorities** first. These are pending actions that may block payroll, documents, leave, or attendance.
-- Use **Self-service shortcuts** to jump directly to payslips, documents, tax declarations, notifications, or manager view.
-- Review **Profile snapshot** before payroll cutoff so email, phone, department, manager, and bank-related details stay accurate.
-- Check **Attendance today** before raising a regularization request.
+- Check **Today** for the attendance date, shift and recorded check-in. Times are labelled UTC; the underlying attendance date and totals come from the existing attendance service.
 - Review **Leave balances** before applying for leave.
-- Use the request area for new leave or attendance correction requests.
+- Use **Awaiting approval** to follow leave and attendance requests waiting for an approver. A pending request is not an action assigned to you.
+- Open **Employee services** for available leave, attendance, document, payroll, tax and notification workflows.
+- Open **My Profile** to review your personal, contact and current employment details. Profile corrections are handled by HR; self-service profile editing and approval requests are unavailable.
 
 ## Employee Checklist
 
@@ -93,7 +93,7 @@ Before payroll cutoff:
 
 When a new employee first enters ESS:
 
-1. Open **Overview** and check whether employee profile, manager, department, and contact details look correct.
+1. Open **My Profile** and check whether your manager, department and contact details look correct.
 2. Open **Documents** and upload required joining documents.
 3. Open **Leave** and verify the available leave types and balances.
 4. Open **Attendance** after the first working day and confirm attendance is flowing correctly.
@@ -104,7 +104,7 @@ When a new employee first enters ESS:
 
 | If you need to | Start here | What to check |
 | --- | --- | --- |
-| See whether anything needs action | Overview | Today’s priorities and notifications. |
+| See whether anything needs action | Overview | Attendance, leave balances and waiting requests; open Notifications for alerts. |
 | Apply for leave or check balance | Leave | Leave type, available balance, attachment rule, and approval status. |
 | Correct a missing punch or exception | Attendance | Date, exception reason, correction window, and approval status. |
 | Download salary proof | Payslips | Correct month, net pay, and published status. |
@@ -169,3 +169,7 @@ The ESS launch certification checks these employee flows from the browser:
 - [Tax Declarations](statutory-declarations.md)
 - [Notifications](notifications.md)
 - [ESS Task Recipes](task-recipes.md)
+
+## My Profile
+
+Open **My Profile** from the navigation or dashboard. Review Overview, Personal details, Contact information, Employment & organization, Payroll & documents, and Access & updates. Current profile fields are HR controlled. Profile editing and change requests are unavailable; contact HR for corrections. Bank and statutory identifiers are not exposed in this profile. Payroll links open the existing authorized services.

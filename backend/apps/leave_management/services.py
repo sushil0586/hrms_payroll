@@ -1376,6 +1376,7 @@ def _recalculate_closing_balance(balance: LeaveBalance) -> LeaveBalance:
     return balance
 
 
+@transaction.atomic
 def _get_or_create_leave_balance(
     *,
     employee,

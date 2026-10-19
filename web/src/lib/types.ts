@@ -6580,3 +6580,24 @@ export type MenuCatalogItem = {
   is_active: boolean;
   catalog_source?: "database" | "code" | string;
 };
+
+export type EssAttendanceDay = Omit<EssAttendanceRecordOption, "derivation_summary"> & {
+  holiday: string | null;
+  work_duration_hours: string;
+  overtime_hours: string;
+  early_exit_minutes: number;
+  derivation_summary: AttendanceDerivationSummary | null;
+  can_regularize: boolean;
+  regularization_unavailable_reason: string;
+};
+export type EssAttendanceMonth = PaginatedListResponse<EssAttendanceDay> & {
+  month: string;
+  period_start: string;
+  period_end: string;
+  timezone: string;
+  today: string;
+  days: EssAttendanceDay[];
+  total_pages: number;
+  raw_punch_history_available: boolean;
+  summary: { recorded_days: number; locked_days: number; worked_hours: string; pending_corrections: number };
+};

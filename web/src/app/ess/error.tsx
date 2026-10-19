@@ -2,25 +2,21 @@
 
 import Link from "next/link";
 
-import { WorkspaceErrorState } from "@/components/patterns/workspace-error-state";
-
-type Props = {
-  error: Error & { digest?: string };
-  reset: () => void;
-};
-
-export default function EssError({ error, reset }: Props) {
+export default function EssError() {
+  function retry() {
+    // A fresh authenticated GET avoids reusing a stale failed RSC boundary.
+    // Preserve the current employee URL and query; never replay a submission.
+    window.location.reload();
+  }
   return (
-    <WorkspaceErrorState
-      actions={
-        <Link className="button button--secondary" href="/login">
-          Sign in again
-        </Link>
-      }
-      detail={error.message}
-      eyebrow="ESS load issue"
-      onRetry={reset}
-      title="Employee self service could not load your live data"
-    />
+    <main className="shell shell--workspace ess-compact">
+      <h1>Employee information is unavailable</h1>
+      <p role="alert">We could not load your employee information. Try again. If the problem continues, contact HR to check your employee access.</p>
+      <div className="ess-related-links">
+        <button className="button button--primary" onClick={retry} type="button">Retry workspace</button>
+        <Link prefetch={false} className="button button--secondary" href="/login">Sign in again</Link>
+        <Link prefetch={false} className="button button--secondary" href="/ess">Back to dashboard</Link>
+      </div>
+    </main>
   );
 }

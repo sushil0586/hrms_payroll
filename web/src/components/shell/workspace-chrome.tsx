@@ -33,6 +33,8 @@ export type WorkspaceSearchDestination = {
 
 type Props = {
   children: React.ReactNode;
+  prefetch?: boolean;
+  documentNavigation?: boolean;
   roleLabel: string;
   productLabel: string;
   workspaceLabel: string;
@@ -71,10 +73,12 @@ function NavEntry({
   item,
   pathname,
   router,
+  prefetch,
 }: {
   item: WorkspaceNavItem;
   pathname: string;
   router: ReturnType<typeof useRouter>;
+  prefetch: boolean;
 }) {
   const active = isActivePath(pathname, item.href);
   if (item.disabled) {
@@ -98,7 +102,8 @@ function NavEntry({
       aria-current={active ? "page" : undefined}
       className={`nav-item${active ? " nav-item--active" : ""}`}
       href={item.href}
-      onMouseEnter={() => router.prefetch(item.href)}
+      prefetch={prefetch ? undefined : false}
+      onMouseEnter={prefetch ? () => router.prefetch(item.href) : undefined}
     >
       <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
       <span className="nav-item__content">
@@ -113,11 +118,13 @@ function WorkspaceSearch({
   quickLinks,
   searchDestinations,
   searchHint,
+  prefetch,
 }: {
   groups: WorkspaceNavGroup[];
   quickLinks: Array<{ href: string; label: string }>;
   searchDestinations: WorkspaceSearchDestination[];
   searchHint: string;
+  prefetch: boolean;
 }) {
   const navigate = useWorkspaceNavigationFeedback();
   const router = useRouter();
@@ -226,7 +233,7 @@ function WorkspaceSearch({
                   className="workspace-search__result"
                   key={`${item.href}:${item.label}`}
                   onClick={() => openResult(item.href)}
-                  onMouseEnter={() => router.prefetch(item.href)}
+                  onMouseEnter={prefetch ? () => router.prefetch(item.href) : undefined}
                   type="button"
                 >
                   <span>
@@ -251,6 +258,8 @@ function WorkspaceSearch({
 
 export function WorkspaceChrome({
   children,
+  prefetch = true,
+  documentNavigation = false,
   roleLabel,
   productLabel,
   workspaceLabel,
@@ -274,13 +283,14 @@ export function WorkspaceChrome({
   const prefetchItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
   useEffect(() => {
+    if (!prefetch) return;
     prefetchItems.forEach((item) => router.prefetch(item.href));
     quickLinks.forEach((item) => router.prefetch(item.href));
-  }, [prefetchItems, quickLinks, router]);
+  }, [prefetch, prefetchItems, quickLinks, router]);
 
   return (
-    <WorkspaceNavigationFeedback>
-    <div className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}`}>
+    <WorkspaceNavigationFeedback documentNavigation={documentNavigation}>
+    <div className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}${workspaceTone === "employee" || workspaceTone === "manager" ? " accerio-workspace" : ""}`}>
       <aside className="app-sidebar app-sidebar--workspace">
         <div className="app-sidebar__brand">
           <div className="brand-mark brand-mark--calm" aria-hidden="true">
@@ -306,7 +316,7 @@ export function WorkspaceChrome({
                 </summary>
                 <div className="nav-group__items">
                   {group.items.map((item) => (
-                    <NavEntry item={item} key={item.href} pathname={pathname} router={router} />
+                    <NavEntry item={item} key={item.href} pathname={pathname} router={router} prefetch={prefetch} />
                   ))}
                 </div>
               </details>
@@ -330,7 +340,7 @@ export function WorkspaceChrome({
             <strong>{workspaceLabel}</strong>
           </div>
 
-          <WorkspaceSearch groups={groups} quickLinks={quickLinks} searchDestinations={searchDestinations} searchHint={searchHint} />
+          <WorkspaceSearch prefetch={prefetch} groups={groups} quickLinks={quickLinks} searchDestinations={searchDestinations} searchHint={searchHint} />
 
           <div className="topbar-actions topbar-actions--workspace">
             <details className="mobile-workspace-nav">
@@ -362,8 +372,14 @@ export function WorkspaceChrome({
                           aria-current={active ? "page" : undefined}
                           className={`mobile-workspace-nav__link${active ? " mobile-workspace-nav__link--active" : ""}`}
                           href={item.href}
+                          prefetch={prefetch ? undefined : false}
                           key={item.href}
-                          onMouseEnter={() => router.prefetch(item.href)}
+                          onClick={(event) => {
+                            if (workspaceTone !== "employee" && workspaceTone !== "manager") return;
+                            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                            event.currentTarget.closest("details")?.removeAttribute("open");
+                          }}
+                          onMouseEnter={prefetch ? () => router.prefetch(item.href) : undefined}
                         >
                           <strong>{item.label}</strong>
                           {item.blurb ? <small>{item.blurb}</small> : null}
@@ -378,8 +394,9 @@ export function WorkspaceChrome({
               <Link
                 className="button button--secondary button--compact"
                 href={item.href}
+                prefetch={prefetch ? undefined : false}
                 key={item.href}
-                onMouseEnter={() => router.prefetch(item.href)}
+                onMouseEnter={prefetch ? () => router.prefetch(item.href) : undefined}
               >
                 {item.label}
               </Link>

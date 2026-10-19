@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { UploadProgressStatus } from "@/components/patterns/upload-progress";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceFilterBar, WorkspaceStatusBadge, WorkspaceStandardPanel } from "@/components/patterns/workspace-standard";
+import { WorkspaceInformation } from "@/components/patterns/workspace-information";
+import { essDocumentDate } from "@/lib/ui/employee-document-format";
 import type { EssDocumentCenterResponse, EssDocumentRequirementItem, HrAdminEmployeeDocument } from "@/lib/types";
 import { uploadFormData, type UploadProgress } from "@/lib/ui/upload-form-data";
 import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
@@ -84,16 +87,7 @@ function formatFileSize(fileSizeBytes: number) {
   return `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
+const formatDate = essDocumentDate;
 
 function extractError(payload: unknown) {
   if (!payload || typeof payload !== "object") {
@@ -133,14 +127,6 @@ function validateUploadForm(
   return errors;
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-row">
-      <span className="detail-label">{label}</span>
-      <span className="detail-value">{value}</span>
-    </div>
-  );
-}
 
 function getRequirementStatus(item: EssDocumentRequirementItem) {
   if (item.current_rejection_reason) {
@@ -181,6 +167,7 @@ function getRequirementSummary(item: EssDocumentRequirementItem) {
 }
 
 function requirementTone(item: EssDocumentRequirementItem) {
+  if (item.is_future_due && !item.current_document_id) return "neutral";
   if (item.is_compliant) return "success";
   if (item.current_rejection_reason || item.current_is_expired || !item.current_document_id) return "danger";
   if (item.current_is_expiring_soon) return "warning";
@@ -197,7 +184,8 @@ function documentTone(item: HrAdminEmployeeDocument) {
 function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument; onClose: () => void }) {
   return (
     <HrAdminActionModal
-      className="ess-document-modal ess-document-modal--wide"
+      className="accerio-dialog"
+      explicitTabOrder
       closeHref="/ess/documents"
       description={`${item.category_name} - Uploaded ${formatDate(item.created_at)}`}
       eyebrow="Document detail"
@@ -219,17 +207,7 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
             </div>
             <WorkspaceStatusBadge tone={documentTone(item)}>{item.review_status_label || item.verification_status}</WorkspaceStatusBadge>
           </div>
-          <div className="detail-grid">
-            <DetailRow label="Version" value={`v${item.version_number}`} />
-            <DetailRow label="Document number" value={item.document_number || "Not set"} />
-            <DetailRow label="File name" value={item.file_name || "Not available"} />
-            <DetailRow label="File size" value={formatFileSize(item.file_size_bytes)} />
-            <DetailRow label="Issued on" value={formatDate(item.issued_on)} />
-            <DetailRow label="Expires on" value={item.expires_on || "No expiry"} />
-            <DetailRow label="Expiry state" value={item.expiry_label} />
-            <DetailRow label="Review owner" value={item.review_owner_label || "Not assigned"} />
-            <DetailRow label="Review status" value={item.review_status_label || item.verification_status} />
-          </div>
+          <WorkspaceInformation fields={[["Version", `v${item.version_number}`], ["Document number", item.document_number || "Not set"], ["File name", item.file_name || "Not available"], ["File size", formatFileSize(item.file_size_bytes)], ["Issued on", formatDate(item.issued_on)], ["Expires on", item.expires_on || "No expiry"], ["Expiry state", item.expiry_label], ["Review owner", item.review_owner_label || "Not assigned"], ["Review status", item.review_status_label || item.verification_status]]} />
         </section>
 
         {item.rejection_reason ? (
@@ -297,7 +275,8 @@ function UploadDocumentModal({
 
   return (
     <HrAdminActionModal
-      className="ess-document-modal"
+      className="accerio-dialog"
+      explicitTabOrder
       closeHref="/ess/documents"
       description="Required fields are marked with *."
       eyebrow="Employee documents"
@@ -329,6 +308,7 @@ function UploadDocumentModal({
           <label className="form-field">
             <span className="muted">Category <strong aria-hidden="true">*</strong></span>
             <select
+              aria-label="Category"
               aria-invalid={Boolean(fieldErrors.category_id)}
               className="input-control"
               disabled={data.uploadable_categories.length === 0 || isSubmitting}
@@ -346,6 +326,7 @@ function UploadDocumentModal({
           <label className="form-field">
             <span className="muted">Title <strong aria-hidden="true">*</strong></span>
             <input
+              aria-label="Title"
               aria-invalid={Boolean(fieldErrors.title)}
               className="input-control"
               disabled={isSubmitting}
@@ -363,6 +344,7 @@ function UploadDocumentModal({
           <label className="form-field">
             <span className="muted">Issued on</span>
             <input
+              aria-label="Issued on"
               aria-invalid={Boolean(fieldErrors.issued_on)}
               className="input-control"
               disabled={isSubmitting}
@@ -375,6 +357,7 @@ function UploadDocumentModal({
           <label className="form-field">
             <span className="muted">Expires on</span>
             <input
+              aria-label="Expires on"
               aria-invalid={Boolean(fieldErrors.expires_on)}
               className="input-control"
               disabled={isSubmitting}
@@ -388,6 +371,7 @@ function UploadDocumentModal({
             <span className="muted">File <strong aria-hidden="true">*</strong></span>
             <input
               accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
+              aria-label="File"
               aria-invalid={Boolean(fieldErrors.file)}
               className="input-control"
               disabled={isSubmitting || data.uploadable_categories.length === 0}
@@ -431,7 +415,8 @@ function RequirementDetailModal({
 }) {
   return (
     <HrAdminActionModal
-      className="ess-document-modal ess-document-modal--wide"
+      className="accerio-dialog"
+      explicitTabOrder
       closeHref="/ess/documents"
       description={getRequirementSummary(item)}
       eyebrow="Required document"
@@ -459,16 +444,7 @@ function RequirementDetailModal({
               </div>
               <WorkspaceStatusBadge tone={requirementTone(item)}>{getRequirementStatus(item)}</WorkspaceStatusBadge>
             </div>
-            <div className="detail-grid">
-              <DetailRow label="Current file" value={item.current_document_title || "Not uploaded"} />
-              <DetailRow label="Verification" value={item.current_review_status_label || item.current_verification_status || "Pending upload"} />
-              <DetailRow label="Due on" value={item.due_on || "No deadline"} />
-              <DetailRow label="Expiry required" value={item.requires_expiry_date ? "Yes" : "No"} />
-              <DetailRow label="Uploaded at" value={formatDate(item.current_uploaded_at)} />
-              <DetailRow label="Expiry state" value={item.current_expiry_label} />
-              <DetailRow label="HR verification" value={item.requires_verification ? "Required" : "Auto accepted"} />
-              <DetailRow label="Future due" value={item.is_future_due ? "Yes" : "No"} />
-            </div>
+            <WorkspaceInformation fields={[["Current file", item.current_document_title || "Not uploaded"], ["Verification", item.current_review_status_label || item.current_verification_status || "Pending upload"], ["Due on", item.due_on || "No deadline"], ["Expiry required", item.requires_expiry_date ? "Yes" : "No"], ["Uploaded at", formatDate(item.current_uploaded_at)], ["Expiry state", item.current_expiry_label], ["HR verification", item.requires_verification ? "Required" : "Auto accepted"], ["Future due", item.is_future_due ? "Yes" : "No"]]} />
           </section>
 
           {item.current_rejection_reason ? (
@@ -489,14 +465,7 @@ function RequirementDetailModal({
                 </div>
                 <span className="queue-summary-chip"><strong>v{currentDocument.version_number}</strong> version</span>
               </div>
-              <div className="detail-grid">
-                <DetailRow label="Document number" value={currentDocument.document_number || "Not set"} />
-                <DetailRow label="File name" value={currentDocument.file_name || "Not available"} />
-                <DetailRow label="File size" value={formatFileSize(currentDocument.file_size_bytes)} />
-                <DetailRow label="Issued on" value={formatDate(currentDocument.issued_on)} />
-                <DetailRow label="Expires on" value={currentDocument.expires_on || "No expiry"} />
-                <DetailRow label="Review owner" value={currentDocument.review_owner_label || "Not assigned"} />
-              </div>
+              <WorkspaceInformation fields={[["Document number", currentDocument.document_number || "Not set"], ["File name", currentDocument.file_name || "Not available"], ["File size", formatFileSize(currentDocument.file_size_bytes)], ["Issued on", formatDate(currentDocument.issued_on)], ["Expires on", currentDocument.expires_on || "No expiry"], ["Review owner", currentDocument.review_owner_label || "Not assigned"]]} />
             </section>
           ) : null}
         </div>
@@ -505,7 +474,6 @@ function RequirementDetailModal({
 }
 
 export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
-  const router = useRouter();
   const { isRefreshing, refresh } = useRefreshAfterMutation();
   const pathname = usePathname();
   const [search, setSearch] = useState(currentFilters.q);
@@ -528,7 +496,9 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   const [selectedRequirementDetail, setSelectedRequirementDetail] = useState<EssDocumentRequirementItem | null>(null);
   const selectedRequirement = data.requirement_items.find((item) => item.category_id === formValue.category_id);
   const reuploadItems = data.items.filter((item) => item.reupload_requested);
-  const modal = typeof document !== "undefined"
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
+  const uploadInFlight = useRef(false);
+  const modal = mounted
     ? (
         <>
           {isUploadOpen ? createPortal(
@@ -581,7 +551,9 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   }
 
   function goToPage(page: number) {
-    router.push(`${pathname}${buildQueryString({
+    // Full GET keeps filter/pagination recovery consistent with certified ESS attendance/leave.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`${pathname}${buildQueryString({
       q: search.trim() || undefined,
       verification_status: verificationStatus !== "all" ? verificationStatus : undefined,
       category_id: categoryId !== "all" ? categoryId : undefined,
@@ -599,6 +571,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (uploadInFlight.current) return;
     setFeedback(null);
     setPageFeedback(null);
 
@@ -612,6 +585,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     }
 
     setFieldErrors({});
+    uploadInFlight.current = true;
     setIsSubmitting(true);
     setUploadProgress({ loaded: 0, total: formValue.file?.size ?? null });
 
@@ -640,6 +614,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
       setToast({ title: "Upload failed.", message, tone: "error" });
       return;
     } finally {
+      uploadInFlight.current = false;
       setIsSubmitting(false);
       setUploadProgress(null);
     }
@@ -663,55 +638,23 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   }, [toast]);
 
   return (
-    <div className="stack ess-documents-center">
+    <div className="queue-list">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <section aria-busy={isRefreshing || undefined} className="workspace-section ess-documents-status-section">
-        <div className="workspace-section__header">
-          <div>
-            <h2>Document status</h2>
-            <p>Current compliance, upload, and renewal focus from your mapped HR document rules.</p>
-          </div>
-          <div className="ess-documents-status-actions">
-            <span className="queue-summary-chip"><strong>{data.summary.total_documents}</strong> uploaded documents</span>
-            <span className="queue-summary-chip"><strong>{data.summary.pending_documents}</strong> pending review</span>
-            <span className="queue-summary-chip"><strong>{data.summary.verified_documents}</strong> verified</span>
-            <button className="button button--primary" disabled={data.uploadable_categories.length === 0} onClick={() => openUpload()} type="button">Upload document</button>
-          </div>
-        </div>
+      <WorkspaceStandardPanel title="Document status" description="Track your assigned requirements and HR review." actions={<button className="button button--primary" disabled={data.uploadable_categories.length === 0} onClick={() => openUpload()} type="button">Upload document</button>}>
+        <div aria-busy={isRefreshing || undefined}>
+        {data.uploadable_categories.length === 0 ? <p className="ess-section-note">Employee uploads are unavailable for your assigned categories.</p> : null}
         {pageFeedback ? (
           <div className={`notice ${pageFeedback.tone === "success" ? "notice--success" : "notice--error"}`} role={pageFeedback.tone === "success" ? "status" : "alert"}>
             <strong>{pageFeedback.tone === "success" ? "Document uploaded successfully." : "Document upload failed."}</strong>
             <span className="muted">{pageFeedback.message}</span>
           </div>
         ) : null}
-        <div className="attendance-summary-strip" aria-label="Document summary">
-          <span><strong>{data.summary.required_document_count}</strong> required</span>
-          <span><strong>{data.summary.missing_required_document_count}</strong> missing</span>
-          <span><strong>{data.summary.expiring_documents}</strong> expiring soon</span>
-          <span><strong>{data.summary.expired_documents}</strong> expired</span>
+        <WorkspaceInformation fields={[["Uploaded documents", String(data.summary.total_documents)], ["Pending HR review", String(data.summary.pending_documents)], ["Verified documents", String(data.summary.verified_documents)], ["Missing required documents", String(data.summary.missing_required_document_count)], ["Expiring soon", String(data.summary.expiring_documents)], ["Expired documents", String(data.summary.expired_documents)]]} />
         </div>
-      </section>
+      </WorkspaceStandardPanel>
 
-      <section className="workspace-section">
-        <div className="ess-documents-workspace">
-          <section className="ess-documents-requirements workspace-data-panel">
-            <div className="ess-documents-panel-header">
-              <div>
-                <span className="workspace-card__eyebrow">What HR needs</span>
-                <h2>Required documents</h2>
-                <p>Use the row actions to inspect a requirement or upload the correct file.</p>
-              </div>
-              <div className="ess-documents-panel-actions">
-                <span className="queue-summary-chip"><strong>{data.summary.required_document_count}</strong> required documents</span>
-                <span className="queue-summary-chip"><strong>{data.summary.missing_required_document_count}</strong> missing now</span>
-              </div>
-            </div>
-            <div className="ess-documents-checklist ess-documents-checklist--inline" aria-label="Upload checklist">
-              <div><strong>Clear file</strong><span>Readable corners, names, dates, and numbers.</span></div>
-              <div><strong>Correct category</strong><span>Upload each file under the matching document type.</span></div>
-              <div><strong>Expiry date</strong><span>Add expiry when HR tracks renewals.</span></div>
-              <div><strong>Re-upload note</strong><span>Read HR comments before replacing a returned file.</span></div>
-            </div>
+      <WorkspaceStandardPanel title="Required documents" description="Review each assigned requirement and upload where permitted.">
+          {data.requirement_items.length === 0 ? <p className="ess-empty">No document requirements are assigned.</p> : null}
           {reuploadItems.length > 0 ? (
             <div className="notice">
               <strong>Re-upload requested.</strong>
@@ -722,8 +665,8 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               </span>
             </div>
           ) : null}
-            <div className="workspace-table-scroll">
-              <table className="workspace-table attendance-directory-table ess-document-requirement-table" aria-label="Required documents">
+            <WorkspaceTableScrollRegion className="workspace-table-scroll" label="Document records table">
+              <table className="workspace-table " aria-label="Required documents">
                 <thead>
                   <tr>
                     <th>Document</th>
@@ -755,7 +698,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                         <span className="workspace-table__secondary">{item.current_uploaded_at ? `Uploaded ${formatDate(item.current_uploaded_at)}` : getRequirementSummary(item)}</span>
                       </td>
                       <td>
-                        <span className="ess-document-row-actions">
+                        <span className="table-actions">
                           <button className="button button--secondary" onClick={() => setSelectedRequirementDetail(item)} type="button">View</button>
                           {item.allow_employee_upload ? (
                             <button className="button button--primary" onClick={() => openUpload(item)} type="button">
@@ -768,24 +711,12 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                   ))}
                 </tbody>
               </table>
-            </div>
-          </section>
-        </div>
-      </section>
+            </WorkspaceTableScrollRegion>
+      </WorkspaceStandardPanel>
 
-      <section className="workspace-section ess-documents-history">
-        <section className="workspace-data-panel">
-          <div className="workspace-data-panel__header">
-            <div>
-              <h2>Document history</h2>
-              <p>Search submitted files, download a copy, and review HR comments.</p>
-            </div>
-            <div className="queue-toolbar__meta">
-              <span className="queue-summary-chip"><strong>{data.total_count}</strong> document records</span>
-              <span className="queue-summary-chip"><strong>{data.items.length}</strong> shown on this page</span>
-            </div>
-          </div>
-          <WorkspaceFilterBar className="ess-document-filter-grid">
+      <section className="queue-list">
+        <WorkspaceStandardPanel title="Document history" description="Search all submitted files, download copies and review HR comments.">
+          <WorkspaceFilterBar >
               <label className="form-field">
                 <span className="muted">Search</span>
                 <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Category, title, file, note" value={search} />
@@ -834,7 +765,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                   setCategoryId("all");
                   setExpiryFilter("all");
                   setPageSize("10");
-                  router.push(pathname);
+                  window.location.assign(pathname);
                 }}
                 type="button"
               >
@@ -842,8 +773,8 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               </button>
           </WorkspaceFilterBar>
 
-          <div className="workspace-table-scroll">
-            <table className="workspace-table attendance-directory-table ess-document-history-table" aria-label="Document history">
+          <WorkspaceTableScrollRegion className="workspace-table-scroll" label="Document records table">
+            <table className="workspace-table " aria-label="Document history">
               <thead>
                 <tr>
                   <th>Document</th>
@@ -860,7 +791,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                     <td className="workspace-table__primary-cell">
                       <div>
                         <strong>{item.title}</strong>
-                        <span>{item.file_name || "File name pending"} - v{item.version_number}</span>
+                        <span>{item.file_name || "File not recorded"} - v{item.version_number}</span>
                       </div>
                     </td>
                     <td>
@@ -869,7 +800,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                     </td>
                     <td>
                       <WorkspaceStatusBadge tone={documentTone(item)}>{item.review_status_label || item.verification_status}</WorkspaceStatusBadge>
-                      <span className="workspace-table__secondary">{item.reupload_requested ? "Re-upload requested" : item.review_owner_label || "Owner pending"}</span>
+                      <span className="workspace-table__secondary">{item.reupload_requested ? "Re-upload requested" : item.review_owner_label || "Not assigned"}</span>
                     </td>
                     <td>
                       <strong>{item.expiry_label}</strong>
@@ -877,7 +808,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                     </td>
                     <td>{formatDate(item.created_at)}</td>
                     <td>
-                      <span className="ess-document-history-actions">
+                      <span className="table-actions">
                         <button className="button button--secondary" onClick={() => setSelectedDocument(item)} type="button">Review</button>
                         {item.artifact_id ? <AsyncDownloadButton className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
                       </span>
@@ -886,14 +817,14 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
           {data.items.length === 0 ? (
               <div className="notice workspace-empty-state">
                 <strong>No documents match the current filters.</strong>
                 <span className="muted">Clear one or more filters to review the full submission history.</span>
               </div>
             ) : null}
-        </section>
+        </WorkspaceStandardPanel>
 
         <PaginationBar
           hasNext={data.has_next}

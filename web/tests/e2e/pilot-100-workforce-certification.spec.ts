@@ -76,7 +76,9 @@ test.describe("P100-3 pilot 100 workforce certification", () => {
     await loginAsSeededUser(page, `${usernamePrefix}.e011`, "/ess");
     await expectPageReady(page, "My workspace");
     await expect(page.getByText(`${seedPrefix}_E011`).first()).toBeVisible();
-    const profile = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "My profile" }) });
+    await page.goto("/ess/profile?section=employment");
+    await expectPageReady(page, "My Profile");
+    const profile = page.locator(".ess-profile-content");
     await expect(profile.getByText("Manager", { exact: true })).toBeVisible();
     await expect(profile.getByText("Aarav Sharma001", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);

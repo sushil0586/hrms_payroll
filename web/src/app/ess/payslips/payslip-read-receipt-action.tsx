@@ -1,24 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSavePayslipReceipt } from "./payslip-read-state";
+import type { EssPayrollPayslip } from "@/lib/types";
+
+import { useEffect, useRef, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 type Props = {
   endpoint: string;
   isReadAcknowledged: boolean;
+  onActionStart?: () => void;
 };
 
-export function PayslipReadReceiptAction({ endpoint, isReadAcknowledged }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
+export function PayslipReadReceiptAction({ endpoint, isReadAcknowledged, onActionStart }: Props) {
+  const saveReceipt = useSavePayslipReceipt();
+  const inFlight = useRef(false);
+  const [savedEndpoint, setSavedEndpoint] = useState("");
+  const acknowledged = isReadAcknowledged || savedEndpoint === endpoint;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   async function handleReadAcknowledgement() {
-    if (isSubmitting || isRefreshing || isReadAcknowledged) return;
+    if (inFlight.current || acknowledged) return;
+    inFlight.current = true;
+    onActionStart?.();
     setIsSubmitting(true);
     setError("");
     let response: Response;
@@ -29,6 +37,7 @@ export function PayslipReadReceiptAction({ endpoint, isReadAcknowledged }: Props
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(false);
+      inFlight.current = false;
       return;
     }
     if (!response.ok) {
@@ -40,11 +49,21 @@ export function PayslipReadReceiptAction({ endpoint, isReadAcknowledged }: Props
       setError(message);
       setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(false);
+      inFlight.current = false;
       return;
     }
+    const receipt = await response.json().catch(() => null) as EssPayrollPayslip | null;
+    if (!receipt || endpoint !== `/api/me/payroll-payslips/${receipt.id}/read` || receipt.access_summary?.is_read_acknowledged !== true) {
+      setError("The server did not confirm the read receipt. Retry to verify its state.");
+      setIsSubmitting(false);
+      inFlight.current = false;
+      return;
+    }
+    saveReceipt?.(receipt);
+    setSavedEndpoint(endpoint);
     setToast({ title: "Action saved.", message: "Payslip read receipt recorded.", tone: "success" });
     setIsSubmitting(false);
-    refresh();
+    inFlight.current = false;
   }
 
   useEffect(() => {
@@ -56,8 +75,8 @@ export function PayslipReadReceiptAction({ endpoint, isReadAcknowledged }: Props
   return (
     <div className="record-card__actions">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <AsyncActionButton className="button button--secondary" disabled={isReadAcknowledged} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing payslip" : "Saving read receipt"} onClick={handleReadAcknowledgement} type="button">{isReadAcknowledged ? "Read acknowledged" : "Mark as read"}</AsyncActionButton>
-      {error ? <span className="muted">{error}</span> : null}
+      <AsyncActionButton className="button button--secondary" disabled={acknowledged} pending={!acknowledged && isSubmitting} pendingLabel="Saving read receipt" onClick={handleReadAcknowledgement} type="button">{acknowledged ? "Read acknowledged" : "Mark as read"}</AsyncActionButton>
+      {error ? <span className="muted" role="alert">{error}</span> : null}
     </div>
   );
 }

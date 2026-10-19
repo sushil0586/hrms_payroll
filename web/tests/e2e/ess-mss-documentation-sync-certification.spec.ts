@@ -30,7 +30,7 @@ const essRoutes: DocumentationRoute[] = [
     heading: "My workspace",
     persona: employee,
     requiredDocSections: ["ESS Quick Navigation", "Screen Labels To Recognize", "Employee Checklist", "Browser Certification Coverage"],
-    requiredUiText: ["Today's actions", "What do you want to do?", "My profile", "Today", "Leave balances"],
+    requiredUiText: ["Awaiting approval", "Employee services", "My Profile", "Today", "Leave balances"],
     requiredActions: [/apply leave/i, /regularize attendance/i, /inbox/i],
   },
   {

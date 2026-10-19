@@ -263,9 +263,8 @@ async function expectEssWorkspaceUsable(page: Page) {
   await expect(page.getByTestId("ess-control-center")).toBeVisible();
 
   for (const heading of [
-    "Today's actions",
-    "What do you want to do?",
-    "My profile",
+    "Awaiting approval",
+    "Employee services",
     "Today",
     "Leave balances",
   ]) {
@@ -349,7 +348,7 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
       path: "/ess",
       heading: /My workspace|Self service/i,
       persona: employee,
-      requiredText: [/Today's actions/i, /Leave balances/i, /Apply leave/i, /Regularize attendance/i],
+      requiredText: [/Awaiting approval/i, /Leave balances/i, /Apply leave/i, /Regularize attendance/i],
     });
     await expectEssWorkspaceUsable(page);
 

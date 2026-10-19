@@ -144,6 +144,12 @@ def append_leave_ledger_movement(
 ) -> LeaveBalanceTransaction:
     if not idempotency_key.strip():
         raise ValidationError({"idempotency_key": "An idempotency key is required."})
+    # Serialize commands for this balance before checking replay identity.
+    locked = (
+        LeaveBalance.objects.select_for_update(of=("self",))
+        .select_related("policy_period", "leave_policy")
+        .get(pk=balance.pk)
+    )
     existing = LeaveBalanceTransaction.objects.filter(
         tenant=balance.tenant,
         idempotency_key=idempotency_key,
@@ -158,11 +164,6 @@ def append_leave_ledger_movement(
             raise ValidationError({"idempotency_key": "This ledger key was used for a different movement."})
         return existing
 
-    locked = (
-        LeaveBalance.objects.select_for_update(of=("self",))
-        .select_related("policy_period", "leave_policy")
-        .get(pk=balance.pk)
-    )
     if locked.policy_period_id is None:
         raise ValidationError({"leave_balance": "Historical unclassified balances cannot receive governed ledger movements."})
     if not (locked.policy_period.start_date <= effective_date <= locked.policy_period.end_date):
@@ -556,9 +557,18 @@ def execute_leave_year_close_run(run: LeaveYearCloseRun) -> LeaveYearCloseRun:
 @transaction.atomic
 def expire_entitlement_lots(*, policy_period: LeavePolicyPeriod, as_of: date, idempotency_prefix: str):
     expired = []
+    # Match consumption/reversal: balance locks precede existing lot locks.
+    eligible_balance_ids = LeaveEntitlementLot.objects.filter(
+        policy_period=policy_period, expiry_date__lt=as_of, remaining_units__gt=0,
+    ).values_list("leave_balance_id", flat=True)
+    locked_balance_ids = list(
+        LeaveBalance.objects.select_for_update().filter(pk__in=eligible_balance_ids)
+        .order_by("pk").values_list("pk", flat=True)
+    )
     lots = (
         LeaveEntitlementLot.objects.select_for_update()
-        .filter(policy_period=policy_period, expiry_date__lt=as_of, remaining_units__gt=0)
+        .filter(policy_period=policy_period, leave_balance_id__in=locked_balance_ids,
+                expiry_date__lt=as_of, remaining_units__gt=0)
         .order_by("expiry_date", "effective_date", "id")
     )
     for lot in lots:
@@ -585,6 +595,7 @@ def consume_entitlement_lots(
     leave_request=None,
 ):
     """Consume earliest-expiring eligible entitlement units and persist exact allocations."""
+    balance = LeaveBalance.objects.select_for_update().get(pk=balance.pk)
     units = Decimal(units).quantize(Decimal("0.01"))
     remaining = units
     lots = list(
@@ -645,6 +656,11 @@ def consume_entitlement_lots(
 @transaction.atomic
 def reverse_leave_request_allocations(*, leave_request, reversal_date: date, idempotency_key: str):
     """Restore exact lots; expired-lot restoration requires an explicit correction decision."""
+    balance_ids = LeaveRequestAllocation.objects.filter(
+        leave_request=leave_request, status=LeaveRequestAllocation.Status.CONSUMED,
+    ).values_list("leave_balance_id", flat=True)
+    # Acquire shared balances before allocation/lot rows, in stable batch order.
+    list(LeaveBalance.objects.select_for_update().filter(pk__in=balance_ids).order_by("pk"))
     allocations = list(
         LeaveRequestAllocation.objects.select_for_update(of=("self",))
         .select_related("entitlement_lot", "leave_balance")

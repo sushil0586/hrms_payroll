@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceFilterBar, WorkspaceStatusBadge, WorkspaceStandardHeader, WorkspaceDataTable } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateUploadFile } from "@/lib/ui/validation";
 import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import { essDocumentDate, essMoney, maskEmployeeIdentifier } from "@/lib/ui/employee-document-format";
 import type {
   EssStatutoryDeclaration,
   EssStatutoryDeclarationItem,
@@ -96,25 +96,8 @@ function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) {
-    return "Pending";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatMoney(value: unknown, currency = "INR") {
-  const numericValue = Number(value ?? 0);
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(numericValue) ? numericValue : 0);
-}
+function formatDate(value: string | null | undefined) { return essDocumentDate(value ?? null); }
+function formatMoney(value: unknown) { return essMoney(value); }
 
 function isEditable(declaration: EssStatutoryDeclaration | null) {
   return declaration?.status === "draft" || declaration?.status === "rejected";
@@ -155,6 +138,7 @@ function TaxYearRail({
       <div className="ess-tax-year-list">
         {declarations.map((declaration) => (
           <Link
+            prefetch={false}
             className={`ess-tax-year-card ${selectedDeclaration?.id === declaration.id ? "is-selected" : ""}`}
             href={`/ess/statutory-declarations${buildQueryString({
               declarationId: declaration.id,
@@ -199,9 +183,9 @@ function ProfileSummary({ profile }: { profile: HrAdminEmployeeStatutoryProfile 
         <StatusBadge status={profile?.declaration_status || "draft"} label={profile?.declaration_status_label || "Draft"} />
       </div>
       <div className="workspace-summary-grid ess-tax-profile-grid">
-        <DetailRow label="PAN" value={profile?.pan_number || "Pending"} />
+        <DetailRow label="PAN" value={maskEmployeeIdentifier(profile?.pan_number)} />
         <DetailRow label="Tax regime" value={profile?.tax_regime_label || "Pending"} />
-        <DetailRow label="PF / UAN" value={profile?.pf_applicable ? profile.uan_number || "Applicable" : "Not applicable"} />
+        <DetailRow label="PF / UAN" value={profile?.pf_applicable ? maskEmployeeIdentifier(profile.uan_number) : "Not applicable"} />
         <DetailRow label="Professional tax" value={profile?.professional_tax_state || "Pending"} />
         <DetailRow label="Previous income" value={formatMoney(profile?.previous_employment_income)} />
         <DetailRow label="Effective from" value={formatDate(profile?.effective_from)} />
@@ -340,7 +324,7 @@ function ProofRegister({
             </select>
           </label>
       </WorkspaceFilterBar>
-      <table className="workspace-table attendance-directory-table ess-tax-proof-list" aria-label="Declared proof items">
+      <WorkspaceDataTable className="ess-tax-proof-list" ariaLabel="Declared proof items" scrollLabel="Declared proof items, scroll horizontally for actions">
         <thead>
           <tr>
             <th>Proof</th>
@@ -363,12 +347,12 @@ function ProofRegister({
               <td>{formatMoney(item.declared_amount)}</td>
               <td>{formatMoney(item.verified_amount)}</td>
               <td>
-                <button className="button button--secondary" onClick={() => onOpenProof(item)} type="button">View details</button>
+                <button className="button button--secondary" onClick={(event) => { event.currentTarget.focus(); onOpenProof(item); }} type="button">View details</button>
               </td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </WorkspaceDataTable>
       {filteredItems.length === 0 ? (
           <div className="ess-tax-empty-card">
             <strong>No proof rows match</strong>
@@ -417,8 +401,8 @@ function NextActionPanel({
       </div>
       <div className="ess-tax-next-list">
         <div className={`ess-tax-next-item ${needsPan ? "is-warning" : "is-ready"}`}>
-          <strong>{needsPan ? "PAN missing" : "PAN ready"}</strong>
-          <span>{needsPan ? "Ask HR to update PAN before payroll consumes tax data." : profile?.pan_number}</span>
+          <strong>{needsPan ? "PAN missing" : "PAN recorded"}</strong>
+          <span>{needsPan ? "Ask HR to update PAN before payroll consumes tax data." : maskEmployeeIdentifier(profile?.pan_number)}</span>
         </div>
         <div className={`ess-tax-next-item ${declaration ? "is-ready" : "is-warning"}`}>
           <strong>{declaration ? "Declaration opened" : "Start declaration"}</strong>
@@ -430,13 +414,13 @@ function NextActionPanel({
         </div>
       </div>
       <div className="ess-tax-next-actions">
-        <button className="button button--primary" onClick={onStartDeclaration} type="button">
+        <button className="button button--primary" onClick={(event) => { event.currentTarget.focus(); onStartDeclaration(); }} type="button">
           {editable ? "Update declaration" : declaration ? "View setup" : "Start declaration"}
         </button>
-        <button className="button button--secondary" disabled={!editable} onClick={onAddProof} type="button">
+        <button className="button button--secondary" disabled={!editable} onClick={(event) => { event.currentTarget.focus(); onAddProof(); }} type="button">
           Add proof
         </button>
-        <button className="button button--secondary" disabled={!editable || (declaration?.item_count ?? 0) === 0} onClick={onSubmit} type="button">
+        <button className="button button--secondary" disabled={!editable || (declaration?.item_count ?? 0) === 0} onClick={(event) => { event.currentTarget.focus(); onSubmit(); }} type="button">
           Submit declaration
         </button>
       </div>
@@ -448,6 +432,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   const { isRefreshing, refresh } = useRefreshAfterMutation();
   const selectedDeclaration = data.items.find((item) => item.id === selectedDeclarationId) ?? data.items[0] ?? null;
   const editableDeclaration = isEditable(selectedDeclaration) ? selectedDeclaration : null;
+  const readOnlySetup = Boolean(selectedDeclaration && !editableDeclaration);
   const [activeModal, setActiveModal] = useState<ModalState>(null);
   const [selectedProof, setSelectedProof] = useState<EssStatutoryDeclarationItem | null>(null);
   const [notice, setNotice] = useState("");
@@ -468,10 +453,10 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     return typeof snapshotValue === "string" ? snapshotValue : selectedDeclaration?.proof_window_ref ?? "";
   }, [data.profile?.config_snapshot, selectedDeclaration?.proof_window_ref]);
 
-  const [financialYearCode, setFinancialYearCode] = useState(editableDeclaration?.financial_year_code ?? defaultFinancialYear);
-  const [taxRegime, setTaxRegime] = useState(editableDeclaration?.tax_regime ?? data.profile?.tax_regime ?? "not_declared");
-  const [declarationProfileRef, setDeclarationProfileRef] = useState(editableDeclaration?.declaration_profile_ref ?? "");
-  const [proofWindowRef, setProofWindowRef] = useState(editableDeclaration?.proof_window_ref ?? defaultProofWindow);
+  const [financialYearCode, setFinancialYearCode] = useState(selectedDeclaration?.financial_year_code ?? defaultFinancialYear);
+  const [taxRegime, setTaxRegime] = useState(selectedDeclaration?.tax_regime ?? data.profile?.tax_regime ?? "not_declared");
+  const [declarationProfileRef, setDeclarationProfileRef] = useState(selectedDeclaration?.declaration_profile_ref ?? "");
+  const [proofWindowRef, setProofWindowRef] = useState(selectedDeclaration?.proof_window_ref ?? defaultProofWindow);
   const [sectionCode, setSectionCode] = useState("80C");
   const [componentCode, setComponentCode] = useState("");
   const [itemKind, setItemKind] = useState(data.options.statutory_declaration_item_kinds[0]?.value ?? "investment");
@@ -514,6 +499,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
   async function handleDeclarationSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnlySetup) return;
     setDeclarationFieldErrors({});
     const nextErrors: FieldErrors<DeclarationField> = {
       financial_year_code: requireText(financialYearCode, "Enter the financial year for this declaration."),
@@ -676,28 +662,11 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   }, [toast]);
 
   return (
-    <main className="shell shell--workspace shell--ess-tax">
+    <main className="shell shell--workspace shell--ess-tax ess-compact">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <header className="workspace-control-header">
-        <div className="workspace-control-header__copy">
-          <span className="workspace-control-header__eyebrow">{isDemo ? "Demo employee tax" : "Live employee tax"}</span>
-          <h1>Statutory Declarations</h1>
-          <p>Choose tax regime, add investment proof, and track HR verification in one focused self-service workspace.</p>
-          <div className="workspace-control-header__metrics">
-            <span>India ready</span>
-            <span>Tenant configured</span>
-            <span>Proof tracked</span>
-          </div>
-        </div>
-        <div className="workspace-control-header__actions">
-          <Link className="button button--secondary" href="/ess">
-            Overview
-          </Link>
-          <Link className="button button--secondary" href="/ess/documents">
-            Documents
-          </Link>
-        </div>
-      </header>
+      <WorkspaceStandardHeader eyebrow={isDemo ? "Demo employee services" : "Employee services"} title="Statutory Declarations"
+        description="Review your tax declaration, provide evidence and follow HR verification."
+        actions={<><Link prefetch={false} className="button button--secondary" href="/ess">Overview</Link><Link prefetch={false} className="button button--secondary" href="/ess/documents">Documents</Link></>} />
 
       <section className="attendance-summary-strip" aria-label="Tax declaration summary">
         <span><strong>{data.summary.declaration_count}</strong> declarations</span>
@@ -722,7 +691,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
           <section className="workspace-data-panel ess-tax-main" aria-label="Tax declaration workspace">
             <div className="ess-tax-toolbar">
-              <form action="/ess/statutory-declarations" className="ess-tax-filter-form">
+              <form action="/ess/statutory-declarations">
                 <WorkspaceFilterBar>
                   <label className="form-field">
                     <span>Search</span>
@@ -763,7 +732,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
                   </button>
                 </WorkspaceFilterBar>
               </form>
-              {notice ? <div className={`notice notice--${noticeTone}`}>{notice}</div> : null}
+              {notice ? <div className={`notice notice--${noticeTone}`} role={noticeTone === "error" ? "alert" : "status"}>{notice}</div> : null}
             </div>
 
             <div className="ess-tax-summary-grid">
@@ -794,7 +763,8 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
       {activeModal === "declaration" ? (
         <HrAdminActionModal
-          className="ess-tax-modal"
+          focusableBody={readOnlySetup}
+          className="accerio-dialog ess-tax-modal"
           closeHref="/ess/statutory-declarations"
           description="Required fields are marked with *."
           eyebrow="Statutory declaration"
@@ -802,24 +772,24 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             <>
               <span className={`notice notice--${noticeTone}`}>{notice}</span>
               <button className="button button--secondary" disabled={isSavingDeclaration} onClick={() => setActiveModal(null)} type="button">Cancel</button>
-              <AsyncActionButton className="button button--primary" disabled={!data.profile} form="ess-tax-declaration-form" pending={isSavingDeclaration || isRefreshing} pendingLabel={isSavingDeclaration ? "Saving declaration" : "Refreshing declaration"} type="submit">
-                {editableDeclaration ? "Update declaration" : "Create declaration"}
+              <AsyncActionButton className="button button--primary" disabled={!data.profile || readOnlySetup} form="ess-tax-declaration-form" pending={isSavingDeclaration || isRefreshing} pendingLabel={isSavingDeclaration ? "Saving declaration" : "Refreshing declaration"} type="submit">
+                {readOnlySetup ? "Read only" : editableDeclaration ? "Update declaration" : "Create declaration"}
               </AsyncActionButton>
             </>
           )}
           labelledBy="ess-tax-declaration-modal-title"
           onClose={() => setActiveModal(null)}
-          title={editableDeclaration ? "Update declaration" : "Start declaration"}
+          title={readOnlySetup ? "Declaration setup" : editableDeclaration ? "Update declaration" : "Start declaration"}
         >
           <form className="ess-tax-modal-form" id="ess-tax-declaration-form" noValidate onSubmit={handleDeclarationSubmit}>
             <label className="form-field">
               <span>Financial year <strong aria-hidden="true">*</strong></span>
-              <input aria-invalid={Boolean(declarationFieldErrors.financial_year_code)} className="input-control" onChange={(event) => { setFinancialYearCode(event.target.value); clearDeclarationFieldError("financial_year_code"); }} placeholder="FY2027-28" required value={financialYearCode} />
+              <input aria-invalid={Boolean(declarationFieldErrors.financial_year_code)} className="input-control" onChange={(event) => { setFinancialYearCode(event.target.value); clearDeclarationFieldError("financial_year_code"); }} placeholder="FY2027-28" required disabled={readOnlySetup} value={financialYearCode} />
               {declarationFieldErrors.financial_year_code ? <span className="field-error-text" role="alert">{declarationFieldErrors.financial_year_code}</span> : null}
             </label>
             <label className="form-field">
               <span>Tax regime <strong aria-hidden="true">*</strong></span>
-              <select aria-invalid={Boolean(declarationFieldErrors.tax_regime)} className="input-control" onChange={(event) => { setTaxRegime(event.target.value); clearDeclarationFieldError("tax_regime"); }} value={taxRegime}>
+              <select aria-invalid={Boolean(declarationFieldErrors.tax_regime)} className="input-control" onChange={(event) => { setTaxRegime(event.target.value); clearDeclarationFieldError("tax_regime"); }} disabled={readOnlySetup} value={taxRegime}>
                 {data.options.tax_regimes.map((option) => (
                   <option value={option.value} key={option.value}>
                     {option.label}
@@ -830,11 +800,11 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             </label>
             <label className="form-field">
               <span>Declaration profile</span>
-              <input className="input-control" onChange={(event) => setDeclarationProfileRef(event.target.value)} placeholder="Configured declaration profile ref" value={declarationProfileRef} />
+              <input className="input-control" onChange={(event) => setDeclarationProfileRef(event.target.value)} placeholder="Configured declaration profile ref" disabled={readOnlySetup} value={declarationProfileRef} />
             </label>
             <label className="form-field">
               <span>Proof window</span>
-              <input className="input-control" onChange={(event) => setProofWindowRef(event.target.value)} placeholder="Configured proof window ref" value={proofWindowRef} />
+              <input className="input-control" onChange={(event) => setProofWindowRef(event.target.value)} placeholder="Configured proof window ref" disabled={readOnlySetup} value={proofWindowRef} />
             </label>
             <div className="ess-tax-helper-card">
               <strong>{taxRegime === "new_regime" ? "New regime selected" : "India statutory guidance"}</strong>
@@ -850,7 +820,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
       {activeModal === "proof" ? (
         <HrAdminActionModal
-          className="ess-tax-modal ess-tax-modal--wide"
+          className="accerio-dialog ess-tax-modal ess-tax-modal--wide"
           closeHref="/ess/statutory-declarations"
           description="Required fields are marked with *."
           eyebrow="Declaration proof"
@@ -934,7 +904,8 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
       {activeModal === "submit" ? (
         <HrAdminActionModal
-          className="ess-tax-modal"
+          focusableBody
+          className="accerio-dialog ess-tax-modal"
           closeHref="/ess/statutory-declarations"
           description="After submission, HR can verify proof and payroll may lock the declaration for the cycle."
           eyebrow="Statutory declaration"
@@ -962,7 +933,8 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
       {activeModal === "proofDetail" && selectedProof ? (
         <HrAdminActionModal
-          className="ess-tax-modal"
+          focusableBody
+          className="accerio-dialog ess-tax-modal"
           closeHref="/ess/statutory-declarations"
           description={selectedProof.name}
           eyebrow="Proof detail"

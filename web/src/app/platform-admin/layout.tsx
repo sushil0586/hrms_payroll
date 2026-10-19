@@ -1,3 +1,5 @@
+import { WorkspaceHydrationBoundary } from "@/components/shell/workspace-hydration-boundary";
+import { WorkspaceLoading } from "@/components/patterns/workspace-loading";
 import { WorkspaceChrome, type WorkspaceNavItem } from "@/components/shell/workspace-chrome";
 import { getWorkspaceMenuSource, type WorkspaceMenuSource } from "@/lib/ui/menu-catalog";
 import { requirePlatformAdminAccess } from "@/lib/workspace-access";
@@ -80,6 +82,7 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
   const menuSource = normalizePlatformMenuSource(rawMenuSource);
 
   return (
+    <WorkspaceHydrationBoundary fallback={<WorkspaceLoading label="Loading Platform Admin workspace" />}>
     <WorkspaceChrome
       footerDescription="Customer onboarding, setup templates, tenant admin users, and launch-readiness controls."
       navGroups={menuSource.navGroups}
@@ -94,5 +97,6 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
     >
       {children}
     </WorkspaceChrome>
+    </WorkspaceHydrationBoundary>
   );
 }
