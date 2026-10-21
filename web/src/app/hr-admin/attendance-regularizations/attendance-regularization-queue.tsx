@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -7,8 +8,9 @@ import Link from "next/link";
 import { AttendanceRegularizationInlineReview } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-inline-review";
 import { AttendanceRegularizationReviewForm } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-review-form";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
-import { useWorkspaceNavigationFeedback } from "@/components/shell/workspace-navigation-feedback";
+import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
+import { attendanceDateError } from "../attendance-records/filter-contract";
 import type { AttendanceRegularizationItem, HrAdminEnumOption } from "@/lib/types";
 
 type Props = {
@@ -84,22 +86,17 @@ export function AttendanceRegularizationQueue({
   pagination,
   canReviewRegularizations = true,
 }: Props) {
-  const navigate = useWorkspaceNavigationFeedback();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const reviewRegularizationId = searchParams.get("reviewRegularization") ?? "";
-  const [search, setSearch] = useState(currentFilters.q);
-  const [status, setStatus] = useState(currentFilters.status || "all");
-  const [requestedStatus, setRequestedStatus] = useState(currentFilters.requested_status || "all");
-  const [currentStatus, setCurrentStatus] = useState(currentFilters.current_status || "all");
-  const [fromDate, setFromDate] = useState(currentFilters.from_date);
-  const [toDate, setToDate] = useState(currentFilters.to_date);
-  const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
-  const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
-
+  const scope = JSON.stringify(currentFilters);
+  const [selection, setSelection] = useState({scope, id: ""});
+  const selectedItemId = selection.scope === scope ? selection.id : "";
+  const setSelectedItemId = (id: string) => setSelection({scope, id});
+  const [filterError, setFilterError] = useState("");
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
   const modalReviewItem = canReviewRegularizations && reviewRegularizationId ? reviewItem : null;
-  const numericPageSize = Number(pageSize) || currentFilters.page_size;
+  const numericPageSize = currentFilters.page_size;
   const totalPages = Math.max(1, Math.ceil(pagination.total_count / Math.max(numericPageSize, 1)));
   const pageStart = pagination.total_count === 0 ? 0 : ((pagination.page - 1) * numericPageSize) + 1;
   const pageEnd = pagination.total_count === 0 ? 0 : Math.min(pagination.page * numericPageSize, pagination.total_count);
@@ -109,33 +106,14 @@ export function AttendanceRegularizationQueue({
 
   function currentQueueHref(params: Record<string, string | number | boolean | undefined> = {}) {
     return `${pathname}${buildQueryString({
-      q: search.trim() || undefined,
-      status: status !== "all" ? status : undefined,
-      requested_status: requestedStatus !== "all" ? requestedStatus : undefined,
-      current_status: currentStatus !== "all" ? currentStatus : undefined,
-      from_date: fromDate || undefined,
-      to_date: toDate || undefined,
-      page: pagination.page,
-      page_size: numericPageSize,
+      ...currentFilters,
       ...params,
     })}`;
   }
 
-  function goToPage(page: number, target?: HTMLElement | null) {
-    navigate(currentQueueHref({ page, reviewRegularization: undefined }), `regularization page ${page}`, target, { scroll: false });
+  function goToPage(page: number) {
+    window.location.assign(currentQueueHref({ page, reviewRegularization: undefined }));
   }
-
-  function clearFilters(target?: HTMLElement | null) {
-    setSearch("");
-    setStatus("all");
-    setRequestedStatus("all");
-    setCurrentStatus("all");
-    setFromDate("");
-    setToDate("");
-    setPageSize("25");
-    navigate(pathname, "cleared regularization filters", target, { scroll: false });
-  }
-
   return (
     <section className="section queue-layout attendance-regularization-layout">
       <div className="hr-employee-summary-strip attendance-summary-strip">
@@ -157,65 +135,72 @@ export function AttendanceRegularizationQueue({
             <span className="queue-summary-chip"><strong>{items.length}</strong> on this page</span>
           </div>
         </div>
-        <WorkspaceFilterBar className="queue-toolbar__grid attendance-filter-grid">
+        <WorkspaceFilterForm key={scope} action={pathname} label="Regularization filters" className="workspace-filter-form--three" onSubmit={event => {
+          const data = new FormData(event.currentTarget);
+          const error = attendanceDateError(String(data.get("from_date") || ""), String(data.get("to_date") || ""));
+          setFilterError(error); if(error) { event.preventDefault(); event.currentTarget.querySelector<HTMLInputElement>('[name="to_date"]')?.focus(); }
+        }}>
+          <input type="hidden" name="page" value="1"/><input type="hidden" name="page_size" value={currentFilters.page_size}/>
           <label className="form-field">
             <span className="muted">Search</span>
-            <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Employee, code, date, shift, reason" value={search} />
+            <input className="input-control" name="q" defaultValue={currentFilters.q} />
           </label>
           <label className="form-field">
             <span className="muted">Request status</span>
-            <select className="input-control" onChange={(event) => setStatus(event.target.value)} value={status}>
-              <option value="all">All request statuses</option>
+            <select className="input-control" name="status" defaultValue={currentFilters.status}>
+              <option value="">All request statuses</option>
               {regularizationStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
           <label className="form-field">
             <span className="muted">Requested status</span>
-            <select className="input-control" onChange={(event) => setRequestedStatus(event.target.value)} value={requestedStatus}>
-              <option value="all">All requested statuses</option>
+            <select className="input-control" name="requested_status" defaultValue={currentFilters.requested_status}>
+              <option value="">All requested statuses</option>
               {attendanceStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-          <details className="directory-more-filters attendance-more-filters">
+          <details className="directory-more-filters attendance-more-filters" open={Boolean(currentFilters.current_status || currentFilters.from_date || currentFilters.to_date) || undefined}>
             <summary className="button button--secondary button--compact">More filters</summary>
             <div className="directory-more-filters__panel attendance-more-filters__panel">
               <label className="form-field">
                 <span className="muted">Current status</span>
-                <select className="input-control" onChange={(event) => setCurrentStatus(event.target.value)} value={currentStatus}>
-                  <option value="all">All current statuses</option>
+                <select className="input-control" name="current_status" defaultValue={currentFilters.current_status}>
+                  <option value="">All current statuses</option>
                   {attendanceStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
               <label className="form-field">
                 <span className="muted">From date</span>
-                <input className="input-control" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+                <input className="input-control" type="date" name="from_date" defaultValue={currentFilters.from_date} />
               </label>
               <label className="form-field">
                 <span className="muted">To date</span>
-                <input className="input-control" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
+                <input className="input-control" type="date" name="to_date" defaultValue={currentFilters.to_date} />
               </label>
             </div>
           </details>
-        </WorkspaceFilterBar>
-        <div className="queue-toolbar__actions attendance-toolbar-actions">
-          <button className="button button--primary" onClick={(event) => goToPage(1, event.currentTarget)} type="button">Apply filters</button>
-          <button className="button button--ghost" onClick={(event) => clearFilters(event.currentTarget)} type="button">Clear filters</button>
+
+        <div className="workspace-filter-actions">
+          <button className="button button--primary" type="submit">Apply filters</button>
+          <a className="button button--secondary" href={pathname}>Clear filters</a>
         </div>
+        </WorkspaceFilterForm>
+        {filterError ? <p className="notice notice--error" role="alert">{filterError}</p> : null}
       </section>
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <article className="record-card panel-card-soft attendance-directory-panel">
-          <div className="employee-directory-table-wrap attendance-directory-table-wrap">
+          <WorkspaceTableScrollRegion label="Attendance regularizations, scroll for more columns" className="employee-directory-table-wrap attendance-directory-table-wrap workspace-table-region">
             {items.length ? (
-              <table className="employee-directory-table attendance-directory-table">
+              <table className="workspace-data-table employee-directory-table attendance-directory-table">
                 <thead>
                   <tr>
-                    <th>Employee</th>
-                    <th>Attendance</th>
-                    <th>Status</th>
-                    <th>Requested</th>
-                    <th>Workflow</th>
-                    <th>Action</th>
+                    <th scope="col">Employee</th>
+                    <th scope="col">Attendance</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Requested</th>
+                    <th scope="col">Workflow</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -259,7 +244,7 @@ export function AttendanceRegularizationQueue({
                 <span className="muted">Try clearing one or more filters to widen the queue.</span>
               </div>
             )}
-          </div>
+          </WorkspaceTableScrollRegion>
         </article>
 
         {selectedItem ? (
@@ -329,25 +314,25 @@ export function AttendanceRegularizationQueue({
             <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> of {totalPages}</span>
             <label className="lifecycle-page-size-control">
               <span>Rows</span>
-              <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+              <select className="input-control" onChange={(event) => window.location.assign(currentQueueHref({page: 1, page_size: Number(event.target.value)}))} value={currentFilters.page_size}>
                 {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
               </select>
             </label>
-            <button className="button button--secondary button--compact" onClick={(event) => goToPage(1, event.currentTarget)} type="button">Apply</button>
+            <button className="button button--secondary button--compact" onClick={() => goToPage(1)} type="button">Apply</button>
           </div>
           {totalPages > 1 ? (
             <div className="pagination-bar__actions">
-              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(1, event.currentTarget)} type="button">First</button>
-              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(pagination.page - 1, event.currentTarget)} type="button">Previous</button>
-              <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(pagination.page + 1, event.currentTarget)} type="button">Next</button>
-              <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(totalPages, event.currentTarget)} type="button">Last</button>
+              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(1)} type="button">First</button>
+              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(pagination.page - 1)} type="button">Previous</button>
+              <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(pagination.page + 1)} type="button">Next</button>
+              <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(totalPages)} type="button">Last</button>
             </div>
           ) : null}
         </div>
       </section>
 
       {modalReviewItem ? (
-        <HrAdminActionModal
+        <HrAdminActionModal documentNavigation
           className="attendance-review-modal"
           closeHref={currentQueueHref({ reviewRegularization: undefined })}
           description="Review and decide this correction request without leaving the queue."

@@ -11,6 +11,16 @@ from apps.leave_management.models import LeaveYearCloseRun, LeaveYearCloseRunSta
 from apps.leave_management.year_end_services import execute_leave_year_close_run
 
 
+@shared_task(name="leave.process_due_auto_approvals", acks_late=True, reject_on_worker_lost=True)
+def process_due_leave_auto_approvals_task(limit: int = 100) -> dict:
+    from apps.leave_management.auto_approval import process_due_leave_auto_approvals
+
+    result = process_due_leave_auto_approvals(limit=limit)
+    if result["failed"]:
+        raise RuntimeError(f"{result['failed']} automatic leave approval candidates failed; see worker logs.")
+    return result
+
+
 @shared_task(
     bind=True,
     name="leave.execute_year_close",

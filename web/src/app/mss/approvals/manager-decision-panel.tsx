@@ -1,9 +1,13 @@
 "use client";
 
+import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
+import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+
 import { useEffect, useRef, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { leaveDecisionMessage } from "@/lib/ui/leave-decision-message";
 import { requireText } from "@/lib/ui/validation";
 import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
@@ -21,16 +25,8 @@ type Props = {
   onCompleted?: () => void;
 };
 
-function getErrorMessage(payload: unknown, fallback: string) {
-  if (!payload || typeof payload !== "object") {
-    return fallback;
-  }
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) {
-      return String(value[0]);
-    }
-  }
-  return String((payload as Record<string, unknown>).detail || fallback);
+function getErrorMessage(payload: unknown, status: number) {
+  return mutationErrorMessage(payload, status, 'Unable to record this decision. Refresh the request and review its current approval step.');
 }
 
 function getEndpoint(kind: "leave" | "attendance", itemId: string, action: "approve" | "reject") {
@@ -61,7 +57,9 @@ export function ManagerDecisionPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null);
   const isSubmittingRef = useRef(false);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
 
+  const feedbackRef = useFeedbackFocus(error, Boolean(isSubmitting), Boolean(commentError));
   const isPending = status === "pending" || status === "partially_approved";
   const isCancellationRequest = requestAction === "cancellation_request";
   const actionLocked = Boolean(successMessage);
@@ -78,9 +76,10 @@ export function ManagerDecisionPanel({
     const nextCommentError = action === "reject" ? requireText(comment, "Enter a decision note before rejecting this request.") : undefined;
     if (nextCommentError) {
       setCommentError(nextCommentError);
+      commentRef.current?.focus();
       const message = "Review the highlighted decision note and try again.";
       setError(message);
-      setToast({ title: "Action failed.", message, tone: "error" });
+      setToast({ title: "Action needs attention.", message, tone: "error" });
       isSubmittingRef.current = false;
       return;
     }
@@ -88,18 +87,15 @@ export function ManagerDecisionPanel({
     if (!canDecide) {
       const message = kind === "leave" ? "Leave approval permission is required." : "Attendance review permission is required.";
       setError(message);
-      setToast({ title: "Action failed.", message, tone: "error" });
+      setToast({ title: "Action needs attention.", message, tone: "error" });
       isSubmittingRef.current = false;
       return;
     }
 
     if (state === "demo") {
-      const message =
-        action === "approve"
-          ? "Demo approval captured. Live workflow updates will run once this page is connected to a signed-in manager."
-          : "Demo rejection captured. Live workflow updates will run once this page is connected to a signed-in manager.";
-      setSuccessMessage(message);
-      setToast({ title: "Action saved.", message, tone: "success" });
+      const message = "Approvals are unavailable in demo mode. Sign in as an authorized manager to record a decision.";
+      setError(message);
+      setToast({ title: "Approval unavailable.", message, tone: "error" });
       isSubmittingRef.current = false;
       return;
     }
@@ -117,9 +113,9 @@ export function ManagerDecisionPanel({
         body: JSON.stringify(requestPayload),
       });
     } catch {
-      const message = "Unable to reach the server. Check your connection and try again.";
+      const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Action failed.", message, tone: "error" });
+      setToast({ title: "Action needs attention.", message, tone: "error" });
       setIsSubmitting(false);
       setPendingAction(null);
       isSubmittingRef.current = false;
@@ -127,26 +123,18 @@ export function ManagerDecisionPanel({
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const message = getErrorMessage(
-        payload,
-        kind === "leave" ? "Unable to update leave request." : "Unable to update attendance regularization.",
-      );
+      const message = getErrorMessage(payload, response.status);
       setError(message);
-      setToast({ title: "Action failed.", message, tone: "error" });
+      setToast({ title: "Action needs attention.", message, tone: "error" });
       setIsSubmitting(false);
       setPendingAction(null);
       isSubmittingRef.current = false;
       return;
     }
     clearMutationIdempotencyKey(mutationScope);
-    const message =
-      action === "approve"
-        ? isCancellationRequest
-          ? "Cancellation request approved."
-          : "Request approved."
-        : isCancellationRequest
-          ? "Cancellation request rejected."
-          : "Request rejected.";
+    const message = kind === "leave"
+      ? leaveDecisionMessage(payload, action, isCancellationRequest)
+      : action === "approve" ? "Attendance regularization approved." : "Attendance regularization rejected.";
     setSuccessMessage(message);
     setToast({ title: "Action saved.", message, tone: "success" });
     setComment("");
@@ -159,7 +147,7 @@ export function ManagerDecisionPanel({
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -184,21 +172,25 @@ export function ManagerDecisionPanel({
       <label className="form-field">
         <span className="muted">Decision note</span>
         <textarea
+          ref={commentRef}
+          aria-describedby={commentError ? `mss-${itemId}-comment-error` : undefined}
           className="input-control"
           disabled={isSubmitting || isRefreshing || actionLocked || !isPending || !canDecide}
           aria-invalid={Boolean(commentError)}
           onChange={(event) => {
             setComment(event.target.value);
             setCommentError("");
+            setError("");
+            setToast(null);
           }}
           rows={4}
           value={comment}
         />
-        {commentError ? <span className="field-error-text" role="alert">{commentError}</span> : null}
+        {commentError ? <span className="field-error-text" id={`mss-${itemId}-comment-error`}>{commentError}</span> : null}
       </label>
       {error ? (
-        <div className="notice notice--error" role="alert">
-          <strong>Action failed.</strong>
+        <div ref={feedbackRef} tabIndex={-1} className="notice notice--error" role="alert">
+          <strong>Action needs attention.</strong>
           <span className="muted">{error}</span>
         </div>
       ) : null}

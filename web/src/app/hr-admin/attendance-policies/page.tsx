@@ -13,8 +13,8 @@ export default async function HrAdminAttendancePoliciesPage() {
   const activeCount = result.data.filter((item) => item.status === "active").length;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live attendance policy mode" : "Demo attendance policy mode"}
         title="Attendance policies"
         description="Set time rules, thresholds, and check-in behavior that drive attendance treatment."
@@ -28,7 +28,7 @@ export default async function HrAdminAttendancePoliciesPage() {
         pills={["Threshold-based attendance rules", "Shift and holiday linkage", "Regularization-aware behavior"]}
       />
 
-      <TimeLeaveOperationsStrip
+      <details className="workspace-context-disclosure"><summary>Attendance navigation and summary</summary><TimeLeaveOperationsStrip
         current="policies"
         title="Attendance policy configuration"
         description="Configure late marks, shift linkage, holiday behavior, and attendance interpretation before assigning policy scope."
@@ -36,7 +36,7 @@ export default async function HrAdminAttendancePoliciesPage() {
         primaryMetricValue={result.data.length}
         secondaryMetricLabel="active"
         secondaryMetricValue={activeCount}
-      />
+      /></details>
 
       <AttendancePoliciesWorkbench
         canManagePolicies={canManagePolicies}

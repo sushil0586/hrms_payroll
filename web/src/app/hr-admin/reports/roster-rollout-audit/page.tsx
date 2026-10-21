@@ -1,3 +1,4 @@
+import { completeReport } from "@/lib/complete-report";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -10,16 +11,16 @@ import { RosterRolloutAuditReportWorkspace } from "./roster-rollout-audit-report
 export default async function RosterRolloutAuditReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
   const [rolloutsResult, templatesResult] = await Promise.all([
-    getHrAdminShiftRosterRollouts({ page: 1, page_size: 500 }),
-    getHrAdminShiftRosterTemplates(),
+    completeReport(getHrAdminShiftRosterRollouts),
+    completeReport(getHrAdminShiftRosterTemplates),
   ]);
   const rollouts = rolloutsResult.data.items;
   const skippedCount = rollouts.reduce((sum, item) => sum + item.skipped_count, 0);
   const createdCount = rollouts.reduce((sum, item) => sum + item.created_count, 0);
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={rolloutsResult.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Roster Rollout Audit Report"
         description="Roster rollout history by template, pattern, scope, window, completion, skipped rows, and risk."
@@ -35,7 +36,7 @@ export default async function RosterRolloutAuditReportPage() {
         }
       />
 
-      <ReportInsightsStrip
+      <details className="workspace-context-disclosure"><summary>Report navigation and summary</summary><ReportInsightsStrip
         current="time"
         eyebrow="Roster audit report"
         title="Roster rollout evidence"
@@ -46,7 +47,7 @@ export default async function RosterRolloutAuditReportPage() {
           { label: "skipped", value: skippedCount, tone: skippedCount ? "warning" : "ready" },
           { label: "templates", value: templatesResult.data.total_count, tone: "neutral" },
         ]}
-      />
+      /></details>
 
       <RosterRolloutAuditReportWorkspace rollouts={rollouts} templates={templatesResult.data.items} />
     </main>

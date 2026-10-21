@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 import { createEmptyLeaveTypeValue } from "@/app/hr-admin/leave-types/form-values";
 import { LeaveTypeForm } from "@/app/hr-admin/leave-types/leave-type-form";
@@ -13,13 +12,13 @@ export default async function HrAdminNewLeaveTypePage() {
   const defaultUnit = optionsResult.data.leave_units[0]?.value || "day";
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create leave type"
         description="Define the leave bucket first, then attach policies, accrual rules, eligibility, and workflow behavior around it."
-        actions={<Link className="button button--secondary" href="/hr-admin/leave-types">Back to leave types</Link>}
-        pills={["Behavior building block", "Category and unit setup", "Policy-ready foundation"]}
+        actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/leave-types">Back to leave types</a>}
       />
       <LeaveTypeForm initialValue={createEmptyLeaveTypeValue(defaultCategory, defaultUnit)} mode="create" options={optionsResult.data} />
     </main>

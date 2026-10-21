@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -32,29 +31,33 @@ export default async function HrAdminLeaveTypesPage({ searchParams }: PageProps)
   ]);
   const activeCount = result.data.filter((item) => item.is_active).length;
   const modalTitle = createModal ? "Create leave type" : editResult?.data ? "Edit leave type" : "";
-  const closeHref = "/hr-admin/leave-types";
+  const context = new URLSearchParams();
+  for (const [key,value] of Object.entries(currentParams)) { const normalized=normalizeParam(value); if(normalized && key!=="leaveTypeModal" && key!=="editLeaveType") context.set(key,normalized); }
+  const closeHref = `/hr-admin/leave-types${context.size ? `?${context}` : ""}`;
+  const createHref = `${closeHref}${context.size ? "&" : "?"}leaveTypeModal=create`;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={result.state === "live" ? "Live leave policy mode" : "Demo leave policy mode"}
         title="Leave types"
         description="Manage the leave categories employees and managers work with before layering policy assignments, accrual rules, and approval logic on top."
         actions={
           <>
             {canManagePolicies ? (
-              <Link className="button button--primary" href="/hr-admin/leave-types?leaveTypeModal=create">
+              <a data-navigation-mode="document" className="button button--primary" href={createHref}>
                 Create leave type
-              </Link>
+              </a>
             ) : null}
-            <Link className="button button--secondary" href="/hr-admin/policies">
+            <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/policies">
               Back to policies
-            </Link>
+            </a>
           </>
         }
-        pills={["Foundational leave buckets", "Approval and balance behavior", "Policy-ready structure"]}
       />
 
+      <details className="workspace-context-disclosure"><summary>Leave navigation and summary</summary>
       <TimeLeaveOperationsStrip
         current="policies"
         title="Leave type configuration"
@@ -64,11 +67,13 @@ export default async function HrAdminLeaveTypesPage({ searchParams }: PageProps)
         secondaryMetricLabel="active"
         secondaryMetricValue={activeCount}
       />
+      </details>
 
       <LeaveTypesWorkbench canManagePolicies={canManagePolicies} leaveTypes={result.data} />
 
       {shouldLoadModal && optionsResult && (createModal || editResult?.data) ? (
         <HrAdminActionModal
+          documentNavigation
           closeHref={closeHref}
           description="Required fields are marked with an asterisk. Existing validation, governance locks, and save APIs are unchanged."
           eyebrow="Leave setup"

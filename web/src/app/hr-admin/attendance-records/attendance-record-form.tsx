@@ -16,6 +16,7 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  documentNavigation?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -33,7 +34,7 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
-export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref, successHref = "/hr-admin/attendance-records", compact = false }: Props) {
+export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref, successHref = "/hr-admin/attendance-records", compact = false, documentNavigation = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -76,11 +77,13 @@ export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref
       submittingRef.current = false;
       return;
     }
+    if (documentNavigation) { window.location.assign(successHref); return; }
     router.push(successHref);
     router.refresh();
   }
 
   function handleCancel() {
+    if (compact && documentNavigation && cancelHref) { window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close")); return; }
     if (cancelHref) {
       router.push(cancelHref);
       return;
@@ -114,7 +117,7 @@ export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref
               <label className="form-field"><span className="muted">Overtime hours</span><input className="input-control" value={formValue.overtime_hours} onChange={(e) => update("overtime_hours", e.target.value)} /></label>
               <label className="form-field"><span className="muted">Late minutes</span><input className="input-control" type="number" value={formValue.late_minutes} onChange={(e) => update("late_minutes", Number(e.target.value))} /></label>
               <label className="form-field"><span className="muted">Early exit minutes</span><input className="input-control" type="number" value={formValue.early_exit_minutes} onChange={(e) => update("early_exit_minutes", Number(e.target.value))} /></label>
-              <label className="form-field" style={{ gridColumn: "1 / -1" }}><span className="muted">Notes</span><textarea className="input-control" rows={4} value={formValue.notes} onChange={(e) => update("notes", e.target.value)} /></label>
+              <label className="form-field workspace-field--full"><span className="muted">Notes</span><textarea className="input-control" rows={4} value={formValue.notes} onChange={(e) => update("notes", e.target.value)} /></label>
             </div>
           </FormSection>
 

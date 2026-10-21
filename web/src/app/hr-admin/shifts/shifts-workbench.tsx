@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -44,9 +46,9 @@ function shiftTone(item: HrAdminShift): "success" | "warning" | "neutral" | "inf
 export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const [kind, setKind] = useState("all");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
+  const [kind, setKind] = useWorkspaceQueryFilter("kind", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
   const modalMode = searchParams.get("shiftModal") ?? "";
   const editShiftId = searchParams.get("editShift") ?? "";
@@ -132,16 +134,16 @@ export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <section className="panel-card-soft attendance-directory-panel">
-          <div className="attendance-directory-table-wrap">
-            <table className="workspace-table attendance-directory-table">
+          <WorkspaceTableScrollRegion label="Shifts, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region">
+            <table className="workspace-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
-                  <th>Shift</th>
-                  <th>Window</th>
-                  <th>Rules</th>
-                  <th>Weekly off</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                  <th scope="col">Shift</th>
+                  <th scope="col">Window</th>
+                  <th scope="col">Rules</th>
+                  <th scope="col">Weekly off</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -168,7 +170,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
                 ) : null}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         </section>
 
         {selectedItem ? (

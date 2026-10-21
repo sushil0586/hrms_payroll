@@ -14,8 +14,8 @@ export default async function HrAdminEditShiftPage({ params }: PageProps) {
   const result = await getHrAdminShift(itemId);
 
   return (
-    <main className="shell shell--time-leave">
-      <PageIntro
+    <main className="shell shell--time-leave accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live shift mode" : "Demo shift mode"}
         title="Edit shift"
         description="Update operational timing and weekly-off settings for this shift."

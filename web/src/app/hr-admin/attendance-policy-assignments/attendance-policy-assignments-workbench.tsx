@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -41,9 +43,9 @@ function statusTone(item: HrAdminScopedAssignment): "success" | "warning" | "dan
 export function AttendancePolicyAssignmentsWorkbench({ items, state, options, canManagePolicies }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const [scope, setScope] = useState("all");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
+  const [scope, setScope] = useWorkspaceQueryFilter("scope", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
   const modalMode = searchParams.get("assignmentModal") ?? "";
   const editAssignmentId = searchParams.get("editAssignment") ?? "";
@@ -128,15 +130,15 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <section className="panel-card-soft attendance-directory-panel">
-          <div className="attendance-directory-table-wrap">
-            <table className="workspace-table attendance-directory-table">
+          <WorkspaceTableScrollRegion label="Attendance policy assignments, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region">
+            <table className="workspace-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
-                  <th>Assignment</th>
-                  <th>Scope</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                  <th scope="col">Assignment</th>
+                  <th scope="col">Scope</th>
+                  <th scope="col">Priority</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,7 +164,7 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
                 ) : null}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         </section>
 
         {selectedItem ? (

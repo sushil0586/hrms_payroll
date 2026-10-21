@@ -24,6 +24,10 @@
   --ds-radius-control: 8px;
   --ds-radius-panel: 14px;
   --ds-shadow: 0 2px 8px rgb(32 38 56 / 4%);
+  --ds-dialog-width: 960px;
+  --ds-disabled-surface: var(--ds-surface-subtle);
+  --ds-disabled-text: var(--ds-text-muted);
+  --ds-disabled-border: var(--ds-border);
   --ds-focus: 0 0 0 3px var(--ds-brand-soft);
 }
 .accerio-workspace, .accerio-dialog {

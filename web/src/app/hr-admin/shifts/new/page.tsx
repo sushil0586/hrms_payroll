@@ -8,8 +8,8 @@ import { requireSessionPermission } from "@/lib/workspace-access";
 export default async function HrAdminNewShiftPage() {
   await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/shifts" });
   return (
-    <main className="shell shell--time-leave">
-      <PageIntro
+    <main className="shell shell--time-leave accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Attendance operations"
         title="Create shift"
         description="Define a new attendance shift for scheduling and policy mapping."

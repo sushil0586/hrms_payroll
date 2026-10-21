@@ -1,3 +1,4 @@
+import { completeReport } from "@/lib/complete-report";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -10,14 +11,14 @@ import { AttendanceRegisterReportWorkspace } from "./attendance-register-report-
 export default async function AttendanceRegisterReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const result = await getHrAdminAttendanceRecords({ page: 1, page_size: 500 });
+  const result = await completeReport(getHrAdminAttendanceRecords);
   const items = result.data.items;
   const exceptionCount = items.filter((item) => item.status === "absent" || item.late_minutes > 0 || item.early_exit_minutes > 0 || item.is_regularized).length;
   const lockedCount = items.filter((item) => item.is_locked).length;
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Daily Attendance Register"
         description="Daily attendance status, capture source, shift, punch, exception, lock, and payroll-readiness evidence."
@@ -39,7 +40,7 @@ export default async function AttendanceRegisterReportPage() {
         }
       />
 
-      <ReportInsightsStrip
+      <details className="workspace-context-disclosure"><summary>Report navigation and summary</summary><ReportInsightsStrip
         current="time"
         eyebrow="Time report"
         title="Attendance register evidence"
@@ -50,7 +51,7 @@ export default async function AttendanceRegisterReportPage() {
           { label: "locked", value: lockedCount, tone: "ready" },
           { label: "source", value: result.state === "live" ? "Live" : "Demo", tone: result.state === "live" ? "ready" : "warning" },
         ]}
-      />
+      /></details>
 
       <AttendanceRegisterReportWorkspace items={items} />
     </main>

@@ -1,3 +1,4 @@
+import { completeReport } from "@/lib/complete-report";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -9,7 +10,7 @@ import { AttendanceDerivationExceptionsReportWorkspace } from "./attendance-deri
 
 export default async function AttendanceDerivationExceptionsReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
-  const result = await getHrAdminAttendanceRecords({ page: 1, page_size: 500 });
+  const result = await completeReport(getHrAdminAttendanceRecords);
   const items = result.data.items;
   const exceptionRows = items.filter((item) => {
     const summary = item.derivation_summary;
@@ -18,8 +19,8 @@ export default async function AttendanceDerivationExceptionsReportPage() {
   const payrollImpacting = exceptionRows.filter((item) => item.derivation_summary.payroll_impact.payroll_impacting).length;
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Attendance Derivation Exceptions Report"
         description="Explainable attendance status derivation, payroll-impacting flags, warnings, and leave collision counts."
@@ -35,7 +36,7 @@ export default async function AttendanceDerivationExceptionsReportPage() {
         }
       />
 
-      <ReportInsightsStrip
+      <details className="workspace-context-disclosure"><summary>Report navigation and summary</summary><ReportInsightsStrip
         current="time"
         eyebrow="Attendance derivation report"
         title="Explainable attendance exceptions"
@@ -46,7 +47,7 @@ export default async function AttendanceDerivationExceptionsReportPage() {
           { label: "payroll impact", value: payrollImpacting, tone: payrollImpacting ? "blocked" : "ready" },
           { label: "source", value: result.state === "live" ? "Live" : "Demo", tone: result.state === "live" ? "ready" : "warning" },
         ]}
-      />
+      /></details>
 
       <AttendanceDerivationExceptionsReportWorkspace items={items} />
     </main>

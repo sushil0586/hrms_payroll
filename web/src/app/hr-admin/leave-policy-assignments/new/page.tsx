@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 import { createEmptyLeavePolicyAssignmentValue } from "@/app/hr-admin/leave-policy-assignments/form-values";
 import { LeavePolicyAssignmentForm } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-form";
@@ -13,13 +12,13 @@ export default async function HrAdminNewLeavePolicyAssignmentPage() {
   });
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create leave assignment"
         description="Use assignment priority and scope to determine which leave policy wins when more than one rule could apply."
-        actions={<Link className="button button--secondary" href="/hr-admin/leave-policy-assignments">Back to leave assignments</Link>}
-        pills={["Priority-based resolution", "Structure-aware targeting", "Employee override capable"]}
+        actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/leave-policy-assignments">Back to leave assignments</a>}
       />
       <LeavePolicyAssignmentForm initialValue={createEmptyLeavePolicyAssignmentValue()} mode="create" options={optionsResult.data} />
     </main>

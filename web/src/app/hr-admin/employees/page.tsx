@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 import { EmployeeAccessForm } from "@/app/hr-admin/employees/[employeeId]/access/access-form";
 import { employeeAccessDetailToFormValue } from "@/app/hr-admin/employees/[employeeId]/access/form-values";
@@ -250,18 +252,27 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const readiness = normalizeParam(currentParams.readiness) ?? "all";
   const createMode = normalizeParam(currentParams.create) === "1";
   const actionMode = normalizeParam(currentParams.action);
-  const page = Math.max(Number(normalizeParam(currentParams.page) ?? "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) ?? "8") || 8, 1), 50);
+  const requestedPage = Number(normalizeParam(currentParams.page));
+  const page = Number.isFinite(requestedPage) ? Math.max(Math.floor(requestedPage) || 1, 1) : 1;
+  const requestedSize = Number(normalizeParam(currentParams.page_size));
+  const pageSize = [5, 8, 10, 25, 50].includes(requestedSize) ? requestedSize : 8;
+  const sort = ["name", "-name", "code", "-code"].includes(normalizeParam(currentParams.sort) ?? "") ? normalizeParam(currentParams.sort)! : "name";
 
   const [employeesResult, optionsResult] = await Promise.all([getHrAdminEmployees(), getHrAdminEmployeeFormOptions()]);
   const departmentOptions = Array.from(new Set(employeesResult.data.map((employee) => employee.department).filter(Boolean))).sort();
-  const filteredEmployees = filterByReadiness(
+  const filteredEmployees = [...filterByReadiness(
     filterByManagerView(
       filterByDepartment(filterByQuery(filterByStatus(employeesResult.data, status), q), department),
       managerView,
     ),
     readiness,
-  );
+  )];
+  filteredEmployees.sort((a, b) => {
+    const field = sort.endsWith("code") ? "employee_code" : "full_name";
+    const order = a[field].localeCompare(b[field], "en", { numeric: true, sensitivity: "base" }) || a.id.localeCompare(b.id);
+    return sort.startsWith("-") ? -order : order;
+  });
+  const viewKey = JSON.stringify([status, q, department, managerView, readiness, sort, pageSize, page]);
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pagedEmployees = filteredEmployees.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -279,9 +290,6 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const canEditEmployees = demoPermissionPreview || sessionHasPermission(sessionUser, "employees.edit");
   const canImportEmployees = demoPermissionPreview || sessionHasPermission(sessionUser, "employees.import");
   const canManageEmployeeAccess = demoPermissionPreview || sessionHasPermission(sessionUser, "employees.access.manage");
-  const accessReadyCount = employeesResult.data.filter((item) => getEmployeeAccessWarnings(item).length === 0).length;
-  const accessReviewCount = employeesResult.data.length - accessReadyCount;
-  const accessReadinessPercent = employeesResult.data.length ? Math.round((accessReadyCount / employeesResult.data.length) * 100) : 0;
   const recordsNeedingReview = employeesResult.data.filter((item) => getEmployeeWarnings(item).length > 0).length;
   const defaultStatus = optionsResult.data.employment_statuses.find((item) => item.value === "draft")?.value || optionsResult.data.employment_statuses[0]?.value || "draft";
   const [accessResult, accessOptionsResult, bankAccountsResult] = await Promise.all([
@@ -294,8 +302,9 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const closeActionHref = buildHref("/hr-admin/employees", currentParams, { action: undefined, create: undefined });
 
   return (
-    <main className="shell hr-admin-compact-ui hr-employee-workbench">
+    <main className="shell hr-admin-compact-ui hr-employee-workbench accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={state === "live" ? "Live employees" : "Demo employees"}
         title="Employees"
         description="Operate employee master data, access readiness, manager structure, and payroll prerequisites."
@@ -308,51 +317,18 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               Back to dashboard
             </Link>
             {canCreateEmployees ? (
-              <Link
+              <a data-navigation-mode="document"
                 className="button button--primary"
                 href={buildHref("/hr-admin/employees", currentParams, { create: "1", employeeId: undefined })}
               >
                 New employee
-              </Link>
+              </a>
             ) : null}
           </>
         }
         pills={["Directory", "Access", "Structure"]}
         showPills
       />
-
-      <section className="section hr-employee-command-grid">
-        <div className="hr-employee-health-panel panel-card-soft">
-          <div
-            className={`hr-employee-health-ring${accessReviewCount ? " hr-employee-health-ring--warn" : " hr-employee-health-ring--ready"}`}
-            aria-label={`${accessReviewCount} employees need access review; ${accessReadyCount} of ${employeesResult.data.length} access-ready`}
-            style={{
-              background: `radial-gradient(circle at center, #fff 57%, transparent 58%), conic-gradient(var(--hr-employee-ring-color) 0 ${accessReadinessPercent}%, rgba(226, 232, 240, 0.95) ${accessReadinessPercent}% 100%)`,
-            }}
-          >
-            <strong>{accessReviewCount}</strong>
-            <span>need review</span>
-          </div>
-          <div>
-            <span className="eyebrow-soft">Operational readiness</span>
-            <h3>Access readiness review</h3>
-            <p>
-              {accessReviewCount
-                ? `${accessReadyCount} of ${employeesResult.data.length} employees are access-ready. ${accessReviewCount} need IAM, membership, or role cleanup before launch.`
-                : "All employee access records are ready for the current workforce."}
-            </p>
-            <div className="hr-employee-health-actions">
-              <Link className="button button--secondary button--compact" href="/hr-admin/employees?readiness=access_review&page_size=25">
-                Review access
-              </Link>
-              <Link className="button button--ghost button--compact" href="/hr-admin/employees?readiness=structure_review&page_size=25">
-                Structure
-              </Link>
-              {canImportEmployees ? <a className="button button--secondary button--compact" href="#employee-imports">Bulk imports</a> : null}
-            </div>
-          </div>
-        </div>
-      </section>
 
       <section className="section">
         <div className="hr-employee-summary-strip" aria-label="Employee directory summary">
@@ -372,12 +348,13 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
       </section>
 
       <EmployeeSelectionProvider
+        key={viewKey}
         canEditEmployees={canEditEmployees}
         canManageEmployeeAccess={canManageEmployeeAccess}
         initialDetail={detail}
         initialSelectedId={selectedListItem?.id ?? null}
       >
-        <article className="queue-toolbar panel-card-soft">
+        <article className="queue-toolbar panel-card-soft workspace-list-card">
           <div className="queue-toolbar__header">
             <div>
               <h2 className="section-heading-soft">Employee directory</h2>
@@ -388,12 +365,12 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                 <strong>{filteredEmployees.length}</strong> in this view
               </span>
               <span className="queue-summary-chip">
-                <strong>{selectedListItem ? "1" : "0"}</strong> selected
+                <strong>{[q.trim(), department !== "all", status !== "all", managerView !== "all", readiness !== "all"].filter(Boolean).length}</strong> active filters
               </span>
             </div>
           </div>
 
-          <form action="/hr-admin/employees" className="directory-filter-bar">
+          <WorkspaceFilterForm label="Directory filters" key={viewKey} action="/hr-admin/employees" className="directory-filter-bar">
             <input name="page" type="hidden" value="1" />
             <input name="page_size" type="hidden" value={String(pageSize)} />
             <label className="form-field">
@@ -421,7 +398,14 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                 ))}
               </select>
             </label>
-            <details className="directory-more-filters">
+            <label className="form-field">
+              <span className="text-label-premium">Sort by</span>
+              <select className="input-control" name="sort" defaultValue={sort}>
+                <option value="name">Name A–Z</option><option value="-name">Name Z–A</option>
+                <option value="code">Code ascending</option><option value="-code">Code descending</option>
+              </select>
+            </label>
+            <details className="directory-more-filters" open={managerView !== "all" || readiness !== "all"}>
               <summary className="button button--secondary button--compact">More filters</summary>
               <div className="directory-more-filters__panel">
                 <label className="form-field">
@@ -444,17 +428,19 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                 </label>
               </div>
             </details>
-            <div className="directory-filter-bar__actions">
+            <div className="directory-filter-bar__actions workspace-filter-actions">
               <button className="button button--primary" type="submit">Apply</button>
-              <Link className="button button--ghost" href="/hr-admin/employees">Reset</Link>
+              <a className="button button--ghost" data-navigation-mode="document" href="/hr-admin/employees">Reset</a>
             </div>
-          </form>
+          </WorkspaceFilterForm>
 
-          <div className="employee-status-filter">
+          <div className="employee-status-filter" aria-label="Status totals across directory">
               {tabs.map((tabStatus) => (
-                <Link
+                <a data-navigation-mode="document"
                   className={`filter-chip-link chip-filter-soft${status === tabStatus ? " filter-chip-link--active" : ""}`}
                   href={buildHref("/hr-admin/employees", currentParams, {
+                    action: undefined,
+                    create: undefined,
                     status: tabStatus,
                     employeeId: undefined,
                     page: "1",
@@ -468,21 +454,21 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                 >
                   <span>{formatStatusLabel(tabStatus)}</span>
                   <strong>{countByStatus(employeesResult.data, tabStatus)}</strong>
-                </Link>
+                </a>
               ))}
           </div>
 
-          <div className="employee-directory-table-wrap">
+          <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Employee directory, scroll for more columns">
             {filteredEmployees.length ? (
-              <table className="employee-directory-table">
+              <table className="employee-directory-table workspace-data-table" aria-label="Employee directory">
                 <thead>
                   <tr>
-                    <th>Employee</th>
-                    <th>Structure</th>
-                    <th>Manager</th>
-                    <th>Access</th>
-                    <th>Status</th>
-                    <th>Review</th>
+                    <th scope="col">Employee</th>
+                    <th scope="col">Structure</th>
+                    <th scope="col">Manager</th>
+                    <th scope="col">Access</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Review</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -541,10 +527,10 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
             ) : (
               <div className="notice">
                 <strong>No employees in this view.</strong>
-                <span className="muted">Try another status tab or seed more tenant data.</span>
+                <span className="muted">Adjust your filters or reset the directory to see available employees.</span>
               </div>
             )}
-          </div>
+          </WorkspaceTableScrollRegion>
 
           <section className="card panel pagination-panel employee-directory-pagination">
             <div className="pagination-bar">
@@ -555,7 +541,8 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                   </strong>
                   of {filteredEmployees.length} records
                 </span>
-                <form action="/hr-admin/employees" className="employee-page-size-form">
+                <form data-navigation-mode="document" key={viewKey} method="get" action="/hr-admin/employees" className="employee-page-size-form" aria-label="Directory pagination">
+                  <input name="sort" type="hidden" value={sort} />
                   <input name="status" type="hidden" value={status} />
                   <input name="page" type="hidden" value="1" />
                   {q ? <input name="q" type="hidden" value={q} /> : null}
@@ -577,10 +564,10 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               </div>
               {totalPages > 1 ? (
                 <div className="pagination-bar__actions">
-                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: "1", page_size: String(pageSize), employeeId: undefined })}>First</Link>
-                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: String(Math.max(1, safePage - 1)), page_size: String(pageSize), employeeId: undefined })}>Previous</Link>
-                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: String(Math.min(totalPages, safePage + 1)), page_size: String(pageSize), employeeId: undefined })}>Next</Link>
-                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: String(totalPages), page_size: String(pageSize), employeeId: undefined })}>Last</Link>
+                  <a data-navigation-mode="document" className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { action: undefined, create: undefined, page: "1", page_size: String(pageSize), employeeId: undefined })}>First</a>
+                  <a data-navigation-mode="document" className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { action: undefined, create: undefined, page: String(Math.max(1, safePage - 1)), page_size: String(pageSize), employeeId: undefined })}>Previous</a>
+                  <a data-navigation-mode="document" className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { action: undefined, create: undefined, page: String(Math.min(totalPages, safePage + 1)), page_size: String(pageSize), employeeId: undefined })}>Next</a>
+                  <a data-navigation-mode="document" className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { action: undefined, create: undefined, page: String(totalPages), page_size: String(pageSize), employeeId: undefined })}>Last</a>
                 </div>
               ) : null}
             </div>
@@ -610,6 +597,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
 
       {createMode && canCreateEmployees ? (
         <HrAdminActionModal
+          documentNavigation
           closeHref={buildHref("/hr-admin/employees", currentParams, { create: undefined })}
           description="A guided setup. Fields marked * are required."
           eyebrow="Employee master"
@@ -627,6 +615,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
 
       {editMode && canEditEmployees && detail ? (
         <HrAdminActionModal
+          documentNavigation
           closeHref={closeActionHref}
           description="Update profile, contact, structure, and review before saving."
           eyebrow={detail.employee_code}
@@ -645,6 +634,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
 
       {accessMode && canManageEmployeeAccess && detail && accessResult?.data?.employee_id && accessOptionsResult ? (
         <HrAdminActionModal
+          documentNavigation
           closeHref={closeActionHref}
           eyebrow={detail.employee_code}
           labelledBy="employee-access-modal-title"
@@ -664,6 +654,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
 
       {bankMode && canEditEmployees && detail && bankAccountsResult ? (
         <HrAdminActionModal
+          documentNavigation
           className="employee-bank-modal"
           closeHref={closeActionHref}
           eyebrow={detail.employee_code}

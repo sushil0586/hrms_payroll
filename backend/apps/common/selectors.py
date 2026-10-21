@@ -5978,60 +5978,65 @@ def _attendance_regularization_approval_track_payloads(regularization: Attendanc
     return _workflow_approval_track_payloads(regularization.workflow_reference) or _legacy_attendance_approval_track_payloads(regularization)
 
 
-def get_employee_leave_requests(employee: Employee, *, limit: int | None = None) -> list[dict]:
+def get_employee_leave_requests(employee: Employee, *, limit: int | None = None, request_ids=None) -> list[dict]:
     """Returns employee leave request history for ESS screens."""
 
     queryset = (
-        LeaveRequest.objects.filter(employee=employee)
+        LeaveRequest.objects.filter(tenant=employee.tenant, employee=employee)
         .select_related("leave_type", "leave_policy")
-        .order_by("-created_at")
+        .order_by("-created_at", "-id")
     )
+    if request_ids is not None:
+        queryset = queryset.filter(id__in=request_ids)
     if limit:
         queryset = queryset[:limit]
 
-    return [
-        {
-            "id": request.id,
-            "request_action": str(request.metadata.get("request_action", "leave_request") or "leave_request"),
-            "leave_type": request.leave_type.name,
-            "leave_type_code": request.leave_type.code,
-            "policy_name": request.leave_policy.name if request.leave_policy else None,
-            "status": request.status,
-            "start_date": request.start_date,
-            "end_date": request.end_date,
-            "start_day_portion": request.start_day_portion,
-            "end_day_portion": request.end_day_portion,
-            "requested_units": request.requested_units,
-            "approved_units": request.approved_units,
-            "unit_breakdown": _leave_request_unit_breakdown_payload(request),
-            "attendance_collision_summary": build_leave_attendance_collision_summary(request),
-            "reason": request.reason,
-            "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
-            "attachments": _leave_request_attachment_payloads(request),
-            "approval_steps": _leave_request_approval_track_payloads(request),
-            "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
-            "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
-            "manager_comment": request.manager_comment,
-            "rejection_reason": request.rejection_reason,
-            "workflow_reference": request.workflow_reference,
-            "applied_at": request.applied_at,
-            "approved_at": request.approved_at,
-            "cancelled_at": request.cancelled_at,
-            "can_withdraw": _get_leave_request_lifecycle_runtime(leave_request=request)["can_withdraw"],
-            "withdraw_block_reason": _get_leave_request_lifecycle_runtime(leave_request=request)["withdraw_block_reason"],
-            "withdraw_requires_attachment": _get_leave_request_lifecycle_runtime(leave_request=request)["withdraw_requires_attachment"],
-            "withdraw_attachment_label": _get_leave_request_lifecycle_runtime(leave_request=request)["withdraw_attachment_label"],
-            "can_cancel": _get_leave_request_lifecycle_runtime(leave_request=request)["can_cancel"],
-            "cancel_block_reason": _get_leave_request_lifecycle_runtime(leave_request=request)["cancel_block_reason"],
-            "cancel_requires_attachment": _get_leave_request_lifecycle_runtime(leave_request=request)["cancel_requires_attachment"],
-            "cancel_attachment_label": _get_leave_request_lifecycle_runtime(leave_request=request)["cancel_attachment_label"],
-            "cancel_requires_reapproval": _get_leave_request_lifecycle_runtime(leave_request=request)["cancel_approved_requires_reapproval"],
-            "cancel_approval_route": _get_leave_request_lifecycle_runtime(leave_request=request)["cancel_approval_route"],
-            "created_at": request.created_at,
-            "updated_at": request.updated_at,
-        }
-        for request in queryset
-    ]
+    return [_build_employee_leave_history_item(item) for item in queryset]
+
+
+def _build_employee_leave_history_item(request: LeaveRequest) -> dict:
+    # One coherent lifecycle read per item, matching the existing detail projection.
+    lifecycle = _get_leave_request_lifecycle_runtime(leave_request=request)
+    return {
+        "id": request.id,
+        "request_action": str(request.metadata.get("request_action", "leave_request") or "leave_request"),
+        "leave_type": request.leave_type.name,
+        "leave_type_code": request.leave_type.code,
+        "policy_name": request.leave_policy.name if request.leave_policy else None,
+        "status": request.status,
+        "start_date": request.start_date,
+        "end_date": request.end_date,
+        "start_day_portion": request.start_day_portion,
+        "end_day_portion": request.end_day_portion,
+        "requested_units": request.requested_units,
+        "approved_units": request.approved_units,
+        "unit_breakdown": _leave_request_unit_breakdown_payload(request),
+        "attendance_collision_summary": build_leave_attendance_collision_summary(request),
+        "reason": request.reason,
+        "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
+        "attachments": _leave_request_attachment_payloads(request),
+        "approval_steps": _leave_request_approval_track_payloads(request),
+        "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
+        "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
+        "manager_comment": request.manager_comment,
+        "rejection_reason": request.rejection_reason,
+        "workflow_reference": request.workflow_reference,
+        "applied_at": request.applied_at,
+        "approved_at": request.approved_at,
+        "cancelled_at": request.cancelled_at,
+        "can_withdraw": lifecycle["can_withdraw"],
+        "withdraw_block_reason": lifecycle["withdraw_block_reason"],
+        "withdraw_requires_attachment": lifecycle["withdraw_requires_attachment"],
+        "withdraw_attachment_label": lifecycle["withdraw_attachment_label"],
+        "can_cancel": lifecycle["can_cancel"],
+        "cancel_block_reason": lifecycle["cancel_block_reason"],
+        "cancel_requires_attachment": lifecycle["cancel_requires_attachment"],
+        "cancel_attachment_label": lifecycle["cancel_attachment_label"],
+        "cancel_requires_reapproval": lifecycle["cancel_approved_requires_reapproval"],
+        "cancel_approval_route": lifecycle["cancel_approval_route"],
+        "created_at": request.created_at,
+        "updated_at": request.updated_at,
+    }
 
 
 def get_employee_leave_request_detail(employee: Employee, request_id) -> dict | None:

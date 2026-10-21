@@ -28,8 +28,8 @@ export default async function HrAdminHolidayCalendarsPage({ searchParams }: Page
     : null;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live calendar mode" : "Demo calendar mode"}
         title="Holiday calendars"
         description="Set scope-aware holiday schedules that policies and daily attendance records can reference."

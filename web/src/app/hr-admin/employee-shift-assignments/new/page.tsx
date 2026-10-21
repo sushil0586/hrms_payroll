@@ -11,8 +11,8 @@ export default async function HrAdminNewEmployeeShiftAssignmentPage() {
   const optionsResult = await getHrAdminPolicyWorkbenchOptions({ include: ["shifts"] });
 
   return (
-    <main className="shell shell--time-leave">
-      <PageIntro
+    <main className="shell shell--time-leave accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Shift assignment setup"
         title="Create shift assignment"
         description="Assign an operational shift to an employee over a governed date window."

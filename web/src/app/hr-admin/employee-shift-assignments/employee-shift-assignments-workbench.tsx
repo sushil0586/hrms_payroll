@@ -1,5 +1,7 @@
 "use client";
 
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -130,7 +132,7 @@ export function EmployeeShiftAssignmentsWorkbench({
             <span className="queue-summary-chip"><strong>{selectedItem ? "1" : "0"}</strong> selected</span>
           </div>
         </div>
-        <form method="get">
+        <WorkspaceFilterForm key={JSON.stringify(currentParams)} action={pathname} label="Shift assignment filters" className="workspace-filter-form--block">
           <WorkspaceFilterBar className="attendance-record-filter-bar">
             <label className="form-field">
               <span className="muted">Search</span>
@@ -173,21 +175,21 @@ export function EmployeeShiftAssignmentsWorkbench({
             <Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Clear filters</Link>
             {canManagePolicies ? <Link className="button button--primary" href={queueHref({ assignmentModal: "create" })}>Create assignment</Link> : null}
           </div>
-        </form>
+        </WorkspaceFilterForm>
       </section>
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <section className="panel-card-soft attendance-directory-panel">
-          <div className="attendance-directory-table-wrap">
-            <table className="workspace-table attendance-directory-table">
+          <WorkspaceTableScrollRegion label="Employee shift assignments, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region">
+            <table className="workspace-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th>Shift</th>
-                  <th>Mode</th>
-                  <th>Window</th>
-                  <th>Review</th>
-                  <th>Action</th>
+                  <th scope="col">Employee</th>
+                  <th scope="col">Shift</th>
+                  <th scope="col">Mode</th>
+                  <th scope="col">Window</th>
+                  <th scope="col">Review</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,7 +216,7 @@ export function EmployeeShiftAssignmentsWorkbench({
                 ) : null}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
           <div className="panel-card-soft attendance-pagination-panel">
             <PaginationBar
               firstHref={buildHref(currentParams, { page: "1", page_size: String(pageSize) })}
@@ -227,15 +229,15 @@ export function EmployeeShiftAssignmentsWorkbench({
               previousHref={buildHref(currentParams, { page: String(page - 1), page_size: String(pageSize) })}
               totalCount={totalCount}
             />
-            <form className="attendance-pagination-panel__controls" method="get">
+            <WorkspaceFilterForm key={`pagination-${JSON.stringify(currentParams)}`} action={pathname} label="Shift assignment pagination" className="attendance-pagination-panel__controls workspace-filter-form--inline">
               {Object.entries(currentParams).map(([key, value]) => {
                 const normalized = normalizeParam(value);
                 if (!normalized || key === "page_size" || key === "page") return null;
                 return <input key={key} name={key} type="hidden" value={normalized} />;
               })}
-              <label className="form-field attendance-pagination-rows"><span className="muted">Rows</span><select className="input-control" name="page_size" defaultValue={String(pageSize)}><option value="10">10</option><option value="25">25</option><option value="50">50</option></select></label>
+              <label className="form-field attendance-pagination-rows"><span className="muted">Rows</span><select className="input-control" name="page_size" defaultValue={String(pageSize)}><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
               <button className="button button--secondary" type="submit">Apply</button>
-            </form>
+            </WorkspaceFilterForm>
           </div>
         </section>
 

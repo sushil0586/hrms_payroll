@@ -19,8 +19,8 @@ export default async function HrAdminEditEmployeeShiftAssignmentPage({ params }:
   ]);
 
   return (
-    <main className="shell shell--time-leave">
-      <PageIntro
+    <main className="shell shell--time-leave accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={itemResult.state === "live" ? "Live shift assignment mode" : "Demo shift assignment mode"}
         title="Edit shift assignment"
         description="Update shift coverage timing or primary coverage precedence for this employee."

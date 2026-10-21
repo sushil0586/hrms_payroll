@@ -104,6 +104,7 @@ export function TimeLeaveOperationsStrip({
       <div className="time-leave-strip__nav panel-card-soft">
         {timeLeaveLinks.map((item) => (
           <Link
+            prefetch={false}
             aria-current={item.key === current ? "page" : undefined}
             className={`time-leave-strip__link${item.key === current ? " time-leave-strip__link--active" : ""}`}
             href={item.href}

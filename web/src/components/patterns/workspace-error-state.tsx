@@ -5,6 +5,8 @@ import Link from "next/link";
 import { PageIntro } from "@/components/patterns/page-intro";
 
 type Props = {
+  appearance?: "standard" | "accerio";
+  userFacing?: boolean;
   actions?: React.ReactNode;
   detail?: string;
   eyebrow: string;
@@ -12,13 +14,14 @@ type Props = {
   title: string;
 };
 
-export function WorkspaceErrorState({ actions, detail, eyebrow, onRetry, title }: Props) {
+export function WorkspaceErrorState({ appearance = "standard", userFacing = false, actions, detail, eyebrow, onRetry, title }: Props) {
   return (
-    <main className="shell shell--workspace" data-workspace-error="true">
+    <main className={`shell shell--workspace${appearance === "accerio" ? " accerio-page" : ""}`} data-workspace-error="true">
       <PageIntro
+        appearance={appearance}
         eyebrow={eyebrow}
         title={title}
-        description="The workspace could not load live data. This is now treated as a real issue instead of silently switching to placeholder data."
+        description={userFacing ? "This workspace is temporarily unavailable. Please try again." : "The workspace could not load live data. This is now treated as a real issue instead of silently switching to placeholder data."}
         actions={
           <>
             {onRetry ? (
@@ -38,10 +41,9 @@ export function WorkspaceErrorState({ actions, detail, eyebrow, onRetry, title }
         <div className="notice" role="alert">
           <strong>Live workspace load failed.</strong>
           <span className="muted">
-            Check API base URL, authentication, and backend availability. If you intended to use seeded demo data,
-            enable `HRMS_ENABLE_DEMO_DATA=true` explicitly.
+            {userFacing ? "Try again or clear the filters. Contact your administrator if the problem continues." : <>Check API base URL, authentication, and backend availability. If you intended to use seeded demo data, enable <code>HRMS_ENABLE_DEMO_DATA=true</code> explicitly.</>}
           </span>
-          {detail ? <span className="muted">Technical detail: {detail}</span> : null}
+          {detail && !userFacing ? <span className="muted">Technical detail: {detail}</span> : null}
         </div>
       </section>
     </main>

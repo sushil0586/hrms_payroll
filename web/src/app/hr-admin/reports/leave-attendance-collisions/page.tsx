@@ -1,3 +1,4 @@
+import { completeReport } from "@/lib/complete-report";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -9,13 +10,13 @@ import { LeaveAttendanceCollisionsReportWorkspace } from "./leave-attendance-col
 
 export default async function LeaveAttendanceCollisionsReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
-  const result = await getHrAdminLeaveRequests({ page: 1, page_size: 500 });
+  const result = await completeReport(getHrAdminLeaveRequests);
   const collisionCount = result.data.items.reduce((sum, item) => sum + (item.attendance_collision_summary?.collision_count ?? 0), 0);
   const blockingCount = result.data.items.filter((item) => item.attendance_collision_summary?.payroll_blocking).length;
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Leave-Attendance Collision Report"
         description="Approved leave overlapping payable attendance, payroll blocking state, and source evidence for correction review."
@@ -31,7 +32,7 @@ export default async function LeaveAttendanceCollisionsReportPage() {
         }
       />
 
-      <ReportInsightsStrip
+      <details className="workspace-context-disclosure"><summary>Report navigation and summary</summary><ReportInsightsStrip
         current="time"
         eyebrow="Leave-attendance report"
         title="Collision review evidence"
@@ -42,7 +43,7 @@ export default async function LeaveAttendanceCollisionsReportPage() {
           { label: "blocking requests", value: blockingCount, tone: blockingCount ? "blocked" : "ready" },
           { label: "page size", value: result.data.items.length, tone: "neutral" },
         ]}
-      />
+      /></details>
 
       <LeaveAttendanceCollisionsReportWorkspace items={result.data.items} />
     </main>

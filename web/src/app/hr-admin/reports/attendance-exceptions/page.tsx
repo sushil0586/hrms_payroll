@@ -1,3 +1,4 @@
+import { completeReport } from "@/lib/complete-report";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -10,14 +11,14 @@ import { AttendanceExceptionsReportWorkspace } from "./attendance-exceptions-rep
 export default async function AttendanceExceptionsReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const result = await getHrAdminAttendanceRegularizations({ page: 1, page_size: 500 });
+  const result = await completeReport(getHrAdminAttendanceRegularizations);
   const items = result.data.items;
   const pendingCount = items.filter((item) => item.status === "pending").length;
   const rejectedCount = items.filter((item) => item.status === "rejected").length;
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Attendance Exceptions SLA Report"
         description="Regularization aging, requested corrections, approval SLA, workflow references, and payroll impact."
@@ -39,7 +40,7 @@ export default async function AttendanceExceptionsReportPage() {
         }
       />
 
-      <ReportInsightsStrip
+      <details className="workspace-context-disclosure"><summary>Report navigation and summary</summary><ReportInsightsStrip
         current="time"
         eyebrow="Time exception report"
         title="Attendance exception SLA evidence"
@@ -50,7 +51,7 @@ export default async function AttendanceExceptionsReportPage() {
           { label: "rejected", value: rejectedCount, tone: rejectedCount ? "blocked" : "ready" },
           { label: "source", value: result.state === "live" ? "Live" : "Demo", tone: result.state === "live" ? "ready" : "warning" },
         ]}
-      />
+      /></details>
 
       <AttendanceExceptionsReportWorkspace items={items} />
     </main>

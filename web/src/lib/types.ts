@@ -863,6 +863,8 @@ export type HrAdminLeaveApprovalRoute =
   | "manager_second_level_hr";
 
 export type HrAdminLeavePolicyApprovalConfig = {
+  auto_approve_enabled: boolean;
+  auto_approve_after_hours: number | null;
   default_route: HrAdminLeaveApprovalRoute;
   escalation_route: HrAdminLeaveApprovalRoute | null;
   escalate_when_units_gte: string | null;
@@ -5901,6 +5903,8 @@ export type HrAdminAttendanceRegularizationListResponse = {
 
 export type EssLeaveRequestListResponse = PaginatedListResponse<LeaveRequestItem> & {
   status_counts: PagedStatusCounts;
+  calendar_days?: Array<{ date: string; count: number }>;
+  filter_types?: Array<{ code: string; name: string }>;
 };
 
 export type HrAdminLeaveRequestListResponse = PaginatedListResponse<LeaveRequestItem> & {

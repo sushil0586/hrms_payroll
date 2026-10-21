@@ -1,0 +1,11 @@
+import {test,expect} from '@playwright/test';
+import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona} from '../helpers/isolated-qa-workspace';
+test('schedule preview preserves date-only periods and converts browser timezone at year boundary',async({browser},info)=>{
+ test.setTimeout(180000);const fixture=await provisionIsolatedQaWorkspace(info);
+ try{let index=0;for(const [timezoneId,expected] of [['Asia/Kolkata','2029-12-31T18:45:00.000Z'],['America/New_York','2030-01-01T05:15:00.000Z']]){
+  const context=await browser.newContext({baseURL:'http://127.0.0.1:3205',timezoneId});const page=await context.newPage();const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  try{const user=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);const ids:string[]=[];for(let n=0;n<2;n++){const year=2040+index*2+n;const result=await page.request.post('/api/hr-admin/leave-year/periods/',{data:{leave_policy_id:fixture.manifest.leave.policy_id,code:'QA-TIMEZONE-'+year,start_date:year+'-01-01',end_date:year+'-12-31',status:'open'}});expect(result.status()).toBe(201);ids.push((await result.json()).id);}
+   await page.goto('/hr-admin/leave-year');await page.getByLabel('Source period',{exact:true}).selectOption(ids[0]);await page.getByLabel('Target period',{exact:true}).selectOption(ids[1]);await page.getByLabel('Schedule time (local, optional)').fill('2030-01-01T00:15');const request=page.waitForRequest(r=>r.url().endsWith('/preview')&&r.method()==='POST');await page.getByRole('button',{name:'Preview impact'}).click();expect((await request).postDataJSON().scheduled_for).toBe(expected);await expect(page.getByText('0 balances reviewed.')).toBeVisible();const periods=await(await page.request.get('/api/hr-admin/leave-year/periods/')).json();expect(periods.find((p:{id:string})=>p.id===ids[0]).start_date).toBe((2040+index*2)+'-01-01');expect(await(await page.request.get('/api/hr-admin/leave-year/close-runs/')).json()).toEqual([]);expect(errors).toEqual([]);
+  }finally{await context.close();}index++;
+ }}finally{await cleanupIsolatedQaWorkspace(fixture);}
+});

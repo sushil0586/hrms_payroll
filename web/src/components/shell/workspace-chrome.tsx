@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { WorkspaceIcon } from "./workspace-icon";
+
 import { LogoutButton } from "@/app/components/logout-button";
 import { payrollCycleOperationalHrefs } from "@/lib/ui/navigation";
 
@@ -48,9 +50,19 @@ type Props = {
   searchDestinations?: WorkspaceSearchDestination[];
   footerTitle?: string;
   footerDescription?: string;
+  appearance?: "standard" | "accerio";
+};
+
+const HR_NAV_CONTEXT: Record<string, string[]> = {
+  "/hr-admin/attendance-operations": ["/hr-admin/attendance-records", "/hr-admin/attendance-regularizations", "/hr-admin/attendance-close", "/hr-admin/shifts", "/hr-admin/employee-shift-assignments", "/hr-admin/shift-roster-templates"],
+  "/hr-admin/policies": ["/hr-admin/leave-policies", "/hr-admin/leave-types", "/hr-admin/leave-policy-assignments", "/hr-admin/attendance-policies", "/hr-admin/attendance-policy-assignments", "/hr-admin/holiday-calendars", "/hr-admin/policy-assignments"],
+  "/hr-admin/leave-requests": ["/hr-admin/leave-balances", "/hr-admin/leave-year"],
+  "/hr-admin/lifecycle": ["/hr-admin/onboardings", "/hr-admin/probation-reviews", "/hr-admin/movements", "/hr-admin/exits"],
+  "/hr-admin/notifications-admin": ["/hr-admin/notifications", "/hr-admin/notification-events", "/hr-admin/notification-templates", "/hr-admin/notification-delivery", "/hr-admin/notification-diagnostics"],
 };
 
 function isActivePath(pathname: string, href: string) {
+  if (HR_NAV_CONTEXT[href]?.some((path) => pathname === path || pathname.startsWith(`${path}/`))) return true;
   if (href === "/platform-admin" || href === "/tenant-admin" || href === "/hr-admin" || href === "/ess" || href === "/mss") {
     return pathname === href;
   }
@@ -74,11 +86,13 @@ function NavEntry({
   pathname,
   router,
   prefetch,
+  appearance,
 }: {
   item: WorkspaceNavItem;
   pathname: string;
   router: ReturnType<typeof useRouter>;
   prefetch: boolean;
+  appearance: "standard" | "accerio";
 }) {
   const active = isActivePath(pathname, item.href);
   if (item.disabled) {
@@ -89,7 +103,7 @@ function NavEntry({
         className="nav-item nav-item--disabled"
         title={item.disabledReason || `${item.label} is unavailable`}
       >
-        <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
+        <span className="nav-item__glyph" aria-hidden="true">{appearance === "accerio" ? <WorkspaceIcon path={item.href} /> : item.shortLabel}</span>
         <span className="nav-item__content">
           <strong>{item.label}</strong>
           {item.disabledReason ? <small>{item.disabledReason}</small> : null}
@@ -99,13 +113,13 @@ function NavEntry({
   }
   return (
     <Link
-      aria-current={active ? "page" : undefined}
+      aria-current={active ? (appearance === "accerio" && pathname !== item.href ? "location" : "page") : undefined}
       className={`nav-item${active ? " nav-item--active" : ""}`}
       href={item.href}
       prefetch={prefetch ? undefined : false}
       onMouseEnter={prefetch ? () => router.prefetch(item.href) : undefined}
     >
-      <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
+      <span className="nav-item__glyph" aria-hidden="true">{appearance === "accerio" ? <WorkspaceIcon path={item.href} /> : item.shortLabel}</span>
       <span className="nav-item__content">
         <strong>{item.label}</strong>
       </span>
@@ -273,6 +287,7 @@ export function WorkspaceChrome({
   searchDestinations = [],
   footerTitle,
   footerDescription,
+  appearance = "standard",
 }: Props) {
   const pathname = usePathname();
   const router = useRouter();
@@ -280,6 +295,8 @@ export function WorkspaceChrome({
     () => (navGroups?.length ? navGroups : [{ title: navTitle, items: navItems }]),
     [navGroups, navItems, navTitle],
   );
+  const mobileNavRef = useRef<HTMLDetailsElement>(null);
+
   const prefetchItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
   useEffect(() => {
@@ -290,14 +307,11 @@ export function WorkspaceChrome({
 
   return (
     <WorkspaceNavigationFeedback documentNavigation={documentNavigation}>
-    <div className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}${workspaceTone === "employee" || workspaceTone === "manager" ? " accerio-workspace" : ""}`}>
+    <div className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}${appearance === "accerio" ? " accerio-shell" : ""}${workspaceTone === "employee" || workspaceTone === "manager" ? " accerio-workspace" : ""}`}>
       <aside className="app-sidebar app-sidebar--workspace">
         <div className="app-sidebar__brand">
           <div className="brand-mark brand-mark--calm" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
+            {appearance === "accerio" ? <span className="workspace-brand-initial">A</span> : <><span /><span /><span /><span /></>}
           </div>
           <div>
             <strong>{productLabel}</strong>
@@ -316,7 +330,7 @@ export function WorkspaceChrome({
                 </summary>
                 <div className="nav-group__items">
                   {group.items.map((item) => (
-                    <NavEntry item={item} key={item.href} pathname={pathname} router={router} prefetch={prefetch} />
+                    <NavEntry item={item} key={item.href} pathname={pathname} router={router} prefetch={prefetch} appearance={appearance} />
                   ))}
                 </div>
               </details>
@@ -325,11 +339,11 @@ export function WorkspaceChrome({
         </nav>
 
         <div className="app-sidebar__footer">
-          <div className="sidebar-promo sidebar-promo--quiet">
+          {appearance === "accerio" ? <div className="workspace-shell-utility"><span>{roleLabel}</span><span>Accerio</span></div> : <div className="sidebar-promo sidebar-promo--quiet">
             <span className="pill pill--neutral">Live workspace</span>
             <strong>{footerTitle || workspaceLabel}</strong>
             <p>{footerDescription || "Compact navigation, short headers, and data-first review flow."}</p>
-          </div>
+          </div>}
         </div>
       </aside>
 
@@ -343,7 +357,12 @@ export function WorkspaceChrome({
           <WorkspaceSearch prefetch={prefetch} groups={groups} quickLinks={quickLinks} searchDestinations={searchDestinations} searchHint={searchHint} />
 
           <div className="topbar-actions topbar-actions--workspace">
-            <details className="mobile-workspace-nav">
+            <details className="mobile-workspace-nav" ref={mobileNavRef} onKeyDown={(event) => {
+              if (appearance !== "accerio" || event.key !== "Escape") return;
+              event.preventDefault();
+              mobileNavRef.current?.removeAttribute("open");
+              mobileNavRef.current?.querySelector("summary")?.focus();
+            }}>
               <summary className="button button--secondary button--compact">Menu</summary>
               <nav
                 aria-label={`${roleLabel} mobile navigation`}
@@ -369,13 +388,13 @@ export function WorkspaceChrome({
                       }
                       return (
                         <Link
-                          aria-current={active ? "page" : undefined}
+                          aria-current={active ? (appearance === "accerio" && pathname !== item.href ? "location" : "page") : undefined}
                           className={`mobile-workspace-nav__link${active ? " mobile-workspace-nav__link--active" : ""}`}
                           href={item.href}
                           prefetch={prefetch ? undefined : false}
                           key={item.href}
                           onClick={(event) => {
-                            if (workspaceTone !== "employee" && workspaceTone !== "manager") return;
+                            if (appearance !== "accerio" && workspaceTone !== "employee" && workspaceTone !== "manager") return;
                             if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                             event.currentTarget.closest("details")?.removeAttribute("open");
                           }}
@@ -417,6 +436,7 @@ export function WorkspaceChrome({
         </header>
 
         <div className="app-content app-content--workspace">{children}</div>
+        {appearance === "accerio" ? <footer className="workspace-shell-footer" aria-label="Workspace footer"><span>{productLabel} · {workspaceLabel}</span><span>{roleLabel}</span></footer> : null}
       </div>
     </div>
     </WorkspaceNavigationFeedback>

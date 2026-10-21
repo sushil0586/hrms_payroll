@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -49,13 +51,13 @@ function isException(item: HrAdminAttendanceRecord) {
 }
 
 export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items: HrAdminAttendanceRecord[] }) {
-  const [query, setQuery] = useState("");
-  const [derivedStatus, setDerivedStatus] = useState("All");
-  const [risk, setRisk] = useState("All");
-  const [department, setDepartment] = useState("All");
-  const [payrollImpacting, setPayrollImpacting] = useState("All");
-  const [leaveCollision, setLeaveCollision] = useState("All");
-  const [sortBy, setSortBy] = useState("risk");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [derivedStatus, setDerivedStatus] = useWorkspaceQueryFilter("derivedStatus", "All");
+  const [risk, setRisk] = useWorkspaceQueryFilter("risk", "All");
+  const [department, setDepartment] = useWorkspaceQueryFilter("department", "All");
+  const [payrollImpacting, setPayrollImpacting] = useWorkspaceQueryFilter("payrollImpacting", "All");
+  const [leaveCollision, setLeaveCollision] = useWorkspaceQueryFilter("leaveCollision", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sortBy", "risk");
   const [page, setPage] = useState(1);
 
   const rows = useMemo(() => items.filter(isException).map((record) => ({ record, risk: derivationRisk(record) })), [items]);
@@ -157,8 +159,8 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
           <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table payroll-register-table">
+        <WorkspaceTableScrollRegion label="Attendance derivation exceptions, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
+          <table className="workspace-data-table report-catalog-table payroll-register-table">
             <thead><tr><th scope="col">Employee</th><th scope="col">Derivation</th><th scope="col">Schedule</th><th scope="col">Work time</th><th scope="col">Payroll impact</th><th scope="col">Evidence</th><th scope="col">Actions</th></tr></thead>
             <tbody>
               {visibleRows.map(({ record, risk: rowRisk }) => {
@@ -178,7 +180,7 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
               {visibleRows.length === 0 ? <tr><td colSpan={7}><div className="empty-state">No attendance derivation exception rows match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Attendance derivation exceptions pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

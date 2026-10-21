@@ -33,6 +33,7 @@ export default async function MssLayout({ children }: { children: React.ReactNod
   return (
     <WorkspaceHydrationBoundary fallback={<WorkspaceLoading label="Loading manager workspace" />}>
     <WorkspaceChrome
+      appearance="accerio"
       footerDescription="Pending decisions, exceptions, and queue context for managers."
       navGroups={menuSource.navGroups}
       navItems={menuSource.navItems}

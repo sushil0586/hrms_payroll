@@ -1,9 +1,11 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { HrAdminAttendanceRecord } from "@/lib/types";
 
@@ -74,47 +76,17 @@ function toReportRow(item: HrAdminAttendanceRecord): AttendanceReportRow {
 }
 
 export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAttendanceRecord[] }) {
-  const [serverItems, setServerItems] = useState(items);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All");
-  const [source, setSource] = useState("All");
-  const [department, setDepartment] = useState("All");
-  const [lockState, setLockState] = useState("All");
-  const [regularizedState, setRegularizedState] = useState("All");
-  const [exception, setException] = useState("All");
-  const [sortBy, setSortBy] = useState("date_desc");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "All");
+  const [source, setSource] = useWorkspaceQueryFilter("source", "All");
+  const [department, setDepartment] = useWorkspaceQueryFilter("department", "All");
+  const [lockState, setLockState] = useWorkspaceQueryFilter("lockState", "All");
+  const [regularizedState, setRegularizedState] = useWorkspaceQueryFilter("regularizedState", "All");
+  const [exception, setException] = useWorkspaceQueryFilter("exception", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sortBy", "date_desc");
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams();
-    params.set("page", "1");
-    params.set("page_size", "500");
-    if (query.trim()) params.set("q", query.trim());
-    if (status !== "All") params.set("status", status);
-    if (source !== "All") params.set("source", source);
-    if (lockState !== "All") params.set("lock_state", lockState);
-    if (regularizedState === "regularized") params.set("regularized_state", "regularized");
-    if (regularizedState === "pending") params.set("regularized_state", "not_regularized");
-
-    fetch(`/api/hr-admin/attendance-records?${params.toString()}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload: { items?: HrAdminAttendanceRecord[] } | null) => {
-        if (payload?.items) {
-          setServerItems(payload.items);
-          setPage(1);
-        }
-      })
-      .catch((error) => {
-        if (error?.name !== "AbortError") {
-          setServerItems(items);
-        }
-      });
-
-    return () => controller.abort();
-  }, [items, lockState, query, regularizedState, source, status]);
-
-  const rows = useMemo(() => serverItems.map(toReportRow), [serverItems]);
+  const rows = useMemo(() => items.map(toReportRow), [items]);
   const statuses = useMemo(() => ["All", ...unique(rows.map((item) => item.status))], [rows]);
   const sources = useMemo(() => ["All", ...unique(rows.map((item) => item.source))], [rows]);
   const departments = useMemo(() => ["All", ...unique(rows.map((item) => item.department ?? ""))], [rows]);
@@ -200,6 +172,7 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
 
   return (
     <section className="section section--tight" aria-label="Daily attendance register report workspace">
+      <p className="notice notice--quiet">Aging bands and payroll-readiness labels are descriptive report indicators. They do not represent tenant SLA policy or authorize payroll processing.</p>
       <div className="report-catalog-workspace attendance-register-report" data-testid="attendance-register-report">
         <div className="report-command-panel">
           <div>
@@ -216,7 +189,7 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
 
         <div className="attendance-summary-strip report-summary-strip" aria-label="Attendance register summary">
           <span><strong>{filteredRows.length}</strong> attendance rows</span>
-          <span><strong>{serverItems.length}</strong> total records</span>
+          <span><strong>{items.length}</strong> total records</span>
           <span><strong>{filteredRows.filter((item) => item.late_minutes > 0).length}</strong> late marks</span>
           <span><strong>{filteredRows.filter((item) => item.is_regularized).length}</strong> regularized</span>
           <span><strong>{filteredRows.filter((item) => item.payrollReadiness.startsWith("Ready")).length}</strong> payroll ready</span>
@@ -295,8 +268,8 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table payroll-register-table">
+        <WorkspaceTableScrollRegion label="Attendance register, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
+          <table className="workspace-data-table report-catalog-table payroll-register-table">
             <thead>
               <tr>
                 <th scope="col">Employee</th>
@@ -372,7 +345,7 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Attendance register pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

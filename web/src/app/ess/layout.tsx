@@ -48,6 +48,7 @@ export default async function EssLayout({ children }: { children: React.ReactNod
     <a className="ess-skip-link" href="#ess-content">Skip to employee content</a>
     <WorkspaceHydrationBoundary fallback={<WorkspaceLoading embedded label="Loading employee workspace" />} >
     <WorkspaceChrome
+      appearance="accerio"
       documentNavigation
       prefetch={false}
       footerDescription="Your information, requests and employee services."

@@ -161,6 +161,11 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 DATA_ERASURE_EXECUTION_ENABLED = env_bool("DATA_ERASURE_EXECUTION_ENABLED", False)
 LEAVE_YEAR_CLOSE_STALE_SECONDS = env_int("LEAVE_YEAR_CLOSE_STALE_SECONDS", 1800)
 CELERY_BEAT_SCHEDULE = {
+    "process-due-leave-auto-approvals": {
+        "task": "leave.process_due_auto_approvals",
+        "schedule": 60.0,
+        "kwargs": {"limit": 100},
+    },
     "dispatch-pending-payroll-background-jobs": {
         "task": "payroll.dispatch_pending_background_jobs",
         "schedule": 2.0,

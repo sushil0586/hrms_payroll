@@ -116,8 +116,8 @@ export default async function HrAdminAttendanceOperationsPage() {
   ];
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui attendance-operations-hub">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui attendance-operations-hub accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live attendance operations mode" : "Demo attendance operations mode"}
         title="Attendance operations"
         description="Control shifts, calendars, daily records, and correction queues from one operational layer."
@@ -135,7 +135,7 @@ export default async function HrAdminAttendanceOperationsPage() {
         ]}
       />
 
-      <TimeLeaveOperationsStrip
+      <details className="workspace-context-disclosure"><summary>Attendance navigation and summary</summary><TimeLeaveOperationsStrip
         current="overview"
         title="Attendance operations command"
         description="Move between attendance records, correction queues, shift coverage, calendars, and leave ledgers without mixing setup and review work."
@@ -143,7 +143,7 @@ export default async function HrAdminAttendanceOperationsPage() {
         primaryMetricValue={recordsResult.data.total_count}
         secondaryMetricLabel="regularizations"
         secondaryMetricValue={regularizationsResult.data.total_count}
-      />
+      /></details>
 
       <div className="attendance-summary-strip" aria-label="Attendance operations summary">
         <span><strong>{recordsResult.data.total_count}</strong> records</span>

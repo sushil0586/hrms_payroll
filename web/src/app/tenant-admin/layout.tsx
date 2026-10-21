@@ -1,4 +1,7 @@
 import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
+import { Suspense } from "react";
+import { DocumentHydrationBoundary } from "@/components/patterns/document-hydration-boundary";
+import { WorkspaceLoading } from "@/components/patterns/workspace-loading";
 import { getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
@@ -13,6 +16,7 @@ const TENANT_ADMIN_NAV_ITEMS = [
   { href: "/tenant-admin/security-readiness", label: "Security", shortLabel: "SE", blurb: "Access and policies", permissions: ["tenant.security.view"] },
   { href: "/tenant-admin/support-access", label: "Support Access", shortLabel: "SA", blurb: "Assisted operations", permissions: ["tenant.support_access.request", "tenant.support_access.approve"] },
   { href: "/tenant-admin/trust-audit", label: "Audit Trail", shortLabel: "AT", blurb: "Activity logs", permissions: ["tenant.audit.view", "tenant.audit.export"] },
+  { href: "/tenant-admin/leave-year", label: "Leave Years", shortLabel: "LY", blurb: "Leave periods and governed close", permissions: ["leave.periods.view"] },
   { href: "/tenant-admin/data-governance", label: "Data Governance", shortLabel: "DG", blurb: "Retention and exports", permissions: ["tenant.retention.view"] },
 ];
 
@@ -55,11 +59,14 @@ export default async function TenantAdminLayout({ children }: { children: React.
   });
 
   return (
+    <Suspense fallback={<WorkspaceLoading label="Loading Tenant Admin workspace" />}><DocumentHydrationBoundary>
     <WorkspaceChrome
+      appearance="accerio"
+      prefetch={false}
       footerDescription="Account setup, users, plan, support, security, and audit evidence in one focused workspace."
       navGroups={menuSource.navGroups}
       navItems={menuSource.navItems}
-      productLabel="HRMS"
+      productLabel="Accerio"
       quickLinks={menuSource.quickLinks}
       roleLabel="Tenant Admin"
       searchHint="Search users, setup, audit..."
@@ -69,5 +76,6 @@ export default async function TenantAdminLayout({ children }: { children: React.
     >
       {children}
     </WorkspaceChrome>
+    </DocumentHydrationBoundary></Suspense>
   );
 }

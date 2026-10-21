@@ -13,8 +13,8 @@ export default async function HrAdminNewAttendancePolicyAssignmentPage() {
   });
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create attendance assignment"
         description="Use assignment priority and scope to control where the attendance policy actually applies."

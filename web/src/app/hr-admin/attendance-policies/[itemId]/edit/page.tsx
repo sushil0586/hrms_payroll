@@ -18,8 +18,8 @@ export default async function HrAdminEditAttendancePolicyPage({ params }: PagePr
   if (!itemResult.data?.id) notFound();
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
         title="Edit attendance policy"
         description="Adjust attendance calculation behavior without changing the underlying runtime model."

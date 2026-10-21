@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -97,13 +99,13 @@ function toReportRow(item: AttendanceRegularizationItem): AttendanceExceptionRow
 }
 
 export function AttendanceExceptionsReportWorkspace({ items }: { items: AttendanceRegularizationItem[] }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All");
-  const [requestedStatus, setRequestedStatus] = useState("All");
-  const [currentStatus, setCurrentStatus] = useState("All");
-  const [risk, setRisk] = useState("All");
-  const [impact, setImpact] = useState("All");
-  const [sortBy, setSortBy] = useState("aging");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "All");
+  const [requestedStatus, setRequestedStatus] = useWorkspaceQueryFilter("requestedStatus", "All");
+  const [currentStatus, setCurrentStatus] = useWorkspaceQueryFilter("currentStatus", "All");
+  const [risk, setRisk] = useWorkspaceQueryFilter("risk", "All");
+  const [impact, setImpact] = useWorkspaceQueryFilter("impact", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sortBy", "aging");
   const [page, setPage] = useState(1);
 
   const rows = useMemo(() => items.map(toReportRow), [items]);
@@ -193,6 +195,7 @@ export function AttendanceExceptionsReportWorkspace({ items }: { items: Attendan
 
   return (
     <section className="section section--tight" aria-label="Attendance exceptions SLA report workspace">
+      <p className="notice notice--quiet">Aging bands and payroll-readiness labels are descriptive report indicators. They do not represent tenant SLA policy or authorize payroll processing.</p>
       <div className="report-catalog-workspace attendance-exceptions-report" data-testid="attendance-exceptions-report">
         <div className="report-command-panel">
           <div>
@@ -277,8 +280,8 @@ export function AttendanceExceptionsReportWorkspace({ items }: { items: Attendan
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table payroll-register-table">
+        <WorkspaceTableScrollRegion label="Attendance exceptions, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
+          <table className="workspace-data-table report-catalog-table payroll-register-table">
             <thead>
               <tr>
                 <th scope="col">Employee</th>
@@ -354,7 +357,7 @@ export function AttendanceExceptionsReportWorkspace({ items }: { items: Attendan
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Attendance exceptions pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

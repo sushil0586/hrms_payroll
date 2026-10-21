@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { leavePolicyAssignmentToFormValue } from "@/app/hr-admin/leave-policy-assignments/form-values";
@@ -21,13 +20,13 @@ export default async function HrAdminEditLeavePolicyAssignmentPage({ params }: P
   if (!itemResult.data) notFound();
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
         title="Edit leave assignment"
         description="Fine-tune which scope receives this policy and in what priority order."
-        actions={<Link className="button button--secondary" href="/hr-admin/leave-policy-assignments">Back to leave assignments</Link>}
-        pills={["Scope refinement", "Priority tuning", "Controlled rollout"]}
+        actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/leave-policy-assignments">Back to leave assignments</a>}
       />
       <LeavePolicyAssignmentForm
         initialValue={leavePolicyAssignmentToFormValue(itemResult.data)}

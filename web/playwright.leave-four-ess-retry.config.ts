@@ -1,0 +1,3 @@
+import {defineConfig} from '@playwright/test';
+import base from './playwright.leave-four-ess.config';
+export default defineConfig({...base,grep:/direct authorization, empty\/error\/loading/,outputDir:'../docs/qa/evidence/leave-four-workspaces/ess-retry/results',reporter:[['list'],['json',{outputFile:'../docs/qa/evidence/leave-four-workspaces/ess-retry/results.json'}]]});

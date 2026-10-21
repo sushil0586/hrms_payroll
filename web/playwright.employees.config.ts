@@ -1,0 +1,2 @@
+import {defineConfig,devices} from '@playwright/test';
+export default defineConfig({testDir:'./tests/employees',workers:1,retries:0,timeout:90000,outputDir:'../docs/qa/evidence/hr-admin-employees/results',reporter:[['list'],['json',{outputFile:'../docs/qa/evidence/hr-admin-employees/results.json'}]],use:{actionTimeout:15000,baseURL:'http://127.0.0.1:3199',trace:'on'},projects:['chromium','firefox','webkit'].map(name=>({name,use:{...devices[name==='chromium'?'Desktop Chrome':name==='firefox'?'Desktop Firefox':'Desktop Safari']}}))});

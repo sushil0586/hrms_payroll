@@ -275,6 +275,7 @@ class HrAdminEmployeeBankAccountWriteSerializer(serializers.Serializer):
 class HrAdminOptionItemSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     name = serializers.CharField()
+    code = serializers.CharField(required=False, allow_blank=True)
     employee_code = serializers.CharField(required=False, allow_blank=True)
     legal_entity_id = serializers.UUIDField(required=False, allow_null=True)
     location_id = serializers.UUIDField(required=False, allow_null=True)
@@ -3792,6 +3793,23 @@ class HrAdminLeavePolicyImpactSerializer(serializers.Serializer):
 
 
 class HrAdminLeaveApprovalConfigSerializer(serializers.Serializer):
+    auto_approve_enabled = serializers.BooleanField(required=False, default=False)
+    auto_approve_after_hours = serializers.IntegerField(required=False, allow_null=True, min_value=1, default=None)
+
+    def validate(self, attrs):
+        hours = attrs.get("auto_approve_after_hours")
+        if attrs.get("auto_approve_enabled") and hours is None:
+            raise serializers.ValidationError({"auto_approve_after_hours": "Waiting hours are required when automatic approval is enabled."})
+        if hours is not None:
+            from datetime import timedelta
+            from django.utils import timezone
+
+            try:
+                timezone.now() + timedelta(hours=hours)
+            except OverflowError:
+                raise serializers.ValidationError({"auto_approve_after_hours": "Waiting hours exceed the supported date range."})
+        return attrs
+
     default_route = serializers.ChoiceField(
         choices=[
             "manager_only",
@@ -4033,7 +4051,7 @@ class HrAdminLeavePolicyAssignmentWriteSerializer(serializers.Serializer):
     grade_id = serializers.UUIDField(allow_null=True, required=False)
     employment_type_id = serializers.UUIDField(allow_null=True, required=False)
     employee_id = serializers.UUIDField(allow_null=True, required=False)
-    priority = serializers.IntegerField(required=False, default=100)
+    priority = serializers.IntegerField(required=False, default=100, min_value=0, max_value=2147483647)
     is_active = serializers.BooleanField(required=False, default=True)
     effective_from = serializers.DateField(allow_null=True, required=False)
     effective_to = serializers.DateField(allow_null=True, required=False)
@@ -4055,7 +4073,7 @@ class HrAdminLeavePolicyAssignmentConflictRequestSerializer(serializers.Serializ
     grade_id = serializers.UUIDField(allow_null=True, required=False)
     employment_type_id = serializers.UUIDField(allow_null=True, required=False)
     employee_id = serializers.UUIDField(allow_null=True, required=False)
-    priority = serializers.IntegerField(required=False, default=100)
+    priority = serializers.IntegerField(required=False, default=100, min_value=0, max_value=2147483647)
     is_active = serializers.BooleanField(required=False, default=True)
     effective_from = serializers.DateField(allow_null=True, required=False)
     effective_to = serializers.DateField(allow_null=True, required=False)
@@ -5951,6 +5969,16 @@ class PagedStatusCountSerializer(serializers.Serializer):
     partially_approved = serializers.IntegerField(required=False)
 
 
+class LeaveHistoryCalendarDaySerializer(serializers.Serializer):
+    date = serializers.DateField()
+    count = serializers.IntegerField(min_value=0)
+
+
+class LeaveHistoryFilterTypeSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    name = serializers.CharField()
+
+
 class LeaveRequestHistoryListSerializer(serializers.Serializer):
     items = LeaveRequestHistoryItemSerializer(many=True)
     total_count = serializers.IntegerField()
@@ -5959,6 +5987,8 @@ class LeaveRequestHistoryListSerializer(serializers.Serializer):
     has_next = serializers.BooleanField()
     has_previous = serializers.BooleanField()
     status_counts = PagedStatusCountSerializer()
+    calendar_days = LeaveHistoryCalendarDaySerializer(many=True, required=False)
+    filter_types = LeaveHistoryFilterTypeSerializer(many=True, required=False)
 
 
 class AttendanceRegularizationHistoryListSerializer(serializers.Serializer):

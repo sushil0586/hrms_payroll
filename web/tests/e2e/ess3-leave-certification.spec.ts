@@ -17,7 +17,7 @@ function django(code: string) {
 }
 let fault: { path: string; status?: number; delay?: number } | undefined;
 let leaveSubmissionResponse: { status: number; body: string } | null = null;
-const backend = "http://127.0.0.1:8048";
+const backend = process.env.PLAYWRIGHT_BACKEND_URL?.replace(/\/api\/v1\/?$/, "") ?? "http://127.0.0.1:8048";
 const evidence = process.env.HRMS_CERT_EVIDENCE_DIR || path.resolve(__dirname, "../../../docs/qa/evidence/ess3-leave");
 async function capture(page: Page, filename: string) {
   await page.evaluate(() => {
@@ -27,6 +27,14 @@ async function capture(page: Page, filename: string) {
   await page.screenshot({ path: path.join(evidence, filename), fullPage: true });
 }
 
+
+async function applyMonth(page: Page) {
+  const terminal = page.waitForResponse(response => response.request().isNavigationRequest() && new URL(response.url()).pathname === "/ess/leave" && ![301, 302, 307, 308].includes(response.status()));
+  await page.getByRole("button", { name: "Apply month", exact: true }).click();
+  const document = await terminal;
+  expect(document.status()).toBe(200);
+  expect(await document.finished()).toBeNull();
+}
 
 test.describe("ESS-3 production leave", () => {
   test.describe.configure({ mode: "serial" });
@@ -64,7 +72,7 @@ test.describe("ESS-3 production leave", () => {
         response.writeHead(502); response.end("Synthetic proxy could not reach local backend");
       }
     });
-    await new Promise<void>((resolve, reject) => { proxy.once("error", reject); proxy.listen(8059, "127.0.0.1", resolve); });
+    await new Promise<void>((resolve, reject) => { proxy.once("error", reject); proxy.listen(Number(process.env.ESS3_PROXY_PORT ?? 8059), "127.0.0.1", resolve); });
   });
   const hydrationErrors: string[] = [];
   test.beforeEach(async ({ page }) => {
@@ -98,20 +106,21 @@ test.describe("ESS-3 production leave", () => {
     expect(token).toBeTruthy();
     return { Authorization: `Token ${token}` };
   }
-  test("entitlements, truthful page scope, filters and pagination", async ({ page }) => {
+  test("entitlements, complete-history filters and pagination", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await open(page);
     await expect(page.getByRole("heading", { name: "Your entitlements" })).toBeVisible();
     await expect(page.locator("article").filter({ has: page.getByRole("heading", { name: "QA Governed Leave", exact: true }) })).toContainText("12.25 units available");
-    await expect(page.getByText(/Status totals cover all requests. Filters and calendar apply to this page./)).toBeVisible();
+    await expect(page.getByText(/Search and filters cover your complete history/)).toBeVisible();
     await expect(page.getByRole("table", { name: "Leave request history" }).locator("tbody tr")).toHaveCount(10);
     await page.getByRole("link", { name: "Next", exact: true }).click();
     await expect(page).toHaveURL(/page=2/);
     await expect(page.getByText("Page 2", { exact: true })).toBeVisible();
-    await page.getByLabel("Search this page").fill("no-such-request");
-    await expect(page.getByText("No requests match these filters.")).toBeVisible();
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
-    await expect(page.getByLabel("Search this page")).toHaveValue("");
+    await page.getByLabel("Search leave history").fill("no-such-request");
+    await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+    await expect(page.getByText("No leave requests match this view.")).toBeVisible();
+    await page.getByRole("link", { name: "Clear filters", exact: true }).click();
+    await expect(page.getByLabel("Search leave history")).toHaveValue("");
     await page.goto("/ess/leave?status=rejected&page=9999");
     await expect(page.getByText("Page 2", { exact: true })).toBeVisible();
     await capture(page, `${test.info().project.name}-leave-desktop.png`);
@@ -119,25 +128,28 @@ test.describe("ESS-3 production leave", () => {
   test("calendar month and date-only boundaries with request details", async ({ page }) => {
     await open(page, "?status=rejected");
     await page.getByRole("button", { name: "Show calendar" }).click();
-    await page.getByLabel("Calendar month").fill("2026-09");
+    await page.getByLabel("Calendar month", { exact: true }).fill("2026-09");
+    await applyMonth(page);
     const calendar = page.getByRole("region", { name: "Leave request calendar" });
     await expect(calendar.getByRole("link")).toHaveCount(30);
-    const first = calendar.getByRole("link", { name: /2026-09-.*: 1 loaded request$/ }).first();
+    const first = calendar.getByRole("link", { name: /2026-09-.*: 1 request$/ }).first();
     const label = await first.getAttribute("aria-label");
     await first.click();
     await expect(first).toHaveAttribute("aria-current", "date");
     const day = page.getByRole("region", { name: "Selected leave day" });
     await expect(day.getByRole("heading")).toContainText("Sep 2026");
-    await day.getByRole("button").click();
+    await expect(day).toContainText("matching request");
+    await page.getByRole("table", { name: "Leave request history" }).getByRole("button", { name: /View/ }).first().click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByRole("dialog")).toContainText("Synthetic history");
     expect(label).toContain("2026-09");
     await page.keyboard.press("Escape");
     await capture(page, `${test.info().project.name}-leave-calendar.png`);
-    await page.getByLabel("Calendar month").fill("2028-02");
+    await page.getByLabel("Calendar month", { exact: true }).fill("2028-02");
+    await applyMonth(page);
     await expect(calendar.getByRole("link")).toHaveCount(29);
-    await calendar.getByRole("link", { name: "2028-02-29: 0 loaded requests", exact: true }).click();
-    await expect(day).toContainText("No requests on this loaded page");
+    await calendar.getByRole("link", { name: "2028-02-29: 0 requests", exact: true }).click();
+    await expect(day).toContainText("0 matching requests");
   });
   test("off-page detail links, governed restrictions and accessible dialog", async ({ page }) => {
     const id = workspace.manifest.fixtures.leave_request_id;
@@ -280,7 +292,7 @@ test.describe("ESS-3 production leave", () => {
   });
   test("direct authorization, empty/error/loading and read-only retry", async ({ page }) => {
     await open(page, "?status=partially_approved");
-    await expect(page.getByText("No leave requests in this view.")).toBeVisible();
+    await expect(page.getByText("No leave requests match this view.")).toBeVisible();
     const auth = await headers(page);
     const randomId = "00000000-0000-0000-0000-000000000001";
     for (const path of [`/me/leave-requests/${randomId}/`, `/me/leave-requests/${randomId}/attachments/${randomId}/download/`]) {
@@ -294,14 +306,18 @@ test.describe("ESS-3 production leave", () => {
     await page.getByRole("button", { name: /try again|retry/i }).click();
     await expect(page.getByRole("heading", { name: "Leave", exact: true })).toBeVisible();
     fault = { path: "/api/v1/me/leave-requests/", delay: 4000 };
-    await page.goto("/ess/leave?status=approved", { waitUntil: "commit" });
+    const delayedDocument = await page.goto("/ess/leave?status=approved", { waitUntil: "commit" });
     await expect(page.getByRole("status", { name: "Loading employee workspace", exact: true })).toBeVisible();
+    expect(delayedDocument?.status()).toBe(200);
+    // The injected upstream delay is transport time, not the UI render budget.
+    expect(await delayedDocument!.finished()).toBeNull();
     await expect(page.getByRole("heading", { name: "Leave", exact: true })).toBeVisible();
   });
   test("mobile/tablet density, accessible names, focus and reduced motion", async ({ page }) => {
     await open(page);
     await page.getByRole("button", { name: "Show calendar" }).click();
-    await page.getByLabel("Calendar month").fill("2026-09");
+    await page.getByLabel("Calendar month", { exact: true }).fill("2026-09");
+    await applyMonth(page);
     for (const width of [320, 390, 768]) {
       await page.setViewportSize({ width, height: 900 });
       await expectNoHorizontalOverflow(page);

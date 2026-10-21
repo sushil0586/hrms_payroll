@@ -13,8 +13,8 @@ export default async function HrAdminNewAttendancePolicyPage() {
   const defaultUnit = optionsResult.data.attendance_units[0]?.value || "day";
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create attendance policy"
         description="Define operational attendance treatment here, then assign it to the right scope later."

@@ -22,8 +22,8 @@ export default async function HrAdminEditAttendancePolicyAssignmentPage({ params
   if (!item) notFound();
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={itemsResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
         title="Edit attendance assignment"
         description="Fine-tune which organizational slices should inherit this attendance behavior and in what order."

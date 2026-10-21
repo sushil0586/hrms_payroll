@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -85,13 +87,13 @@ function toRows(items: LeaveRequestItem[]): CollisionRow[] {
 }
 
 export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: LeaveRequestItem[] }) {
-  const [query, setQuery] = useState("");
-  const [leaveStatus, setLeaveStatus] = useState("All");
-  const [severity, setSeverity] = useState("All");
-  const [blocking, setBlocking] = useState("All");
-  const [leaveType, setLeaveType] = useState("All");
-  const [attendanceStatus, setAttendanceStatus] = useState("All");
-  const [sortBy, setSortBy] = useState("severity");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [leaveStatus, setLeaveStatus] = useWorkspaceQueryFilter("leaveStatus", "All");
+  const [severity, setSeverity] = useWorkspaceQueryFilter("severity", "All");
+  const [blocking, setBlocking] = useWorkspaceQueryFilter("blocking", "All");
+  const [leaveType, setLeaveType] = useWorkspaceQueryFilter("leaveType", "All");
+  const [attendanceStatus, setAttendanceStatus] = useWorkspaceQueryFilter("attendanceStatus", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sortBy", "severity");
   const [page, setPage] = useState(1);
 
   const rows = useMemo(() => toRows(items), [items]);
@@ -167,7 +169,7 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
   return (
     <section className="section section--tight" aria-label="Leave-attendance collision report workspace">
       <div className="report-catalog-workspace leave-attendance-collisions-report" data-testid="leave-attendance-collisions-report">
-        <div className="attendance-summary-strip report-summary-strip" aria-label="Leave attendance collision summary">
+        <div className="attendance-summary-strip report-summary-strip" role="group" aria-label="Leave attendance collision summary">
           <span><strong>{filteredRows.length}</strong> collisions</span>
           <span><strong>{rows.length}</strong> total rows</span>
           <span><strong>{filteredRows.filter((row) => row.payroll_blocking).length}</strong> payroll blocking</span>
@@ -175,7 +177,7 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
           <span><strong>{unique(filteredRows.map((row) => row.employee_code)).length}</strong> employees</span>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Leave attendance collision filters">
+        <div className="report-catalog-toolbar payroll-register-toolbar" role="group" aria-label="Leave attendance collision filters">
           <label><span>Search collisions</span><input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, leave, status, shift" /></label>
           <label><span>Leave status</span><select aria-label="Leave status" className="input-control" value={leaveStatus} onChange={(event) => updateFilter(() => setLeaveStatus(event.target.value))}>{leaveStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
           <label><span>Severity</span><select aria-label="Severity" className="input-control" value={severity} onChange={(event) => updateFilter(() => setSeverity(event.target.value))}>{severities.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
@@ -192,8 +194,8 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
           <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table payroll-register-table">
+        <WorkspaceTableScrollRegion label="Leave attendance collisions, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
+          <table className="workspace-data-table report-catalog-table payroll-register-table">
             <thead><tr><th scope="col">Employee</th><th scope="col">Leave</th><th scope="col">Attendance</th><th scope="col">Payroll risk</th><th scope="col">Evidence</th><th scope="col">Actions</th></tr></thead>
             <tbody>
               {visibleRows.map((row) => (
@@ -209,9 +211,9 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
               {visibleRows.length === 0 ? <tr><td colSpan={6}><div className="empty-state">No leave-attendance collision rows match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
-        <div className="pagination-bar" aria-label="Leave attendance collisions pagination">
+        <div className="pagination-bar" role="group" aria-label="Leave attendance collisions pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
           <span>Showing {filteredRows.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, filteredRows.length)} of {filteredRows.length}</span>
           <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</button>

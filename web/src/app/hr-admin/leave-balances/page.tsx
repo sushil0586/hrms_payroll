@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { attendanceQueueHref } from "../attendance-records/filter-contract";
 
 import { LeaveBalanceOperations } from "@/app/hr-admin/leave-balances/leave-balance-operations";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -49,52 +51,39 @@ export default async function HrAdminLeaveBalancesPage({ searchParams }: PagePro
     }),
     getHrAdminPolicyWorkbenchOptions({ include: ["leave_policies"] }),
   ]);
-  const encashedTotal = balancesResult.data.items.reduce((sum, item) => sum + Number(item.encashed_amount), 0);
-  const adjustmentsTotal = balancesResult.data.items.reduce((sum, item) => sum + Number(item.adjustment_amount), 0);
+  const safeBalancePage = Math.min(balancePage, balancesResult.data.total_pages ?? Math.max(1, Math.ceil(balancesResult.data.total_count / pageSize)));
+  const safeTransactionPage = Math.min(transactionPage, transactionsResult.data.total_pages ?? Math.max(1, Math.ceil(transactionsResult.data.total_count / pageSize)));
+  if (safeBalancePage !== balancePage || safeTransactionPage !== transactionPage) redirect(attendanceQueueHref("/hr-admin/leave-balances", {q,employee_id:employeeId,leave_policy_id:leavePolicyId,transaction_status:transactionStatus,page_size:pageSize,balance_page:safeBalancePage,transaction_page:safeTransactionPage}));
   const pendingReviewsCount = transactionsResult.data.items.filter((item) => item.status === "pending").length;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={balancesResult.state === "live" ? "Live leave balance mode" : "Demo leave balance mode"}
         title="Leave balances"
         description="Inspect balances, run controlled adjustments, and process encashment from one operator surface."
         actions={
-          <>
-            <Link className="button button--secondary" href="/hr-admin/leave-policies">
-              Leave policies
-            </Link>
-            <Link className="button button--secondary" href="/hr-admin/policies">
-              Back to policies
-            </Link>
-          </>
+          <Link className="button button--secondary" href="/hr-admin/leave-requests">Leave requests</Link>
         }
       />
 
-      <TimeLeaveOperationsStrip
+      <details className="workspace-context-disclosure"><summary>Leave navigation and summary</summary><TimeLeaveOperationsStrip
         current="balances"
         title="Leave balance ledger"
         description="Inspect employee-policy balances, controlled adjustments, encashment, and maker-checker review pressure."
         primaryMetricLabel="balances"
         primaryMetricValue={balancesResult.data.total_count}
-        secondaryMetricLabel="pending reviews"
+        secondaryMetricLabel="pending reviews on this transaction page"
         secondaryMetricValue={pendingReviewsCount}
-      />
-
-      <section className="section">
-        <div className="attendance-summary-strip" aria-label="Leave balance summary">
-          <span><strong>{balancesResult.data.total_count}</strong> tracked balances</span>
-          <span><strong>{encashedTotal.toFixed(2)}</strong> encashed units</span>
-          <span><strong>{adjustmentsTotal.toFixed(2)}</strong> net adjustments</span>
-          <span><strong>{pendingReviewsCount}</strong> pending reviews</span>
-        </div>
-      </section>
+      /></details>
 
       <LeaveBalanceOperations
         balancesPage={balancesResult.data}
         options={optionsResult.data}
         canManageBalances={canManageBalances}
         initialFilters={{
+          selectedBalanceId: normalizeParam(currentParams.selectedBalance) ?? "",
+          selectedTransactionId: normalizeParam(currentParams.selectedTransaction) ?? "",
           balancePage,
           employeeId,
           pageSize,

@@ -1,0 +1,281 @@
+/* Opt-in workspace patterns, shared by lists across roles. Business state stays in modules. */
+.accerio-shell .accerio-page .workspace-page-header {
+  padding: var(--space-3) var(--space-4); margin: 0; border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-panel); background: var(--ds-surface); box-shadow: none;
+}
+.accerio-shell .accerio-page .workspace-page-header .page-intro__title { font-size: var(--type-size-xl); line-height: var(--type-leading-title); font-weight: var(--type-weight-bold); color: var(--ds-text); }
+.accerio-shell .accerio-page .workspace-page-header .page-intro__description { margin-top: var(--space-1); font-size: var(--type-size-sm); color: var(--ds-text-muted); }
+.accerio-shell .accerio-page .workspace-page-header .page-intro__eyebrow,
+.accerio-shell .accerio-page .workspace-page-header .page-intro__stats { display: none; }
+.accerio-shell .accerio-page .workspace-list-card { border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); background: var(--ds-surface); box-shadow: none; overflow: visible; }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(120px, 1fr)); align-items: end; gap: var(--space-3); padding: var(--space-3); background: var(--ds-surface); border-block: 1px solid var(--ds-border); }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form .form-field { min-width: 0; margin: 0; gap: var(--space-1); }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form .input-control { width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-surface); color: var(--ds-text); font: inherit; padding: var(--space-2); }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form .text-label-premium { color: var(--ds-text-muted); font-size: var(--type-size-xs); font-weight: var(--type-weight-semibold); }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form details { position: static; grid-column: 1 / -2; }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form details > div { position: static; width: auto; display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); padding: var(--space-3) 0 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form details:not([open]) > div { display: none; }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form .workspace-filter-actions { grid-column: -2 / -1; justify-content: flex-end; }
+.accerio-shell .accerio-page .workspace-table-region { max-width: 100%; overflow-x: auto; border-block: 1px solid var(--ds-border); border-radius: 0; scrollbar-width: auto; }
+.accerio-shell .accerio-page .workspace-data-table { width: 100%; border-collapse: collapse; font-size: var(--type-size-md); }
+.accerio-shell .accerio-page .workspace-data-table th { padding: var(--space-3); background: var(--ds-surface-subtle); color: var(--ds-text-muted); font-size: var(--type-size-xs); text-align: left; }
+.accerio-shell .accerio-page .workspace-data-table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--ds-border); color: var(--ds-text); vertical-align: middle; }
+.accerio-shell .accerio-page .workspace-data-table small { color: var(--ds-text-muted); line-height: var(--type-leading-copy); }
+.accerio-shell .accerio-page .workspace-data-table tbody tr:hover td { background: var(--ds-brand-soft); }
+.accerio-shell .accerio-page :is(.workspace-filter-form,.workspace-table-region,.workspace-page-header) :is(a,button,input,select,summary):focus-visible,
+.accerio-shell .accerio-page .workspace-table-region:focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 2px; box-shadow: var(--ds-focus); }
+@media(max-width: 1100px) { :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form { grid-template-columns: 1fr 1fr; } }
+@media(max-width: 600px) {
+  :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form { grid-template-columns: minmax(0,1fr); }
+  :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form details > div { grid-template-columns: minmax(0,1fr); }
+  :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form :is(.button,.input-control) { min-height: 44px; }
+  .accerio-shell .accerio-page .workspace-page-header { padding: var(--space-3); }
+}
+.accerio-shell .accerio-page .button { border-radius: var(--ds-radius-control); box-shadow: none; }
+.accerio-shell .accerio-page .button--primary { background: var(--ds-brand); border-color: var(--ds-brand); color: var(--ds-surface); }
+.accerio-shell .accerio-page .button--primary:hover { background: var(--ds-brand-hover); border-color: var(--ds-brand-hover); }
+.accerio-shell .accerio-page .button--secondary { background: var(--ds-surface); border-color: var(--ds-border); color: var(--ds-text); }
+.accerio-shell .accerio-page .record-chip--success { background: var(--ds-success-soft); color: var(--ds-success); border-color: var(--ds-success-soft); }
+.accerio-shell .accerio-page .record-chip--warning { background: var(--ds-warning-soft); color: var(--ds-warning); border-color: var(--ds-warning-soft); }
+.accerio-shell .accerio-page .record-chip--danger { background: var(--ds-danger-soft); color: var(--ds-danger); border-color: var(--ds-danger-soft); }
+
+@media(max-width: 600px) { :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form :is(details,.workspace-filter-actions) { grid-column: 1 / -1; } }
+
+@media(max-width: 600px) { .accerio-shell .accerio-page .workspace-page-header .button { min-height: 44px; } }
+/* Shared affordance and explicit sizing avoid WebKit native select intrinsic-height differences. */
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form select.input-control {
+  appearance: none; height: 36px; padding-inline-end: var(--space-7);
+  background-image: linear-gradient(45deg, transparent 50%, var(--ds-text-muted) 50%), linear-gradient(135deg, var(--ds-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 12px) 50%;
+  background-size: var(--space-1) var(--space-1); background-repeat: no-repeat;
+}
+@media(max-width: 600px) { :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form select.input-control { height: 44px; } }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--three { grid-template-columns: minmax(180px,2fr) repeat(2,minmax(140px,1fr)); }
+.accerio-shell .accerio-page .workspace-filter-actions { display: flex; align-items: center; gap: var(--space-2); }
+.accerio-shell .accerio-page .workspace-filter-validation { grid-column: 1 / -1; margin: 0; color: var(--ds-danger); }
+.accerio-shell .accerio-page .workspace-context-disclosure { border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-surface); padding: var(--space-3); }
+.accerio-shell .accerio-page .workspace-context-disclosure > summary { color: var(--ds-text-muted); font-size: var(--type-size-sm); cursor: pointer; }
+.accerio-shell .accerio-page .workspace-page-size-form { display: flex; align-items: flex-end; gap: var(--space-2); }
+@media(max-width: 1100px) { :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--three { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
+@media(max-width: 600px) { :is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--three { grid-template-columns: minmax(0,1fr); } .accerio-shell .accerio-page .workspace-filter-actions { flex-wrap: wrap; } }
+.accerio-shell .accerio-page .workspace-field--full { grid-column: 1 / -1; }
+.accerio-shell .accerio-page .workspace-status-badge--success { background: var(--ds-success-soft); color: var(--ds-success); }
+.accerio-shell .accerio-page .workspace-status-badge--warning { background: var(--ds-warning-soft); color: var(--ds-warning); }
+.accerio-shell .accerio-page .workspace-status-badge--danger { background: var(--ds-danger-soft); color: var(--ds-danger); }
+.accerio-shell .accerio-page .workspace-status-badge--info { background: var(--ds-info-soft); color: var(--ds-info); }
+.accerio-shell .accerio-page .workspace-status-badge--neutral { background: var(--ds-surface-subtle); color: var(--ds-text-muted); }
+
+.accerio-shell .accerio-page .workspace-action-panel { background: var(--ds-surface-subtle); border-color: var(--ds-border); border-radius: var(--ds-radius-control); padding: var(--space-3); gap: var(--space-3); }
+.accerio-shell .accerio-page :is(.workspace-action-panel,.workspace-page-size-form) .muted { color: var(--ds-text-muted); font-size: var(--type-size-xs); }
+.accerio-shell .accerio-page .workspace-pagination { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); color: var(--ds-text); }
+/* Wrapped action rows must not turn a horizontal basis into a tall mobile button. */
+@media(max-width: 900px) {
+  .accerio-shell .accerio-page .queue-toolbar__actions .button { flex: 0 0 auto; min-height: 44px; }
+}
+/* Attendance-family adoption of shared catalog, report and form surfaces. */
+.accerio-shell .accerio-page :is(.panel-card-soft,.record-card,.report-catalog-workspace,.report-filter-panel,.form-shell-card,.pagination-panel) {
+  background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); box-shadow: none; min-width: 0;
+}
+.accerio-shell .accerio-page :is(.workspace-filter-bar,.filter-panel,.report-filter-grid) { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); align-items: end; gap: var(--space-3); padding: var(--space-3); }
+.accerio-shell .accerio-page :is(.form-field,.form-grid,.report-filter-panel,.record-card,.record-list,.queue-layout) { min-width: 0; }
+.accerio-shell .accerio-page .input-control { max-width: 100%; background-color: var(--ds-surface); color: var(--ds-text); border-color: var(--ds-border); border-radius: var(--ds-radius-control); font-size: var(--type-size-sm); }
+.accerio-shell .accerio-page :is(.muted,.section-copy,.detail-label) { color: var(--ds-text-muted); }
+.accerio-shell .accerio-page :is(.report-command-panel,.report-filter-panel__header,.queue-toolbar__header,.record-card__header,.form-shell-card__header) { padding: var(--space-3); gap: var(--space-3); }
+.accerio-shell .accerio-page :is(.section-heading-soft,.report-command-panel h2,.section-heading h2) { font-size: var(--type-size-lg); line-height: var(--type-leading-title); color: var(--ds-text); }
+.accerio-shell .accerio-page :is(.attendance-summary-strip,.report-summary-strip,.hr-employee-summary-strip) { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); padding: var(--space-3); box-shadow: none; }
+.accerio-shell .accerio-page .form-actions-bar { background: var(--ds-surface-subtle); border-color: var(--ds-border); }
+.accerio-shell .accerio-page .input-control:focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 2px; box-shadow: var(--ds-focus); }
+@media(max-width: 600px) {
+  .accerio-shell .accerio-page :is(.workspace-filter-bar,.filter-panel,.report-filter-grid) { grid-template-columns: minmax(0,1fr); }
+  .accerio-shell .accerio-page :is(.button,.input-control) { min-height: 44px; }
+  .accerio-shell .accerio-page select.input-control { height: 44px; }
+  .accerio-shell .accerio-page :is(.report-command-panel,.report-filter-panel__header,.record-card__header) { flex-wrap: wrap; }
+}
+.accerio-shell .accerio-page :is(.workspace-filter-bar,.workspace-filter-form,.report-filter-panel) .form-field :is(.muted,span),
+.accerio-shell .accerio-page .report-filter-panel label > span { color: var(--ds-text-muted); }
+.accerio-shell .accerio-page .filter-panel { background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); }
+.accerio-shell .accerio-page :is(.workspace-data-table,.accerio-data-table) tr.is-selected td > span:not([class]) { color: var(--ds-text); }
+@media(max-width: 900px) {
+  .accerio-shell .accerio-page :is(.page-intro__actions,.record-card__actions,.form-actions-bar__buttons,.report-command-panel__actions) .button { flex: 0 0 auto; }
+}
+@media(max-width: 600px) {
+  .accerio-shell.workspace-tone--hr .accerio-page .button { min-height: 44px; }
+}
+.accerio-shell.workspace-tone--hr .accerio-page :is(form,.form-grid) .form-field > span,
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form label > span { color: var(--ds-text-muted); }
+@media(max-width: 600px) {
+  .accerio-shell.workspace-tone--hr .accerio-page .workspace-page-header .page-intro__actions .button { min-height: 44px; }
+}
+/* GET controls become editable after hydration, before browser-restored drafts can be accepted. */
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-fields { display: contents; min-width: 0; margin: 0; padding: 0; border: 0; }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--block { display: block; padding: 0; border: 0; }
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--inline { display: flex; flex-wrap: wrap; padding: 0; border: 0; background: transparent; }
+/* Inline review actions stay in the dialog scroll flow so sticky legacy bars
+   cannot cover the focused field. The shared modal owns scrolling. */
+.accerio-shell .accerio-page .accerio-dialog .inline-review-panel .form-actions-bar {
+  position: static;
+  bottom: auto;
+  margin: 0;
+  box-shadow: none;
+}
+/* Employee search uses the same semantic label/help contrast as other forms. */
+.accerio-shell.workspace-tone--hr .accerio-page form .queue-toolbar__search > .muted,
+.accerio-shell.workspace-tone--hr .accerio-page form .field-help-text:not(.field-help-text--warning) {
+  color: var(--ds-text-muted);
+}
+/* A reusable employee filter places search and selection on the form grid,
+   rather than aligning other controls beneath a tall nested picker. */
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--employee .workspace-filter-fields > .queue-toolbar__search {
+  display: contents;
+}
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--employee .workspace-filter-fields > .queue-toolbar__search > .field-help-text {
+  grid-column: 1 / -1;
+  order: 2;
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
+:is(.accerio-shell .accerio-page, .ess-experience-shell) .workspace-filter-form--employee .workspace-filter-actions { order: 1; }
+/* Modal metadata follows the same readable muted-text token as workspace forms. */
+.accerio-shell.workspace-tone--hr .hr-admin-action-modal .workspace-card__eyebrow { color: var(--ds-text-muted); }
+
+/* Preserve real form actions when modal presentation suppresses duplicate headings. */
+.accerio-shell.workspace-tone--hr .hr-admin-action-modal .form-shell-card__header--actionable { display: flex; }
+/* Shared controlled-form readiness wrapper preserves existing form grids. */
+.workspace-form-controls { display: contents; min-width: 0; margin: 0; padding: 0; border: 0; }
+
+/* Import tools share field-label contrast even when they are outside a form element. */
+.accerio-shell.workspace-tone--hr .accerio-page .form-field > .text-label-premium { color: var(--ds-text-muted); }
+/* Shared report utility actions and forms retain compact, wrapping layouts. */
+.accerio-shell .accerio-page .report-filter-form-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); }
+
+/* Reusable operational cards keep content clear of their border at every width. */
+.accerio-shell .accerio-page .workspace-operation-card { padding: var(--space-3); }
+.accerio-shell .accerio-page .workspace-operation-card .section-heading-row { margin: 0 0 var(--space-3); padding: 0; }
+.accerio-shell .accerio-page .workspace-operation-card .form-grid { margin-top: var(--space-3); gap: var(--space-3); align-items: end; }
+.accerio-shell .accerio-page .workspace-operation-card .input-control { width: 100%; min-width: 0; }
+
+/* MetricTile is shared; these compact grids keep labels, values and context separate. */
+.accerio-shell .accerio-page .workspace-metric-grid { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.accerio-shell .accerio-page .workspace-metric-grid .metric-tile { flex: 1 0 calc(25% - var(--space-3)); min-width: 0; min-height: max-content; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); background: var(--ds-surface-subtle); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); box-shadow: none; }
+.accerio-shell .accerio-page .workspace-metric-grid :is(.metric-tile__label,.metric-tile__trend) { min-width: 0; color: var(--ds-text-muted); overflow-wrap: anywhere; }
+.accerio-shell .accerio-page .workspace-metric-grid .metric-tile__value { color: var(--ds-text); }
+@media(max-width: 900px) { .accerio-shell .accerio-page .workspace-metric-grid .metric-tile { flex-basis: calc(50% - var(--space-3)); } }
+
+/* Governed operation forms share readable labels in every workspace shell. */
+.workspace-operation-card .form-field > span { color: var(--ds-text-muted); }
+
+/* Scrolling is a component capability, independent of the consuming shell. */
+.workspace-table-region { min-width: 0; max-width: 100%; overflow-x: auto; }
+.workspace-table-region:focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 2px; box-shadow: var(--ds-focus); }
+
+/* Shared compact workspace family. Opt in with accerio-page; modules own data/actions. */
+.accerio-shell .accerio-page.shell { width: 100%; max-width: none; margin: 0; padding: 0; gap: var(--space-3); }
+.accerio-shell .accerio-page :is(.workspace-page-header,.workspace-standard-header) { padding: var(--space-3) var(--space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); background: var(--ds-surface); box-shadow: none; gap: var(--space-3); }
+.accerio-shell .accerio-page :is(.workspace-standard-header h1,.page-intro__title) { color: var(--ds-text); font-size: var(--type-size-xl); line-height: var(--type-leading-title); }
+.accerio-shell .accerio-page :is(.workspace-standard-header p,.page-intro__description) { color: var(--ds-text-muted); font-size: var(--type-size-sm); line-height: var(--type-leading-copy); margin-block: var(--space-1) 0; }
+.accerio-shell .accerio-page .workspace-standard-header__eyebrow { display: none; }
+.accerio-shell .accerio-page :is(.workspace-standard-panel,.workspace-data-panel,.workspace-card,.record-card,.pagination-panel,.organization-import-workbench) { background: var(--ds-surface); border-color: var(--ds-border); border-radius: var(--ds-radius-panel); box-shadow: none; min-width: 0; }
+.accerio-shell .accerio-page :is(.workspace-standard-panel__header,.workspace-data-panel__header,.workspace-card__header) { padding: var(--space-3); margin: 0; gap: var(--space-2); border-color: var(--ds-border); background: var(--ds-surface); }
+.accerio-shell .accerio-page :is(.workspace-standard-panel__header h2,.workspace-data-panel__header h2,.workspace-card__header h2) { color: var(--ds-text); font-size: var(--type-size-lg); line-height: var(--type-leading-title); margin: 0; }
+.accerio-shell .accerio-page :is(.workspace-standard-panel__header p,.workspace-data-panel__header p,.workspace-card__header p) { font-size: var(--type-size-sm); line-height: var(--type-leading-copy); color: var(--ds-text-muted); margin-block: var(--space-1) 0; }
+.accerio-shell .accerio-page .workspace-standard-panel__body { padding: var(--space-3); background: var(--ds-surface); }
+.accerio-shell .accerio-page :is(.queue-toolbar,.queue-toolbar__header,.queue-summary-chip,.pagination-panel,.input-control) { background: var(--ds-surface); box-shadow: none; color: var(--ds-text); border-color: var(--ds-border); }
+.accerio-shell .accerio-page .queue-summary-chip { color: var(--ds-text-muted); font-size: var(--type-size-xs); }
+.accerio-shell .accerio-page select.input-control { appearance: auto; background-image: none; }
+.accerio-shell .accerio-page .workspace-filter-form select.input-control { appearance: auto; background-image: none; padding-inline-end: var(--space-2); }
+.accerio-shell .accerio-page .workspace-summary-grid { gap: var(--space-3); }
+.accerio-shell .accerio-page .workspace-summary-card { padding: var(--space-3); gap: var(--space-1); }
+.accerio-shell .accerio-page .workspace-summary-card > strong { font-size: var(--type-size-xl); line-height: var(--type-leading-title); }
+.accerio-shell .accerio-page .workspace-summary-card :is(h3,p) { margin: 0; font-size: var(--type-size-sm); }
+.accerio-shell .accerio-page .workspace-summary-card .ess-fields { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-2) 0 0; }
+.accerio-shell .accerio-page .workspace-summary-card .ess-fields :is(dt,dd) { font-size: var(--type-size-sm); margin: 0; }
+.accerio-shell .accerio-page .attendance-summary-strip { display: flex; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-3); background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); box-shadow: none; }
+.accerio-shell .accerio-page .attendance-summary-strip > span { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); min-height: 0; min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--ds-text-muted); font-size: var(--type-size-sm); }
+.accerio-shell .accerio-page .attendance-summary-strip strong { color: var(--ds-text); font-size: var(--type-size-lg); }
+.accerio-shell .accerio-page .workspace-queue-context { display: grid; gap: var(--space-3); padding: var(--space-3); }
+.accerio-shell .accerio-page .workspace-queue-context .tabbar { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; }
+.accerio-shell .accerio-page .workspace-queue-context .tab { display: inline-flex; gap: var(--space-2); min-height: 36px; padding: var(--space-2) var(--space-3); font-size: var(--type-size-sm); background: var(--ds-surface); border: 1px solid var(--ds-border); color: var(--ds-text); border-radius: var(--ds-radius-control); }
+.accerio-shell .accerio-page .workspace-queue-context .tab--active { background: var(--ds-brand-soft); color: var(--ds-brand); border-color: var(--ds-brand); }
+.accerio-shell .accerio-page .workspace-queue-context__copy :is(h2,p) { margin: 0; font-size: var(--type-size-sm); line-height: var(--type-leading-copy); }
+.accerio-shell .accerio-page .workspace-queue-context__copy h2 { font-size: var(--type-size-lg); }
+:is(.accerio-shell .accerio-page,.accerio-dialog) .detail-grid { grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); gap: var(--space-3); }
+:is(.accerio-shell .accerio-page,.accerio-dialog) .detail-row { padding: var(--space-2); gap: var(--space-1); background: var(--ds-surface-subtle); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); box-shadow: none; }
+:is(.accerio-shell .accerio-page,.accerio-dialog) :is(.detail-label,.detail-value) { font-size: var(--type-size-sm); line-height: var(--type-leading-copy); }
+.accerio-shell .accerio-page .mss-selected-review-band { padding: var(--space-3); gap: var(--space-3); background: var(--ds-brand-soft); border-color: var(--ds-border); box-shadow: none; }
+.accerio-shell .accerio-page .mss-selected-review-band p { margin-bottom: 0; }
+.accerio-shell .accerio-page .workspace-context-disclosure > .section { margin-block: var(--space-3) 0; }
+.accerio-shell .accerio-page .organization-import-grid { display: grid; grid-template-columns: minmax(0,1fr); gap: var(--space-3); }
+.accerio-shell .accerio-page .organization-import-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.accerio-shell .accerio-page .organization-import-actions .button { flex: 0 1 auto; width: auto; min-width: 0; }
+.accerio-shell .accerio-page .organization-import-textarea { min-height: 112px; max-height: 320px; resize: vertical; }
+.accerio-shell .accerio-page .pagination-panel { padding: var(--space-3); margin: 0; }
+.accerio-shell .accerio-page .pagination-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 0; margin: 0; background: var(--ds-surface); }
+.accerio-shell .accerio-page .pagination-bar__summary { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.accerio-shell .accerio-page .pagination-bar__actions { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-1); margin: 0 0 0 auto; }
+.accerio-shell .accerio-page .pagination-bar__actions .button { width: auto; min-width: 0; margin: 0; padding-inline: var(--space-2); }
+/* Disabled controls retain their native disabled contract and a distinct, readable surface. */
+.accerio-shell :is(.accerio-page,.accerio-dialog) .button:is(:disabled,[aria-disabled="true"]),
+.accerio-dialog .button:is(:disabled,[aria-disabled="true"]),
+.accerio-shell .accerio-page .button:has(input:disabled) { background: var(--ds-disabled-surface); border-color: var(--ds-disabled-border); color: var(--ds-disabled-text); box-shadow: none; transform: none; cursor: not-allowed; }
+.accerio-shell .accerio-page :is(.button,.tab,summary):focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 2px; box-shadow: var(--ds-focus); }
+@media(max-width: 900px) {
+  .accerio-shell .accerio-page .mss-approval-queue-grid { grid-template-columns: minmax(0,1fr); }
+  .accerio-shell .accerio-page .organization-import-actions .button { flex: 1 1 160px; }
+}
+@media(max-width: 600px) {
+  .accerio-shell .accerio-page :is(.workspace-page-header,.workspace-standard-header) { padding: var(--space-3); }
+  .accerio-shell .accerio-page .pagination-bar__actions { width: 100%; margin: 0; }
+  .accerio-shell .accerio-page .pagination-bar__actions .button { min-height: 44px; padding-inline: var(--space-1); font-size: var(--type-size-sm); }
+  .accerio-shell .accerio-page .workspace-queue-context .tab { min-height: 44px; }
+}
+
+/* Existing accessible modal, shared presentation; focus/close and mutation ownership stay intact. */
+.accerio-dialog.hr-admin-action-modal { width: min(var(--ds-dialog-width),calc(100vw - var(--space-6))); padding: 0; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); box-shadow: var(--ds-shadow); color: var(--ds-text); }
+.accerio-dialog .hr-admin-action-modal__header { padding: var(--space-3) var(--space-4); gap: var(--space-3); background: var(--ds-surface); border-bottom: 1px solid var(--ds-border); }
+.accerio-dialog .hr-admin-action-modal__title { font-size: var(--type-size-xl); color: var(--ds-text); }
+.accerio-dialog .hr-admin-action-modal__description { color: var(--ds-text-muted); font-size: var(--type-size-sm); line-height: var(--type-leading-copy); }
+.accerio-dialog .hr-admin-action-modal__body { min-height: 0; padding: var(--space-4); background: var(--ds-surface); }
+.accerio-dialog .hr-admin-action-modal__close { min-width: 44px; min-height: 44px; color: var(--ds-text); border-color: var(--ds-border); background: var(--ds-surface); }
+.accerio-dialog .form-actions-bar { position: static; margin: var(--space-3) 0 0; padding: var(--space-3); background: var(--ds-surface-subtle); border-color: var(--ds-border); box-shadow: none; }
+.accerio-dialog :is(.input-control,.queue-toolbar,.queue-summary-chip) { color: var(--ds-text); background: var(--ds-surface); border-color: var(--ds-border); box-shadow: none; }
+.accerio-dialog :is(.button,.input-control):focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 2px; box-shadow: var(--ds-focus); }
+@media(max-width: 600px) { .accerio-dialog .hr-admin-action-modal__body { padding: var(--space-3); } .accerio-dialog .button { min-height: 44px; } }
+
+/* Match legacy shell specificity so every role resolves the same shared heading scale. */
+.accerio-shell.workspace-tone .app-content--workspace .accerio-page :is(.page-intro__title,.workspace-standard-header h1) { font-size: var(--type-size-xl); line-height: var(--type-leading-title); }
+.accerio-shell .accerio-page .mss-selected-review-band p { color: var(--ds-text-muted); }
+
+.accerio-shell.workspace-tone .app-content--workspace .accerio-page :is(.page-intro__description,.workspace-standard-header p) { color: var(--ds-text-muted); font-size: var(--type-size-sm); line-height: var(--type-leading-copy); }
+/* Queue and its pager form one column; short queues do not stretch to detail height. */
+.accerio-shell .accerio-page .workspace-review-grid { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); align-items: start; gap: var(--space-3); padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.accerio-shell .accerio-page .workspace-review-grid__list { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
+@media(max-width: 900px) { .accerio-shell .accerio-page .workspace-review-grid { grid-template-columns: minmax(0,1fr); } }
+
+/* Text-entry boundaries use the existing non-text contrast token; table borders stay subtle. */
+:is(.accerio-shell .accerio-page,.accerio-dialog) .input-control:not(:disabled) { border-color: var(--ds-control-border); }
+:is(.accerio-shell .accerio-page,.accerio-dialog) .input-control[aria-invalid="true"] { border-color: var(--ds-danger); }
+.accerio-dialog .ess-modal-section small { color: var(--ds-text-muted); }
+
+/* Shared solid form/report surfaces keep text contrast independently assessable. */
+.accerio-shell .accerio-page .form-shell-card::before { content: none; }
+.accerio-shell .accerio-page .report-catalog-toolbar { background: var(--ds-surface); border-color: var(--ds-border); border-radius: var(--ds-radius-panel); }
+.accerio-shell .accerio-page .report-catalog-toolbar label { color: var(--ds-text-muted); }
+
+/* Contrast must remain readable when native readiness changes disabled state.
+   Animate elevation/movement only; interpolating two readable color pairs can
+   create an unreadable intermediate foreground/background combination. */
+:is(.accerio-shell .accerio-page,.accerio-dialog) .button { transition: transform var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard); }
+
+/* Collapsible policy summaries keep readable copy width on small screens. */
+@media(max-width: 600px) {
+  .accerio-shell .accerio-page .form-section-card__summary { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: var(--space-2); }
+  .accerio-shell .accerio-page .form-section-card__summary > span:first-child { grid-column: 1; min-width: 0; }
+  .accerio-shell .accerio-page .form-section-card__summary-meta { grid-column: 1 / -1; min-width: 0; justify-content: flex-start; }
+  .accerio-shell .accerio-page .form-section-card__summary::after { grid-column: 2; grid-row: 1; }
+}
+/* Tablet actions share a compact wrapping row before mobile stacking begins. */
+@media(min-width: 601px) and (max-width: 900px) {
+  .accerio-shell .accerio-page .page-intro__actions { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; width: auto; gap: var(--space-2); }
+  .accerio-shell .accerio-page .page-intro__actions .button { flex: 0 0 auto; width: auto; min-width: 0; }
+}

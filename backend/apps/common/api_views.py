@@ -14,7 +14,7 @@ from io import StringIO
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
 from django.http import FileResponse, HttpResponse
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -25,6 +25,7 @@ from rest_framework.views import APIView
 
 from apps.common.models import HrmsImportBatchAudit, HrmsImportBatchStatus, HrmsLaunchRemediationAssignment
 from apps.common.idempotency import execute_idempotent_mutation
+from apps.common.leave_history import EmployeeLeaveHistoryQuery, employee_leave_history_queryset, filter_employee_leave_history, employee_leave_calendar
 from apps.common.api_serializers import (
     LIFECYCLE_COMMON_DUE_ANCHORS,
     LIFECYCLE_EXIT_DUE_ANCHORS,
@@ -1421,7 +1422,24 @@ def save_hr_admin_leave_type(actor, validated_data, *, item=None):
         if field in validated_data:
             setattr(item, field, validated_data[field])
 
-    item.save()
+    duplicate = LeaveType.objects.filter(tenant=actor.tenant, code=item.code)
+    if item.pk:
+        duplicate = duplicate.exclude(pk=item.pk)
+    if item.code and duplicate.exists():
+        raise serializers.ValidationError({"code": "A leave type with this code already exists."})
+
+    try:
+        # A savepoint keeps the surrounding transaction usable if another
+        # request wins the same tenant/code between validation and insertion.
+        with transaction.atomic():
+            item.save()
+    except IntegrityError as exc:
+        cause = exc.__cause__
+        constraint = getattr(getattr(cause, "diag", None), "constraint_name", "") or ""
+        sqlite_duplicate = "leave_management_leavetype.tenant_id" in str(exc) and "leave_management_leavetype.code" in str(exc)
+        if constraint.startswith("leave_management_leavetype_tenant_id_code_") or sqlite_duplicate:
+            raise serializers.ValidationError({"code": "A leave type with this code already exists."}) from exc
+        raise
     return item
 
 
@@ -15430,6 +15448,11 @@ class HrAdminEmployeeOptionSearchView(HrAdminContextMixin, APIView):
         except (TypeError, ValueError):
             limit = 20
         queryset = Employee.objects.filter(tenant=employee.tenant)
+        exact_code = request.query_params.get("employee_code")
+        if exact_code is not None:
+            if not exact_code.strip() or len(exact_code) > 100:
+                raise serializers.ValidationError({"employee_code": "Enter an exact employee code of at most 100 characters."})
+            queryset = queryset.filter(employee_code__iexact=exact_code.strip())
         if query:
             queryset = queryset.filter(
                 Q(employee_code__icontains=query)
@@ -16194,7 +16217,18 @@ class HrAdminAttendanceRecordBulkActionView(HrAdminContextMixin, APIView):
             update_kwargs["is_regularized"] = True
         elif action == "clear_regularized":
             update_kwargs["is_regularized"] = False
-        updated_count = queryset.update(**update_kwargs)
+        try:
+            # The PostgreSQL close guard remains authoritative, including races
+            # with close transitions. Roll back the complete batch before mapping
+            # its known domain rejection; unrelated database errors still surface.
+            with transaction.atomic():
+                updated_count = queryset.update(**update_kwargs)
+        except DatabaseError as exc:
+            cause = exc.__cause__
+            code = getattr(cause, "sqlstate", None) or getattr(cause, "pgcode", None)
+            if code == "P0001" and str(exc).splitlines()[0] == "attendance period is closed":
+                raise serializers.ValidationError({"record_ids": ["A selected attendance period is closed. Use the governed attendance-close workflow before changing these records."]}) from exc
+            raise
         payload = {"action": action, "updated_count": updated_count}
         return response.Response(BulkMutationResultSerializer(payload).data)
 
@@ -17273,6 +17307,8 @@ class HrAdminLeavePolicyAssignmentConflictView(HrAdminContextMixin, APIView):
                 "grade_id": serializer.validated_data.get("grade_id"),
                 "employment_type_id": serializer.validated_data.get("employment_type_id"),
                 "employee_id": serializer.validated_data.get("employee_id"),
+                "effective_from": serializer.validated_data.get("effective_from"),
+                "effective_to": serializer.validated_data.get("effective_to"),
             },
             priority=serializer.validated_data.get("priority", 100),
             item_id=str(serializer.validated_data["item_id"]) if serializer.validated_data.get("item_id") else None,
@@ -17316,6 +17352,10 @@ class HrAdminLeavePolicyAssignmentListCreateView(HrAdminContextMixin, APIView):
         items = LeavePolicyAssignment.objects.filter(tenant=employee.tenant).select_related(
             "leave_policy", "leave_policy__leave_type", "legal_entity", "branch", "department", "grade", "employment_type", "employee"
         ).order_by("priority", "created_at")
+        for key in ("employee_id", "leave_policy_id"):
+            if key in request.query_params:
+                identifier = serializers.UUIDField().run_validation(request.query_params[key])
+                items = items.filter(**{key: identifier})
         query = (request.query_params.get("q") or "").strip()
         status_filter = (request.query_params.get("status") or "all").strip()
         scope_filter = (request.query_params.get("scope") or "all").strip()
@@ -17432,37 +17472,32 @@ class HrAdminLeavePolicyAssignmentBulkImportView(HrAdminContextMixin, APIView):
         rows = request.data.get("rows") if isinstance(request.data, dict) else None
         if not isinstance(rows, list) or not rows:
             return response.Response({"rows": ["At least one assignment row is required."]}, status=status.HTTP_400_BAD_REQUEST)
-        created_items = []
+        created = []
         errors = []
-        tenant = employee.tenant
-        policy_ids = {str(row.get("leave_policy_id")) for row in rows if isinstance(row, dict) and row.get("leave_policy_id")}
-        employee_ids = {str(row.get("employee_id")) for row in rows if isinstance(row, dict) and row.get("employee_id")}
-        policies = {str(item.id): item for item in LeavePolicy.objects.filter(tenant=tenant, id__in=policy_ids)}
-        target_employees = {str(item.id): item for item in Employee.objects.filter(tenant=tenant, id__in=employee_ids)}
         for index, row in enumerate(rows, start=1):
             serializer = HrAdminLeavePolicyAssignmentWriteSerializer(data=row)
             if not serializer.is_valid():
                 errors.append({"row": index, "message": serializer.errors})
                 continue
-            data = serializer.validated_data
-            policy = policies.get(str(data.get("leave_policy_id")))
-            target_employee = target_employees.get(str(data.get("employee_id"))) if data.get("employee_id") else None
-            if not policy:
-                errors.append({"row": index, "message": {"leave_policy_id": "Invalid selection."}})
-                continue
-            if data.get("employee_id") and not target_employee:
-                errors.append({"row": index, "message": {"employee_id": "Invalid selection."}})
-                continue
-            created_items.append(
-                LeavePolicyAssignment(
-                    tenant=tenant,
-                    leave_policy=policy,
-                    employee=target_employee,
-                    priority=data.get("priority", 100),
-                    is_active=data.get("is_active", True),
-                )
-            )
-        created = LeavePolicyAssignment.objects.bulk_create(created_items) if created_items else []
+            try:
+                # Keep the same scope, dates, conflict rules and balance setup as a single save.
+                # A rejected row rolls back its complete write; other valid rows retain 207 semantics.
+                with transaction.atomic():
+                    item = save_hr_admin_leave_policy_assignment(employee, serializer.validated_data)
+            except serializers.ValidationError as exc:
+                errors.append({"row": index, "message": exc.detail})
+            except DjangoValidationError as exc:
+                errors.append({"row": index, "message": getattr(exc, "message_dict", None) or exc.messages})
+            except IntegrityError as exc:
+                # A concurrent assignment can win after the domain preview. The existing
+                # PostgreSQL guard stays authoritative; unrelated integrity failures still surface.
+                diagnostic = getattr(getattr(exc, "__cause__", None), "diag", None)
+                message = getattr(diagnostic, "message_primary", "") or str(exc)
+                if not message.startswith("overlapping equal-priority policy assignment rejected"):
+                    raise
+                errors.append({"row": index, "message": "Another assignment now overlaps at the same priority. Refresh the conflict preview and retry only this rejected row."})
+            else:
+                created.append(item)
         return response.Response(
             {
                 "created_count": len(created),
@@ -17560,7 +17595,7 @@ class HrAdminLeaveBalanceListView(HrAdminContextMixin, APIView):
             "employee",
             "leave_policy",
             "leave_policy__leave_type",
-        ).order_by("employee__first_name", "leave_policy__name", "-period_year")
+        ).order_by("employee__first_name", "leave_policy__name", "-period_year", "id")
 
         employee_id = request.query_params.get("employee_id")
         if employee_id:
@@ -20496,20 +20531,28 @@ class MeLeaveRequestListCreateView(EmployeeContextMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         page, page_size = _get_page_params(request)
         status_filter = (request.query_params.get("status") or "").strip()
-        all_items = get_employee_leave_requests(employee)
-        items = all_items
-        if status_filter and status_filter != "all":
-            items = [item for item in all_items if item["status"] == status_filter]
-        status_counts = {
-            "all": len(all_items),
-            "pending": sum(1 for item in all_items if item["status"] == LeaveRequestStatus.PENDING),
-            "approved": sum(1 for item in all_items if item["status"] == LeaveRequestStatus.APPROVED),
-            "rejected": sum(1 for item in all_items if item["status"] == LeaveRequestStatus.REJECTED),
-            "withdrawn": sum(1 for item in all_items if item["status"] == LeaveRequestStatus.WITHDRAWN),
-            "cancelled": sum(1 for item in all_items if item["status"] == LeaveRequestStatus.CANCELLED),
-            "partially_approved": sum(1 for item in all_items if item["status"] == LeaveRequestStatus.PARTIALLY_APPROVED),
-        }
-        payload = _build_paginated_payload(items, page=page, page_size=page_size, extra={"status_counts": status_counts})
+        query = EmployeeLeaveHistoryQuery(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        filters = query.validated_data
+        all_items = employee_leave_history_queryset(employee)
+        counts = dict(all_items.order_by().values_list("status").annotate(total=Count("id")))
+        status_counts = {key: counts.get(key, 0) for key in (
+            "pending", "approved", "rejected", "withdrawn", "cancelled", "partially_approved")}
+        status_counts["all"] = sum(counts.values())
+        items = filter_employee_leave_history(all_items, filters, status_filter)
+        calendar_days = employee_leave_calendar(items, filters["month"]) if filters.get("month") else None
+        if day := filters.get("day"):
+            items = items.filter(start_date__lte=day, end_date__gte=day)
+        total_count = items.count()
+        offset = (page - 1) * page_size
+        ids = list(items.values_list("id", flat=True)[offset:offset + page_size])
+        payload = {"items": get_employee_leave_requests(employee, request_ids=ids), "total_count": total_count,
+            "page": page, "page_size": page_size, "has_next": offset + page_size < total_count,
+            "has_previous": page > 1, "status_counts": status_counts,
+            "filter_types": [{"code": code, "name": name} for code, name in all_items.order_by(
+                "leave_type__name", "leave_type__code").values_list("leave_type__code", "leave_type__name").distinct()]}
+        if calendar_days is not None:
+            payload["calendar_days"] = calendar_days
         return response.Response(LeaveRequestHistoryListSerializer(payload).data)
 
     def post(self, request):
@@ -20923,7 +20966,10 @@ class ManagerLeaveRequestApproveView(ManagerDecisionMixin, APIView):
         def operation():
             if not self.ensure_leave_request_scope(leave_request):
                 return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
-            result = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=True, comment=comment)
+            try:
+                result = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=True, comment=comment)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError(getattr(exc, "message_dict", None) or {"detail": exc.messages})
             payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
             return response.Response(MutationResultSerializer(payload).data)
         return self.execute_idempotent_decision(request=request, actor=actor, action="mss.leave.approve", item_id=leave_request.id, comment=comment, operation=operation)
@@ -20944,7 +20990,10 @@ class ManagerLeaveRequestRejectView(ManagerDecisionMixin, APIView):
         def operation():
             if not self.ensure_leave_request_scope(leave_request):
                 return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
-            result = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=False, comment=comment)
+            try:
+                result = resolve_leave_request(leave_request=leave_request, actor_employee=actor, approve=False, comment=comment)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError(getattr(exc, "message_dict", None) or {"detail": exc.messages})
             payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
             return response.Response(MutationResultSerializer(payload).data)
         return self.execute_idempotent_decision(request=request, actor=actor, action="mss.leave.reject", item_id=leave_request.id, comment=comment, operation=operation)

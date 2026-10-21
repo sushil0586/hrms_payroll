@@ -282,16 +282,19 @@ export async function getEssDashboard(params?: {
 }
 
 // Leave workspace reads only its own contracts; do not load legacy attendance options.
-export async function getEssLeaveWorkspace(params: { status: string; page: number; requestId?: string }) {
+export async function getEssLeaveWorkspace(params: { status: string; page: number; requestId?: string } & import("@/lib/ui/leave-history-filters").LeaveHistoryFilters) {
+  const { requestId: _requestId, ...historyFilters } = params;
+  void _requestId;
+  const historyQuery = (page: number) => buildQueryString({ ...historyFilters, status: params.status === "all" ? undefined : params.status, page, page_size: 10 });
   const [dashboard, requests, types, detail] = await Promise.all([
     apiGet<EmployeeDashboard>("/me/dashboard/", 15_000),
-    apiGet<EssLeaveRequestListResponse>(`/me/leave-requests/${buildQueryString({ status: params.status === "all" ? undefined : params.status, page: params.page, page_size: 10 })}`, 15_000),
+    apiGet<EssLeaveRequestListResponse>(`/me/leave-requests/${historyQuery(params.page)}`, 15_000),
     apiGet<EssLeaveTypeOption[]>("/me/leave-types/", 15_000),
     params.requestId ? apiGet<LeaveRequestItem>(`/me/leave-requests/${params.requestId}/`, 15_000) : Promise.resolve(null),
   ]);
   const lastPage = Math.max(1, Math.ceil(requests.data.total_count / requests.data.page_size));
   const history = params.page > lastPage
-    ? await apiGet<EssLeaveRequestListResponse>(`/me/leave-requests/${buildQueryString({ status: params.status === "all" ? undefined : params.status, page: lastPage, page_size: 10 })}`, 15_000)
+    ? await apiGet<EssLeaveRequestListResponse>(`/me/leave-requests/${historyQuery(lastPage)}`, 15_000)
     : requests;
   return { dashboard: dashboard.data, requests: history.data, types: types.data, detail: detail?.data ?? null,
     state: dashboard.state === "live" && history.state === "live" && types.state === "live" ? "live" as const : "demo" as const };
@@ -2445,6 +2448,8 @@ function getDemoData<T>(path: string): T {
       config_snapshot: {
         version: 1,
         approval: {
+          auto_approve_enabled: false,
+          auto_approve_after_hours: null,
           default_route: "manager_only",
           escalation_route: "manager_then_hr",
           escalate_when_units_gte: "3.00",

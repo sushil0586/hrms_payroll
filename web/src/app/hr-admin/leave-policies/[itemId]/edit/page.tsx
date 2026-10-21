@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { leavePolicyToFormValue } from "@/app/hr-admin/leave-policies/form-values";
@@ -16,13 +15,13 @@ export default async function HrAdminEditLeavePolicyPage({ params }: PageProps) 
   if (!itemResult.data?.id) notFound();
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
         title="Edit leave policy"
         description="Refine enforceable leave rules without changing application logic in code."
-        actions={<Link className="button button--secondary" href="/hr-admin/leave-policies">Back to leave policies</Link>}
-        pills={["Rule refinement", "Eligibility tuning", "Assignment-linked policy"]}
+        actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/leave-policies">Back to leave policies</a>}
       />
       <LeavePolicyForm initialValue={leavePolicyToFormValue(itemResult.data)} item={itemResult.data} itemId={itemId} mode="edit" options={optionsResult.data} />
     </main>

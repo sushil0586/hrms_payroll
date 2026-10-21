@@ -1,0 +1,99 @@
+/* Shared shell only. Page content/forms keep their existing contracts and styles. */
+:root {
+  --ds-shell-width: 224px;
+  --ds-shell-header-height: 64px;
+  --ds-shell-canvas: #eceff6;
+  --ds-shell-navigation: #24243b;
+  --ds-shell-navigation-text: #d9d7e9;
+  --ds-shell-navigation-muted: #b9b4d2;
+  --ds-shell-navigation-hover: #34324f;
+  --ds-shell-navigation-active: #443c6b;
+  --ds-shell-navigation-selected-text: #f4efff;
+  --ds-shell-navigation-indicator: #c3b4ff;
+  --ds-shell-navigation-divider: #45415e;
+  --ds-shell-header: #f7f8fc;
+  --ds-shell-search: #eef0f7;
+}
+.accerio-shell.workspace-tone.app-shell--workspace {
+  grid-template-columns: var(--ds-shell-width) minmax(0, 1fr);
+  gap: 0; padding: 0; background: var(--ds-shell-canvas);
+  font-family: var(--font-sans);
+}
+.accerio-shell.workspace-tone .app-sidebar--workspace {
+  display: flex; flex-direction: column; position: sticky; top: 0;
+  height: 100dvh; min-height: 0; overflow: hidden;
+  padding: var(--space-5) var(--space-3) var(--space-3); gap: 0;
+  border: 0; border-radius: 0; background: var(--ds-shell-navigation); box-shadow: none;
+}
+.accerio-shell.workspace-tone .app-sidebar__brand { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2); margin: 0 0 var(--space-4); border: 0; }
+.accerio-shell.workspace-tone .brand-mark { width: 34px; height: 34px; min-width: 34px; display: grid; place-items: center; padding: 0; background: var(--ds-brand); border-radius: var(--ds-radius-control); box-shadow: none; }
+.accerio-shell.workspace-tone .brand-mark .workspace-brand-initial { display: block; width: auto; height: auto; border: 0; border-radius: 0; background: transparent; color: var(--ds-surface); font-size: 24px; font-weight: 700; line-height: 1; transform: none; }
+.accerio-shell.workspace-tone .app-sidebar__brand strong { color: var(--ds-surface); font-size: 24px; line-height: 1.2; letter-spacing: -.04em; }
+.accerio-shell.workspace-tone .app-sidebar__brand p { margin: var(--space-1) 0 0; color: var(--ds-shell-navigation-muted); font-size: var(--type-size-xs); }
+.accerio-shell.workspace-tone .app-sidebar__nav { display: flex; flex-direction: column; flex: 1; min-height: 0; max-height: none; overflow-y: auto; gap: var(--space-2); scrollbar-width: thin; }
+.accerio-shell.workspace-tone .nav-group--collapsible { margin: 0; padding: 0; border: 0; background: transparent; }
+.accerio-shell.workspace-tone .nav-group__summary { min-height: 36px; padding: var(--space-2); color: var(--ds-shell-navigation-muted); }
+.accerio-shell.workspace-tone .nav-group__title { color: inherit; font-size: var(--type-size-xs); letter-spacing: .08em; line-height: 1.5; }
+.accerio-shell.workspace-tone .nav-group__chevron { color: inherit; }
+.accerio-shell.workspace-tone .nav-group__items { padding: 0; display: grid; gap: var(--space-1); }
+.accerio-shell.workspace-tone .nav-item { min-height: 42px; display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2); border: 1px solid transparent; border-radius: var(--ds-radius-control); background: transparent; color: var(--ds-shell-navigation-text); box-shadow: none; }
+.accerio-shell.workspace-tone .nav-item:hover { background: var(--ds-shell-navigation-hover); }
+.accerio-shell.workspace-tone .nav-item--active { background: var(--ds-shell-navigation-active); color: var(--ds-shell-navigation-selected-text); }
+.accerio-shell.workspace-tone .nav-item--active::before { display: block; content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 20px; transform: translateY(-50%); border-radius: var(--ds-radius-control); background: var(--ds-shell-navigation-indicator); }
+.accerio-shell.workspace-tone .nav-item__glyph { min-width: 20px; width: 20px; height: 20px; padding: 0; border: 0; background: transparent; color: inherit; box-shadow: none; }
+.accerio-shell.workspace-tone .nav-item__glyph svg { width: 18px; height: 18px; }
+.accerio-shell.workspace-tone .nav-item:hover .nav-item__glyph { background: transparent; color: inherit; transform: none; box-shadow: none; }
+.accerio-shell.workspace-tone .nav-item__content { min-width: 0; }
+.accerio-shell.workspace-tone .nav-item__content strong { color: inherit; font-size: var(--type-size-md); line-height: 1.45; font-weight: 560; white-space: normal; }
+.accerio-shell.workspace-tone .nav-item__content small { display: block; color: var(--ds-shell-navigation-muted); font-size: var(--type-size-xs); }
+.accerio-shell.workspace-tone .nav-item--disabled { opacity: .6; cursor: not-allowed; }
+.accerio-shell.workspace-tone .app-sidebar__footer { display: block; margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--ds-shell-navigation-divider); }
+.workspace-shell-utility { display: flex; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); font-size: var(--type-size-xs); color: var(--ds-shell-navigation-text); }
+.accerio-shell.workspace-tone .app-main--workspace { display: flex; flex-direction: column; min-height: 100dvh; min-width: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--ds-shell-canvas); }
+.accerio-shell.workspace-tone .app-topbar--workspace { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-4); position: sticky; top: 0; z-index: 30; min-height: var(--ds-shell-header-height); height: auto; margin: 0; padding: var(--space-2) var(--space-5); border: 0; border-bottom: 1px solid var(--ds-border); border-radius: 0; background: var(--ds-shell-header); box-shadow: none; backdrop-filter: none; }
+.accerio-shell.workspace-tone .topbar-context { display: flex; order: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; height: auto; min-height: 0; border: 0; padding: 0; background: transparent; }
+.accerio-shell.workspace-tone .topbar-context__label { display: none; }
+.accerio-shell.workspace-tone .topbar-context strong { font-size: var(--type-size-md); font-weight: 600; color: var(--ds-text); white-space: nowrap; }
+.accerio-shell.workspace-tone .workspace-search { flex: 1; min-width: 160px; max-width: 360px; width: auto; order: 0; }
+.accerio-shell.workspace-tone .search-chip--calm { display: flex; height: 38px; min-height: 38px; padding: 0 var(--space-3); gap: var(--space-2); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-shell-search); box-shadow: none; }
+.accerio-shell.workspace-tone .workspace-search__input { min-width: 0; min-height: 0; height: 34px; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: var(--type-size-sm); color: var(--ds-text); }
+.accerio-shell.workspace-tone .workspace-search__input::placeholder { color: var(--ds-text-muted); }
+.accerio-shell.workspace-tone .workspace-search__panel { z-index: 40; top: calc(100% + var(--space-2)); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); background: var(--ds-surface); color: var(--ds-text); max-height: min(65dvh, 480px); overflow-y: auto; }
+.accerio-shell.workspace-tone .topbar-actions--workspace { display: flex; flex-wrap: wrap; min-width: 0; max-width: 100%; align-items: center; justify-content: flex-end; margin-left: auto; gap: var(--space-2); order: 0; }
+.accerio-shell.workspace-tone .topbar-actions--workspace > .button,
+.accerio-shell.workspace-tone .topbar-actions--workspace .button { height: auto; min-height: 36px; padding: var(--space-2) var(--space-3); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-surface); color: var(--ds-text); font-size: var(--type-size-sm); box-shadow: none; }
+.accerio-shell.workspace-tone .user-chip--workspace { display: flex; height: auto; min-height: 36px; gap: var(--space-2); padding: 0; border: 0; background: transparent; box-shadow: none; }
+.accerio-shell.workspace-tone .user-chip__avatar { width: 32px; height: 32px; min-width: 32px; background: var(--ds-brand-soft); color: var(--ds-brand); border: 0; font-size: var(--type-size-sm); }
+.accerio-shell.workspace-tone .user-chip strong { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-size-sm); color: var(--ds-text); }
+.accerio-shell.workspace-tone .user-chip small { display: block; font-size: var(--type-size-2xs); color: var(--ds-text-muted); }
+.accerio-shell.workspace-tone .app-content--workspace { flex: 1; min-width: 0; padding: var(--space-4); }
+.accerio-shell.workspace-tone .workspace-shell-footer { display: flex; justify-content: space-between; gap: var(--space-3); margin-top: auto; padding: var(--space-3) var(--space-4); color: var(--ds-text-muted); font-size: var(--type-size-xs); }
+.accerio-shell.workspace-tone :is(.app-sidebar--workspace,.app-topbar--workspace,.workspace-shell-footer) :is(a,button,input,summary):focus-visible { outline: 2px solid var(--ds-brand); outline-offset: 3px; box-shadow: var(--ds-focus); }
+.accerio-shell.workspace-tone .app-sidebar--workspace :is(a,summary):focus-visible { outline-color: var(--ds-shell-navigation-indicator); box-shadow: none; }
+.accerio-shell.workspace-tone .mobile-workspace-nav { display: none; }
+@media(max-width: 1100px) { .accerio-shell.workspace-tone .topbar-context { display: none; } .accerio-shell.workspace-tone .user-chip strong { max-width: 110px; } }
+@media(max-width: 900px) {
+  .accerio-shell.workspace-tone.app-shell--workspace { grid-template-columns: minmax(0, 1fr); }
+  .accerio-shell.workspace-tone .app-sidebar--workspace { display: none; }
+  .accerio-shell.workspace-tone .app-topbar--workspace { flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); position: relative; }
+  .accerio-shell.workspace-tone .workspace-search { max-width: none; flex: 1 1 100%; }
+  .accerio-shell.workspace-tone .search-chip--calm { min-height: 44px; }
+  .accerio-shell.workspace-tone .workspace-search__input { height: 40px; }
+  .accerio-shell.workspace-tone .topbar-actions--workspace { width: 100%; justify-content: flex-start; gap: var(--space-2); }
+  .accerio-shell.workspace-tone .user-chip--workspace { margin-left: auto; }
+  .accerio-shell.workspace-tone .user-chip strong { max-width: 100px; }
+  .accerio-shell.workspace-tone .user-chip small { display: none; }
+  .accerio-shell.workspace-tone .topbar-actions--workspace .button { min-height: 44px; padding-inline: var(--space-2); }
+  .accerio-shell.workspace-tone .mobile-workspace-nav { display: block; position: static; }
+  .accerio-shell.workspace-tone .mobile-workspace-nav__panel { position: absolute; top: calc(100% + var(--space-1)); left: var(--space-3); right: var(--space-3); width: auto; max-width: none; max-height: min(65dvh, 520px); overflow-y: auto; background: var(--ds-surface); color: var(--ds-text); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); z-index: 40; }
+  .accerio-shell.workspace-tone .mobile-workspace-nav__link { color: var(--ds-text); min-height: 44px; padding: var(--space-3); overflow-wrap: anywhere; }
+  .accerio-shell.workspace-tone .mobile-workspace-nav__link--active { background: var(--ds-brand-soft); color: var(--ds-brand); }
+  .accerio-shell.workspace-tone .app-content--workspace { padding: var(--space-3); }
+}
+@media(max-width: 360px) { .accerio-shell.workspace-tone .user-chip strong { max-width: 60px; } .accerio-shell.workspace-tone .topbar-actions--workspace { gap: var(--space-1); } }
+@media(prefers-reduced-motion: reduce) { .accerio-shell.workspace-tone :is(.app-sidebar--workspace,.app-topbar--workspace) * { transition: none; animation: none; scroll-behavior: auto; } }
+.accerio-shell.workspace-tone .brand-mark--calm::before,
+.accerio-shell.workspace-tone .brand-mark--calm::after { content: none; display: none; }
+
+/* Keyboard hints remain readable in every consuming workspace. */
+.accerio-shell.workspace-tone .search-chip kbd { color: var(--ds-text-muted); background: var(--ds-surface); border-color: var(--ds-border); }

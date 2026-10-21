@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -40,9 +42,9 @@ function statusTone(item: HrAdminHolidayCalendar): "success" | "neutral" {
 export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, options, state }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const [year, setYear] = useState("all");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
+  const [year, setYear] = useWorkspaceQueryFilter("year", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
   const createModalOpen = searchParams.get("calendarModal") === "create";
   const modalEditItem = canManagePolicies && editItem ? editItem : null;
@@ -83,7 +85,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
 
   return (
     <section className="section queue-layout attendance-holiday-calendars-workbench">
-      <div className="attendance-summary-strip" aria-label="Holiday calendar summary">
+      <div className="attendance-summary-strip" role="group" aria-label="Holiday calendar summary">
         <span><strong>{items.length}</strong> calendars</span>
         <span><strong>{activeCount}</strong> active</span>
         <span><strong>{holidayCount}</strong> holiday rows</span>
@@ -135,16 +137,16 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <section className="panel-card-soft attendance-directory-panel">
-          <div className="attendance-directory-table-wrap">
-            <table className="workspace-table attendance-directory-table">
+          <WorkspaceTableScrollRegion label="Holiday calendars, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region">
+            <table className="workspace-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
-                  <th>Calendar</th>
-                  <th>Scope</th>
-                  <th>Year</th>
-                  <th>Holiday rows</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                  <th scope="col">Calendar</th>
+                  <th scope="col">Scope</th>
+                  <th scope="col">Year</th>
+                  <th scope="col">Holiday rows</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,7 +173,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
                 ) : null}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         </section>
 
         {selectedItem ? (

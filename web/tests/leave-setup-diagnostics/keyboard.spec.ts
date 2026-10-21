@@ -1,0 +1,12 @@
+import {test,expect} from '@playwright/test';
+import {writeFileSync} from 'node:fs';
+import path from 'node:path';
+import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona} from '../helpers/isolated-qa-workspace';
+test('record native keyboard review focus and activation',async({page},info)=>{
+ test.setTimeout(180000);const fixture=await provisionIsolatedQaWorkspace(info);const evidence=path.resolve(__dirname,'../../../docs/qa/evidence/hr-admin-standardization/leave-setup');const rounds:unknown[]=[];
+ try {const user=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);
+ await page.addInitScript(()=>{for(const type of ['focusin','keydown','keyup','click','pageshow'])addEventListener(type,event=>{const target=event.target as HTMLElement;const active=document.activeElement as HTMLElement|null;const key='qa.leave.keyboard';const logs=JSON.parse(sessionStorage.getItem(key)||'[]');logs.push({type,key:(event as KeyboardEvent).key,target:target?.tagName,text:target?.textContent?.slice(0,65),active:active?.tagName,activeText:active?.textContent?.slice(0,65),href:target?.closest?.('a')?.getAttribute('href'),url:location.href,time:performance.now()});sessionStorage.setItem(key,JSON.stringify(logs.slice(-80)));},true);});
+ for(let round=0;round<4;round++){await page.setViewportSize({width:390,height:667});await page.goto('/hr-admin/leave-requests?status=pending');await page.getByRole('link',{name:/Inspect leave request/}).first().click();const review=page.getByRole('complementary',{name:'Leave request detail'}).getByRole('link',{name:'Review',exact:true});await review.focus();const before=await page.evaluate(()=>({tag:document.activeElement?.tagName,text:document.activeElement?.textContent,href:document.activeElement?.getAttribute('href')}));await page.keyboard.press('Enter');let opened=true;try{await expect(page.getByRole('dialog',{name:'Review leave request'})).toBeVisible();}catch{opened=false;}rounds.push({round,before,opened,events:await page.evaluate(()=>JSON.parse(sessionStorage.getItem('qa.leave.keyboard')||'[]'))});writeFileSync(path.join(evidence,'keyboard-diagnostic-events.json'),JSON.stringify(rounds,null,2));if(!opened){await page.screenshot({path:path.join(evidence,'keyboard-diagnostic-failure.png')});break;}}
+ expect(rounds.every((r:unknown)=>(r as {opened:boolean}).opened)).toBe(true);
+ }finally{await cleanupIsolatedQaWorkspace(fixture);}
+});

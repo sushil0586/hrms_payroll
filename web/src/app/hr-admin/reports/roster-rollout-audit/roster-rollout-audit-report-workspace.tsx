@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -77,13 +79,13 @@ export function RosterRolloutAuditReportWorkspace({
   rollouts: HrAdminShiftRosterRollout[];
   templates: HrAdminShiftRosterTemplate[];
 }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All");
-  const [assignmentKind, setAssignmentKind] = useState("All");
-  const [templateStatus, setTemplateStatus] = useState("All");
-  const [primaryState, setPrimaryState] = useState("All");
-  const [risk, setRisk] = useState("All");
-  const [sortBy, setSortBy] = useState("created");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "All");
+  const [assignmentKind, setAssignmentKind] = useWorkspaceQueryFilter("assignmentKind", "All");
+  const [templateStatus, setTemplateStatus] = useWorkspaceQueryFilter("templateStatus", "All");
+  const [primaryState, setPrimaryState] = useWorkspaceQueryFilter("primaryState", "All");
+  const [risk, setRisk] = useWorkspaceQueryFilter("risk", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sortBy", "created");
   const [page, setPage] = useState(1);
 
   const rows = useMemo(() => toRows(rollouts, templates), [rollouts, templates]);
@@ -179,8 +181,8 @@ export function RosterRolloutAuditReportWorkspace({
           <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table payroll-register-table">
+        <WorkspaceTableScrollRegion label="Roster rollout audit, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
+          <table className="workspace-data-table report-catalog-table payroll-register-table">
             <thead><tr><th scope="col">Template</th><th scope="col">Pattern</th><th scope="col">Rollout window</th><th scope="col">Scope</th><th scope="col">Result</th><th scope="col">Risk</th><th scope="col">Actions</th></tr></thead>
             <tbody>
               {visibleRows.map((row) => (
@@ -197,7 +199,7 @@ export function RosterRolloutAuditReportWorkspace({
               {visibleRows.length === 0 ? <tr><td colSpan={7}><div className="empty-state">No roster rollout audit rows match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Roster rollout audit pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

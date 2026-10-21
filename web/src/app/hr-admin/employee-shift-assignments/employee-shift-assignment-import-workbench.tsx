@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useState } from "react";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
@@ -335,17 +336,17 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
         {message ? <div className={`notice${hasFailedRows || lookupFailed ? " notice--error" : " notice--success"}`} role={hasFailedRows || lookupFailed ? "alert" : "status"}><strong>{hasFailedRows || lookupFailed ? "Shift import needs attention." : "Shift import update completed."}</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
-          <div className="table-scroll">
+          <WorkspaceTableScrollRegion label="Employee shift assignments, scroll for more columns" className="table-scroll workspace-table-region">
             <table>
               <thead>
                 <tr>
-                  <th>Row</th>
-                  <th>Employee</th>
-                  <th>Shift</th>
-                  <th>Mode</th>
-                  <th>Window</th>
-                  <th>Status</th>
-                  <th>Message</th>
+                  <th scope="col">Row</th>
+                  <th scope="col">Employee</th>
+                  <th scope="col">Shift</th>
+                  <th scope="col">Mode</th>
+                  <th scope="col">Window</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Message</th>
                 </tr>
               </thead>
               <tbody>
@@ -362,7 +363,7 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
                 ))}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         ) : null}
       </article>
     </section>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 import { createEmptyLeavePolicyValue } from "@/app/hr-admin/leave-policies/form-values";
 import { LeavePolicyForm } from "@/app/hr-admin/leave-policies/leave-policy-form";
@@ -13,13 +12,13 @@ export default async function HrAdminNewLeavePolicyPage() {
   const defaultAccrual = optionsResult.data.accrual_frequencies[0]?.value || "none";
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create leave policy"
         description="Define leave behavior that later assignments will apply to branches, departments, grades, or employees."
-        actions={<Link className="button button--secondary" href="/hr-admin/leave-policies">Back to leave policies</Link>}
-        pills={["Entitlement logic", "Eligibility controls", "Assignment-ready behavior"]}
+        actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/leave-policies">Back to leave policies</a>}
       />
       <LeavePolicyForm initialValue={createEmptyLeavePolicyValue(defaultStatus, defaultAccrual)} mode="create" options={optionsResult.data} />
     </main>

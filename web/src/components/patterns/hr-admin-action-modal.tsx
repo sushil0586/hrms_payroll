@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 type HrAdminActionModalProps = {
   children: ReactNode;
+  documentNavigation?: boolean;
   closeHref: string;
   footer?: ReactNode;
   eyebrow?: string;
@@ -30,6 +31,7 @@ const focusableSelector = [
 
 export function HrAdminActionModal({
   children,
+  documentNavigation = false,
   closeHref,
   footer,
   eyebrow,
@@ -39,7 +41,7 @@ export function HrAdminActionModal({
   tabs = [],
   className = "",
   onClose,
-  explicitTabOrder = false,
+  explicitTabOrder = true,
   focusableBody = false,
 }: HrAdminActionModalProps) {
   const router = useRouter();
@@ -70,8 +72,12 @@ export function HrAdminActionModal({
       onClose();
       return;
     }
+    if (documentNavigation) {
+      window.location.assign(closeHref);
+      return;
+    }
     router.push(closeHref);
-  }, [closeHref, isDirty, onClose, router]);
+  }, [closeHref, documentNavigation, isDirty, onClose, router]);
 
   useEffect(() => {
     window.addEventListener("hr-admin-modal:request-close", requestClose);
@@ -79,6 +85,8 @@ export function HrAdminActionModal({
   }, [requestClose]);
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    // Nested preview dialogs own their focus trap and Escape handling.
+    if ((event.target as HTMLElement).closest('[role="dialog"]') !== event.currentTarget) return;
     if (event.key === "Escape") {
       event.preventDefault();
       requestClose();
@@ -97,8 +105,8 @@ export function HrAdminActionModal({
       return;
     }
 
-    // Safari may skip buttons in native Tab order. Opt-in consumers can keep
-    // traversal inside the dialog without changing other workspaces. Native
+    // Safari may skip buttons in native Tab order. Shared dialogs keep
+    // traversal explicit by default; consumers can opt out. Native
     // date/time inputs retain internal segment navigation; these consumers
     // place them between ordinary form controls, never at the trap boundary.
     const active = document.activeElement;
@@ -126,7 +134,16 @@ export function HrAdminActionModal({
       <section
         aria-labelledby={labelledBy}
         aria-modal="true"
-        className={`hr-admin-action-modal employee-create-modal employee-maintenance-modal${tabs.length ? " hr-admin-action-modal--with-tabs" : ""}${className ? ` ${className}` : ""}`}
+        className={`accerio-dialog hr-admin-action-modal employee-create-modal employee-maintenance-modal${tabs.length ? " hr-admin-action-modal--with-tabs" : ""}${className ? ` ${className}` : ""}`}
+        onClickCapture={(event) => {
+          if (!documentNavigation || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
+          if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
+          if (new URL(anchor.href, window.location.href).href !== new URL(closeHref, window.location.href).href) return;
+          event.preventDefault();
+          event.stopPropagation();
+          requestClose();
+        }}
         onChange={() => setIsDirty(true)}
         onInput={() => setIsDirty(true)}
         onKeyDown={handleKeyDown}

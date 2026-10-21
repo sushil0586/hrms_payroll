@@ -44,6 +44,8 @@ DEFAULT_LEAVE_POLICY_CONFIG = {
         "escalate_when_units_gte": None,
         "second_level_owner_employee_id": None,
         "hr_owner_employee_id": None,
+        "auto_approve_enabled": False,
+        "auto_approve_after_hours": None,
     },
     "evidence": {
         "attachment_required": False,
@@ -189,6 +191,9 @@ def normalize_leave_policy_config(snapshot) -> dict:
     if escalation_route not in LEAVE_APPROVAL_ROUTES:
         escalation_route = None
 
+    auto_hours = approval_raw.get("auto_approve_after_hours")
+    valid_auto_hours = type(auto_hours) is int and auto_hours > 0
+
     approval_route_when_evidence_required = evidence_raw.get("approval_route_when_evidence_required")
     if approval_route_when_evidence_required not in LEAVE_APPROVAL_ROUTES:
         approval_route_when_evidence_required = None
@@ -241,6 +246,8 @@ def normalize_leave_policy_config(snapshot) -> dict:
             "escalate_when_units_gte": _normalize_decimal_string(approval_raw.get("escalate_when_units_gte")),
             "second_level_owner_employee_id": str(approval_raw.get("second_level_owner_employee_id") or "").strip() or None,
             "hr_owner_employee_id": str(approval_raw.get("hr_owner_employee_id") or "").strip() or None,
+            "auto_approve_enabled": approval_raw.get("auto_approve_enabled") is True and valid_auto_hours,
+            "auto_approve_after_hours": auto_hours if valid_auto_hours else None,
         },
         "evidence": {
             "attachment_required": bool(evidence_raw.get("attachment_required", False)),
@@ -2704,6 +2711,9 @@ def submit_leave_request(
     )
     leave_request.workflow_reference = str(workflow_instance.id)
     leave_request.save(update_fields=["workflow_reference", "updated_at"])
+    from apps.leave_management.auto_approval import arm_leave_auto_approval
+
+    arm_leave_auto_approval(leave_request)
     if manager_membership:
         trigger_notification_event(
             tenant=employee.tenant,
@@ -2721,7 +2731,7 @@ def submit_leave_request(
 
 
 @transaction.atomic
-def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approve: bool, comment: str = "") -> LeaveRequest:
+def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approve: bool, comment: str = "", _automatic_approval: bool = False) -> LeaveRequest:
     """Approves or rejects a leave request."""
 
     leave_request = (
@@ -2729,6 +2739,14 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
         .select_related("employee", "employee__membership", "leave_policy", "leave_policy__leave_type")
         .get(pk=leave_request.pk)
     )
+    automatic_context = None
+    if _automatic_approval:
+        if actor_employee is not None or not approve:
+            raise ValidationError({"action": "Invalid automatic leave decision."})
+        from apps.leave_management.auto_approval import due_leave_auto_approval_context, SYSTEM_ACTOR
+
+        automatic_context = due_leave_auto_approval_context(leave_request)
+        comment = f"Automatically approved after {automatic_context['hours']} elapsed hours under the recorded leave policy."
     action = WorkflowAction.APPROVE if approve else WorkflowAction.REJECT
     previous_status = leave_request.status
     request_action = str((leave_request.metadata or {}).get("request_action") or "leave_request")
@@ -2751,7 +2769,7 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
         if workflow_instance:
             workflow_instance = resolve_workflow_action(
                 instance=workflow_instance,
-                actor_identifier=str(actor_employee.membership.user_id) if actor_employee.membership else str(actor_employee.id),
+                actor_identifier=SYSTEM_ACTOR if automatic_context else str(actor_employee.membership.user_id) if actor_employee.membership else str(actor_employee.id),
                 action=action,
                 comment=comment,
             )
@@ -2806,6 +2824,12 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
             "updated_at",
         ]
     )
+    if automatic_context:
+        leave_request.metadata = {
+            **(leave_request.metadata or {}),
+            "automatic_approvals": [*(leave_request.metadata or {}).get("automatic_approvals", []), automatic_context],
+        }
+        leave_request.save(update_fields=["metadata", "updated_at"])
     if request_action == "cancellation_request":
         if is_final_approval:
             if leave_request.allocations.filter(status=LeaveRequestAllocation.Status.CONSUMED).exists():
@@ -2850,6 +2874,9 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
                     requested_units=leave_request.requested_units,
                     leave_request=leave_request,
                 )
+    from apps.leave_management.auto_approval import arm_leave_auto_approval
+
+    arm_leave_auto_approval(leave_request)
     if leave_request.employee.membership:
         fallback_body = (
             "Your leave cancellation was approved."
@@ -2878,7 +2905,7 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
         )
     from apps.common.selectors import record_saas_commercial_audit_event
 
-    actor_identifier = (
+    actor_identifier = SYSTEM_ACTOR if automatic_context else (
         actor_employee.membership.user.username
         if actor_employee and actor_employee.membership and actor_employee.membership.user
         else actor_employee.employee_code
@@ -2902,6 +2929,7 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
             "decision": "approved" if approve else "rejected",
             "comment_present": bool(comment),
             "workflow_reference": leave_request.workflow_reference or "",
+            **({"automatic_approval": automatic_context} if automatic_context else {}),
         },
     )
     return leave_request

@@ -10,7 +10,12 @@ export async function GET(request: NextRequest) {
   if (!token) {
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
-  const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/leave-policy-assignments/`, {
+  const query = new URLSearchParams();
+  for (const key of ["q", "status", "scope", "risk", "page", "page_size", "employee_id", "leave_policy_id"]) {
+    const value = request.nextUrl.searchParams.get(key);
+    if (value !== null) query.set(key, value);
+  }
+  const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/leave-policy-assignments/${query.size ? `?${query}` : ""}`, {
     headers: { Authorization: `Token ${token}` },
     cache: "no-store",
   });

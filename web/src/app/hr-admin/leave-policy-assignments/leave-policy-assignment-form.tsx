@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFieldErrors, mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+import { WorkspaceFormControls } from "@/components/patterns/workspace-form-controls";
 
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
+import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
+import { useValidationFocus } from "@/lib/ui/use-validation-focus";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
@@ -26,14 +31,8 @@ type Props = {
 
 type LeavePolicyAssignmentField = "leave_policy_id" | "priority";
 
-function getErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to save leave policy assignment.";
-  const conflictCheck = (payload as { conflict_check?: { summary?: string } }).conflict_check;
-  if (conflictCheck?.summary) return conflictCheck.summary;
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) return String(value[0]);
-  }
-  return String((payload as Record<string, unknown>).detail || "Unable to save leave policy assignment.");
+function getErrorMessage(payload: unknown, status: number) {
+  return mutationErrorMessage(payload, status, "Unable to save leave policy assignment.");
 }
 
 function selectOptions(items: Array<{ id: string; name: string }>) {
@@ -63,8 +62,11 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeavePolicyAssignmentField>>({});
+  const formRef = useValidationFocus(fieldErrors);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const feedbackRef = useFeedbackFocus(error, isSubmitting, hasFieldErrors(fieldErrors));
   const isSubmittingRef = useRef(false);
+  const cancelConflictCheck = useRef<(() => void) | null>(null);
   const [conflictCheck, setConflictCheck] = useState<HrAdminLeavePolicyAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
   const [conflictError, setConflictError] = useState("");
@@ -81,6 +83,8 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
     setConflictError("");
     setIsCheckingConflicts(false);
     setFieldErrors((current) => ({ ...current, [key as LeavePolicyAssignmentField]: undefined }));
+    setError("");
+    setToast(null);
     setFormValue((current) => {
       const nextValue = { ...current, [key]: value };
       if (key === "employee_id" && value) {
@@ -108,7 +112,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
   }
 
   useEffect(() => {
-    if (!formValue.leave_policy_id || !formValue.is_active) {
+    if (!formValue.leave_policy_id || !formValue.is_active || isSubmitting) {
       return;
     }
 
@@ -127,6 +131,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
           signal: controller.signal,
         });
         const payload = (await response.json().catch(() => null)) as HrAdminLeavePolicyAssignmentConflictCheck | null;
+        if (controller.signal.aborted) return;
         if (!response.ok || !payload) {
           setConflictCheck(null);
           setConflictError("Unable to check overlapping leave assignments.");
@@ -134,7 +139,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
         }
         setConflictCheck(payload);
       } catch (requestError) {
-        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+        if (controller.signal.aborted || (requestError instanceof DOMException && requestError.name === "AbortError")) return;
         setConflictCheck(null);
         setConflictError("Unable to check overlapping leave assignments.");
       } finally {
@@ -142,11 +147,26 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
       }
     }, 250);
 
+    const stop = () => { window.clearTimeout(timeoutId); controller.abort(); };
+    cancelConflictCheck.current = stop;
+    window.addEventListener("pagehide", stop);
     return () => {
-      window.clearTimeout(timeoutId);
-      controller.abort();
+      window.removeEventListener("pagehide", stop);
+      stop();
+      if (cancelConflictCheck.current === stop) cancelConflictCheck.current = null;
     };
-  }, [conflictRetry, formValue, itemId]);
+  }, [conflictRetry, formValue, itemId, isSubmitting]);
+
+  useEffect(() => {
+    const restore = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+      setConflictRetry(value => value + 1);
+    };
+    window.addEventListener("pageshow", restore);
+    return () => window.removeEventListener("pageshow", restore);
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -155,22 +175,23 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
     }
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
-      setToast({ title: "Save failed.", message: conflictCheck.summary, tone: "error" });
+      setToast({ title: "Save needs attention.", message: conflictCheck.summary, tone: "error" });
       return;
     }
+    cancelConflictCheck.current?.();
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
     setFieldErrors({});
     const nextErrors: FieldErrors<LeavePolicyAssignmentField> = {
       leave_policy_id: requireValue(formValue.leave_policy_id, "Select the leave policy for this assignment."),
-      priority: formValue.priority < 0 ? "Priority cannot be negative." : undefined,
+      priority: !Number.isInteger(formValue.priority) || formValue.priority < 0 ? "Enter priority as a whole number of zero or more." : undefined,
     };
     if (hasFieldErrors(nextErrors)) {
       setFieldErrors(nextErrors);
       const message = "Review the highlighted leave policy assignment fields and try again.";
       setError(message);
-      setToast({ title: "Save failed.", message, tone: "error" });
+      setToast({ title: "Review the highlighted fields.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -183,18 +204,19 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
         body: JSON.stringify(formValue),
       });
     } catch {
-      const message = "Unable to reach the server. Check your connection and try again.";
+      const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Save failed.", message, tone: "error" });
+      setToast({ title: "Save not confirmed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = getErrorMessage(payload);
+    if (!response.ok || typeof payload?.id !== "string" || !payload.id) {
+      setFieldErrors(apiFieldErrors(payload, Object.keys(nextErrors) as LeavePolicyAssignmentField[]));
+      const message = response.ok ? "The server returned an incomplete confirmation. Check the latest list before retrying; your entries are still here." : getErrorMessage(payload, response.status);
       setError(message);
-      setToast({ title: "Save failed.", message, tone: "error" });
+      setToast({ title: response.ok || response.status >= 500 ? "Save not confirmed." : "Unable to save.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -204,21 +226,22 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
       message: mode === "create" ? "Leave assignment created. Returning to the assignment list." : "Leave assignment saved. Returning to the assignment list.",
       tone: "success",
     });
-    setIsSubmitting(false);
-    isSubmittingRef.current = false;
-    router.push(returnPath);
+    // Keep checks suspended until the destination owns the document.
+    rememberActionSuccess(returnPath, typeof payload.id === "string" ? payload.id : itemId ?? "", "Leave assignment saved.", mode === "create" ? "Leave assignment created and available in this list." : "Your changes to this leave assignment were saved.");
+    window.location.assign(returnPath);
   }
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
   return (
     <>
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+      <form ref={formRef} className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+      <WorkspaceFormControls>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -234,12 +257,12 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
         <div className="form-shell-card__grid">
           <FormSection title="Policy and scope" description="Choose the target policy first, then narrow the structure or employee slice it should govern.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Leave policy</span><select aria-invalid={Boolean(fieldErrors.leave_policy_id)} className="input-control" value={formValue.leave_policy_id ?? ""} onChange={(e) => update("leave_policy_id", e.target.value || null)}>{selectOptions(options.leave_policies ?? [])}</select>{fieldErrors.leave_policy_id ? <span className="field-error-text">{fieldErrors.leave_policy_id}</span> : null}</label>
-              <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>{hasEmployeeOverride ? "Employee override ignores organization filters." : "Branch options narrow to the selected legal entity."}</FieldHint></label>
-              <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={hasEmployeeOverride || Boolean(branchWarning)} value={hasEmployeeOverride ? "" : formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{hasEmployeeOverride ? "Employee override ignores branch scope." : branchWarning ?? "Branch scope is optional unless the leave policy should apply only to a branch."}</FieldHint></label>
-              <label className="form-field"><span className="muted">Department</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(options.departments)}</select></label>
-              <label className="form-field"><span className="muted">Grade</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
-              <label className="form-field"><span className="muted">Employment type</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>
+              <label className="form-field"><span className="muted">Leave policy</span><select aria-label="Leave policy" aria-invalid={Boolean(fieldErrors.leave_policy_id)} aria-describedby={fieldErrors.leave_policy_id ? "leave-assignment-leave_policy_id-error" : undefined} className="input-control" value={formValue.leave_policy_id ?? ""} onChange={(e) => update("leave_policy_id", e.target.value || null)}>{selectOptions(options.leave_policies ?? [])}</select>{fieldErrors.leave_policy_id ? <span className="field-error-text" id="leave-assignment-leave_policy_id-error">{fieldErrors.leave_policy_id}</span> : null}</label>
+              <label className="form-field"><span className="muted">Legal entity</span><select aria-label="Legal entity" className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>{hasEmployeeOverride ? "Employee override ignores organization filters." : "Branch options narrow to the selected legal entity."}</FieldHint></label>
+              <label className="form-field"><span className="muted">Branch</span><select aria-label="Branch" className="input-control" disabled={hasEmployeeOverride || Boolean(branchWarning)} value={hasEmployeeOverride ? "" : formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{hasEmployeeOverride ? "Employee override ignores branch scope." : branchWarning ?? "Branch scope is optional unless the leave policy should apply only to a branch."}</FieldHint></label>
+              <label className="form-field"><span className="muted">Department</span><select aria-label="Department" className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(options.departments)}</select></label>
+              <label className="form-field"><span className="muted">Grade</span><select aria-label="Grade" className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
+              <label className="form-field"><span className="muted">Employment type</span><select aria-label="Employment type" className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>
               <EmployeeSearchSelect
                 hint={hasEmployeeOverride ? "Employee override clears organization filters." : "Optional. Search only when this policy should target one employee."}
                 label="Employee override"
@@ -247,15 +270,15 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
                 value={formValue.employee_id ?? ""}
                 onChange={(value) => update("employee_id", value || null)}
               />
-              <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
-              <label className="form-field"><span className="muted">Effective from</span><input className="input-control" type="date" value={formValue.effective_from ?? ""} onChange={(e) => update("effective_from", e.target.value || null)} /><FieldHint>Leave blank only for an explicitly classified legacy assignment.</FieldHint></label>
-              <label className="form-field"><span className="muted">Effective to</span><input className="input-control" min={formValue.effective_from ?? undefined} type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} /></label>
+              <label className="form-field"><span className="muted">Priority</span><input aria-label="Priority" aria-invalid={Boolean(fieldErrors.priority)} aria-describedby={fieldErrors.priority ? "leave-assignment-priority-error" : undefined} className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} />{fieldErrors.priority ? <span className="field-error-text" id="leave-assignment-priority-error">{fieldErrors.priority}</span> : null}</label>
+              <label className="form-field"><span className="muted">Effective from</span><input aria-label="Effective from" className="input-control" type="date" value={formValue.effective_from ?? ""} onChange={(e) => update("effective_from", e.target.value || null)} /><FieldHint>Leave blank only for an explicitly classified legacy assignment.</FieldHint></label>
+              <label className="form-field"><span className="muted">Effective to</span><input aria-label="Effective to" className="input-control" min={formValue.effective_from ?? undefined} type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} /></label>
             </div>
             {formValue.is_active ? (
               <div aria-busy={isCheckingConflicts} aria-live="polite" className="notice" role="status">
-                <strong>{conflictError ? "Overlap check unavailable." : conflictCheck ? (conflictCheck.has_blocking_conflict ? "Blocking overlap detected." : conflictCheck.has_conflicts ? "Active overlap review." : "Assignment governance check.") : "Checking overlap impact..."}</strong>
+                <strong>{!formValue.leave_policy_id ? "Select a leave policy." : conflictError ? "Overlap check unavailable." : conflictCheck ? (conflictCheck.has_blocking_conflict ? "Blocking overlap detected." : conflictCheck.has_conflicts ? "Active overlap review." : "Assignment governance check.") : "Checking overlap impact..."}</strong>
                 <span className="muted">
-                  {conflictError || (isCheckingConflicts && !conflictCheck
+                  {!formValue.leave_policy_id ? "Choose a leave policy to check assignment overlap." : conflictError || (isCheckingConflicts && !conflictCheck
                     ? "Reviewing active leave assignments for the same leave type."
                     : conflictCheck?.summary ?? "This panel will show whether the current scope overlaps with active assignments for the same leave type.")}
                 </span>
@@ -308,7 +331,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
           </FormSection>
         </div>
 
-        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div ref={feedbackRef} tabIndex={-1} className="notice notice--error" role="alert"><strong>Save needs attention.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Assignment changes go back into the leave policy rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">
@@ -317,6 +340,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
           </div>
         </div>
       </section>
+      </WorkspaceFormControls>
       </form>
     </>
   );

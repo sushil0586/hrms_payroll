@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useState } from "react";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
@@ -364,17 +365,17 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
         {message ? <div className={`notice${hasFailedRows || lookupFailed ? " notice--error" : " notice--success"}`} role={hasFailedRows || lookupFailed ? "alert" : "status"}><strong>{hasFailedRows || lookupFailed ? "Attendance import needs attention." : "Attendance import update completed."}</strong><span>{message}</span></div> : null}
         {!canManageRecords ? <div className="notice"><strong>Read-only attendance view.</strong><span>Imports can be previewed, but committing rows requires attendance record management permission.</span></div> : null}
         {rows.length ? (
-          <div className="table-scroll">
+          <WorkspaceTableScrollRegion label="Attendance records, scroll for more columns" className="table-scroll workspace-table-region">
             <table>
               <thead>
                 <tr>
-                  <th>Row</th>
-                  <th>Employee</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  <th>Timing</th>
-                  <th>Import state</th>
-                  <th>Message</th>
+                  <th scope="col">Row</th>
+                  <th scope="col">Employee</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Timing</th>
+                  <th scope="col">Import state</th>
+                  <th scope="col">Message</th>
                 </tr>
               </thead>
               <tbody>
@@ -391,7 +392,7 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
                 ))}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         ) : null}
       </article>
     </section>

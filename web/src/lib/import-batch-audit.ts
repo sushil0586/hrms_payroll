@@ -33,13 +33,18 @@ export async function sha256Hex(value: string) {
 }
 
 export async function recordImportBatchAudit(input: ImportBatchAuditInput) {
-  const response = await fetch("/api/hr-admin/import-batches", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) {
+  // Nullable confirmation covers HTTP rejection, transport loss and incomplete replies.
+  // A lost reply may still have persisted: never retry this POST automatically.
+  try {
+    const response = await fetch("/api/hr-admin/import-batches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as ImportBatchAudit | null;
+    return payload && typeof payload.id === "string" && payload.id.trim() ? payload : null;
+  } catch {
     return null;
   }
-  return (await response.json()) as ImportBatchAudit;
 }

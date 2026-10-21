@@ -1,10 +1,14 @@
 "use client";
 
-import Link from "next/link";
 
+import { MetricTile } from "@/components/patterns/metric-tile";
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
+import { availableLeaveUnits as availableAfterReserved, leaveUtilizationPercent as utilizationPercent, leaveBalanceState as liabilityState, leaveRiskAssessment as liabilityRisk } from "@/lib/ui/leave-balance-presentation";
 import type { HrAdminLeaveBalance } from "@/lib/types";
 
 const PAGE_SIZE = 10;
@@ -13,7 +17,7 @@ type LeaveReportRow = HrAdminLeaveBalance & {
   availableAfterReserved: number;
   utilizationPercent: number;
   liabilityState: string;
-  liabilityRisk: "High" | "Medium" | "Low";
+  liabilityRisk: string;
 };
 
 function unique(values: string[]) {
@@ -25,35 +29,10 @@ function numeric(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function availableAfterReserved(item: HrAdminLeaveBalance) {
-  return numeric(item.closing_balance) - numeric(item.reserved_amount);
-}
-
-function utilizationPercent(item: HrAdminLeaveBalance) {
-  const earned = numeric(item.opening_balance) + numeric(item.accrued_amount) + numeric(item.carry_forward_amount) + numeric(item.adjustment_amount);
-  if (!earned) return 0;
-  return Math.round((numeric(item.consumed_amount) / earned) * 100);
-}
-
-function liabilityRisk(item: HrAdminLeaveBalance): LeaveReportRow["liabilityRisk"] {
-  const available = availableAfterReserved(item);
-  if (available < 0) return "High";
-  if (numeric(item.reserved_amount) > 0 || available <= 2) return "Medium";
-  return "Low";
-}
-
-function liabilityState(item: HrAdminLeaveBalance) {
-  const available = availableAfterReserved(item);
-  if (available < 0) return "Overdrawn";
-  if (numeric(item.reserved_amount) > 0) return "Reserved";
-  if (available <= 2) return "Low balance";
-  return "Healthy";
-}
-
 function statusClass(status: string) {
-  if (["healthy", "low"].includes(status.toLowerCase())) return "record-chip record-chip--success";
-  if (["reserved", "low balance", "medium"].includes(status.toLowerCase())) return "record-chip record-chip--warning";
-  if (["overdrawn", "high"].includes(status.toLowerCase())) return "record-chip record-chip--danger";
+  if (["no reservations"].includes(status.toLowerCase())) return "record-chip record-chip--success";
+  if (["reserved"].includes(status.toLowerCase())) return "record-chip record-chip--warning";
+  if (["negative available"].includes(status.toLowerCase())) return "record-chip record-chip--danger";
   return "record-chip";
 }
 
@@ -63,7 +42,7 @@ function toReportRow(item: HrAdminLeaveBalance): LeaveReportRow {
     availableAfterReserved: availableAfterReserved(item),
     utilizationPercent: utilizationPercent(item),
     liabilityState: liabilityState(item),
-    liabilityRisk: liabilityRisk(item),
+    liabilityRisk: liabilityRisk(),
   };
 }
 
@@ -72,19 +51,27 @@ function formatUnits(value: string | number) {
 }
 
 export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBalance[] }) {
-  const [query, setQuery] = useState("");
-  const [policy, setPolicy] = useState("All");
-  const [leaveType, setLeaveType] = useState("All");
-  const [periodYear, setPeriodYear] = useState("All");
-  const [risk, setRisk] = useState("All");
-  const [sortBy, setSortBy] = useState("risk");
-  const [page, setPage] = useState(1);
+  const params = useSearchParams();
+  const query = params.get("q") ?? "";
+  const policy = params.get("leave_policy") ?? "All";
+  const leaveType = params.get("leave_type") ?? "All";
+  const periodYear = params.get("period_year") ?? "All";
+  const risk = params.get("liability_risk") ?? "All";
+  const state = params.get("liability_state") ?? "All";
+  const sortBy = params.get("sort") ?? "risk";
+  const parsedPage = Number(params.get("page"));
+  const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  function pageHref(value: number) {
+    const next = new URLSearchParams(params.toString());
+    next.set("page", String(value));
+    return `/hr-admin/reports/leave-balance?${next}`;
+  }
 
   const rows = useMemo(() => items.map(toReportRow), [items]);
   const policies = useMemo(() => ["All", ...unique(rows.map((item) => item.leave_policy_name))], [rows]);
   const leaveTypes = useMemo(() => ["All", ...unique(rows.map((item) => item.leave_type_name))], [rows]);
   const years = useMemo(() => ["All", ...unique(rows.map((item) => String(item.period_year)))], [rows]);
-  const risks = ["All", "High", "Medium", "Low"];
+  const states = ["All", "Negative available", "Reserved", "No reservations"];
 
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -108,7 +95,8 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
         (policy === "All" || item.leave_policy_name === policy) &&
         (leaveType === "All" || item.leave_type_name === leaveType) &&
         (periodYear === "All" || String(item.period_year) === periodYear) &&
-        (risk === "All" || item.liabilityRisk === risk)
+        (risk === "All" || item.liabilityRisk === risk) &&
+        (state === "All" || item.liabilityState === state)
       );
     });
 
@@ -118,10 +106,10 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
       if (sortBy === "closing") return numeric(right.closing_balance) - numeric(left.closing_balance);
       if (sortBy === "utilization") return right.utilizationPercent - left.utilizationPercent;
       if (sortBy === "reserved") return numeric(right.reserved_amount) - numeric(left.reserved_amount);
-      const score = { High: 3, Medium: 2, Low: 1 };
-      return score[right.liabilityRisk] - score[left.liabilityRisk];
+      const score: Record<string, number> = { "Negative available": 3, Reserved: 2, "No reservations": 1 };
+      return score[right.liabilityState] - score[left.liabilityState];
     });
-  }, [leaveType, periodYear, policy, query, risk, rows, sortBy]);
+  }, [leaveType, periodYear, policy, query, risk, state, rows, sortBy]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -134,25 +122,11 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
     if (leaveType !== "All") params.set("leave_type", leaveType);
     if (periodYear !== "All") params.set("period_year", periodYear);
     if (risk !== "All") params.set("liability_risk", risk);
+    if (state !== "All") params.set("liability_state", state);
     params.set("sort", sortBy);
     return `/api/hr-admin/reports/leave-balance?${params.toString()}`;
-  }, [leaveType, periodYear, policy, query, risk, sortBy]);
+  }, [leaveType, periodYear, policy, query, risk, state, sortBy]);
   const manifestHref = `${exportHref}&format=manifest`;
-
-  function updateFilter(action: () => void) {
-    action();
-    setPage(1);
-  }
-
-  function clearFilters() {
-    setQuery("");
-    setPolicy("All");
-    setLeaveType("All");
-    setPeriodYear("All");
-    setRisk("All");
-    setSortBy("risk");
-    setPage(1);
-  }
 
   return (
     <section className="section section--tight" aria-label="Leave balance report workspace">
@@ -160,8 +134,8 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
         <div className="report-command-panel">
           <div>
             <span className="workspace-card__eyebrow">Leave balance</span>
-            <h2>Balance liability and utilization</h2>
-            <p className="section-copy section-copy-soft">Review available balances, reserved units, utilization, and liability risk before exporting or printing the current view.</p>
+            <h2>Balance quantities and utilization</h2>
+            <p className="section-copy section-copy-soft">Amounts use each policy’s configured unit. Quantities are not added across policies or years.</p>
           </div>
           <div className="report-command-panel__actions">
             <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
@@ -170,70 +144,56 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
           </div>
         </div>
 
-        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
-          <article>
-            <span>Balance rows</span>
-            <strong>{filteredRows.length}</strong>
-            <small>{items.length} total employee-policy rows</small>
-          </article>
-          <article>
-            <span>Closing liability</span>
-            <strong>{formatUnits(filteredRows.reduce((sum, item) => sum + numeric(item.closing_balance), 0))}</strong>
-            <small>Total closing units</small>
-          </article>
-          <article>
-            <span>Reserved units</span>
-            <strong>{formatUnits(filteredRows.reduce((sum, item) => sum + numeric(item.reserved_amount), 0))}</strong>
-            <small>Leave already reserved</small>
-          </article>
-          <article>
-            <span>High liability risk</span>
-            <strong>{filteredRows.filter((item) => item.liabilityRisk === "High").length}</strong>
-            <small>Overdrawn balances</small>
-          </article>
+        <div className="workspace-metric-grid" role="group" aria-label="Leave balance summary">
+          <MetricTile label="Balance rows" value={filteredRows.length} trend={`${items.length} total employee-policy rows`} />
+          <MetricTile label="Policies represented" value={new Set(filteredRows.map(item => item.leave_policy_id)).size} trend="Distinct policies in this view" />
+          <MetricTile label="Balances with reservations" value={filteredRows.filter(item => numeric(item.reserved_amount) > 0).length} trend="Rows with reserved quantities" />
+          <MetricTile label="Negative available" value={filteredRows.filter((item) => item.liabilityState === "Negative available").length} trend="Rows below zero after reservations" />
         </div>
 
-        <div className="report-filter-panel" aria-label="Leave balance filters">
+        {risk !== "All" ? <p className="notice" role="status">Legacy risk filter is not assessed. Clear filters to review factual balance states.</p> : null}
+        <WorkspaceFilterForm action="/hr-admin/reports/leave-balance" label="Leave balance filters" className="workspace-filter-form--block">
+          {risk !== "All" ? <input type="hidden" name="liability_risk" value={risk} /> : null}
           <div className="report-filter-panel__header">
             <div>
               <strong>Filter balance ledger</strong>
-              <span>Use policy and leave type filters for liability review; use risk for exception follow-up.</span>
+              <span>Review exact quantities within the relevant policy and year; states describe recorded balances.</span>
             </div>
-            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+            <a data-navigation-mode="document" className="button button--ghost" href="/hr-admin/reports/leave-balance">Clear filters</a>
           </div>
-          <div className="report-filter-grid report-filter-grid--leave">
-            <label className="report-filter-field report-filter-field--wide">
+          <div className="report-filter-grid">
+            <label className="report-filter-field">
               <span>Search leave</span>
-              <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, policy, leave type" />
+              <input className="input-control" type="search" name="q" defaultValue={query} placeholder="Search employee, policy, leave type" />
             </label>
             <label className="report-filter-field">
               <span>Leave policy</span>
-              <select aria-label="Leave policy" className="input-control" value={policy} onChange={(event) => updateFilter(() => setPolicy(event.target.value))}>
+              <select aria-label="Leave policy" className="input-control" name="leave_policy" defaultValue={policy}>
                 {policies.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
               <span>Leave type</span>
-              <select aria-label="Leave type" className="input-control" value={leaveType} onChange={(event) => updateFilter(() => setLeaveType(event.target.value))}>
+              <select aria-label="Leave type" className="input-control" name="leave_type" defaultValue={leaveType}>
                 {leaveTypes.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
               <span>Period year</span>
-              <select aria-label="Period year" className="input-control" value={periodYear} onChange={(event) => updateFilter(() => setPeriodYear(event.target.value))}>
+              <select aria-label="Period year" className="input-control" name="period_year" defaultValue={periodYear}>
                 {years.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
-              <span>Liability risk</span>
-              <select aria-label="Liability risk" className="input-control" value={risk} onChange={(event) => updateFilter(() => setRisk(event.target.value))}>
-                {risks.map((item) => <option key={item} value={item}>{item}</option>)}
+              <span>Balance state</span>
+              <select aria-label="Balance state" className="input-control" name="liability_state" defaultValue={state}>
+                {states.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
               <span>Sort</span>
-              <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
-                <option value="risk">Risk first</option>
+              <select aria-label="Sort" className="input-control" name="sort" defaultValue={sortBy}>
+                <option value="risk">Negative available first</option>
                 <option value="employee">Employee</option>
                 <option value="policy">Policy</option>
                 <option value="closing">Closing balance</option>
@@ -242,24 +202,25 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
               </select>
             </label>
           </div>
-        </div>
+          <div className="report-filter-form-actions"><button className="button button--primary" type="submit">Apply filters</button></div>
+        </WorkspaceFilterForm>
 
         <div className="report-catalog-summary" aria-live="polite">
-          <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.liabilityState === "Overdrawn").length}</strong> overdrawn</span>
+          <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.liabilityState === "Negative available").length}</strong> negative available</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => numeric(item.encashed_amount) > 0).length}</strong> encashed</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table payroll-register-table">
+        <WorkspaceTableScrollRegion className="report-catalog-table-wrap workspace-table-region" label="Leave balance report table scroll">
+          <table aria-label="Leave balance report" className="data-table workspace-data-table report-catalog-table payroll-register-table">
             <thead>
               <tr>
                 <th scope="col">Employee</th>
                 <th scope="col">Policy</th>
                 <th scope="col">Entitlement</th>
                 <th scope="col">Usage</th>
-                <th scope="col">Liability</th>
-                <th scope="col">Risk</th>
+                <th scope="col">Balance quantities</th>
+                <th scope="col">Balance state</th>
                 <th scope="col">Actions</th>
               </tr>
             </thead>
@@ -300,19 +261,18 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
                   </td>
                   <td>
                     <div className="payroll-register-stack">
-                      <span className={statusClass(item.liabilityRisk)}>{item.liabilityRisk}</span>
                       <span className={statusClass(item.liabilityState)}>{item.liabilityState}</span>
                       <span>Adjustment {formatUnits(item.adjustment_amount)}</span>
                     </div>
                   </td>
                   <td>
                     <div className="report-row-actions">
-                      <Link className="button button--secondary" href={`/hr-admin/leave-balances?q=${encodeURIComponent(item.employee_code)}`}>
+                      <a data-navigation-mode="document" className="button button--secondary" href={`/hr-admin/leave-balances?q=${encodeURIComponent(item.employee_code)}`}>
                         Open
-                      </Link>
-                      <Link className="button button--ghost" href={`/hr-admin/leave-balances?leave_policy_id=${encodeURIComponent(item.leave_policy_id)}`}>
+                      </a>
+                      <a data-navigation-mode="document" className="button button--ghost" href={`/hr-admin/leave-balances?leave_policy_id=${encodeURIComponent(item.leave_policy_id)}`}>
                         Policy
-                      </Link>
+                      </a>
                     </div>
                   </td>
                 </tr>
@@ -326,12 +286,12 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
-        <div className="pagination-bar" aria-label="Leave balance pagination">
-          <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+        <div className="pagination-bar" role="group" aria-label="Leave balance pagination">
+          <a data-navigation-mode="document" className="button button--secondary" aria-disabled={currentPage === 1} href={currentPage > 1 ? pageHref(currentPage - 1) : undefined}>Previous</a>
           <span>Showing {filteredRows.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, filteredRows.length)} of {filteredRows.length}</span>
-          <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</button>
+          <a data-navigation-mode="document" className="button button--secondary" aria-disabled={currentPage === pageCount} href={currentPage < pageCount ? pageHref(currentPage + 1) : undefined}>Next</a>
         </div>
       </div>
     </section>

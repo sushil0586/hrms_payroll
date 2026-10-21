@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { attendanceDateError, attendanceQueueHref } from "../attendance-records/filter-contract";
 import Link from "next/link";
 
 import { AttendanceRegularizationQueue } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-queue";
@@ -19,8 +21,8 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view"], fallbackPath: "/hr-admin" });
   const canReviewRegularizations = sessionHasPermission(sessionUser, "attendance.regularization.review");
   const currentParams = (await searchParams) ?? {};
-  const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
+  const page = Math.max(Math.floor(Number(normalizeParam(currentParams.page) || "1")) || 1, 1);
+  const pageSize = ([10,25,50,100].includes(Number(normalizeParam(currentParams.page_size))) ? Number(normalizeParam(currentParams.page_size)) : 25);
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
   const requestedStatus = normalizeParam(currentParams.requested_status) ?? "";
@@ -29,6 +31,8 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
   const toDate = normalizeParam(currentParams.to_date) ?? "";
   const reviewRegularizationId = normalizeParam(currentParams.reviewRegularization) ?? "";
 
+  const invalidDates = attendanceDateError(fromDate, toDate);
+  if (invalidDates) return <main className="shell accerio-page"><PageIntro appearance="accerio" eyebrow="Filter validation" title="Review regularization filters" description={invalidDates} actions={<a className="button button--secondary" href="/hr-admin/attendance-regularizations">Clear filters</a>}/><p role="alert" className="notice notice--error">{invalidDates}</p></main>;
   const [result, optionsResult] = await Promise.all([
     getHrAdminAttendanceRegularizations({
       page,
@@ -42,18 +46,20 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
     }),
     getHrAdminAttendanceWorkbenchOptions(),
   ]);
+  const lastPage = Math.max(1, Math.ceil(result.data.total_count / pageSize));
+  if (!Number.isFinite(page) || page > lastPage) redirect(attendanceQueueHref("/hr-admin/attendance-regularizations", {q,status,requested_status: requestedStatus,current_status: currentStatus,from_date: fromDate,to_date: toDate,page:lastPage,page_size:pageSize}));
   const reviewResult = canReviewRegularizations && reviewRegularizationId ? await getHrAdminAttendanceRegularization(reviewRegularizationId) : null;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live regularization mode" : "Demo regularization mode"}
         title="Regularizations"
         description="Review correction requests across the tenant to understand operational bottlenecks, exception quality, and approval pressure."
         actions={<Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>}
         pills={["Server-driven review queue", "Status-focused triage", "In-context approval decisions"]}
       />
-      <TimeLeaveOperationsStrip
+      <details className="workspace-context-disclosure"><summary>Attendance navigation and summary</summary><TimeLeaveOperationsStrip
         current="regularizations"
         title="Attendance correction queue"
         description="Triage requested attendance corrections, review context, and preserve approval evidence."
@@ -61,7 +67,7 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
         primaryMetricValue={result.data.total_count}
         secondaryMetricLabel="status options"
         secondaryMetricValue={optionsResult.data.regularization_statuses.length}
-      />
+      /></details>
       <AttendanceRegularizationQueue
         items={result.data.items}
         regularizationStatusOptions={optionsResult.data.regularization_statuses}

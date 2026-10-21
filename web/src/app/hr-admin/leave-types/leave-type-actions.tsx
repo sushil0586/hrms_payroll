@@ -1,5 +1,7 @@
 "use client";
 
+import { apiErrorMessage, mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+
 import { useEffect, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
@@ -14,9 +16,8 @@ type Props = {
   leaveTypeName: string;
 };
 
-function errorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to update this leave type.";
-  return String((payload as Record<string, unknown>).detail || (payload as Record<string, unknown>).summary || "Unable to update this leave type.");
+function errorMessage(payload: unknown, status: number) {
+  return mutationErrorMessage(payload, status, 'Unable to update this leave type. Refresh and review its linked records.');
 }
 
 export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props) {
@@ -39,16 +40,16 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
       const response = await fetch(`/api/hr-admin/leave-types/${leaveTypeId}/impact`);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const message = errorMessage(payload);
+        const message = response.status >= 500 ? "Removal impact is unavailable. No removal was submitted. Close this dialog and retry the impact check." : apiErrorMessage(payload, "Unable to load removal impact. Close this dialog and try again.");
         setError(message);
-        setToast({ title: "Action failed.", message, tone: "error" });
+        setToast({ title: "Action needs attention.", message, tone: "error" });
         return;
       }
       setImpact(payload as HrAdminLeaveTypeImpact);
     } catch {
-      const message = "Unable to reach the server. Check your connection and try again.";
+      const message = "Unable to load the removal impact. Check your connection and reopen this dialog to retry.";
       setError(message);
-      setToast({ title: "Action failed.", message, tone: "error" });
+      setToast({ title: "Action needs attention.", message, tone: "error" });
     } finally {
       setIsLoadingImpact(false);
     }
@@ -63,7 +64,7 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -76,10 +77,10 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const message = errorMessage(payload);
+        const message = errorMessage(payload, response.status);
         setImpact((payload as HrAdminLeaveTypeImpact) ?? impact);
         setError(message);
-        setToast({ title: "Action failed.", message, tone: "error" });
+        setToast({ title: "Action needs attention.", message, tone: "error" });
         return;
       }
       const message = action === "delete" ? "Leave type deleted." : "Leave type deactivated.";
@@ -89,9 +90,9 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
       setImpact(null);
       refresh();
     } catch {
-      const message = "Unable to reach the server. Check your connection and try again.";
+      const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Action failed.", message, tone: "error" });
+      setToast({ title: "Action needs attention.", message, tone: "error" });
     } finally {
       setIsSubmitting(false);
     }
@@ -130,7 +131,7 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
                 ) : null}
               </div>
             ) : null}
-            {error ? <div className="notice notice--error" role="alert"><strong>Action failed.</strong><span className="muted">{error}</span></div> : null}
+            {error ? <div className="notice notice--error" role="alert"><strong>Action needs attention.</strong><span className="muted">{error}</span></div> : null}
             <div className="form-actions-bar">
               <span className="muted">Deactivate hides this leave type from new use while keeping linked history intact.</span>
               <div className="form-actions-bar__buttons">

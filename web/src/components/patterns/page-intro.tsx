@@ -1,4 +1,5 @@
 type Props = {
+  appearance?: "standard" | "accerio";
   eyebrow: string;
   title: string;
   description: string;
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function PageIntro({
+  appearance = "standard",
   eyebrow,
   title,
   description,
@@ -25,7 +27,7 @@ export function PageIntro({
 }: Props) {
   return (
     <section
-      className={`page-intro page-intro--compact${className ? ` ${className}` : ""}`}
+      className={`page-intro page-intro--compact${appearance === "accerio" ? " workspace-page-header" : ""}${className ? ` ${className}` : ""}`}
     >
       <div className="page-intro__meta">
         <span className="page-intro__eyebrow">{eyebrow}</span>

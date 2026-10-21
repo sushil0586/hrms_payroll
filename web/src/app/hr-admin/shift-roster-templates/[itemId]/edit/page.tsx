@@ -19,8 +19,8 @@ export default async function HrAdminEditShiftRosterTemplatePage({ params }: Pag
   ]);
 
   return (
-    <main className="shell shell--time-leave">
-      <PageIntro
+    <main className="shell shell--time-leave accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={itemResult.state === "live" ? "Live roster template mode" : "Demo roster template mode"}
         title="Edit roster template"
         description="Adjust the reusable shift pattern, publication state, and rollout behavior before operations stamp it across employees."

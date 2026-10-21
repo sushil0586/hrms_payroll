@@ -1,7 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
+
+import { useSearchParams } from "next/navigation";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminScopedAssignment } from "@/lib/types";
@@ -10,24 +12,28 @@ import { LeavePolicyAssignmentActions } from "./leave-policy-assignment-actions"
 type Props = {
   canManagePolicies: boolean;
   assignments: HrAdminScopedAssignment[];
+  onChanged?: () => Promise<void>;
 };
 
-export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies }: Props) {
-  const [selectedId, setSelectedId] = useState(assignments[0]?.id ?? "");
+export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, onChanged }: Props) {
+  const params = useSearchParams();
+  const selectedId = params.get("selected") ?? "";
+  function href(updates: Record<string,string|undefined>) { const next=new URLSearchParams(params.toString()); for(const [key,value] of Object.entries(updates)){if(value)next.set(key,value);else next.delete(key);} return `/hr-admin/leave-policy-assignments${next.size ? `?${next}` : ""}`; }
   const selected = assignments.find((item) => item.id === selectedId) ?? null;
 
   return (
     <div className="employee-directory-layout">
-      <div className="employee-directory-table-wrap">
-        <table className="workspace-table attendance-directory-table">
+      <ActionFeedbackReceipt recordIds={assignments.map(item => item.id)} />
+      <WorkspaceTableScrollRegion className="employee-directory-table-wrap" label="Leave assignments table scroll">
+        <table aria-label="Leave assignments" className="accerio-data-table workspace-table attendance-directory-table">
           <thead>
             <tr>
-              <th>Policy</th>
-              <th>Scope</th>
-              <th>Priority</th>
-              <th>Status</th>
-              <th>Risk</th>
-              <th>Action</th>
+              <th scope="col">Policy</th>
+              <th scope="col">Scope</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Status</th>
+              <th scope="col">Risk</th>
+              <th scope="col">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -51,7 +57,7 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies }: 
                     <WorkspaceStatusBadge tone="success">Clear</WorkspaceStatusBadge>
                   )}
                 </td>
-                <td><button className="button button--secondary" onClick={() => setSelectedId(item.id)} type="button">Inspect</button></td>
+                <td><a className="button button--secondary" data-navigation-mode="document" href={`${href({selected:item.id})}#leave-assignment-detail`}>Inspect</a></td>
               </tr>
             ))}
             {assignments.length === 0 ? (
@@ -59,18 +65,18 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies }: 
             ) : null}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
 
       {selected ? (
-        <aside className="panel-card-soft attendance-detail-drawer" aria-label="Leave assignment detail">
+        <aside id="leave-assignment-detail" tabIndex={-1} className="panel-card-soft attendance-detail-drawer" aria-label="Leave assignment detail">
           <div className="record-card__header">
             <div>
               <h2>{selected.policy_name}</h2>
               <p className="section-copy section-copy-soft">{selected.leave_type_name || "All leave types"} · Priority {selected.priority}</p>
             </div>
             <div className="record-card__actions">
-              <button className="button button--secondary" onClick={() => setSelectedId("")} type="button">Close</button>
-              {canManagePolicies ? <Link className="button button--secondary" href={`/hr-admin/leave-policy-assignments?editLeaveAssignment=${selected.id}`}>Edit</Link> : null}
+              <a className="button button--secondary" data-navigation-mode="document" href={href({selected:undefined})}>Close</a>
+              {canManagePolicies ? <a data-navigation-mode="document" className="button button--secondary" href={href({editLeaveAssignment:selected.id})}>Edit</a> : null}
             </div>
           </div>
           <div className="record-card__eyebrow">
@@ -82,6 +88,8 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies }: 
             ) : <WorkspaceStatusBadge tone="success">Clear</WorkspaceStatusBadge>}
           </div>
           <div className="detail-grid">
+            <div className="detail-row"><span className="detail-label">Effective from</span><span className="detail-value">{selected.effective_from || "Not recorded"}</span></div>
+            <div className="detail-row"><span className="detail-label">Effective to</span><span className="detail-value">{selected.effective_to || "Open ended"}</span></div>
             <div className="detail-row"><span className="detail-label">Legal entity</span><span className="detail-value">{selected.legal_entity || "Any entity"}</span></div>
             <div className="detail-row"><span className="detail-label">Branch</span><span className="detail-value">{selected.branch || "Any branch"}</span></div>
             <div className="detail-row"><span className="detail-label">Location</span><span className="detail-value">{selected.location || "Any location"}</span></div>
@@ -97,7 +105,7 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies }: 
               <span className="muted">{selected.conflict_summary}</span>
             </div>
           ) : null}
-          {canManagePolicies ? <LeavePolicyAssignmentActions assignmentId={selected.id} isActive={selected.is_active} policyName={selected.policy_name} /> : null}
+          {canManagePolicies ? <LeavePolicyAssignmentActions onChanged={onChanged} key={selected.id} assignmentId={selected.id} isActive={selected.is_active} policyName={selected.policy_name} /> : null}
         </aside>
       ) : null}
     </div>

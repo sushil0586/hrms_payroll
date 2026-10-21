@@ -5,13 +5,18 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEv
 import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
+import { apiFieldErrors, mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
+import { useValidationFocus } from "@/lib/ui/use-validation-focus";
+import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceCalendar } from "@/components/patterns/workspace-calendar";
 import { WorkspaceInformation } from "@/components/patterns/workspace-information";
-import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
@@ -51,10 +56,6 @@ function formatDateTime(value: string | null | undefined) {
   return `${formatDate(iso.slice(0, 10))} ${iso.slice(11, 16)} UTC`;
 }
 
-function statusClass(status: string) {
-  return `status status--${status}`;
-}
-
 function formatStatus(value: string) {
   return value.replaceAll("_", " ");
 }
@@ -86,12 +87,8 @@ function buildHref(currentParams: Record<string, SearchParamValue>, updates: Rec
   return queryString ? `/ess/leave?${queryString}` : "/ess/leave";
 }
 
-function getErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to submit leave request.";
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) return String(value[0]);
-  }
-  return String((payload as Record<string, unknown>).detail || "Unable to submit leave request.");
+function getErrorMessage(payload: unknown, status: number) {
+  return mutationErrorMessage(payload, status, "Unable to submit the leave request. Review your entries and try again.");
 }
 
 function parseDateOnly(value: string) {
@@ -134,22 +131,6 @@ function rangesOverlap(leftStart: string, leftEnd: string, rightStart: string, r
   const endB = parseDateOnly(rightEnd);
   if (!startA || !endA || !startB || !endB) return false;
   return startA <= endB && startB <= endA;
-}
-
-function getRequestPeriod(item: LeaveRequestItem, today: Date) {
-  const startDate = parseDateOnly(item.start_date);
-  const endDate = parseDateOnly(item.end_date);
-  if (!startDate || !endDate) return "all";
-  if (startDate >= today) return "upcoming";
-  if (endDate < today) return "past";
-  return "current";
-}
-
-function isRequestInYear(item: LeaveRequestItem, year: number) {
-  const startDate = parseDateOnly(item.start_date);
-  const endDate = parseDateOnly(item.end_date);
-  if (!startDate || !endDate) return false;
-  return startDate <= new Date(Date.UTC(year, 11, 31)) && endDate >= new Date(Date.UTC(year, 0, 1));
 }
 
 function getCurrentApprovalStep(item: LeaveRequestItem) {
@@ -217,7 +198,7 @@ function LeaveUnitBreakdown({ item }: { item: LeaveRequestItem }) {
         <span className="muted">{getUnitBreakdownSummary(item)}</span>
       </div>
       {days.length ? (
-        <div className="leave-unit-breakdown" aria-label="Leave unit calculation by date">
+        <div className="leave-unit-breakdown" role="group" aria-label="Leave unit calculation by date">
           {days.map((day) => (
             <div className={`leave-unit-breakdown__row ${day.counted ? "leave-unit-breakdown__row--counted" : "leave-unit-breakdown__row--excluded"}`} key={day.date}>
               <span>
@@ -228,9 +209,9 @@ function LeaveUnitBreakdown({ item }: { item: LeaveRequestItem }) {
                 <strong>{day.units} units</strong>
                 <small>{day.holiday_name || formatUnitReason(day.reason)}</small>
               </span>
-              <span className={day.counted ? "status status--approved" : "status status--cancelled"}>
+              <WorkspaceStatusBadge tone={day.counted ? "success" : "neutral"}>
                 {day.counted ? "Counted" : "Excluded"}
-              </span>
+              </WorkspaceStatusBadge>
             </div>
           ))}
         </div>
@@ -365,7 +346,7 @@ function LeaveDecisionCard({ item }: { item: LeaveRequestItem }) {
         <h3>{waitingLabel || formatStatus(item.status)}</h3>
         <p>{decisionText || (isOpen ? "The request is still moving through the configured approval route." : "No manager note was added.")}</p>
       </div>
-      <span className={statusClass(item.status)}>{formatStatus(item.status)}</span>
+      <WorkspaceStatusBadge tone={statusTone(item.status)}>{formatStatus(item.status)}</WorkspaceStatusBadge>
     </section>
   );
 }
@@ -396,8 +377,10 @@ function LeaveApplyModal({
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeaveApplyField>>({});
+  const formRef = useValidationFocus(fieldErrors);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const feedbackRef = useFeedbackFocus(feedback?.tone === "error" ? feedback.message : "", submitting, hasFieldErrors(fieldErrors));
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((item) => item.id === leaveTypeId) ?? leaveTypes[0] ?? null,
     [leaveTypeId, leaveTypes],
@@ -426,6 +409,8 @@ function LeaveApplyModal({
 
   function clearFieldError(field: LeaveApplyField) {
     setFieldErrors((current) => ({ ...current, [field]: undefined }));
+    setFeedback(null);
+    setToast(null);
   }
 
   async function submitLeave(event: FormEvent<HTMLFormElement>) {
@@ -452,14 +437,14 @@ function LeaveApplyModal({
       const message = "Review the highlighted leave fields and try again.";
       setFieldErrors(nextErrors);
       setFeedback({ tone: "error", message });
-      setToast({ title: "Submission failed.", message, tone: "error" });
+      setToast({ title: "Submission needs attention.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
     if (isDemo) {
       const message = "Leave requests are only available in live mode.";
       setFeedback({ tone: "error", message });
-      setToast({ title: "Submission failed.", message, tone: "error" });
+      setToast({ title: "Submission needs attention.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
@@ -483,19 +468,20 @@ function LeaveApplyModal({
         body: formData,
       });
     } catch {
-      const message = "Unable to reach the server. Check your connection and try again.";
+      const message = networkMutationMessage;
       setFeedback({ tone: "error", message });
-      setToast({ title: "Submission failed.", message, tone: "error" });
+      setToast({ title: "Submission needs attention.", message, tone: "error" });
       setSubmitting(false);
       submittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    if (!response.ok || typeof payload?.id !== "string" || !payload.id) {
       setSubmitting(false);
-      const message = getErrorMessage(payload);
+      setFieldErrors(apiFieldErrors(payload, Object.keys(nextErrors) as LeaveApplyField[]));
+      const message = response.ok ? "The server returned an incomplete confirmation. Check the latest list before retrying; your entries are still here." : getErrorMessage(payload, response.status);
       setFeedback({ tone: "error", message });
-      setToast({ title: "Submission failed.", message, tone: "error" });
+      setToast({ title: "Submission needs attention.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
@@ -510,7 +496,7 @@ function LeaveApplyModal({
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -526,27 +512,27 @@ function LeaveApplyModal({
       title="Apply leave"
     >
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-        <form className="leave-apply-layout" noValidate onSubmit={submitLeave}>
+        <form ref={formRef} className="leave-apply-layout" noValidate onSubmit={submitLeave}>
           <div className="form-grid leave-apply-form">
             <label className="form-field">
               <span className="muted">Leave type</span>
-              <select aria-invalid={Boolean(fieldErrors.leave_type_id)} className="input-control" disabled={!leaveTypes.length} name="leave_type_id" onChange={(event) => { setLeaveTypeId(event.target.value); clearFieldError("leave_type_id"); }} required value={leaveTypeId}>
+              <select aria-invalid={Boolean(fieldErrors.leave_type_id)} aria-describedby={fieldErrors.leave_type_id ? "leave-apply-leave_type_id-error" : undefined} className="input-control" disabled={!leaveTypes.length} name="leave_type_id" onChange={(event) => { setLeaveTypeId(event.target.value); clearFieldError("leave_type_id"); }} required value={leaveTypeId}>
                 {!leaveTypes.length ? <option value="">No leave types available</option> : null}
                 {leaveTypes.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>
-              {fieldErrors.leave_type_id ? <span className="field-error-text" role="alert">{fieldErrors.leave_type_id}</span> : null}
+              {fieldErrors.leave_type_id ? <span className="field-error-text" id="leave-apply-leave_type_id-error">{fieldErrors.leave_type_id}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Start date</span>
-              <input aria-invalid={Boolean(fieldErrors.start_date)} className="input-control" name="start_date" onChange={(event) => { setStartDate(event.target.value); clearFieldError("start_date"); }} required type="date" value={startDate} />
-              {fieldErrors.start_date ? <span className="field-error-text" role="alert">{fieldErrors.start_date}</span> : null}
+              <input aria-invalid={Boolean(fieldErrors.start_date)} aria-describedby={fieldErrors.start_date ? "leave-apply-start_date-error" : undefined} className="input-control" name="start_date" onChange={(event) => { setStartDate(event.target.value); clearFieldError("start_date"); }} required type="date" value={startDate} />
+              {fieldErrors.start_date ? <span className="field-error-text" id="leave-apply-start_date-error">{fieldErrors.start_date}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">End date</span>
-              <input aria-invalid={Boolean(fieldErrors.end_date)} className="input-control" name="end_date" onChange={(event) => { setEndDate(event.target.value); clearFieldError("end_date"); }} required type="date" value={endDate} />
-              {fieldErrors.end_date ? <span className="field-error-text" role="alert">{fieldErrors.end_date}</span> : null}
+              <input aria-invalid={Boolean(fieldErrors.end_date)} aria-describedby={fieldErrors.end_date ? "leave-apply-end_date-error" : undefined} className="input-control" name="end_date" onChange={(event) => { setEndDate(event.target.value); clearFieldError("end_date"); }} required type="date" value={endDate} />
+              {fieldErrors.end_date ? <span className="field-error-text" id="leave-apply-end_date-error">{fieldErrors.end_date}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Start day portion</span>
@@ -568,30 +554,30 @@ function LeaveApplyModal({
               <span className="muted">Evidence file</span>
               <input
                 accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                aria-invalid={Boolean(fieldErrors.attachment_file)}
+                aria-invalid={Boolean(fieldErrors.attachment_file)} aria-describedby={fieldErrors.attachment_file ? "leave-apply-attachment_file-error" : undefined}
                 className="input-control"
                 name="attachment_file"
                 onChange={(event) => { setSelectedFile(event.target.files?.[0] ?? null); clearFieldError("attachment_file"); clearFieldError("attachment_reference"); }}
                 type="file"
               />
-              {fieldErrors.attachment_file ? <span className="field-error-text" role="alert">{fieldErrors.attachment_file}</span> : null}
+              {fieldErrors.attachment_file ? <span className="field-error-text" id="leave-apply-attachment_file-error">{fieldErrors.attachment_file}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Evidence reference</span>
               <input
                 className="input-control"
                 name="attachment_reference"
-                aria-invalid={Boolean(fieldErrors.attachment_reference)}
+                aria-invalid={Boolean(fieldErrors.attachment_reference)} aria-describedby={fieldErrors.attachment_reference ? "leave-apply-attachment_reference-error" : undefined}
                 onChange={(event) => { setEvidenceReference(event.target.value); clearFieldError("attachment_reference"); }}
                 placeholder="Medical certificate, travel proof, or policy note"
                 value={evidenceReference}
               />
-              {fieldErrors.attachment_reference ? <span className="field-error-text" role="alert">{fieldErrors.attachment_reference}</span> : null}
+              {fieldErrors.attachment_reference ? <span className="field-error-text" id="leave-apply-attachment_reference-error">{fieldErrors.attachment_reference}</span> : null}
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason for leave</span>
-              <textarea aria-invalid={Boolean(fieldErrors.reason)} className="input-control" name="reason" onChange={() => clearFieldError("reason")} required rows={3} />
-              {fieldErrors.reason ? <span className="field-error-text" role="alert">{fieldErrors.reason}</span> : null}
+              <textarea aria-invalid={Boolean(fieldErrors.reason)} aria-describedby={fieldErrors.reason ? "leave-apply-reason-error" : undefined} className="input-control" name="reason" onChange={() => clearFieldError("reason")} required rows={3} />
+              {fieldErrors.reason ? <span className="field-error-text" id="leave-apply-reason-error">{fieldErrors.reason}</span> : null}
             </label>
             {selectedFile ? (
               <div className="leave-file-preview form-field--full">
@@ -603,8 +589,8 @@ function LeaveApplyModal({
               </div>
             ) : null}
             {feedback ? (
-              <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"} form-field--full`} role={feedback.tone === "success" ? "status" : "alert"}>
-                <strong>{feedback.tone === "success" ? "Submitted successfully." : "Submission failed."}</strong>
+              <div ref={feedbackRef} tabIndex={-1} className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"} form-field--full`} role={feedback.tone === "success" ? "status" : "alert"}>
+                <strong>{feedback.tone === "success" ? "Submitted successfully." : "Submission needs attention."}</strong>
                 <span className="muted">{feedback.message}</span>
               </div>
             ) : null}
@@ -741,46 +727,23 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
   }, []);
   const [clickedRequest, setClickedRequest] = useState<LeaveRequestItem | null>(null);
   const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
-  const [historyQuery, setHistoryQuery] = useState("");
-  const [historyLeaveType, setHistoryLeaveType] = useState("all");
-  const [historyPeriod, setHistoryPeriod] = useState("all");
+  const [filterError, setFilterError] = useState("");
   const status = normalizeParam(currentParams.status) ?? "all";
   const selectedRequestId = normalizeParam(currentParams.requestId);
   const page = leaveRequests.page;
   const tabs = ["all", "pending", "partially_approved", "approved", "rejected", "withdrawn", "cancelled"];
   const totalPages = Math.max(1, Math.ceil(leaveRequests.total_count / leaveRequests.page_size));
-  const today = useMemo(() => parseDateOnly(new Date().toISOString().slice(0, 10)) ?? new Date(), []);
-  const leaveTypeOptions = useMemo(
-    () => Array.from(new Set(leaveRequests.items.map((item) => item.leave_type))).sort((left, right) => left.localeCompare(right)),
-    [leaveRequests.items],
-  );
-  const visibleRequests = useMemo(() => {
-    const normalizedQuery = historyQuery.trim().toLowerCase();
-    return leaveRequests.items.filter((item) => {
-      const matchesQuery = !normalizedQuery || [
-        item.leave_type,
-        item.leave_type_code,
-        item.policy_name ?? "",
-        item.status,
-        item.reason,
-      ].some((value) => value.toLowerCase().includes(normalizedQuery));
-      const matchesType = historyLeaveType === "all" || item.leave_type === historyLeaveType;
-      const itemPeriod = getRequestPeriod(item, today);
-      const matchesPeriod = historyPeriod === "all" || historyPeriod === itemPeriod || (historyPeriod === "this_year" && isRequestInYear(item, today.getUTCFullYear()));
-      return matchesQuery && matchesType && matchesPeriod;
-    });
-  }, [historyLeaveType, historyPeriod, historyQuery, leaveRequests.items, today]);
-  const filtersActive = Boolean(historyQuery.trim() || historyLeaveType !== "all" || historyPeriod !== "all");
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [selectedDay, setSelectedDay] = useState("");
-  const [calendarVisible, setCalendarVisible] = useState(false);
+  const leaveTypeOptions = leaveRequests.filter_types ?? [];
+  const visibleRequests = leaveRequests.items;
+  const selectedDay = normalizeParam(currentParams.day) ?? "";
+  const calendarMonth = normalizeParam(currentParams.month) ?? "";
+  const calendarVisible = Boolean(calendarMonth);
   const monthStart = new Date(`${calendarMonth}-01T00:00:00Z`);
-  const calendarDays = Number.isNaN(monthStart.getTime()) ? [] : Array.from({ length: new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate() }, (_, index) => {
-    const date = `${calendarMonth}-${String(index + 1).padStart(2, "0")}`;
-    const matches = visibleRequests.filter(item => item.start_date <= date && item.end_date >= date);
-    return { date, number: index + 1, label: `${date}: ${matches.length} loaded request${matches.length === 1 ? "" : "s"}`,
-      status: matches.length ? `${matches.length} request${matches.length === 1 ? "" : "s"}` : "No loaded requests",
-      shortStatus: matches.length ? String(matches.length) : "—", finalized: false, selected: selectedDay === date, href: `#leave-day-details` };
+  const calendarDays = (leaveRequests.calendar_days ?? []).map(({ date, count }) => {
+    return { date, number: Number(date.slice(-2)), label: `${date}: ${count} request${count === 1 ? "" : "s"}`,
+      status: count ? `${count} request${count === 1 ? "" : "s"}` : "No requests",
+      shortStatus: count ? String(count) : "—", finalized: false, selected: selectedDay === date,
+      href: buildHref(currentParams, { day: date, page: "1" }) };
   });
   const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
   const linkedRequest = selectedRequestId && selectedRequestId !== dismissedRequestId
@@ -801,7 +764,7 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
                 const destination = new URL(window.location.href);
                 destination.searchParams.set("status", "all");
                 destination.searchParams.set("page", "1");
-                destination.searchParams.delete("requestId");
+                for (const key of ["requestId", "q", "leave_type", "period", "date_from", "date_to", "day"]) destination.searchParams.delete(key);
                 destination.hash = "";
                 window.location.replace(destination.href);
               }}
@@ -836,13 +799,14 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
     : null;
 
   return (
-    <main className="shell shell--workspace ess-experience-shell ess-compact">
+    <main className="shell shell--workspace ess-experience-shell ess-compact accerio-page">
+      <ActionFeedbackReceipt recordIds={leaveRequests.items.map(item => item.id)} />
       <WorkspaceStandardHeader eyebrow={`${state === "live" ? "Employee" : "Demo"} / Time off`} title="Leave"
         description="Plan time away, check entitlements and follow your requests."
         actions={<><button className="button button--primary" onClick={(event) => { event.currentTarget.focus(); setApplyOpen(true); }} type="button">Apply leave</button><Link prefetch={false} className="button button--secondary" href="/ess">Overview</Link></>} />
       {hydrated && submissionSaved ? <div className="notice notice--success" role="status">Leave request submitted. Review its status in your history.</div> : null}
       <WorkspaceStandardPanel title="Your entitlements" description="Current policy balances. Contact HR for leave-year dates, expiry and applicable holidays.">
-        <div className="workspace-summary-grid" aria-label="Leave balance cards">
+        <div className="workspace-summary-grid" role="group" aria-label="Leave balance cards">
           {balances.map((balance, index) => <article className="workspace-standard-panel workspace-summary-card" key={`${balance.leave_type}-${index}`}>
             <h3>{balance.leave_type}</h3><strong>{getPrimaryBalanceLabel(balance)}</strong><p>{balance.policy_name || "Policy not provided"}</p>
             <WorkspaceInformation fields={[["Used", balance.consumed_amount], ["Reserved", balance.reserved_amount]]} />
@@ -850,7 +814,7 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
           {!balances.length ? <p role="status">No leave balance is assigned yet. Ask HR to review your leave policies.</p> : null}
         </div>
       </WorkspaceStandardPanel>
-      <WorkspaceStandardPanel title="My leave requests" description="Status totals cover all requests. Filters and calendar apply to this page.">
+      <WorkspaceStandardPanel title="My leave requests" description="Search and filters cover your complete history. Calendar counts include every matching request; status totals cover all your requests.">
         <div>
           <div className="workspace-status-tabs">
             {tabs.map((tab) => (
@@ -862,62 +826,42 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
           </div>
           <div className="workspace-filter-disclosure">
             <div className="queue-toolbar__header">
-              <span className="queue-summary-chip"><strong>{visibleRequests.length}</strong> shown</span>
+              <span className="queue-summary-chip"><strong>{leaveRequests.total_count}</strong> matching · {visibleRequests.length} shown</span>
             </div>
-            <WorkspaceFilterBar>
-              <label className="form-field">
-                <span>Search this page</span>
-                <input
-                  className="input-control"
-                  disabled={!hydrated}
-                  onChange={(event) => setHistoryQuery(event.target.value)}
-                  placeholder="Type, policy, status, or reason"
-                  value={historyQuery}
-                />
-              </label>
-              <label className="form-field">
-                <span>Type</span>
-                <select disabled={!hydrated} className="input-control" onChange={(event) => setHistoryLeaveType(event.target.value)} value={historyLeaveType}>
-                  <option value="all">All types</option>
-                  {leaveTypeOptions.map((leaveType) => (
-                    <option key={leaveType} value={leaveType}>{leaveType}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="form-field">
-                <span>Dates on this page</span>
-                <select disabled={!hydrated} className="input-control" onChange={(event) => setHistoryPeriod(event.target.value)} value={historyPeriod}>
-                  <option value="all">All periods</option>
-                  <option value="upcoming">Upcoming (UTC)</option>
-                  <option value="past">Past (UTC)</option>
-                  <option value="current">In progress (UTC)</option>
-                  <option value="this_year">Calendar year (UTC)</option>
-                </select>
-              </label>
-              <button
-                className="button button--secondary"
-                disabled={!filtersActive}
-                onClick={() => {
-                  setHistoryQuery("");
-                  setHistoryLeaveType("all");
-                  setHistoryPeriod("all");
-                }}
-                type="button"
-              >
-                Clear filters
-              </button>
-            </WorkspaceFilterBar>
+            <WorkspaceFilterForm action="/ess/leave" label="Leave history filters" onSubmit={event => {
+              const data = new FormData(event.currentTarget);
+              if (String(data.get("date_from") || "") > String(data.get("date_to") || "") && data.get("date_to")) {
+                event.preventDefault(); setFilterError("End date cannot be earlier than start date.");
+                event.currentTarget.querySelector<HTMLInputElement>('[name="date_to"]')?.focus();
+              }
+            }}>
+              <input type="hidden" name="status" value={status} /><input type="hidden" name="page" value="1" />
+              {calendarMonth ? <input type="hidden" name="month" value={calendarMonth} /> : null}
+              <label className="form-field"><span>Search leave history</span><input className="input-control" name="q" maxLength={200} defaultValue={normalizeParam(currentParams.q) ?? ""} placeholder="Type, policy, status, or reason" /></label>
+              <label className="form-field"><span>Type</span><select className="input-control" name="leave_type" defaultValue={normalizeParam(currentParams.leave_type) ?? ""}>
+                <option value="">All types</option>{leaveTypeOptions.map(type => <option key={type.code} value={type.code}>{type.name} ({type.code})</option>)}
+              </select></label>
+              <label className="form-field"><span>Date period</span><select className="input-control" name="period" defaultValue={normalizeParam(currentParams.period) ?? "all"}>
+                <option value="all">All periods</option><option value="upcoming">Upcoming (UTC)</option><option value="past">Past (UTC)</option><option value="current">In progress (UTC)</option><option value="this_year">Calendar year (UTC)</option>
+              </select></label>
+              <label className="form-field"><span>From date</span><input className="input-control" type="date" name="date_from" defaultValue={normalizeParam(currentParams.date_from) ?? ""} onChange={() => setFilterError("")} /></label>
+              <label className="form-field"><span>Through date</span><input className="input-control" type="date" name="date_to" defaultValue={normalizeParam(currentParams.date_to) ?? ""} onChange={() => setFilterError("")} aria-invalid={Boolean(filterError)} aria-describedby={filterError ? "leave-filter-error" : undefined} />{filterError ? <span className="field-error-text" id="leave-filter-error" role="alert">{filterError}</span> : null}</label>
+              <button className="button button--primary" type="submit">Apply filters</button>
+              <a className="button button--secondary" href={buildHref(currentParams, { q: undefined, leave_type: undefined, period: undefined, date_from: undefined, date_to: undefined, day: undefined, page: "1" })}>Clear filters</a>
+            </WorkspaceFilterForm>
           </div>
-          <button className="button button--secondary" type="button" aria-expanded={calendarVisible} onClick={() => setCalendarVisible(!calendarVisible)}>{calendarVisible ? "Hide calendar" : "Show calendar"}</button>
+          <button className="button button--secondary" type="button" disabled={!hydrated} onClick={() => window.location.assign(buildHref(currentParams, { month: calendarVisible ? undefined : new Date().toISOString().slice(0, 7), day: undefined, page: "1" }))}>{calendarVisible ? "Hide calendar" : "Show calendar"}</button>
           {calendarVisible ? <>
-            <label className="form-field"><span>Calendar month</span><input className="input-control" type="month" value={calendarMonth} onChange={event => { if (/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) { setCalendarMonth(event.target.value); setSelectedDay(""); } }} /></label>
-            <WorkspaceCalendar label="Leave request calendar" statusKey="Numbers count requests on this page, including withdrawn or cancelled requests. — No loaded request. Dates do not indicate chargeable units or holiday entitlement."
-              offset={(monthStart.getUTCDay() + 6) % 7} days={calendarDays} onSelect={(event, date) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setSelectedDay(date); }} />
-            <section id="leave-day-details" aria-label="Selected leave day" aria-live="polite"><h3>{selectedDay ? formatDate(selectedDay) : "Select a day"}</h3>
-              {selectedDay ? visibleRequests.filter(item => item.start_date <= selectedDay && item.end_date >= selectedDay).map(item => <p key={item.id}><button className="button button--secondary" onClick={() => setClickedRequest(item)} type="button">{item.leave_type} · {formatStatus(item.status)}</button></p>) : null}
-              {selectedDay && !visibleRequests.some(item => item.start_date <= selectedDay && item.end_date >= selectedDay) ? <p>No requests on this loaded page for this date.</p> : null}
-            </section>
+            <WorkspaceFilterForm action="/ess/leave" label="Leave calendar month" className="workspace-filter-form--inline">
+              {(["status", "q", "leave_type", "period", "date_from", "date_to"] as const).map(key => <input key={key} type="hidden" name={key} value={normalizeParam(currentParams[key]) ?? ""} />)}
+              <input type="hidden" name="page" value="1" />
+              <label className="form-field"><span>Calendar month</span><input className="input-control" type="month" name="month" required defaultValue={calendarMonth} /></label>
+              <button className="button button--secondary" type="submit">Apply month</button>
+            </WorkspaceFilterForm>
+            {leaveRequests.calendar_days ? <WorkspaceCalendar label="Leave request calendar" statusKey="Numbers count all requests matching the current filters, including withdrawn or cancelled requests. Dates do not indicate chargeable units or holiday entitlement."
+              offset={(monthStart.getUTCDay() + 6) % 7} days={calendarDays} onSelect={() => { /* The authorized document link owns navigation and keyboard behavior. */ }} /> : <div className="notice" role="status">Calendar counts are unavailable. <a href={buildHref(currentParams, {})}>Retry calendar</a></div>}
           </> : null}
+            {selectedDay ? <section id="leave-day-details" aria-label="Selected leave day"><h3>{formatDate(selectedDay)}</h3><p>{leaveRequests.total_count} matching request{leaveRequests.total_count === 1 ? "" : "s"}. Review the history below and use pagination for additional requests.</p><a className="button button--secondary" href={buildHref(currentParams, { day: undefined, page: "1" })}>Clear selected day</a></section> : null}
           <div className="employee-directory-table-wrap" role="region" aria-label="Scrollable leave history" tabIndex={0}>
             <table className="workspace-table attendance-directory-table leave-request-table" aria-label="Leave request history">
               <thead>
@@ -977,8 +921,8 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
                   <tr>
                     <td colSpan={6}>
                       <div className="notice workspace-empty-state">
-                        <strong>{leaveRequests.items.length ? "No requests match these filters." : "No leave requests in this view."}</strong>
-                        <span className="muted">{leaveRequests.items.length ? "Clear filters or try another status tab." : "Try another status tab once more data is available."}</span>
+                        <strong>{"No leave requests match this view."}</strong>
+                        <span className="muted">{"Clear filters or try another status tab."}</span>
                       </div>
                     </td>
                   </tr>

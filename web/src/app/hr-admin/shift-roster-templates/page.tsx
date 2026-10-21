@@ -45,7 +45,7 @@ export default async function HrAdminShiftRosterTemplatesPage({ searchParams }: 
     kind: normalizeParam(currentParams.kind) ?? "all",
     pattern: normalizeParam(currentParams.pattern) ?? "all",
   };
-  const pageSize = Math.min(numberParam(currentParams.page_size, 10), 50);
+  const pageSize = Math.min(numberParam(currentParams.page_size, 10), 100);
   const page = numberParam(currentParams.page, 1);
   const rolloutPageSize = Math.min(numberParam(currentParams.rollout_page_size, 6), 25);
   const rolloutPage = numberParam(currentParams.rollout_page, 1);
@@ -68,8 +68,8 @@ export default async function HrAdminShiftRosterTemplatesPage({ searchParams }: 
   const publishedCount = pageItems.filter((item) => item.status === "published" || item.status === "locked").length;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live roster template mode" : "Demo roster template mode"}
         title="Roster templates"
         description="Define reusable shift patterns once, then publish and roll them out across teams with less manual scheduling work."
@@ -81,7 +81,7 @@ export default async function HrAdminShiftRosterTemplatesPage({ searchParams }: 
         }
       />
 
-      <TimeLeaveOperationsStrip
+      <details className="workspace-context-disclosure"><summary>Attendance navigation and summary</summary><TimeLeaveOperationsStrip
         current="shifts"
         title="Roster template rollout"
         description="Create repeatable shift patterns and roll them out safely across teams or employee selections."
@@ -89,7 +89,7 @@ export default async function HrAdminShiftRosterTemplatesPage({ searchParams }: 
         primaryMetricValue={totalCount}
         secondaryMetricLabel="rollout ready"
         secondaryMetricValue={publishedCount}
-      />
+      /></details>
 
       <ShiftRosterTemplatesWorkbench
         canManagePolicies={canManagePolicies}

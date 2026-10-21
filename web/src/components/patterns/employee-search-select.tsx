@@ -102,7 +102,7 @@ export function EmployeeSearchSelect({ value, onChange, onOptionSelected, label 
           onFocus={() => {
             if (items.length === 0 && !isLoading) void searchEmployees(query);
           }}
-          value={selectedIsVisible ? value : ""}
+          value={selectedIsVisible || selectedLabel ? value : ""}
           onChange={(event) => {
             const nextValue = event.target.value;
             onChange(nextValue);

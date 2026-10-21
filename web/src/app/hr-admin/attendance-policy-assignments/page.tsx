@@ -19,8 +19,8 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
   const activeCount = result.data.filter((item) => item.is_active).length;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live attendance assignment mode" : "Demo attendance assignment mode"}
         title="Attendance assignments"
         description="Map attendance behavior to the branches, locations, departments, employment types, or employees that should inherit it."
@@ -34,7 +34,7 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
         pills={["Priority-driven precedence", "Scope-aware rollout", "Employee override support"]}
       />
 
-      <TimeLeaveOperationsStrip
+      <details className="workspace-context-disclosure"><summary>Attendance navigation and summary</summary><TimeLeaveOperationsStrip
         current="assignments"
         title="Attendance assignment governance"
         description="Map attendance policy behavior to tenant scopes and keep overlap, priority, and employee override review visible."
@@ -42,7 +42,7 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
         primaryMetricValue={result.data.length}
         secondaryMetricLabel="active"
         secondaryMetricValue={activeCount}
-      />
+      /></details>
 
       <AttendancePolicyAssignmentsWorkbench
         canManagePolicies={canManagePolicies}

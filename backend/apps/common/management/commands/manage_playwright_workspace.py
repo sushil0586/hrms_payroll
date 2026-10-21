@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, time
+from datetime import date, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -460,11 +460,16 @@ class Command(BaseCommand):
         )
         AttendancePolicyAssignment.objects.create(tenant=tenant, attendance_policy=policy, employee=employee, priority=1)
         EmployeeShiftAssignment.objects.create(tenant=tenant, employee=employee, shift=shift, effective_from=date(2024, 1, 1), config_snapshot=marker)
+        pending_leave_date = max(date(2026, 10, 20), timezone.localdate())
+        while pending_leave_date.weekday() >= 5:
+            pending_leave_date += timedelta(days=1)
+        if pending_leave_date > policy_period.end_date:
+            raise CommandError("Synthetic workspace leave dates exceed the fixture policy period; refresh the dated fixture.")
         submit_leave_request(
             employee=employee,
             leave_type=leave_type,
-            start_date=date(2026, 10, 20),
-            end_date=date(2026, 10, 20),
+            start_date=pending_leave_date,
+            end_date=pending_leave_date,
             start_day_portion=LeaveDayPortion.FULL_DAY,
             end_day_portion=LeaveDayPortion.FULL_DAY,
             reason="Playwright manager queue",
@@ -612,7 +617,14 @@ class Command(BaseCommand):
             LeaveYearCloseItem.objects.filter(tenant=tenant).delete()
             LeavePolicyPeriodStatusEvent.objects.filter(tenant=tenant).delete()
             LeaveEntitlementLot.objects.filter(tenant=tenant).delete()
-            LeaveBalanceTransaction.objects.filter(tenant=tenant).delete()
+            # Reversals protect their source movement. Delete leaf movements
+            # first, preserving PROTECT and failing closed on an invalid graph.
+            movements = LeaveBalanceTransaction.objects.filter(tenant=tenant)
+            while movements.exists():
+                leaves = list(movements.filter(compensating_transactions__isnull=True).values_list("pk", flat=True))
+                if not leaves:
+                    raise CommandError("Synthetic leave movement graph has no removable leaves.")
+                movements.filter(pk__in=leaves).delete()
             LeaveYearCloseRun.objects.filter(tenant=tenant).delete()
             LeaveRequest.objects.filter(tenant=tenant).delete()
             LeaveBalance.objects.filter(tenant=tenant).delete()

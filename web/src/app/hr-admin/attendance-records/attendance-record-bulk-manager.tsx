@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { attendanceRecordToFormValue } from "@/app/hr-admin/attendance-records/form-values";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
-import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
-import { useWorkspaceNavigationFeedback } from "@/components/shell/workspace-navigation-feedback";
+import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { AttendanceRecordFilterForm } from "./attendance-record-filters";
+import { attendanceQueueHref, type AttendanceRecordFilters } from "./filter-contract";
 import type {
   HrAdminAttendanceOperationOptions,
   HrAdminAttendanceRecord,
@@ -26,19 +27,8 @@ type Props = {
   shiftOptions: HrAdminOptionItem[];
   recordOptions: HrAdminAttendanceOperationOptions;
   editRecord?: HrAdminAttendanceRecord | null;
-  currentFilters: {
-    q: string;
-    status: string;
-    source: string;
-    shift_id: string;
-    lock_state: string;
-    regularized_state: string;
-    from_date: string;
-    to_date: string;
-    late_only: boolean;
-    page: number;
-    page_size: number;
-  };
+  currentFilters: AttendanceRecordFilters;
+  validationError?: string;
   pagination: {
     total_count: number;
     page: number;
@@ -55,16 +45,6 @@ function getErrorMessage(payload: unknown) {
     if (Array.isArray(value) && value.length) return String(value[0]);
   }
   return String((payload as Record<string, unknown>).detail || "Unable to run bulk attendance action.");
-}
-
-function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === "" || value === false) return;
-    query.set(key, String(value));
-  });
-  const queryString = query.toString();
-  return queryString ? `?${queryString}` : "";
 }
 
 function formatDateTime(value: string | null) {
@@ -113,36 +93,31 @@ export function AttendanceRecordBulkManager({
   recordOptions,
   editRecord = null,
   currentFilters,
+  validationError = "",
   pagination,
   canManageRecords = true,
 }: Props) {
-  const navigate = useWorkspaceNavigationFeedback();
   const { isRefreshing, refresh } = useRefreshAfterMutation();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  const scope = JSON.stringify(currentFilters);
+  const [selection, setSelection] = useState<{scope: string; ids: string[]}>({scope, ids: []});
+  const [inspection, setInspection] = useState({scope, id: ""});
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [search, setSearch] = useState(currentFilters.q);
-  const [statusFilter, setStatusFilter] = useState(currentFilters.status || "all");
-  const [sourceFilter, setSourceFilter] = useState(currentFilters.source || "all");
-  const [shiftFilter, setShiftFilter] = useState(currentFilters.shift_id || "all");
-  const [lockFilter, setLockFilter] = useState(currentFilters.lock_state || "all");
-  const [regularizedFilter, setRegularizedFilter] = useState(currentFilters.regularized_state || "all");
-  const [fromDate, setFromDate] = useState(currentFilters.from_date);
-  const [toDate, setToDate] = useState(currentFilters.to_date);
-  const [lateOnly, setLateOnly] = useState(currentFilters.late_only);
-  const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [bulkStatus, setBulkStatus] = useState(statusOptions[0]?.value ?? "present");
   const submittingRef = useRef(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const selectedItem = useMemo(
-    () => items.find((item) => item.id === selectedItemId) ?? null,
-    [items, selectedItemId],
-  );
+  const selectedIds = useMemo(() => selection.scope === scope ? selection.ids.filter(id => items.some(item => item.id === id)) : [], [items, scope, selection]);
+  const selectedItem = inspection.scope === scope ? items.find(item => item.id === inspection.id) ?? null : null;
   const allSelected = items.length > 0 && selectedIds.length === items.length;
+  function setSelectedIds(next: string[] | ((ids: string[]) => string[])) {
+    setSelection(previous => {
+      const visible = previous.scope === scope ? previous.ids.filter(id => items.some(item => item.id === id)) : [];
+      return {scope, ids: typeof next === "function" ? next(visible) : next};
+    });
+  }
+  function setSelectedItemId(id: string) { setInspection({scope, id}); }
   const editRecordId = searchParams.get("editRecord") ?? "";
   const modalEditRecord = canManageRecords && editRecordId ? editRecord : null;
   const lateOnPage = items.filter((item) => item.late_minutes > 0).length;
@@ -151,52 +126,9 @@ export function AttendanceRecordBulkManager({
   const totalPages = Math.max(1, Math.ceil(pagination.total_count / pagination.page_size));
 
   function queueHref(overrides: Record<string, string | number | boolean | undefined> = {}) {
-    return `${pathname}${buildQueryString({
-      q: currentFilters.q || undefined,
-      status: currentFilters.status || undefined,
-      source: currentFilters.source || undefined,
-      shift_id: currentFilters.shift_id || undefined,
-      lock_state: currentFilters.lock_state || undefined,
-      regularized_state: currentFilters.regularized_state || undefined,
-      from_date: currentFilters.from_date || undefined,
-      to_date: currentFilters.to_date || undefined,
-      late_only: currentFilters.late_only || undefined,
-      page: currentFilters.page,
-      page_size: currentFilters.page_size,
-      ...overrides,
-    })}`;
+    return attendanceQueueHref(pathname, currentFilters, overrides);
   }
-
-  function buildFilterHref(page: number, nextPageSize = pageSize, nextSearch = search) {
-    return `${pathname}${buildQueryString({
-      q: nextSearch.trim() || undefined,
-      status: statusFilter !== "all" ? statusFilter : undefined,
-      source: sourceFilter !== "all" ? sourceFilter : undefined,
-      shift_id: shiftFilter !== "all" ? shiftFilter : undefined,
-      lock_state: lockFilter !== "all" ? lockFilter : undefined,
-      regularized_state: regularizedFilter !== "all" ? regularizedFilter : undefined,
-      from_date: fromDate || undefined,
-      to_date: toDate || undefined,
-      late_only: lateOnly || undefined,
-      page,
-      page_size: Number(nextPageSize) || currentFilters.page_size,
-    })}`;
-  }
-
-  function goToPage(page: number, target?: HTMLElement | null) {
-    navigate(buildFilterHref(page), `attendance page ${page}`, target, { scroll: false });
-  }
-
-  function applyFilters(target?: HTMLElement | null) {
-    const nextSearch = searchInputRef.current?.value ?? search;
-    setSearch(nextSearch);
-    navigate(buildFilterHref(1, pageSize, nextSearch), "attendance filters", target, { scroll: false });
-  }
-
-  function applyPageSize(target?: HTMLElement | null) {
-    navigate(buildFilterHref(1, pageSize), "attendance rows", target, { scroll: false });
-  }
-
+  function goToPage(page: number) { window.location.assign(queueHref({page})); }
   function toggleOne(itemId: string) {
     setSelectedIds((current) => (current.includes(itemId) ? current.filter((value) => value !== itemId) : [...current, itemId]));
   }
@@ -207,6 +139,7 @@ export function AttendanceRecordBulkManager({
 
   async function handleBulkAction(action: "lock" | "unlock" | "set_status" | "mark_regularized" | "clear_regularized") {
     if (submittingRef.current || isRefreshing) return;
+    if (!selectedIds.length) { setError("Select records on the current page before running an action."); return; }
     submittingRef.current = true;
     if (state !== "live") {
       setError("Bulk actions are disabled in demo mode.");
@@ -219,10 +152,11 @@ export function AttendanceRecordBulkManager({
       return;
     }
     setError("");
+    setSuccess("");
     setIsSubmitting(true);
     const body: { action: string; record_ids: string[]; status?: string } = {
       action,
-      record_ids: selectedIds,
+      record_ids: selectedIds.filter(id => items.some(item => item.id === id)),
     };
     if (action === "set_status") body.status = bulkStatus;
     let response: Response;
@@ -245,6 +179,7 @@ export function AttendanceRecordBulkManager({
       submittingRef.current = false;
       return;
     }
+    setSuccess(`${Number(payload.updated_count) || 0} attendance records updated. Refreshing this view.`);
     setSelectedIds([]);
     setIsSubmitting(false);
     submittingRef.current = false;
@@ -253,113 +188,36 @@ export function AttendanceRecordBulkManager({
 
   return (
     <section className="section queue-layout attendance-records-workbench">
-      <div className="attendance-summary-strip" aria-label="Attendance record summary">
+      {!validationError ? <div className="attendance-summary-strip" aria-label="Attendance record summary">
         <span><strong>{pagination.total_count}</strong> records</span>
         <span><strong>{items.length}</strong> on page</span>
-        <span><strong>{lateOnPage}</strong> late</span>
-        <span><strong>{regularizedOnPage}</strong> regularized</span>
-        <span><strong>{lockedOnPage}</strong> locked</span>
-      </div>
+        <span><strong>{lateOnPage}</strong> late on page</span>
+        <span><strong>{regularizedOnPage}</strong> regularized on page</span>
+        <span><strong>{lockedOnPage}</strong> locked on page</span>
+      </div> : null}
 
-      <section aria-label="Attendance records toolbar" className="panel-card-soft attendance-queue-toolbar" data-testid="attendance-records-toolbar">
+      <section aria-label="Attendance records toolbar" className="panel-card-soft attendance-queue-toolbar workspace-list-card" data-testid="attendance-records-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Attendance records</h2>
             <p className="section-copy section-copy-soft">Filter daily rows, inspect exceptions, and apply permitted bulk actions.</p>
           </div>
-          <div className="queue-toolbar__meta">
+          {!validationError ? <div className="queue-toolbar__meta">
             <span className="queue-summary-chip"><strong>{items.length}</strong> in this view</span>
             <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
-          </div>
+          </div> : null}
         </div>
-        <WorkspaceFilterBar className="attendance-record-filter-bar">
-          <label className="form-field">
-            <span className="muted">Search</span>
-            <input ref={searchInputRef} className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Employee, code, shift, source, date" value={search} />
-          </label>
-          <label className="form-field">
-            <span className="muted">Status</span>
-            <select className="input-control" onChange={(event) => setStatusFilter(event.target.value)} value={statusFilter}>
-              <option value="all">All statuses</option>
-              {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label className="form-field">
-            <span className="muted">Source</span>
-            <select className="input-control" onChange={(event) => setSourceFilter(event.target.value)} value={sourceFilter}>
-              <option value="all">All sources</option>
-              {sourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <details className="attendance-more-filters">
-            <summary className="button button--secondary">More filters</summary>
-            <div className="attendance-more-filters__panel">
-              <label className="form-field">
-                <span className="muted">Shift</span>
-                <select aria-label="Shift" className="input-control" onChange={(event) => setShiftFilter(event.target.value)} value={shiftFilter}>
-                  <option value="all">All shifts</option>
-                  {shiftOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-                </select>
-              </label>
-              <label className="form-field">
-                <span className="muted">Lock state</span>
-                <select className="input-control" onChange={(event) => setLockFilter(event.target.value)} value={lockFilter}>
-                  <option value="all">All rows</option>
-                  <option value="locked">Locked only</option>
-                  <option value="open">Open only</option>
-                </select>
-              </label>
-              <label className="form-field">
-                <span className="muted">Regularization</span>
-                <select className="input-control" onChange={(event) => setRegularizedFilter(event.target.value)} value={regularizedFilter}>
-                  <option value="all">All rows</option>
-                  <option value="regularized">Regularized only</option>
-                  <option value="not_regularized">Not regularized</option>
-                </select>
-              </label>
-              <label className="form-field">
-                <span className="muted">From date</span>
-                <input className="input-control" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
-              </label>
-              <label className="form-field">
-                <span className="muted">To date</span>
-                <input className="input-control" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
-              </label>
-              <label className="form-field">
-                <span className="muted">Late focus</span>
-                <label className="toggle-inline">
-                  <input checked={lateOnly} onChange={(event) => setLateOnly(event.target.checked)} type="checkbox" />
-                  <span className="detail-value">Late rows only</span>
-                </label>
-              </label>
-            </div>
-          </details>
-        </WorkspaceFilterBar>
+        <AttendanceRecordFilterForm key={scope} filters={currentFilters} statusOptions={statusOptions} sourceOptions={sourceOptions} shiftOptions={shiftOptions} />
+        {validationError ? <div className="notice notice--error" role="alert">{validationError}</div> : null}
         <div className="queue-toolbar__actions attendance-toolbar-actions">
-          <button className="button button--primary" onClick={(event) => applyFilters(event.currentTarget)} type="button">Apply filters</button>
-          <button className="button button--ghost" onClick={(event) => {
-            setSearch("");
-            setStatusFilter("all");
-            setSourceFilter("all");
-            setShiftFilter("all");
-            setLockFilter("all");
-            setRegularizedFilter("all");
-            setFromDate("");
-            setToDate("");
-            setLateOnly(false);
-            setPageSize("25");
-            navigate(pathname, "cleared attendance filters", event.currentTarget, { scroll: false });
-          }} type="button">
-            Clear filters
-          </button>
           {canManageRecords ? (
-            <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
+            <button className="button button--secondary" disabled={items.length === 0 || Boolean(validationError) || isSubmitting || isRefreshing} onClick={toggleAll} type="button">
               {allSelected ? "Clear page" : "Select page"}
             </button>
           ) : null}
         </div>
         {canManageRecords ? (
-          <div className="attendance-bulk-panel">
+          <div className="attendance-bulk-panel workspace-action-panel">
             <label className="form-field">
               <span className="muted">Bulk status</span>
               <select className="input-control" onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
@@ -379,21 +237,22 @@ export function AttendanceRecordBulkManager({
         ) : (
           <div className="notice"><strong>Read-only attendance view.</strong><span className="muted">Record edits and bulk actions require attendance record management permission.</span></div>
         )}
+        {success ? <div className="notice" role="status">{success}</div> : null}
         {error ? <div className="notice notice--error" role="alert"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
-      <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
-        <section className="panel-card-soft attendance-directory-panel">
-          <div className="attendance-directory-table-wrap">
-            <table className="workspace-table attendance-directory-table">
+      {!validationError ? <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
+        <section className="panel-card-soft attendance-directory-panel workspace-list-card">
+          <WorkspaceTableScrollRegion label="Attendance records, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region">
+            <table aria-label="Attendance records" className="workspace-table attendance-directory-table workspace-data-table">
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th>Date and shift</th>
-                  <th>Status</th>
-                  <th>Time</th>
-                  <th>State</th>
-                  <th>Action</th>
+                  <th scope="col">Employee</th>
+                  <th scope="col">Date and shift</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Time</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -402,8 +261,8 @@ export function AttendanceRecordBulkManager({
                   const isChecked = selectedIds.includes(item.id);
                   return (
                     <tr
-                      aria-selected={isRowSelected}
                       className={isRowSelected ? "is-selected" : ""}
+                      data-record-id={item.id}
                       key={item.id}
                       onClick={() => setSelectedItemId(item.id)}
                     >
@@ -411,7 +270,7 @@ export function AttendanceRecordBulkManager({
                         <div className="workspace-table__primary-cell">
                           {canManageRecords ? (
                             <input
-                              aria-label={`Select ${item.employee_name}`}
+                              aria-label={`Select ${item.employee_name}, ${item.attendance_date}`}
                               checked={isChecked}
                               onChange={() => toggleOne(item.id)}
                               onClick={(event) => event.stopPropagation()}
@@ -452,7 +311,7 @@ export function AttendanceRecordBulkManager({
                 ) : null}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         </section>
 
         {selectedItem ? (
@@ -480,7 +339,7 @@ export function AttendanceRecordBulkManager({
             </article>
             <div className="record-card__actions">
               {canManageRecords ? (
-                <Link className="button button--primary" href={queueHref({ editRecord: selectedItem.id })}>Edit record</Link>
+                <a data-navigation-mode="document" className="button button--primary" href={queueHref({ editRecord: selectedItem.id })}>Edit record</a>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.records.manage permission." type="button">Edit record</button>
               )}
@@ -506,39 +365,39 @@ export function AttendanceRecordBulkManager({
             </details>
           </aside>
         ) : null}
-      </div>
+      </div> : null}
 
-      <div className="panel-card-soft attendance-pagination-panel">
+      {!validationError ? <div className="panel-card-soft attendance-pagination-panel workspace-pagination">
         <span className="queue-summary-chip"><strong>{pagination.total_count ? ((pagination.page - 1) * pagination.page_size) + 1 : 0}-{Math.min(pagination.page * pagination.page_size, pagination.total_count)}</strong> of {pagination.total_count} records</span>
         <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> of {totalPages}</span>
-        <label className="form-field attendance-pagination-rows">
-          <span className="muted">Rows</span>
-          <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
-            {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
-          </select>
-        </label>
-        <button className="button button--secondary" onClick={(event) => applyPageSize(event.currentTarget)} type="button">Apply</button>
+        <form key={scope} action={pathname} method="get" data-navigation-mode="document" aria-label="Attendance pagination" className="workspace-page-size-form">
+          {Object.entries(currentFilters).filter(([key,value]) => key !== "page" && key !== "page_size" && value !== "" && value !== false).map(([key,value]) => <input key={key} type="hidden" name={key} value={String(value)}/>)}
+          <input type="hidden" name="page" value="1"/>
+          <label className="form-field attendance-pagination-rows"><span className="muted">Rows</span><select className="input-control" name="page_size" defaultValue={String(currentFilters.page_size)}>{[10,25,50,100].map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          <button className="button button--secondary" type="submit">Apply</button>
+        </form>
         {totalPages > 1 ? (
           <div className="attendance-pagination-panel__controls">
-            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(1, event.currentTarget)} type="button">First</button>
-            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={(event) => goToPage(pagination.page - 1, event.currentTarget)} type="button">Previous</button>
-            <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(pagination.page + 1, event.currentTarget)} type="button">Next</button>
-            <button className="button button--secondary" disabled={!pagination.has_next} onClick={(event) => goToPage(totalPages, event.currentTarget)} type="button">Last</button>
+            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(1)} type="button">First</button>
+            <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(pagination.page - 1)} type="button">Previous</button>
+            <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(pagination.page + 1)} type="button">Next</button>
+            <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(totalPages)} type="button">Last</button>
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       {modalEditRecord ? (
         <HrAdminActionModal
+          documentNavigation
           className="attendance-record-edit-modal"
           closeHref={queueHref({ editRecord: undefined })}
           eyebrow="Attendance record"
           labelledBy="attendance-record-edit-modal-title"
           title={`Edit ${modalEditRecord.employee_name}`}
           description="Update record interpretation, timing and lock state."
-          tabs={["Record", "State"]}
         >
           <AttendanceRecordForm
+            documentNavigation
             compact
             cancelHref={queueHref({ editRecord: undefined })}
             successHref={queueHref({ editRecord: undefined })}

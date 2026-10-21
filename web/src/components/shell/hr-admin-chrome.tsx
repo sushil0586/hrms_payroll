@@ -1,5 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
+import { DocumentHydrationBoundary } from "@/components/patterns/document-hydration-boundary";
+import { WorkspaceLoading } from "@/components/patterns/workspace-loading";
+
 import { hrAdminNavigation, hrAdminSearchDestinations } from "@/lib/ui/navigation";
 import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
 import type { WorkspaceNavGroup, WorkspaceNavItem } from "@/components/shell/workspace-chrome";
@@ -33,24 +37,28 @@ export function HrAdminChrome({ children, navGroups, navItems, quickLinks, userL
   const groupedNavGroups = groupedHrAdminNavigation(navGroups, navItems);
 
   return (
+    <Suspense fallback={<WorkspaceLoading label="Loading HR Admin workspace" />}><DocumentHydrationBoundary>
     <WorkspaceChrome
+      appearance="accerio"
+      prefetch={false}
       footerDescription="People operations, payroll readiness, compliance evidence, and workforce workflows in one focused control center."
       navItems={groupedNavGroups.flatMap((group) => group.items)}
       navGroups={groupedNavGroups}
       footerTitle="HRMS Workspace"
-      productLabel="HRMS"
+      productLabel="Accerio"
       quickLinks={quickLinks ?? [
         { href: "/ess", label: "ESS" },
         { href: "/mss/approvals", label: "MSS" },
       ]}
       roleLabel="HR Admin"
       searchDestinations={hrAdminSearchDestinations}
-      searchHint="Search employees, payroll, leave, attendance, reports..."
+      searchHint="Search pages and actions"
       userLabel={userLabel}
       workspaceLabel="People Operations"
       workspaceTone="hr"
     >
       {children}
     </WorkspaceChrome>
+    </DocumentHydrationBoundary></Suspense>
   );
 }

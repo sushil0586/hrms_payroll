@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { LogoutButton } from "@/app/components/logout-button";
+import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { ManagerApprovalReviewAction } from "@/app/mss/approvals/manager-approval-review-action";
@@ -156,7 +157,8 @@ function LeaveApprovalSection({
   }
 
   return (
-    <section className="workspace-section queue-review-split mss-approval-queue-grid">
+    <section className="workspace-section queue-review-split mss-approval-queue-grid workspace-review-grid">
+      <div className="workspace-review-grid__list">
       <article className="workspace-data-panel record-card">
         <div className="workspace-data-panel__header section-header">
           <div>
@@ -164,7 +166,7 @@ function LeaveApprovalSection({
             <p className="section-copy section-copy-soft">Pending queue for manager decisions.</p>
           </div>
         </div>
-        <div className="workspace-table-scroll">
+        <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Pending leave requests, scroll for more columns">
           {items.length ? (
             <table className="workspace-table attendance-directory-table mss-approval-table" aria-label="Pending leave requests">
               <thead>
@@ -221,8 +223,20 @@ function LeaveApprovalSection({
               <span className="muted">This queue is currently clear.</span>
             </div>
           )}
-        </div>
+        </WorkspaceTableScrollRegion>
       </article>
+      <PaginationBar
+        firstHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: "1" })}
+        hasNext={response.has_next}
+        hasPrevious={response.has_previous}
+        lastHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: String(totalPages) })}
+        nextHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: String(page + 1) })}
+        page={response.page}
+        pageSize={response.page_size}
+        previousHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: String(Math.max(1, page - 1)) })}
+        totalCount={response.total_count}
+      />
+      </div>
 
       <article className="workspace-data-panel record-card mss-approval-detail-panel">
         <div className="workspace-data-panel__header">
@@ -284,17 +298,7 @@ function LeaveApprovalSection({
         )}
       </article>
 
-      <PaginationBar
-        firstHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: "1" })}
-        hasNext={response.has_next}
-        hasPrevious={response.has_previous}
-        lastHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: String(totalPages) })}
-        nextHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: String(page + 1) })}
-        page={response.page}
-        pageSize={response.page_size}
-        previousHref={buildHref("/mss/approvals", currentParams, { queue: "leave", leaveId: undefined, leavePage: String(Math.max(1, page - 1)) })}
-        totalCount={response.total_count}
-      />
+
     </section>
   );
 }
@@ -329,7 +333,8 @@ function RegularizationApprovalSection({
   }
 
   return (
-    <section className="workspace-section queue-review-split mss-approval-queue-grid">
+    <section className="workspace-section queue-review-split mss-approval-queue-grid workspace-review-grid">
+      <div className="workspace-review-grid__list">
       <article className="workspace-data-panel record-card">
         <div className="workspace-data-panel__header section-header">
           <div>
@@ -337,7 +342,7 @@ function RegularizationApprovalSection({
             <p className="section-copy section-copy-soft">Attendance exception queue.</p>
           </div>
         </div>
-        <div className="workspace-table-scroll">
+        <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Pending attendance requests, scroll for more columns">
           {items.length ? (
             <table className="workspace-table attendance-directory-table mss-approval-table" aria-label="Pending attendance fixes">
               <thead>
@@ -394,8 +399,20 @@ function RegularizationApprovalSection({
               <span className="muted">This queue is currently clear.</span>
             </div>
           )}
-        </div>
+        </WorkspaceTableScrollRegion>
       </article>
+      <PaginationBar
+        firstHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: "1" })}
+        hasNext={response.has_next}
+        hasPrevious={response.has_previous}
+        lastHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: String(totalPages) })}
+        nextHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: String(page + 1) })}
+        page={response.page}
+        pageSize={response.page_size}
+        previousHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: String(Math.max(1, page - 1)) })}
+        totalCount={response.total_count}
+      />
+      </div>
 
       <article className="workspace-data-panel record-card mss-approval-detail-panel">
         <div className="workspace-data-panel__header">
@@ -443,17 +460,7 @@ function RegularizationApprovalSection({
         )}
       </article>
 
-      <PaginationBar
-        firstHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: "1" })}
-        hasNext={response.has_next}
-        hasPrevious={response.has_previous}
-        lastHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: String(totalPages) })}
-        nextHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: String(page + 1) })}
-        page={response.page}
-        pageSize={response.page_size}
-        previousHref={buildHref("/mss/approvals", currentParams, { queue: "attendance", regId: undefined, regPage: String(Math.max(1, page - 1)) })}
-        totalCount={response.total_count}
-      />
+
     </section>
   );
 }
@@ -475,7 +482,7 @@ function DecisionHistorySection({
             <span className="eyebrow">Read-only queue</span>
             <h2 className="section-heading-soft">Completed decisions</h2>
             <p className="section-copy section-copy-soft">
-              Approved and rejected manager decisions will appear here after the history endpoint is available.
+              Completed-decision history is currently unavailable in this workspace.
             </p>
           </div>
           <div className="mss-history-panel__actions">
@@ -508,8 +515,7 @@ function DecisionHistorySection({
         <div className="mss-history-panel__empty">
           <strong>No completed manager decisions are available yet.</strong>
           <span>
-            Pending work remains in the Leave and Attendance queues. Once a completed-decision feed is wired,
-            this view will show employee, request type, decision, decision date, and comment in a paginated list.
+            Pending work remains in the Leave and Attendance queues. Contact HR if you need a completed decision record.
           </span>
         </div>
       </div>
@@ -572,27 +578,9 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
   }[queue];
 
   return (
-    <main className="shell shell--workspace shell--mss-approvals">
-      <header className="workspace-control-header">
-        <div className="workspace-control-header__copy">
-          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live MSS" : "Demo MSS"}</span>
-          <h1>Manager approvals</h1>
-          <p>Choose one queue at a time: leave decisions, attendance decisions, or completed decision history.</p>
-          <div className="workspace-control-header__metrics">
-            <span>Pending decisions</span>
-            <span>Team context</span>
-          </div>
-        </div>
-        <div className="workspace-control-header__actions">
-          <Link className="button button--secondary" href="/">
-            Home
-          </Link>
-          <Link className="button button--secondary" href="/ess">
-            Open ESS
-          </Link>
-          <LogoutButton />
-        </div>
-      </header>
+    <main className="shell shell--workspace shell--mss-approvals accerio-page">
+      <PageIntro appearance="accerio" eyebrow="Manager workspace" title="Manager approvals"
+        description="Review requests, confirm context and record a decision." />
 
       <section className="workspace-section" aria-label="Manager approval metrics">
         <div className="attendance-summary-strip">
@@ -603,30 +591,10 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <section className="workspace-section">
-        <div className="workspace-data-panel mss-approval-focus">
-          <div>
-            <span className="eyebrow">{queueMeta.eyebrow}</span>
-            <h2>{queueMeta.title}</h2>
-            <p>{queueMeta.description}</p>
-          </div>
-          <div className="mss-approval-focus__next">
-            <span>Next step</span>
-            <strong>{queueMeta.nextAction}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="workspace-section">
-        <div className="workspace-data-panel queue-toolbar">
-          <div className="workspace-data-panel__header toolbar">
-            <div>
-              <h2 className="section-heading-soft">Approval views</h2>
-              <p className="section-copy section-copy-soft">Keep each manager task separate and easy to scan.</p>
-            </div>
-            <div className="tabbar">
+      <section className="workspace-standard-panel workspace-queue-context" aria-label="Approval views and guidance">
+            <nav className="tabbar" aria-label="Approval views">
               <Link
-                className={`tab ${queue === "leave" ? "tab--active" : ""}`}
+                aria-current={queue === "leave" ? "page" : undefined} className={`tab ${queue === "leave" ? "tab--active" : ""}`}
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "leave",
                   regId: undefined,
@@ -637,7 +605,7 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
                 <span>{summary.pending_leave_approvals_count}</span>
               </Link>
               <Link
-                className={`tab ${queue === "attendance" ? "tab--active" : ""}`}
+                aria-current={queue === "attendance" ? "page" : undefined} className={`tab ${queue === "attendance" ? "tab--active" : ""}`}
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "attendance",
                   leaveId: undefined,
@@ -648,7 +616,7 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
                 <span>{summary.pending_attendance_regularizations_count}</span>
               </Link>
               <Link
-                className={`tab ${queue === "history" ? "tab--active" : ""}`}
+                aria-current={queue === "history" ? "page" : undefined} className={`tab ${queue === "history" ? "tab--active" : ""}`}
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "history",
                   leaveId: undefined,
@@ -658,9 +626,8 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
                 <span>History</span>
                 <span>Audit</span>
               </Link>
-            </div>
-          </div>
-        </div>
+            </nav>
+        <div className="workspace-queue-context__copy"><h2>{queueMeta.title}</h2><p>{queueMeta.description}</p><p className="muted">{queueMeta.nextAction}</p></div>
       </section>
 
       {queue === "history" ? (

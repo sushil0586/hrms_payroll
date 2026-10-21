@@ -1,5 +1,7 @@
 "use client";
 
+import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+
 import { useEffect, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
@@ -11,14 +13,14 @@ type Props = {
   assignmentId: string;
   isActive: boolean;
   policyName: string;
+  onChanged?: () => Promise<void>;
 };
 
-function getErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to update this assignment.";
-  return String((payload as Record<string, unknown>).detail || "Unable to update this assignment.");
+function getErrorMessage(payload: unknown, status: number) {
+  return mutationErrorMessage(payload, status, 'Unable to update this assignment. Refresh and review its current state.');
 }
 
-export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyName }: Props) {
+export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyName, onChanged }: Props) {
   const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,7 +36,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -49,20 +51,20 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const message = getErrorMessage(payload);
+        const message = getErrorMessage(payload, response.status);
         setError(message);
-        setToast({ title: "Action failed.", message, tone: "error" });
+        setToast({ title: "Action needs attention.", message, tone: "error" });
         return;
       }
       const message = action === "delete" ? "Leave assignment removed." : "Leave assignment deactivated.";
       setSuccessMessage(message);
       setToast({ title: "Assignment updated.", message, tone: "success" });
       setDialogOpen(false);
-      refresh();
+      if (onChanged) void onChanged(); else refresh();
     } catch {
-      const message = "Unable to reach the server. Check your connection and try again.";
+      const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Action failed.", message, tone: "error" });
+      setToast({ title: "Action needs attention.", message, tone: "error" });
     } finally {
       setIsSubmitting(false);
     }
@@ -98,7 +100,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
             </div>
             {error ? (
               <div className="notice notice--error" role="alert">
-                <strong>Action failed.</strong>
+                <strong>Action needs attention.</strong>
                 <span className="muted">{error}</span>
               </div>
             ) : null}

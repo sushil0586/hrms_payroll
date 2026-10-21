@@ -80,6 +80,8 @@ export function createEmptyLeavePolicyValue(defaultStatus: string, defaultAccrua
       version: 1,
       approval: {
         default_route: "manager_only",
+        auto_approve_enabled: false,
+        auto_approve_after_hours: null,
         escalation_route: null,
         escalate_when_units_gte: null,
         second_level_owner_employee_id: null,

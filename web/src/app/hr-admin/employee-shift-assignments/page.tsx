@@ -32,7 +32,7 @@ export default async function HrAdminEmployeeShiftAssignmentsPage({ searchParams
     primary: normalizeParam(currentParams.primary) ?? "all",
     risk: normalizeParam(currentParams.risk) ?? "all",
   };
-  const pageSize = Math.min(numberParam(currentParams.page_size, 10), 50);
+  const pageSize = Math.min(numberParam(currentParams.page_size, 10), 100);
   const page = numberParam(currentParams.page, 1);
   const [result, optionsResult] = await Promise.all([
     getHrAdminEmployeeShiftAssignments({ q: filters.q, kind: filters.kind, primary: filters.primary, risk: filters.risk, page, page_size: pageSize }),
@@ -49,8 +49,8 @@ export default async function HrAdminEmployeeShiftAssignmentsPage({ searchParams
   const primaryCount = pageItems.filter((item) => item.is_primary).length;
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live shift assignment mode" : "Demo shift assignment mode"}
         title="Shift assignments"
         description="Control fixed shifts, weekly rotations, and temporary overrides before attendance runtime depends on them."
@@ -68,7 +68,7 @@ export default async function HrAdminEmployeeShiftAssignmentsPage({ searchParams
         }
       />
 
-      <TimeLeaveOperationsStrip
+      <details className="workspace-context-disclosure"><summary>Attendance navigation and summary</summary><TimeLeaveOperationsStrip
         current="shifts"
         title="Employee shift assignment governance"
         description="Assign employees to fixed shifts, weekly rotations, or temporary overrides with effective windows and overlap review."
@@ -76,7 +76,7 @@ export default async function HrAdminEmployeeShiftAssignmentsPage({ searchParams
         primaryMetricValue={totalCount}
         secondaryMetricLabel="primary"
         secondaryMetricValue={primaryCount}
-      />
+      /></details>
 
       <EmployeeShiftAssignmentsWorkbench
         canManagePolicies={canManagePolicies}

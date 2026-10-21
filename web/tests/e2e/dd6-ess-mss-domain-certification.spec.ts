@@ -13,7 +13,9 @@ async function loginThroughBrowser(page: Page, username: string, password: strin
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.getByLabel("Username or email").fill(username);
   await page.getByLabel("Password").fill(password);
+  const authenticated = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/auth/login");
   await page.getByRole("button", { name: "Sign in" }).click();
+  expect((await authenticated).status()).toBe(200);
   await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
 }
 
@@ -55,14 +57,16 @@ test("DD-SS-005/008 session and connection recovery preserve the ESS leave draft
     });
     const submit = dialog.getByRole("button", { name: "Submit leave" });
     await submit.click();
-    await expect(dialog.getByText("Unable to reach the server. Check your connection and try again.")).toBeVisible();
+    await expect(dialog.getByText(/Unable to reach the server\. We could not confirm the outcome\./)).toBeVisible();
     await expect(dialog.getByLabel("Reason for leave")).toHaveValue(reason);
     await page.unroute("**/api/me/leave-requests");
 
     const logout = await page.request.post("/api/auth/logout");
     expect(logout.ok()).toBeTruthy();
+    const rejectedSession = page.waitForResponse((response) => response.url().includes("/api/me/leave-requests") && response.request().method() === "POST");
     await submit.click();
-    await expect(dialog.getByText(/Not authenticated|Authentication credentials were not provided|Unable to submit leave request/)).toBeVisible();
+    expect((await rejectedSession).status()).toBe(401);
+    await expect(dialog.getByText(/Your session has expired\. Sign in again/)).toBeVisible();
     await expect(dialog.getByLabel("Reason for leave")).toHaveValue(reason);
 
     const relogin = await context.newPage();
@@ -111,7 +115,7 @@ test("DD-SS-008 committed leave with a lost response replays its canonical succe
     });
     const submit = dialog.getByRole("button", { name: "Submit leave" });
     await submit.click();
-    await expect(dialog.getByText("Unable to reach the server. Check your connection and try again.")).toBeVisible();
+    await expect(dialog.getByText(/Unable to reach the server\. We could not confirm the outcome\./)).toBeVisible();
     expect(committedStatus).toBe(201);
     await expect(dialog.getByLabel("Reason for leave")).toHaveValue(reason);
     await page.unroute("**/api/me/leave-requests");

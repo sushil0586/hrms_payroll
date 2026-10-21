@@ -23,8 +23,8 @@ export default async function AttendanceReportsPage() {
   const reports = reportCatalog.filter((report) => report.category === "Attendance");
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={dashboardResult.state === "live" ? "Live attendance reports" : "Demo attendance reports"}
         title="Attendance Reports"
         description="Daily attendance, exception SLA, and leave balance reporting in one focused workspace."
@@ -37,7 +37,7 @@ export default async function AttendanceReportsPage() {
         }
       />
 
-      <ReportInsightsStrip
+      <details className="workspace-context-disclosure"><summary>Report navigation and summary</summary><ReportInsightsStrip
         current="time"
         eyebrow="Attendance reports"
         title="Time and leave report workspace"
@@ -48,7 +48,7 @@ export default async function AttendanceReportsPage() {
           { label: "regularizations", value: operations.pending_regularizations, tone: operations.pending_regularizations ? "warning" : "ready" },
           { label: "employees", value: overview.total_employees, tone: "neutral" },
         ]}
-      />
+      /></details>
 
       <ReportFamilyWorkspace reports={reports} groups={groups} />
     </main>

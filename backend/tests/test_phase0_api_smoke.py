@@ -302,7 +302,7 @@ def create_employee_scoped_leave_policy(
 
 
 def create_assignment_test_leave_type(*, employee: Employee, label: str) -> LeaveType:
-    slug = f"{label}-{uuid4().hex[:8]}"
+    slug = f"{label[:41]}-{uuid4().hex[:8]}"
     return LeaveType.objects.create(
         tenant=employee.tenant,
         code=slug,
@@ -322,7 +322,7 @@ def create_assignment_test_leave_policy(
     allow_backdated_application: bool = True,
     config_snapshot: dict | None = None,
 ) -> LeavePolicy:
-    slug = f"{label}-{uuid4().hex[:8]}"
+    slug = f"{label[:41]}-{uuid4().hex[:8]}"
     return LeavePolicy.objects.create(
         tenant=employee.tenant,
         leave_type=leave_type,
@@ -393,7 +393,7 @@ def create_assignment_test_attendance_policy(
     default_shift: Shift | None = None,
     holiday_calendar: HolidayCalendar | None = None,
 ) -> AttendancePolicy:
-    slug = f"{label}-{uuid4().hex[:8]}"
+    slug = f"{label[:41]}-{uuid4().hex[:8]}"
     return AttendancePolicy.objects.create(
         tenant=employee.tenant,
         code=slug,
@@ -13126,7 +13126,7 @@ def test_employee_cannot_submit_leave_without_required_attachment(api_client: AP
         name="Earned Leave Attachment Policy",
     )
 
-    start_date = timezone.localdate() + timedelta(days=10)
+    start_date = next_weekday(10)
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -13198,6 +13198,8 @@ def test_employee_cannot_submit_leave_when_balance_is_insufficient(api_client: A
     )
 
     start_date = timezone.localdate() + timedelta(days=10)
+    while start_date.weekday() > 3:
+        start_date += timedelta(days=1)
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -13342,6 +13344,8 @@ def test_employee_leave_request_uses_resolved_employee_policy_assignment(api_cli
     )
 
     start_date = timezone.localdate() - timedelta(days=2)
+    while start_date.weekday() > 4:
+        start_date -= timedelta(days=1)
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -13976,6 +13980,8 @@ def test_employee_cannot_withdraw_pending_leave_when_policy_disables_it(api_clie
         is_active=True,
     )
     start_date = timezone.localdate() + timedelta(days=25)
+    while start_date.weekday() > 4:
+        start_date += timedelta(days=1)
     create_response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -14428,7 +14434,7 @@ def test_employee_cannot_withdraw_pending_leave_without_required_attachment(api_
         priority=10,
         is_active=True,
     )
-    start_date = timezone.localdate() + timedelta(days=45)
+    start_date = next_weekday(45)
     create_response = api_client.post(
         "/api/v1/me/leave-requests/",
         {

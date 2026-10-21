@@ -8,43 +8,38 @@ function normalize(value: string) {
   return value.trim().toLowerCase();
 }
 
-async function searchEmployeeOptions(query: string, limit: number, signal: AbortSignal) {
-  const params = new URLSearchParams({ limit: String(limit), q: query });
-  const response = await fetch(`/api/hr-admin/employees/option-search?${params.toString()}`, {
-    cache: "no-store",
-    signal,
-  });
-  const payload = (await response.json().catch(() => null)) as HrAdminEmployeeOptionSearchResponse | null;
-  if (!response.ok || !payload || !("items" in payload)) {
-    throw new Error("Employee lookup failed.");
+async function searchEmployeeOptions(code: string, signal: AbortSignal) {
+  const params = new URLSearchParams({ limit: "2", employee_code: code });
+  let response: Response;
+  try {
+    response = await fetch(`/api/hr-admin/employees/option-search?${params.toString()}`, { cache: "no-store", signal });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new Error("Employee lookup failed. Check your connection and preview the CSV again.");
   }
-  return payload.items;
+  const payload = (await response.json().catch(() => null)) as HrAdminEmployeeOptionSearchResponse | null;
+  if (!response.ok || !payload || !Array.isArray(payload.items) || !Number.isSafeInteger(payload.total_count) || payload.total_count < 0) {
+    throw new Error("Employee lookup failed. Check your session and connection, then preview the CSV again.");
+  }
+  const exact = payload.items.filter(item => normalize(item.employee_code ?? "") === code);
+  if (payload.total_count > 1 || exact.length > 1) throw new Error("Employee code is ambiguous. Ask HR to correct the duplicate codes before importing.");
+  if (payload.total_count !== exact.length) throw new Error("Employee lookup returned an unexpected result. No employee was selected.");
+  return exact[0] ?? null;
 }
 
-async function resolveEmployeeCodes(employeeCodes: string[], signal: AbortSignal) {
+export async function resolveEmployeeCodes(employeeCodes: string[], signal: AbortSignal) {
   const normalizedCodes = Array.from(new Set(employeeCodes.map(normalize).filter(Boolean)));
-  const prefix = normalizedCodes.reduce((left, right) => {
-    let index = 0;
-    while (index < left.length && left[index] === right[index]) index += 1;
-    return left.slice(0, index);
-  }, normalizedCodes[0] ?? "");
+  if (normalizedCodes.length > 250) throw new Error("Preview at most 250 distinct employee codes per batch.");
   const lookup = new Map<string, HrAdminOptionItem>();
-
-  if (prefix.length >= 3) {
-    for (const item of await searchEmployeeOptions(prefix, 250, signal)) {
-      lookup.set(normalize(item.employee_code ?? item.name), item);
+  let next = 0;
+  // Bound read concurrency; never approximate an unresolved code using a name or prefix.
+  await Promise.all(Array.from({ length: Math.min(6, normalizedCodes.length) }, async () => {
+    while (next < normalizedCodes.length) {
+      const code = normalizedCodes[next++];
+      const item = await searchEmployeeOptions(code, signal);
+      if (item) lookup.set(code, item);
     }
-  }
-
-  const unresolvedCodes = normalizedCodes.filter((employeeCode) => !lookup.has(employeeCode));
-  const entries = await Promise.all(unresolvedCodes.map(async (employeeCode) => {
-    const items = await searchEmployeeOptions(employeeCode, 10, signal);
-    const exactMatch = items.find((item) => normalize(item.employee_code ?? item.name) === employeeCode);
-    return [employeeCode, exactMatch ?? items[0] ?? null] as const;
   }));
-  for (const [employeeCode, item] of entries) {
-    if (item) lookup.set(employeeCode, item);
-  }
   return lookup;
 }
 

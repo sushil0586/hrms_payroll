@@ -1,3 +1,5 @@
+import { availableLeaveUnits, leaveUtilizationPercent, leaveBalanceState as leaveLiabilityState, leaveRiskAssessment as leaveLiabilityRisk } from "@/lib/ui/leave-balance-presentation";
+import { completeReport } from "@/lib/complete-report";
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -6,6 +8,7 @@ import type {
   HrAdminAttendanceRecordListResponse,
   HrAdminAttendanceRegularizationListResponse,
   HrAdminLeaveBalance,
+  HrAdminLeaveBalanceListResponse,
   HrAdminLeaveRequestListResponse,
   HrAdminShiftRosterRollout,
   HrAdminShiftRosterRolloutListResponse,
@@ -634,7 +637,11 @@ function rowMatchesQuery(row: Record<string, unknown>, query: string) {
 function applyExportFilters(reportKey: string, rows: Array<Record<string, unknown>>, filters: ExportFilters) {
   const query = filters.q ?? "";
   return rows.filter((row) => {
-    if (!rowMatchesQuery(row, query)) return false;
+    if (!rowMatchesQuery(reportKey === "leave-balance" ? {
+      employee_code: row.employee_code, employee_name: row.employee_name,
+      leave_policy_name: row.leave_policy_name, leave_type_name: row.leave_type_name,
+      period_year: row.period_year, liability_state: row.liability_state, liability_risk: row.liability_risk,
+    } : row, query)) return false;
     if (reportKey === "challan-reconciliation") {
       if (filters.payment_status && row.payment_status !== filters.payment_status) return false;
       if (filters.provider_ref && row.provider_ref !== filters.provider_ref) return false;
@@ -722,6 +729,7 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.leave_type && row.leave_type_name !== filters.leave_type) return false;
       if (filters.period_year && String(row.period_year) !== filters.period_year) return false;
       if (filters.liability_risk && row.liability_risk !== filters.liability_risk) return false;
+      if (filters.liability_state && row.liability_state !== filters.liability_state) return false;
     }
     if (reportKey === "attendance-exceptions") {
       if (filters.status && row.status !== filters.status) return false;
@@ -1673,18 +1681,33 @@ function attendancePayrollReadiness(item: {
   return "Ready";
 }
 
+async function completeAttendanceSource<T extends { items: {id: string}[]; total_count: number }>(path: string, token: string): Promise<UpstreamResult<T>> {
+  let failure: UpstreamResult<T> | undefined;
+  try {
+    const result = await completeReport(async ({page, page_size}) => {
+      const url = new URL(path, "http://local");
+      url.searchParams.set("page", String(page)); url.searchParams.set("page_size", String(page_size));
+      const response = await upstreamJson<T>(`${url.pathname}${url.search}`, token);
+      if (!response.ok || !response.data) { failure = response; throw new Error(response.detail); }
+      return {data: response.data, state: "live" as const};
+    });
+    return {ok: true, status: 200, data: result.data, detail: ""};
+  } catch (error) {
+    return failure ?? {ok: false, status: 502, data: null, detail: error instanceof Error ? error.message : "Complete report evidence could not be loaded."};
+  }
+}
+
 async function getAttendanceRegisterExportRows(reportKey: string, token: string, filters: ExportFilters) {
   if (reportKey !== "attendance-register") return null;
 
   const params = new URLSearchParams({ page: "1", page_size: "500" });
-  if (filters.q) params.set("q", filters.q);
   if (filters.status) params.set("status", filters.status);
   if (filters.source) params.set("source", filters.source);
   if (filters.lock_state) params.set("lock_state", filters.lock_state);
   if (filters.regularized_state === "regularized") params.set("regularized_state", "regularized");
   if (filters.regularized_state === "pending") params.set("regularized_state", "not_regularized");
 
-  const attendanceResult = await upstreamJson<HrAdminAttendanceRecordListResponse>(`/hr-admin/attendance-records/?${params.toString()}`, token);
+  const attendanceResult = await completeAttendanceSource<HrAdminAttendanceRecordListResponse>(`/hr-admin/attendance-records/?${params.toString()}`, token);
   if (!attendanceResult.ok) return { error: attendanceResult };
 
   const attendance = attendanceResult.data;
@@ -1772,7 +1795,7 @@ function attendanceDerivationExceptionRows(attendance: HrAdminAttendanceRecordLi
 async function getAttendanceDerivationExceptionsExportRows(reportKey: string, token: string) {
   if (reportKey !== "attendance-derivation-exceptions") return null;
 
-  const attendanceResult = await upstreamJson<HrAdminAttendanceRecordListResponse>("/hr-admin/attendance-records/?page=1&page_size=500", token);
+  const attendanceResult = await completeAttendanceSource<HrAdminAttendanceRecordListResponse>("/hr-admin/attendance-records/?page=1&page_size=500", token);
   if (!attendanceResult.ok) return { error: attendanceResult };
 
   const attendance = attendanceResult.data;
@@ -1835,8 +1858,8 @@ async function getRosterRolloutAuditExportRows(reportKey: string, token: string)
   if (reportKey !== "roster-rollout-audit") return null;
 
   const [rolloutsResult, templatesResult] = await Promise.all([
-    upstreamJson<HrAdminShiftRosterRolloutListResponse>("/hr-admin/shift-roster-rollouts/?page_size=500", token),
-    upstreamJson<HrAdminShiftRosterTemplateListResponse>("/hr-admin/shift-roster-templates/?page_size=500", token),
+    completeAttendanceSource<HrAdminShiftRosterRolloutListResponse>("/hr-admin/shift-roster-rollouts/?page_size=500", token),
+    completeAttendanceSource<HrAdminShiftRosterTemplateListResponse>("/hr-admin/shift-roster-templates/?page_size=500", token),
   ]);
   if (!rolloutsResult.ok) return { error: rolloutsResult };
   if (!templatesResult.ok) return { error: templatesResult };
@@ -1847,35 +1870,10 @@ async function getRosterRolloutAuditExportRows(reportKey: string, token: string)
   };
 }
 
-function availableLeaveUnits(item: HrAdminLeaveBalance) {
-  return Number(item.closing_balance) - Number(item.reserved_amount);
-}
-
-function leaveUtilizationPercent(item: HrAdminLeaveBalance) {
-  const earned = Number(item.opening_balance) + Number(item.accrued_amount) + Number(item.carry_forward_amount) + Number(item.adjustment_amount);
-  if (!earned) return 0;
-  return Math.round((Number(item.consumed_amount) / earned) * 100);
-}
-
-function leaveLiabilityRisk(item: HrAdminLeaveBalance) {
-  const available = availableLeaveUnits(item);
-  if (available < 0) return "High";
-  if (Number(item.reserved_amount) > 0 || available <= 2) return "Medium";
-  return "Low";
-}
-
-function leaveLiabilityState(item: HrAdminLeaveBalance) {
-  const available = availableLeaveUnits(item);
-  if (available < 0) return "Overdrawn";
-  if (Number(item.reserved_amount) > 0) return "Reserved";
-  if (available <= 2) return "Low balance";
-  return "Healthy";
-}
-
 async function getLeaveBalanceExportRows(reportKey: string, token: string) {
   if (reportKey !== "leave-balance") return null;
 
-  const leaveResult = await upstreamJson<HrAdminLeaveBalance[] | { items?: HrAdminLeaveBalance[] }>("/hr-admin/leave-balances/", token);
+  const leaveResult = await completeAttendanceSource<HrAdminLeaveBalanceListResponse>("/hr-admin/leave-balances/", token);
   if (!leaveResult.ok) return { error: leaveResult };
 
   const balances = Array.isArray(leaveResult.data) ? leaveResult.data : leaveResult.data?.items;
@@ -1899,7 +1897,7 @@ async function getLeaveBalanceExportRows(reportKey: string, token: string) {
       available_after_reserved: availableLeaveUnits(item).toFixed(2),
       utilization_percent: leaveUtilizationPercent(item),
       liability_state: leaveLiabilityState(item),
-      liability_risk: leaveLiabilityRisk(item),
+      liability_risk: leaveLiabilityRisk(),
     })),
   };
 }
@@ -1935,7 +1933,7 @@ function attendanceExceptionPayrollImpact(currentStatus: string, requestedStatus
 async function getAttendanceExceptionsExportRows(reportKey: string, token: string) {
   if (reportKey !== "attendance-exceptions") return null;
 
-  const regularizationResult = await upstreamJson<HrAdminAttendanceRegularizationListResponse>("/hr-admin/attendance-regularizations/?page=1&page_size=500", token);
+  const regularizationResult = await completeAttendanceSource<HrAdminAttendanceRegularizationListResponse>("/hr-admin/attendance-regularizations/?page=1&page_size=500", token);
   if (!regularizationResult.ok) return { error: regularizationResult };
 
   const regularizations = regularizationResult.data;
@@ -2010,7 +2008,7 @@ function leaveAttendanceCollisionRows(leaveRequests: HrAdminLeaveRequestListResp
 async function getLeaveAttendanceCollisionsExportRows(reportKey: string, token: string) {
   if (reportKey !== "leave-attendance-collisions") return null;
 
-  const leaveResult = await upstreamJson<HrAdminLeaveRequestListResponse>("/hr-admin/leave-requests/?page=1&page_size=500", token);
+  const leaveResult = await completeAttendanceSource<HrAdminLeaveRequestListResponse>("/hr-admin/leave-requests/?page=1&page_size=500", token);
   if (!leaveResult.ok) return { error: leaveResult };
 
   const leaveRequests = leaveResult.data;
@@ -2634,7 +2632,7 @@ async function getDemoRows(reportKey: string) {
       }));
     }
     case "attendance-register": {
-      const result = await getHrAdminAttendanceRecords({ page: 1, page_size: 500 });
+      const result = await completeReport(getHrAdminAttendanceRecords);
       return result.data.items.map((item) => ({
         employee_code: item.employee_code,
         employee_name: item.employee_name,
@@ -2660,18 +2658,18 @@ async function getDemoRows(reportKey: string) {
       }));
     }
     case "attendance-derivation-exceptions": {
-      const result = await getHrAdminAttendanceRecords({ page: 1, page_size: 500 });
+      const result = await completeReport(getHrAdminAttendanceRecords);
       return attendanceDerivationExceptionRows(result.data);
     }
     case "roster-rollout-audit": {
       const [rolloutsResult, templatesResult] = await Promise.all([
-        getHrAdminShiftRosterRollouts({ page: 1, page_size: 500 }),
+        completeReport(getHrAdminShiftRosterRollouts),
         getHrAdminShiftRosterTemplates(),
       ]);
       return rosterRolloutAuditRows(rolloutsResult.data.items, templatesResult.data.items);
     }
     case "leave-balance": {
-      const result = await getHrAdminLeaveBalances({ page_size: 50 });
+      const result = await completeReport(getHrAdminLeaveBalances);
       return result.data.items.map((item) => ({
         employee_code: item.employee_code,
         employee_name: item.employee_name,
@@ -2689,11 +2687,11 @@ async function getDemoRows(reportKey: string) {
         available_after_reserved: availableLeaveUnits(item).toFixed(2),
         utilization_percent: leaveUtilizationPercent(item),
         liability_state: leaveLiabilityState(item),
-        liability_risk: leaveLiabilityRisk(item),
+        liability_risk: leaveLiabilityRisk(),
       }));
     }
     case "attendance-exceptions": {
-      const result = await getHrAdminAttendanceRegularizations({ page: 1, page_size: 500 });
+      const result = await completeReport(getHrAdminAttendanceRegularizations);
       return result.data.items.map((item) => {
         const agingDays = attendanceExceptionAgingDays(item.applied_at, item.created_at, item.resolved_at);
         return {
@@ -2724,7 +2722,7 @@ async function getDemoRows(reportKey: string) {
       });
     }
     case "leave-attendance-collisions": {
-      const result = await getHrAdminLeaveRequests({ page: 1, page_size: 500 });
+      const result = await completeReport(getHrAdminLeaveRequests);
       return leaveAttendanceCollisionRows(result.data);
     }
     case "payroll-input-exceptions": {

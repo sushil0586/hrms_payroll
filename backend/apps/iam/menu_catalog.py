@@ -42,6 +42,7 @@ MENU_DEFINITIONS: tuple[MenuDefinition, ...] = (
     MenuDefinition("tenant-admin", "Workspace", "sidebar", "/tenant-admin/trust-audit", "Trust Audit", "TA", "Evidence review", ("tenant.audit.view", "tenant.audit.export"), 70),
     MenuDefinition("tenant-admin", "Workspace", "sidebar", "/tenant-admin/settings", "Settings", "ST", "Account controls", ("tenant.settings.view",), 80),
     MenuDefinition("tenant-admin", "Workspace", "sidebar", "/tenant-admin/financial-calendars", "Financial Years", "FY", "Calendars and posting periods", ("tenant.settings.view", "finance.periods.close", "finance.periods.reopen"), 85),
+    MenuDefinition("tenant-admin", "Workspace", "sidebar", "/tenant-admin/leave-year", "Leave Years", "LY", "Leave periods and governed close", ("leave.periods.view",), 86),
     MenuDefinition("tenant-admin", "Workspace", "sidebar", "/tenant-admin/security-readiness", "Security", "SE", "Enterprise readiness", ("tenant.security.view",), 90),
     MenuDefinition("tenant-admin", "Quick Links", "quick_link", "/", "Home", "", "", tuple(), 10),
     MenuDefinition("tenant-admin", "Quick Links", "quick_link", "/tenant-admin", "Tenant", "", "", ("tenant.dashboard.view",), 20),

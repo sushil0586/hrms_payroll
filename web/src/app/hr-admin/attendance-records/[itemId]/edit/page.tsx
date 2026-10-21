@@ -20,8 +20,8 @@ export default async function HrAdminEditAttendanceRecordPage({ params }: PagePr
   ]);
 
   return (
-    <main className="shell shell--time-leave">
-      <PageIntro
+    <main className="shell shell--time-leave accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live attendance record mode" : "Demo attendance record mode"}
         title="Edit attendance record"
         description="Adjust operational values and lock state for a day-level attendance row."
