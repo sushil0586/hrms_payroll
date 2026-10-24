@@ -45,15 +45,16 @@ test.describe.serial("deployed read-only auth routing proof", () => {
     }
   });
 
-  test("employee opens ESS and is redirected away from HR admin", async ({ page }) => {
+  test("employee opens ESS and is denied HR admin access", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
     await expectPageReady(page, /My workspace|Self service/i);
     await expectWorkspaceLoaded(page, /My workspace|Self service|Employee/i);
     await expect(page.getByRole("link", { name: "HR Admin" })).toHaveCount(0);
 
     await page.goto("/hr-admin");
-    await expect(page).toHaveURL(/\/ess$/);
-    await expectPageReady(page, /My workspace|Self service/i);
+    await expect(page).toHaveURL(/\/access-denied$/);
+    await expectPageReady(page, "Workspace access unavailable");
+    await expect(page.getByRole("link", { name: "Employee workspace" })).toHaveAttribute("href", "/ess");
   });
 
   test("manager opens MSS without HR admin escalation", async ({ page }) => {
