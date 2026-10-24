@@ -190,8 +190,8 @@ export default async function HrAdminAuditPage({ searchParams }: PageProps) {
   const notificationEventCount = events.filter((item) => item.source === "notification_delivery").length;
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live audit view" : "Demo audit view"}
         title="Audit center"
         description="Review recent document decisions, lifecycle work-item history, and notification delivery activity in one trust-layer timeline."

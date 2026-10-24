@@ -16,8 +16,8 @@ export default async function StatutoryDeductionsReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance report" : "Demo compliance report"}
         title="Statutory Deduction Summary"
         description="Component-wise statutory deduction report using configurable statutory setup, employer registrations, filing calendars, and published payroll handoff artifacts."

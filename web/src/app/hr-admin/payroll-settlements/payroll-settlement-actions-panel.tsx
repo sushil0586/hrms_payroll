@@ -42,6 +42,7 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
   const [sourceRef, setSourceRef] = useState("pilot-settlement-manual");
   const [grossAmount, setGrossAmount] = useState("42000");
   const [recoveryAmount, setRecoveryAmount] = useState("3000");
+  const [rejectionReason, setRejectionReason] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState("");
@@ -60,11 +61,18 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
         setNotice({ tone: "error", message: payload.detail ?? "Action failed. Review the payload and current status." });
         return payload;
       }
+      if (!payload.id && !payload.status) {
+        setNotice({ tone: "error", message: "The settlement action was not confirmed. Verify the current package before trying again." });
+        return payload;
+      }
       setNotice({ tone: "success", message: successMessage });
       if (options.refresh ?? true) {
         router.refresh();
       }
       return payload;
+    } catch {
+      setNotice({ tone: "error", message: "The settlement action could not be confirmed. Your entered values are still available; verify the package before retrying." });
+      return undefined;
     } finally {
       setBusyAction("");
     }
@@ -152,24 +160,26 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
     router.push(`/hr-admin/payroll-settlements?tab=detail&runId=${selectedRun.id}&settlementId=${settlement.id}`);
   }
 
-  async function act(action: "submit" | "approve" | "apply") {
+  async function act(action: "submit" | "approve" | "reject" | "apply") {
     if (!selectedSettlement) {
       setNotice({ tone: "error", message: "Select a settlement before running a lifecycle action." });
       return;
     }
     await postJson(
       `/api/hr-admin/payroll-settlements/${selectedSettlement.id}/${action}`,
-      action === "approve" ? { approval_profile_ref: "tenant.payroll.settlement.approval.pilot100.v1" } : {},
+      action === "approve"
+        ? { approval_profile_ref: "tenant.payroll.settlement.approval.pilot100.v1" }
+        : action === "reject" ? { reason: rejectionReason } : {},
       `Settlement ${action} completed.`,
     );
   }
 
   return (
-    <section className="payroll-setup-assignment-panel" aria-label="Settlement certification actions">
+    <section className="payroll-setup-assignment-panel" aria-label="Settlement actions">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
-          <span className="workspace-card__eyebrow">Certification actions</span>
-          <h2>Create and apply settlement</h2>
+          <span className="workspace-card__eyebrow">Settlement actions</span>
+          <h2>Create or advance a settlement</h2>
         </div>
         <span className="payroll-setup-count">{runSnapshots.length} locked snapshots</span>
       </div>
@@ -214,16 +224,24 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
         <button className="button button--primary" disabled={Boolean(busyAction) || !selectedRun || !activeSnapshot} onClick={createSettlement} type="button">
           Create settlement
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || !selectedSettlement} onClick={() => act("submit")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "draft"} onClick={() => act("submit")} type="button">
           Submit selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || !selectedSettlement} onClick={() => act("approve")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "submitted"} onClick={() => act("approve")} type="button">
           Approve selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || !selectedSettlement} onClick={() => act("apply")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "submitted" || !rejectionReason.trim()} onClick={() => act("reject")} type="button">
+          Reject selected
+        </button>
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "approved"} onClick={() => act("apply")} type="button">
           Apply selected
         </button>
       </div>
+      <label className="form-field">
+        <span className="muted">Rejection reason</span>
+        <textarea aria-label="Settlement rejection reason" onChange={(event) => setRejectionReason(event.target.value)} placeholder="Required only when rejecting" rows={2} value={rejectionReason} />
+      </label>
+      {selectedSettlement ? <p className="section-copy section-copy-soft">Current state: {selectedSettlement.status.replaceAll("_", " ")}. The next eligible transition is enabled.</p> : null}
       {notice ? (
         <p className={`form-status form-status--${notice.tone}`} role="alert">
           {notice.message}

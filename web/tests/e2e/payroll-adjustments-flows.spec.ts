@@ -35,7 +35,7 @@ test.describe("HR admin payroll adjustment flows", () => {
     }
 
     await page.getByRole("link", { name: /Actions/ }).click();
-    await expect(page.getByLabel("Adjustment certification actions")).toBeVisible();
+    await expect(page.getByLabel("Adjustment actions")).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
   });

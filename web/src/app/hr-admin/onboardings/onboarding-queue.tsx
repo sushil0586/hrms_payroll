@@ -1,8 +1,10 @@
 "use client";
+import {useDocumentUploadDraft} from "@/lib/ui/use-document-upload-draft";
+import {postLifecycleBulk,lifecycleNavigate} from "@/lib/ui/lifecycle-bulk";
 
-import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -51,16 +53,21 @@ function buildQueryString(params: Record<string, string | number | boolean | und
 }
 
 export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecycleOwners, currentFilters, pagination }: Props) {
-  const router = useRouter();
+
   const pathname = usePathname();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [feedback,setFeedback]=useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const pending=useRef(false);const noticeRef=useRef<HTMLDivElement>(null);const ready=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
+  useDocumentUploadDraft(false,isSubmitting);
+  useEffect(()=>{if(error||feedback)noticeRef.current?.focus();},[error,feedback]);
   const [search, setSearch] = useState(currentFilters.q);
   const [status, setStatus] = useState(currentFilters.status || "all");
   const [owner, setOwner] = useState(currentFilters.owner || "all");
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [bulkOwner, setBulkOwner] = useState(currentFilters.owner || "");
+  useEffect(()=>{const restore=()=>{setSearch(currentFilters.q );setStatus(currentFilters.status || "all");setOwner(currentFilters.owner || "all");setPageSize(String(currentFilters.page_size));setSelectedIds([]);};window.addEventListener('pageshow',restore);window.addEventListener('popstate',restore);return()=>{window.removeEventListener('pageshow',restore);window.removeEventListener('popstate',restore);};},[currentFilters]);
   const [bulkStatus, setBulkStatus] = useState(onboardingStatusOptions[0]?.value ?? "not_started");
 
   const allSelected = items.length > 0 && selectedIds.length === items.length;
@@ -76,8 +83,9 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
     setSelectedIds((current) => (current.length === items.length ? [] : items.map((item) => item.id)));
   }
 
-  function goToPage(page: number) {
-    router.push(`${pathname}${buildQueryString({
+  function goToPage(page: number, apply = false) {
+    if(!apply){lifecycleNavigate(queueHref({page}));return;}
+    lifecycleNavigate(`${pathname}${buildQueryString({
       q: search.trim() || undefined,
       status: status !== "all" ? status : undefined,
       owner: owner !== "all" ? owner : undefined,
@@ -86,15 +94,8 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
     })}`);
   }
 
-  function queueHref(params: Record<string, string | number | boolean | undefined>) {
-    return `${pathname}${buildQueryString({
-      q: search.trim() || undefined,
-      status: status !== "all" ? status : undefined,
-      owner: owner !== "all" ? owner : undefined,
-      page: pagination.page,
-      page_size: Number(pageSize) || currentFilters.page_size,
-      ...params,
-    })}`;
+  function queueHref(params: Record<string,string|number|boolean|undefined> = {}) {
+    return `${pathname}${buildQueryString({...currentFilters,...params})}`;
   }
 
   function statusTone(value: string) {
@@ -110,26 +111,18 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
       return;
     }
     setError("");
+    if(pending.current)return;pending.current=true;
     setIsSubmitting(true);
     const body: HrAdminLifecycleOwnerBulkActionInput = {
       record_type: "onboarding",
       record_ids: selectedIds,
       owner_value: nextOwnerValue,
     };
-    const response = await fetch("/api/hr-admin/lifecycle-owner-bulk-actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(getErrorMessage(payload));
-      setIsSubmitting(false);
-      return;
-    }
-    setSelectedIds([]);
-    setIsSubmitting(false);
-    router.refresh();
+    try {
+      const count=await postLifecycleBulk("/api/hr-admin/lifecycle-owner-bulk-actions",body);
+      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);setSelectedIds([]);
+    } catch(error){setError(error instanceof Error?error.message:"Update outcome could not be confirmed. Reload before retrying.");}
+    finally {pending.current=false;setIsSubmitting(false);}
   }
 
   async function handleBulkStatusAction(nextStatusValue: string) {
@@ -138,30 +131,23 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
       return;
     }
     setError("");
+    if(pending.current)return;pending.current=true;
     setIsSubmitting(true);
     const body: HrAdminLifecycleStatusBulkActionInput = {
       record_type: "onboarding",
       record_ids: selectedIds,
       status_value: nextStatusValue,
     };
-    const response = await fetch("/api/hr-admin/lifecycle-status-bulk-actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(getErrorMessage(payload));
-      setIsSubmitting(false);
-      return;
-    }
-    setSelectedIds([]);
-    setIsSubmitting(false);
-    router.refresh();
+    try {
+      const count=await postLifecycleBulk("/api/hr-admin/lifecycle-status-bulk-actions",body);
+      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);setSelectedIds([]);
+    } catch(error){setError(error instanceof Error?error.message:"Update outcome could not be confirmed. Reload before retrying.");}
+    finally {pending.current=false;setIsSubmitting(false);}
   }
 
   return (
-    <section className="section queue-layout lifecycle-queue-layout">
+    <section className="section queue-layout lifecycle-queue-layout"><fieldset className="lifecycle-fields" disabled={!ready||isSubmitting} data-hydrated={ready}>
+      {error||feedback?<div className="notice" role={error?"alert":"status"} ref={noticeRef} tabIndex={-1}>{error?<p>{error}</p>:null}{feedback?<p>{feedback}</p>:null}<a data-navigation-mode="document" href={queueHref()}>Reload queue</a></div>:null}
       <section className="queue-toolbar panel-card-soft lifecycle-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
@@ -169,33 +155,29 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
             <p className="section-copy section-copy-soft">Filter joiners by readiness, owner, or status.</p>
           </div>
           <div className="queue-toolbar__meta">
-            <span className="queue-summary-chip"><strong>{pagination.total_count}</strong> total records</span>
-            <span className="queue-summary-chip"><strong>{items.length}</strong> on this page</span>
             <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
           </div>
         </div>
         <div className="queue-toolbar__grid">
           <label className="form-field">
             <span className="muted">Search</span>
-            <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Employee, code, owner, template, notes" value={search} />
+            <input className="input-control" onChange={(event) => setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();goToPage(1,true);}}} placeholder="Employee, code, owner, template, notes" value={search} />
           </label>
           <label className="form-field">
-            <span className="muted">Status</span>
-            <select className="input-control" onChange={(event) => setStatus(event.target.value)} value={status}>
+            <span className="muted">Status</span><select aria-label="Status" className="input-control" onChange={(event) => setStatus(event.target.value)} value={status}>
               <option value="all">All statuses</option>
               {onboardingStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
           <label className="form-field">
-            <span className="muted">Owner</span>
-            <select className="input-control" onChange={(event) => setOwner(event.target.value)} value={owner}>
+            <span className="muted">Owner</span><select aria-label="Owner" className="input-control" onChange={(event) => setOwner(event.target.value)} value={owner}>
               <option value="all">All owners</option>
               {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
         </div>
         <div className="queue-toolbar__actions">
-          <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
+          <button className="button button--primary" onClick={() => goToPage(1,true)} type="button">Apply filters</button>
           <button className="button button--ghost" onClick={() => {
             setSelectedIds([]);
             setError("");
@@ -205,7 +187,7 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
             setPageSize("25");
             setBulkOwner("");
             setBulkStatus(onboardingStatusOptions[0]?.value ?? "not_started");
-            router.push(pathname);
+            lifecycleNavigate(pathname);
           }} type="button">Clear filters</button>
           <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
             {allSelected ? "Clear selection" : "Select page"}
@@ -214,8 +196,7 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
         <div className="queue-toolbar__bulk-grid lifecycle-bulk-grid">
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
-              <span className="muted">Bulk owner</span>
-              <select className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
+              <span className="muted">Bulk owner</span><select aria-label="Bulk owner" className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
                 <option value="">Clear owner assignment</option>
                 {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -241,8 +222,7 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
           </div>
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
-              <span className="muted">Bulk status</span>
-              <select className="input-control" onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
+              <span className="muted">Bulk status</span><select aria-label="Bulk status" className="input-control" onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
                 {onboardingStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
@@ -285,8 +265,7 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
           <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
           <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
         </div>
-        {error ? <div className="notice notice--error" role="alert"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
-      </section>
+              </section>
 
       <WorkspaceDataTable ariaLabel="Onboarding records" className="lifecycle-table">
         <thead>
@@ -325,7 +304,7 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
                 </WorkspaceStatusBadge>
                 <span>{missingDocumentSummary}</span>
               </td>
-              <td><Link className="button button--secondary" href={queueHref({ editOnboarding: item.id })}>Edit</Link></td>
+              <td><a data-navigation-mode="document" className="button button--secondary" data-lifecycle-trigger={`edit-onboarding-${item.id}`} href={queueHref({ editOnboarding: item.id })}>Edit</a></td>
             </tr>
           );
         })}
@@ -333,8 +312,7 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
       </WorkspaceDataTable>
       <div className="lifecycle-pagination-row">
         <label className="form-field form-field--inline">
-          <span className="muted">Rows</span>
-          <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+          <span className="muted">Rows</span><select aria-label="Rows" className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
             {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
           </select>
         </label>
@@ -357,6 +335,7 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
         pageSize={pagination.page_size}
         totalCount={pagination.total_count}
       />
+    </fieldset>
     </section>
   );
 }

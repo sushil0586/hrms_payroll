@@ -5,8 +5,8 @@ import { ImportHistoryWorkspace } from "./import-history-workspace";
 
 export default function HrAdminImportHistoryPage() {
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Bulk import evidence"
         title="Import history"
         description="Review batch outcomes, source hashes, blocked rows, and rollback readiness."

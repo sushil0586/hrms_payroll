@@ -1,5 +1,7 @@
 # HR Admin page-by-page coverage tracker
 
+Cross-workspace reconciliation (22 October 2026): see the [current route inventory and UI/UX gap tracker](hrms-ui-ux-gap-tracker.md). It preserves this tracker's historical results and distinguishes current source signals from fresh acceptance.
+
 Inventory baseline: 2026-10-19. Latest implementation checkpoint: 2026-10-20. See [audit findings](hrms-hr-admin-page-audit.md), [shared standard](hrms-hr-admin-experience-standard.md) and [phased implementation/QA plan](hrms-hr-admin-phased-implementation-plan.md).
 
 **146 route files source-inventoried; 30 desktop renders observed; two routes have focused filter interactions. No all-route functional acceptance.** Route patterns may represent many records or organization sections; one pattern is not coverage of all underlying variants. All mutation workflows, role-negative checks, backend/API regressions and responsive/accessibility certification remain open unless separately evidenced.

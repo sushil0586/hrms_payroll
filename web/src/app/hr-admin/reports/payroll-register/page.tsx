@@ -13,8 +13,8 @@ export default async function PayrollRegisterReportPage() {
   const result = await getHrAdminPayrollOutputSetup({ artifact_kind: "register", artifact_page_size: 100 });
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-outputs">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-outputs accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Register Report"
         description="Finance-ready payroll register view backed by locked output artifacts, source hashes, export controls, and tenant-scoped payroll output evidence."

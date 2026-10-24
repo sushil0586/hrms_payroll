@@ -16,8 +16,8 @@ export default async function StatutoryFilingStatusReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance report" : "Demo compliance report"}
         title="Statutory Filing Status"
         description="Filing-calendar status tracking across due dates, overdue exposure, acknowledgement state, provider route readiness, and artifact evidence."

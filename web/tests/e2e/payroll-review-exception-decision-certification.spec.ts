@@ -127,13 +127,11 @@ test.describe("Phase 5O payroll review exception decision certification", () => 
     const payrollOperator = await createPayrollLifecycleOperator(page);
     const setup = await createApprovedReadyReview(page, payrollOperator);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${setup.reviewId}`, payrollOperator);
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=exceptions&reviewId=${setup.reviewId}`, payrollOperator);
     await expectPageReady(page, "Payroll Review");
     await expect(page.locator(".payroll-review-card.is-selected")).toContainText(setup.runCode);
-    await expect(page.getByRole("heading", { name: "Review controls" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Exception actions" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Exception register" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Approved calculation lines" })).toBeVisible();
 
     const actions = page.getByLabel("Exception actions");
     const title = `Browser blocker ${setup.runCode}`;
@@ -148,11 +146,12 @@ test.describe("Phase 5O payroll review exception decision certification", () => 
     expect(created.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText("Exception created.");
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${setup.reviewId}&exceptionId=${created.payload.id}`, payrollOperator);
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=exceptions&reviewId=${setup.reviewId}&exceptionId=${created.payload.id}`, payrollOperator);
     await expectPageReady(page, "Payroll Review");
     await expect(page.locator(".payroll-review-exception-table tr.is-selected")).toContainText(title);
     await expect(page.locator("aside[aria-label$='exception detail']")).toContainText("Browser-created blocker");
 
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=actions&reviewId=${setup.reviewId}`, payrollOperator);
     const controls = page.getByLabel("Review controls");
     await expect(controls.getByRole("button", { name: "Submit review" })).toBeDisabled();
     await expect(controls).toContainText(/open blocker exception/i);
@@ -160,48 +159,54 @@ test.describe("Phase 5O payroll review exception decision certification", () => 
     expect(blockedSubmit.status()).toBe(400);
     expect(await blockedSubmit.text()).toMatch(/blocker/i);
 
-    await actions.locator("#payroll-review-exception-decision").selectOption("accepted");
-    await actions.getByLabel("Decision reason").fill("Finance accepted this blocker for the certification run.");
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=exceptions&reviewId=${setup.reviewId}&exceptionId=${created.payload.id}`, payrollOperator);
+    const decisionActions = page.getByLabel("Exception actions");
+    await decisionActions.locator("#payroll-review-exception-decision").selectOption("accepted");
+    await decisionActions.getByLabel("Decision reason").fill("Finance accepted this blocker for the certification run.");
     const decision = await submitAndCapture<{ status: string }>(page, new RegExp(`/api/hr-admin/payroll-review-exceptions/${created.payload.id}/decision$`), "POST", async () => {
-      await actions.getByRole("button", { name: "Save decision" }).click();
+      await decisionActions.getByRole("button", { name: "Save decision" }).click();
     });
     expect(decision.ok).toBeTruthy();
     expect(decision.payload.status).toBe("accepted");
     await expect(page.getByRole("status").first()).toContainText("Exception decision saved.");
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${setup.reviewId}&exceptionId=${created.payload.id}`, payrollOperator);
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=exceptions&reviewId=${setup.reviewId}&exceptionId=${created.payload.id}`, payrollOperator);
     await expectPageReady(page, "Payroll Review");
     await expect(page.locator("aside[aria-label$='exception detail']")).toContainText("Finance accepted this blocker");
-    await expect(controls.getByRole("button", { name: "Submit review" })).toBeEnabled();
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=actions&reviewId=${setup.reviewId}`, payrollOperator);
+    const readyControls = page.getByLabel("Review controls");
+    await expect(readyControls.getByRole("button", { name: "Submit review" })).toBeEnabled();
 
     const submitted = await submitAndCapture<{ review: { status: string } }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${setup.reviewId}/submit$`), "POST", async () => {
-      await controls.getByRole("button", { name: "Submit review" }).click();
+      await readyControls.getByRole("button", { name: "Submit review" }).click();
     });
     expect(submitted.ok).toBeTruthy();
     expect(submitted.payload.review.status).toBe("ready_for_approval");
-    await expect(controls.getByRole("button", { name: "Approve review" })).toBeEnabled();
+    await expect(readyControls.getByRole("button", { name: "Approve review" })).toBeEnabled();
 
-    await controls.getByLabel("Approval profile ref").fill("tenant.payroll.approval.phase5o.v1");
-    await controls.getByLabel("Approval comment").fill("Reviewer approved after accepted blocker decision.");
+    await readyControls.getByLabel("Approval profile ref").fill("tenant.payroll.approval.phase5o.v1");
+    await readyControls.getByLabel("Approval comment").fill("Reviewer approved after accepted blocker decision.");
     const approved = await submitAndCapture<{ review: { status: string } }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${setup.reviewId}/approve$`), "POST", async () => {
-      await controls.getByRole("button", { name: "Approve review" }).click();
+      await readyControls.getByRole("button", { name: "Approve review" }).click();
     });
     expect(approved.ok).toBeTruthy();
     expect(approved.payload.review.status).toBe("approved");
     await expect(page.getByRole("status").first()).toContainText("Payroll review approved.");
-    await expect(controls.getByRole("button", { name: "Final lock" })).toBeEnabled();
+    await expect(readyControls.getByRole("button", { name: "Final lock" })).toBeEnabled();
 
     const locked = await submitAndCapture<{ review: { status: string } }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${setup.reviewId}/lock$`), "POST", async () => {
-      await controls.getByRole("button", { name: "Final lock" }).click();
+      await readyControls.getByRole("button", { name: "Final lock" }).click();
     });
     expect(locked.ok).toBeTruthy();
     expect(locked.payload.review.status).toBe("locked");
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${setup.reviewId}&exceptionId=${created.payload.id}`, payrollOperator);
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=actions&reviewId=${setup.reviewId}`, payrollOperator);
     await expectPageReady(page, "Payroll Review");
     await expect(page.locator(".payroll-review-card.is-selected")).toContainText("Locked");
     await expect(page.getByText("Reviewer approved after accepted blocker decision.")).toBeVisible();
     await expect(page.getByText("tenant.payroll.approval.phase5o.v1")).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?tab=exceptions&reviewId=${setup.reviewId}&exceptionId=${created.payload.id}`, payrollOperator);
+    await expect(page.locator("aside[aria-label$='exception detail']")).toContainText("Finance accepted this blocker");
     await expectNoHorizontalOverflow(page);
   });
 });

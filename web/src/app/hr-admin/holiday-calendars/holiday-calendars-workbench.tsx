@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
@@ -159,10 +161,10 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
                       <td><strong>{item.year}</strong><span>Calendar year</span></td>
                       <td><strong>{item.holidays.length} holidays</strong><span>{item.holidays.filter((holiday) => holiday.holiday_type === "restricted").length} restricted</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item)}>{item.is_active ? "Active" : "Inactive"}</WorkspaceStatusBadge><span><PlatformGovernanceCard item={item} /></span></td>
-                      <td><button className="button button--secondary button--compact" onClick={(event) => {
-                        event.stopPropagation();
+                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                        triggerEvent.stopPropagation();
                         setSelectedItemId(item.id);
-                      }} type="button">Inspect</button></td>
+                       }} type="button">Inspect</button></td>
                     </tr>
                   );
                 })}
@@ -183,7 +185,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
                 <h2 className="section-heading-soft">Calendar detail</h2>
                 <p className="section-copy section-copy-soft">Focused scope and holiday-row context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={() => setSelectedItemId("")} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

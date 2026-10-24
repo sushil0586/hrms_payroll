@@ -9,9 +9,11 @@ type Props = {
   reset: () => void;
 };
 
-export default function FinanceManagerError({ error, reset }: Props) {
+export default function FinanceManagerError({ error }: Props) {
   return (
     <WorkspaceErrorState
+      appearance="accerio"
+      userFacing
       actions={
         <>
           <Link className="button button--secondary" href="/hr-admin/reports">
@@ -24,7 +26,7 @@ export default function FinanceManagerError({ error, reset }: Props) {
       }
       detail={error.message}
       eyebrow="Finance load issue"
-      onRetry={reset}
+      onRetry={() => window.location.reload()}
       title="Finance control center could not load handoff data"
     />
   );

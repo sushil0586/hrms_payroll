@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
@@ -308,7 +310,7 @@ export function ManagerApprovalReviewAction(props: Props) {
 
   return (
     <>
-      <button className={buttonClass} onClick={() => setIsOpen(true)} type="button">
+      <button className={buttonClass} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setIsOpen(true); }} type="button">
         Review
       </button>
       {modal}

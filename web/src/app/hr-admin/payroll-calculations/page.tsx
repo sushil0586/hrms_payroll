@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -572,8 +574,8 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const canOpenSelectedReview = Boolean(selectedRun && selectedCalculation);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-calculations hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-calculations hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 4E" : "Demo payroll phase 4E"}
         title="Payroll Calculations"
         description="Draft payroll calculations from locked input snapshots, active rule versions, approved adjustments, and configurable pre-calculation validation."
@@ -730,7 +732,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
               ]}
             />
 
-            <div className="payroll-table-scroll payroll-table-scroll--compact">
+            <WorkspaceTableScrollRegion label="Payroll calculations table 1" className="payroll-table-scroll payroll-table-scroll--compact workspace-table-region">
               <table className="payroll-readiness-table payroll-setup-table payroll-calc-attempt-table">
                 <thead>
                   <tr>
@@ -760,7 +762,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   ))}
                 </tbody>
               </table>
-            </div>
+            </WorkspaceTableScrollRegion>
             {pagedCalculations.totalPages > 1 ? (
               <PaginationControls
                 ariaLabel="payroll calculation attempt pagination"
@@ -781,7 +783,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                 </div>
                 <span className="payroll-setup-count">{visibleLines.length} lines</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll calculations table 2" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-calc-line-table">
                   <thead>
                     <tr>
@@ -819,7 +821,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
               {pagedLines.totalPages > 1 ? (
                 <PaginationControls
                   ariaLabel="payroll calculation line pagination"

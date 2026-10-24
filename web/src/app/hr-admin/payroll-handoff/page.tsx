@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 import type React from "react";
 
@@ -24,6 +26,14 @@ type PageProps = {
 };
 
 type EvidenceKind = "delivery" | "retry" | "job" | "callback";
+type HandoffTab = "overview" | "artifacts" | "actions" | "delivery" | "evidence";
+const HANDOFF_TABS: Array<{ id: HandoffTab; label: string; helper: string }> = [
+  { id: "overview", label: "Overview", helper: "Totals and readiness" },
+  { id: "artifacts", label: "Artifacts", helper: "Finance and filing files" },
+  { id: "actions", label: "Actions", helper: "Transmit and acknowledge" },
+  { id: "delivery", label: "Delivery", helper: "Callbacks, retries and jobs" },
+  { id: "evidence", label: "Evidence", helper: "Selected audit detail" },
+];
 type EvidenceSelection = {
   kind: EvidenceKind;
   id: string;
@@ -35,6 +45,11 @@ type EvidenceRow = {
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeHandoffTab(value: SearchParamValue): HandoffTab {
+  const candidate = normalizeParam(value);
+  return HANDOFF_TABS.some((tab) => tab.id === candidate) ? candidate as HandoffTab : "overview";
 }
 
 function numberParam(value: SearchParamValue, fallback: number) {
@@ -1447,6 +1462,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
   const canAcknowledgeHandoff = sessionHasPermission(sessionUser, "finance.handoff.acknowledge");
   const canGenerateAuditPack = sessionHasPermission(sessionUser, "finance.bank_advice.export");
   const currentParams = (await searchParams) ?? {};
+  const activeTab = normalizeHandoffTab(currentParams.tab);
   const selectedHandoffId = normalizeParam(currentParams.handoffId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);
   const selectedEvidence = parseEvidenceParam(currentParams.evidence);
@@ -1499,8 +1515,8 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
   });
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-outputs shell--payroll-handoff hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-outputs shell--payroll-handoff hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 3C" : "Demo payroll phase 3C"}
         title="Payroll Handoff"
         description="Package bank advice, accounting exports, statutory summaries, returns, and challans from published payroll outputs with configurable finance profile references."
@@ -1577,6 +1593,22 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
       </section>
 
       <section className="section section--tight">
+        <nav className="payroll-setup-tabs" aria-label="Payroll handoff sections">
+          {HANDOFF_TABS.map((tab) => (
+            <Link
+              aria-current={activeTab === tab.id ? "page" : undefined}
+              className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              href={buildHref("/hr-admin/payroll-handoff", currentParams, { tab: tab.id })}
+              key={tab.id}
+            >
+              <strong>{tab.label}</strong>
+              <span>{tab.helper}</span>
+            </Link>
+          ))}
+        </nav>
+      </section>
+
+      <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-output-workspace payroll-handoff-workspace">
           <HandoffRail
             allHandoffs={setup.handoffs}
@@ -1596,7 +1628,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               {selectedHandoff ? <StatusBadge status={selectedHandoff.status} /> : null}
             </div>
 
-            <div className="payroll-calc-total-grid payroll-output-total-grid payroll-handoff-total-grid">
+            {activeTab === "overview" ? <><div className="payroll-calc-total-grid payroll-output-total-grid payroll-handoff-total-grid">
               <article>
                 <span>Bank advice</span>
                 <strong>{formatMoney(totals.bank_advice_total)}</strong>
@@ -1651,9 +1683,9 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               artifacts={visibleArtifacts}
               deliveries={selectedHandoffDeliveries}
               handoff={selectedHandoff}
-            />
+            /></> : null}
 
-            <PayrollCloseActionsPanel
+            {activeTab === "actions" ? <PayrollCloseActionsPanel
               eyebrow="Payroll operations"
               title="Handoff controls"
               description="Transmit, acknowledge, and lock provider audit-pack evidence using configurable handoff profiles."
@@ -1692,9 +1724,9 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                       : readiness.detail,
                 },
               ]}
-            />
+            /> : null}
 
-            {auditPackArtifacts.length ? (
+            {activeTab === "actions" && auditPackArtifacts.length ? (
               <section className="payroll-setup-assignment-panel payroll-handoff-audit-pack-panel">
                 <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                   <div>
@@ -1730,7 +1762,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               </section>
             ) : null}
 
-            <section className="payroll-setup-assignment-panel payroll-handoff-profile-panel">
+            {activeTab === "overview" ? <section className="payroll-setup-assignment-panel payroll-handoff-profile-panel">
               <div className="payroll-setup-panel__header">
                 <span className="workspace-card__eyebrow">Profile refs</span>
                 <h2>Configurable finance routing</h2>
@@ -1753,9 +1785,9 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   <span>{selectedHandoff?.statutory_pack_ref ?? "No profile"}</span>
                 </article>
               </div>
-            </section>
+            </section> : null}
 
-            <section className="payroll-setup-assignment-panel payroll-handoff-filing-panel">
+            {activeTab === "artifacts" ? <section className="payroll-setup-assignment-panel payroll-handoff-filing-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
                   <span className="workspace-card__eyebrow">Return and challan artifacts</span>
@@ -1787,9 +1819,9 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   </Link>
                 ))}
               </div>
-            </section>
+            </section> : null}
 
-            <div className="payroll-setup-assignment-panel">
+            {activeTab === "artifacts" ? <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
                   <span className="workspace-card__eyebrow">Package register</span>
@@ -1797,7 +1829,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                 </div>
                 <span className="payroll-setup-count">{visibleArtifacts.length} artifacts</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll handoff table 1" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-output-artifact-table payroll-handoff-artifact-table">
                   <thead>
                     <tr>
@@ -1834,7 +1866,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
               {artifactTotalPages > 1 ? (
                 <PaginationBar
                   firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
@@ -1848,9 +1880,9 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   totalCount={visibleArtifacts.length}
                 />
               ) : null}
-            </div>
+            </div> : null}
 
-            <DeliveryLedger
+            {activeTab === "delivery" ? <DeliveryLedger
               deliveries={setup.deliveries}
               callbackEvents={setup.callback_events}
               currentParams={currentParams}
@@ -1858,10 +1890,10 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               retryEvents={setup.retry_events}
               selectedHandoff={selectedHandoff}
               selectedEvidence={selectedEvidence}
-            />
+            /> : null}
           </div>
 
-          {selectedEvidence ? (
+          {activeTab === "evidence" && selectedEvidence ? (
             <AuditEvidenceDetail
               selection={selectedEvidence}
               selectedHandoff={selectedHandoff}
@@ -1871,9 +1903,9 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               providerJobs={setup.provider_jobs}
               retryEvents={setup.retry_events}
             />
-          ) : (
+          ) : activeTab === "evidence" ? (
             <ArtifactDetail artifact={selectedArtifact} delivery={selectedDelivery} retryEvents={setup.retry_events} />
-          )}
+          ) : null}
         </div>
       </section>
     </main>

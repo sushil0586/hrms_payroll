@@ -42,10 +42,14 @@ export default async function EssDocumentsPage({ searchParams }: PageProps) {
   }
 
   return (
-    <main className="shell shell--workspace shell--ess-documents ess-experience-shell ess-compact">
+    <main className="shell shell--workspace shell--ess-documents ess-experience-shell ess-compact accerio-page">
       <WorkspaceStandardHeader eyebrow="Employee self service" title="Documents" description="Check requirements, submit permitted files and follow HR review." actions={<Link prefetch={false} className="button button--secondary" href="/ess/payslips">Published payslips</Link>} />
 
-      <EmployeeDocumentCenter
+      <EmployeeDocumentCenter uploadReceipt={(() => {
+        const id = normalizeParam(currentParams.uploaded_document) ?? "";
+        const status = normalizeParam(currentParams.upload_result);
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) && (status === "pending" || status === "verified") ? { id, status } : undefined;
+      })()} key={JSON.stringify([q, verificationStatus, categoryId, expiryFilter, result.data.page, pageSize])}
         currentFilters={{
           q,
           verification_status: verificationStatus,

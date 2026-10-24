@@ -67,8 +67,8 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
   const catalogSourceLabel = databaseBackedCount ? "DB-managed" : "Code fallback";
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="RBAC control"
         title="Permission Catalog"
         description="Platform-owned permission definitions used by tenant roles, default grants, and backend access checks."

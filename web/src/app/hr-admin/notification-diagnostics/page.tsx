@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -13,8 +15,8 @@ export default async function HrAdminNotificationDiagnosticsPage() {
   const channelsWithFailures = result.data.channel_diagnostics.filter((item) => item.failed_notification_count > 0).length;
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live diagnostics" : "Demo diagnostics"}
         title="Notification diagnostics"
         description="See which templates and events are active, producing volume, failing delivery, or attracting test activity."
@@ -89,7 +91,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
               <strong>{channelsWithFailures}</strong> with failures
             </span>
           </div>
-          <div className="notification-table-scroll">
+          <WorkspaceTableScrollRegion label="Notification diagnostics table 1" className="notification-table-scroll workspace-table-region">
             <table className="notification-catalog-table notification-diagnostics-table">
               <thead>
                 <tr>
@@ -133,7 +135,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         </article>
       </section>
 
@@ -201,7 +203,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
                 <p className="section-copy-soft">Look for templates with no linked events, inactive usage, or repeated delivery failures.</p>
               </div>
             </div>
-            <div className="notification-table-scroll">
+            <WorkspaceTableScrollRegion label="Notification diagnostics table 2" className="notification-table-scroll workspace-table-region">
               <table className="notification-catalog-table notification-diagnostics-table">
                 <thead>
                   <tr>
@@ -234,7 +236,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </WorkspaceTableScrollRegion>
           </article>
 
           <article className="record-card">
@@ -244,7 +246,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
                 <p className="section-copy-soft">Identify noisy or underused event rules and see where test-send activity is concentrated.</p>
               </div>
             </div>
-            <div className="notification-table-scroll">
+            <WorkspaceTableScrollRegion label="Notification diagnostics table 3" className="notification-table-scroll workspace-table-region">
               <table className="notification-catalog-table notification-diagnostics-table">
                 <thead>
                   <tr>
@@ -282,7 +284,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </WorkspaceTableScrollRegion>
           </article>
 
           <article className="record-card">
@@ -293,7 +295,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
               </div>
             </div>
             {result.data.recent_test_notifications.length ? (
-              <div className="notification-table-scroll">
+              <WorkspaceTableScrollRegion label="Notification diagnostics table 4" className="notification-table-scroll workspace-table-region">
                 <table className="notification-catalog-table notification-diagnostics-table">
                   <thead>
                     <tr>
@@ -322,7 +324,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             ) : (
               <div className="notice">
                 <strong>No test activity yet.</strong>

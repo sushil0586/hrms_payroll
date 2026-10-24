@@ -1,4 +1,8 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -88,7 +92,6 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
   const [noticeTone, setNoticeTone] = useState<"success" | "error">("success");
   const [formError, setFormError] = useState("");
   const inviteEmailRef = useRef<HTMLInputElement>(null);
-  const editDialogRef = useRef<HTMLDivElement>(null);
   const confirmationNoteRef = useRef<HTMLTextAreaElement>(null);
 
   const actionLabels = useMemo(
@@ -173,11 +176,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
     }
   }, [inviteOpen]);
 
-  useEffect(() => {
-    if (editingMember) {
-      editDialogRef.current?.querySelector<HTMLInputElement>("input[type='checkbox']")?.focus();
-    }
-  }, [editingMember]);
+
 
   useEffect(() => {
     if (confirmation) {
@@ -185,17 +184,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
     }
   }, [confirmation]);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      if (inviteOpen) closeInviteDialog();
-      if (editingMember) setEditingMember(null);
-      if (confirmation) closeConfirmation();
-    }
 
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [closeConfirmation, closeInviteDialog, confirmation, editingMember, inviteOpen]);
 
   function toggleInviteRole(roleId: string) {
     setSelectedRoleIds((current) => (current.includes(roleId) ? current.filter((item) => item !== roleId) : [...current, roleId]));
@@ -326,7 +315,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
         <div className="tenant-membership-actions__header-actions">
           <span className="record-chip">{data.seat_usage.current_value}/{data.seat_usage.limit_value || "unlimited"} seats</span>
           <span className="record-chip">{roleOptions.length} roles available</span>
-          <button className="button button--primary" disabled={!canManageUsers} onClick={() => setInviteOpen(true)} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
+          <button className="button button--primary" disabled={!canManageUsers} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setInviteOpen(true); }} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
             {actionLabels.invite ?? "Invite member"}
           </button>
         </div>
@@ -391,19 +380,19 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
             </span>
             <span>{formatDate(membership.updated_at ?? membership.created_at)}</span>
             <div className="tenant-membership-row__actions">
-              <button className="button button--secondary button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openEditDialog(membership)} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
+              <button className="button button--secondary button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openEditDialog(membership); }} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                 {actionLabels.update_roles ?? "Update roles"}
               </button>
               {membership.membership_status === "active" ? (
-                <button className="button button--secondary button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "suspend")} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
+                <button className="button button--secondary button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openConfirmation(membership, "suspend"); }} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                   {actionLabels.suspend ?? "Suspend"}
                 </button>
               ) : (
-                <button className="button button--secondary button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "activate")} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
+                <button className="button button--secondary button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openConfirmation(membership, "activate"); }} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                   {actionLabels.activate ?? "Activate"}
                 </button>
               )}
-              <button className="button button--ghost button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "revoke")} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
+              <button className="button button--ghost button--compact" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openConfirmation(membership, "revoke"); }} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                 {actionLabels.revoke ?? "Revoke"}
               </button>
             </div>
@@ -417,18 +406,10 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       </div>
 
       {inviteOpen ? (
-        <div className="tenant-modal-shell" role="presentation">
-          <div aria-describedby="invite-member-validation" aria-label="Invite tenant member" aria-modal="true" className="tenant-modal" role="dialog">
-            <div className="tenant-modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">User Management</span>
-                <h3>Invite member</h3>
-              </div>
-              <button aria-label="Close invite member" className="button button--ghost" onClick={closeInviteDialog} type="button">
-                Close
-              </button>
-            </div>
-            <div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
+        <HrAdminActionModal closeHref="/tenant-admin/users" labelledBy="tenant-user-dialog-1" title="Invite tenant member" onClose={closeInviteDialog} busy={Boolean(busyRef)} className="tenant-modal">
+
+
+<div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
               <label>
                 <span>Email</span>
                 <input aria-describedby="invite-member-validation" aria-invalid={inviteEmailInvalid || Boolean(formError && formError.toLowerCase().includes("email"))} ref={inviteEmailRef} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="person@company.com" />
@@ -456,7 +437,8 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
                 </select>
               </label>
             </div>
-            <div className="tenant-role-picker" aria-describedby="invite-member-validation" aria-label="Invite roles">
+
+<div className="tenant-role-picker" role="group" aria-describedby="invite-member-validation" aria-label="Invite roles">
               {roleOptions.map((role) => (
                 <label key={role.id}>
                   <input checked={selectedRoleIds.includes(role.id)} onChange={() => toggleInviteRole(role.id)} type="checkbox" />
@@ -464,38 +446,33 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
                 </label>
               ))}
             </div>
-            <div className="tenant-modal__validation" id="invite-member-validation" role={formError || inviteValidation ? "alert" : "status"}>
+
+<div className="tenant-modal__validation" id="invite-member-validation" role={formError || inviteValidation ? "alert" : "status"}>
               <span>{formError || inviteValidation || "Ready to invite after review."}</span>
             </div>
-            <div className="tenant-modal__actions">
-              <button className="button button--secondary" onClick={closeInviteDialog} type="button">
+
+<div className="tenant-modal__actions">
+              <button className="button button--secondary" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} type="button">
                 Cancel
               </button>
               <AsyncActionButton className="button button--primary" disabled={Boolean(inviteValidation)} onClick={inviteMember} pending={busyRef === "invite"} pendingLabel="Inviting member" type="button">
                 {actionLabels.invite ?? "Invite member"}
               </AsyncActionButton>
             </div>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
 
       {editingMember ? (
-        <div className="tenant-modal-shell" role="presentation">
-          <div aria-describedby="update-member-validation" aria-label="Update tenant member roles" aria-modal="true" className="tenant-modal tenant-modal--small" ref={editDialogRef} role="dialog">
-            <div className="tenant-modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">Role assignment</span>
-                <h3>Update roles</h3>
-              </div>
-              <button aria-label="Close update roles" className="button button--ghost" onClick={() => setEditingMember(null)} type="button">
-                Close
-              </button>
-            </div>
-            <div className="tenant-modal__member-summary">
+        <HrAdminActionModal closeHref="/tenant-admin/users" labelledBy="tenant-user-dialog-2" title="Update tenant member roles" onClose={() => setEditingMember(null)} busy={Boolean(busyRef)} className="tenant-modal tenant-modal--small">
+
+
+<div className="tenant-modal__member-summary">
               <strong>{editingMember.display_name}</strong>
               <span>{editingMember.email}</span>
             </div>
-            <div className="tenant-role-picker" aria-describedby="update-member-validation" aria-label="Update roles">
+
+<div className="tenant-role-picker" role="group" aria-describedby="update-member-validation" aria-label="Update roles">
               {roleOptions.map((role) => (
                 <label key={role.id}>
                   <input checked={editRoleIds.includes(role.id)} onChange={() => toggleEditRole(role.id)} type="checkbox" />
@@ -503,39 +480,34 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
                 </label>
               ))}
             </div>
-            <div className="tenant-modal__validation" id="update-member-validation" role={formError || editValidation ? "alert" : "status"}>
+
+<div className="tenant-modal__validation" id="update-member-validation" role={formError || editValidation ? "alert" : "status"}>
               <span>{formError || editValidation || "Role selection is ready to save."}</span>
             </div>
-            <div className="tenant-modal__actions">
-              <button className="button button--secondary" onClick={() => setEditingMember(null)} type="button">
+
+<div className="tenant-modal__actions">
+              <button className="button button--secondary" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} type="button">
                 Cancel
               </button>
               <AsyncActionButton className="button button--primary" disabled={Boolean(editValidation)} onClick={() => runMembershipAction(editingMember.id, "update_roles")} pending={busyRef === `${editingMember.id}:update_roles`} pendingLabel="Updating roles" type="button">
                 {actionLabels.update_roles ?? "Update roles"}
               </AsyncActionButton>
             </div>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
 
       {confirmation ? (
-        <div className="tenant-modal-shell" role="presentation">
-          <div aria-describedby="membership-action-validation" aria-label={`${titleCase(confirmation.action)} tenant member`} aria-modal="true" className="tenant-modal tenant-modal--small" role="dialog">
-            <div className="tenant-modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">Access change</span>
-                <h3>{titleCase(confirmation.action)} member</h3>
-              </div>
-              <button aria-label={`Close ${confirmation.action} member`} className="button button--ghost" onClick={closeConfirmation} type="button">
-                Close
-              </button>
-            </div>
-            <div className="tenant-modal__member-summary">
+        <HrAdminActionModal closeHref="/tenant-admin/users" labelledBy="tenant-user-dialog-3" title={`${titleCase(confirmation.action)} tenant member`} onClose={closeConfirmation} busy={Boolean(busyRef)} className="tenant-modal tenant-modal--small">
+
+
+<div className="tenant-modal__member-summary">
               <strong>{confirmation.member.display_name}</strong>
               <span>{confirmation.member.email}</span>
               <span>Current status: {titleCase(confirmation.member.membership_status)}</span>
             </div>
-            <label className="tenant-modal__note">
+
+<label className="tenant-modal__note">
               <span>Change note</span>
               <textarea
                 aria-label="Change note"
@@ -546,7 +518,8 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
                 value={actionNote}
               />
             </label>
-            <div className="tenant-modal__validation" id="membership-action-validation" role="status">
+
+<div className="tenant-modal__validation" id="membership-action-validation" role="status">
               <span>
                 {confirmation.action === "revoke"
                   ? "Revoked members lose access and remain visible in audit history."
@@ -555,8 +528,9 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
                     : "Activated members can access the tenant workspace when role and seat rules allow it."}
               </span>
             </div>
-            <div className="tenant-modal__actions">
-              <button className="button button--secondary" onClick={closeConfirmation} type="button">
+
+<div className="tenant-modal__actions">
+              <button className="button button--secondary" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} type="button">
                 Cancel
               </button>
               <AsyncActionButton
@@ -570,8 +544,8 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
                 {actionLabels[confirmation.action] ?? titleCase(confirmation.action)}
               </AsyncActionButton>
             </div>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
     </div>
   );

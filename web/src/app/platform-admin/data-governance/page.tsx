@@ -15,8 +15,8 @@ export default async function PlatformDataGovernancePage({ searchParams }: PageP
   const tenants = tenantsResult.data;
   const selectedTenantId = requested || tenants[0]?.id;
   const result = await getPlatformDataGovernanceWorkspace(selectedTenantId);
-  return <main className="shell hr-admin-compact-ui">
-    <PageIntro eyebrow="Platform governance" title="Retention and controlled erasure" description="Configure approved retention rules, place legal holds, review impact, and independently approve governed requests." actions={<Link className="button button--secondary" href="/platform-admin">Back to platform workspace</Link>} pills={["Legal hold", "Approved policy", "Erasure disabled by default"]} />
+  return <main className="shell hr-admin-compact-ui accerio-page">
+    <PageIntro appearance="accerio" eyebrow="Platform governance" title="Retention and controlled erasure" description="Configure approved retention rules, place legal holds, review impact, and independently approve governed requests." actions={<Link className="button button--secondary" href="/platform-admin">Back to platform workspace</Link>} pills={["Legal hold", "Approved policy", "Erasure disabled by default"]} />
     <nav className="filter-chip-row" aria-label="Tenant governance scope">{tenants.map((tenant) => <Link className={`filter-chip-link${tenant.id === selectedTenantId ? " filter-chip-link--active" : ""}`} href={`/platform-admin/data-governance?tenantId=${tenant.id}`} key={tenant.id}>{tenant.name}</Link>)}</nav>
     <DataGovernanceWorkbench mode="platform" recordCategories={result.data.record_categories} policies={result.data.policies} legalHolds={result.data.legal_holds} requests={result.data.requests} preview={result.data.preview ?? undefined} tenants={tenants.map((tenant) => ({ id: tenant.id, name: tenant.name }))} />
   </main>;

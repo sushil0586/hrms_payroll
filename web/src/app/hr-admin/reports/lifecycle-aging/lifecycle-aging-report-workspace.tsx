@@ -1,10 +1,15 @@
 "use client";
 
-import Link from "next/link";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
+
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import {useSearchParams} from "next/navigation";
+import {selectLifecycleReport,lifecycleDaysSince as daysSince,lifecycleAgeBucket as ageBucket,lifecycleSlaState as slaState,lifecycleSlaRisk as slaRisk} from "@/lib/lifecycle-report";
 import type { HrAdminLifecycleQueueItem } from "@/lib/types";
 
 const PAGE_SIZE = 10;
@@ -27,27 +32,6 @@ function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort();
 }
 
-function dateOnly(value: string | null | undefined) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-}
-
-function daysSince(value: string | null | undefined) {
-  const date = dateOnly(value);
-  if (!date) return 0;
-  const today = dateOnly(new Date().toISOString()) ?? new Date();
-  return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86_400_000));
-}
-
-function daysOverdue(value: string | null | undefined) {
-  const date = dateOnly(value);
-  if (!date) return 0;
-  const today = dateOnly(new Date().toISOString()) ?? new Date();
-  return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86_400_000));
-}
-
 function formatDate(value: string | null) {
   if (!value) return "Not set";
   return new Intl.DateTimeFormat("en-IN", {
@@ -57,29 +41,6 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function ageBucket(ageDays: number) {
-  if (ageDays >= 30) return "30+ days";
-  if (ageDays >= 15) return "15-29 days";
-  if (ageDays >= 8) return "8-14 days";
-  return "0-7 days";
-}
-
-function slaState(item: HrAdminLifecycleQueueItem) {
-  const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
-  if (overdue > 0) return "Overdue";
-  if (item.next_escalation_on) return "Escalation scheduled";
-  if (!item.owner_value) return "Owner missing";
-  if (item.document_attention_state === "blocked") return "Document blocked";
-  return "On track";
-}
-
-function slaRisk(item: HrAdminLifecycleQueueItem): AgingRow["slaRisk"] {
-  const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
-  if (overdue >= 3 || item.document_attention_state === "blocked" || !item.owner_value) return "High";
-  if (overdue > 0 || item.next_escalation_on || item.attention_rank >= 40 || item.document_attention_state === "warning") return "Medium";
-  return "Low";
-}
-
 function statusClass(status: string) {
   if (["completed", "confirmed", "approved", "closed", "clear", "low", "on track"].includes(status.toLowerCase())) return "record-chip record-chip--success";
   if (["pending", "in_progress", "warning", "upcoming", "medium", "escalation scheduled"].includes(status.toLowerCase())) return "record-chip record-chip--warning";
@@ -87,87 +48,47 @@ function statusClass(status: string) {
   return "record-chip";
 }
 
-function toAgingRow(item: HrAdminLifecycleQueueItem): AgingRow {
-  const ageDays = daysSince(item.created_at);
+function toAgingRow(item: HrAdminLifecycleQueueItem, asOf:string): AgingRow {
+  const ageDays = daysSince(item.created_at,asOf);
   return {
     ...item,
     ageDays,
     ageBucket: ageBucket(ageDays),
-    daysOverdue: daysOverdue(item.next_due_on ?? item.attention_due_on),
-    slaState: slaState(item),
-    slaRisk: slaRisk(item),
+    daysOverdue: daysSince(item.next_due_on ?? item.attention_due_on,asOf),
+    slaState: slaState(item,asOf),
+    slaRisk: slaRisk(item,asOf),
     ownerGap: !item.owner_value,
     documentBlockerCount: item.missing_required_document_count + item.expired_document_count,
   };
 }
 
-export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecycleQueueItem[] }) {
-  const [query, setQuery] = useState("");
-  const [itemType, setItemType] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [owner, setOwner] = useState("All");
-  const [bucket, setBucket] = useState("All");
-  const [risk, setRisk] = useState("All");
-  const [escalation, setEscalation] = useState("All");
-  const [sortBy, setSortBy] = useState("overdue");
-  const [page, setPage] = useState(1);
+export function LifecycleAgingReportWorkspace({ items, asOf }: { items: HrAdminLifecycleQueueItem[]; asOf:string }) {
+  const searchParams=useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q")??"");
+  const [itemType, setItemType] = useState(searchParams.get("item_type")??"All");
+  const [status, setStatus] = useState(searchParams.get("status")??"All");
+  const [owner, setOwner] = useState(searchParams.get("owner")??"All");
+  const [bucket, setBucket] = useState(searchParams.get("age_bucket")??"All");
+  const [risk, setRisk] = useState(searchParams.get("sla_risk")??"All");
+  const [escalation, setEscalation] = useState(searchParams.get("escalation")??"All");
+  const [sortBy, setSortBy] = useState(searchParams.get("sort")??"overdue");
+  const [page, setPage] = useState(Math.max(1,Number(searchParams.get("page"))||1));
 
-  const rows = useMemo(() => items.map(toAgingRow), [items]);
+  const rows = useMemo(() => items.map(item=>toAgingRow(item,asOf)), [items,asOf]);
   const itemTypes = useMemo(() => ["All", ...unique(rows.map((item) => item.item_type))], [rows]);
   const statuses = useMemo(() => ["All", ...unique(rows.map((item) => item.status))], [rows]);
   const owners = useMemo(() => ["All", ...unique(rows.map((item) => item.owner_value))], [rows]);
   const buckets = ["All", "0-7 days", "8-14 days", "15-29 days", "30+ days"];
   const risks = ["All", "High", "Medium", "Low"];
 
-  const filteredRows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const nextRows = rows.filter((item) => {
-      const matchesQuery =
-        !normalizedQuery ||
-        [
-          item.item_type,
-          item.item_label,
-          item.employee_code,
-          item.employee_name,
-          item.status,
-          item.status_label,
-          item.owner_value,
-          item.owner_label,
-          item.workflow_reference,
-          item.slaState,
-          item.slaRisk,
-          item.attention_summary,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery);
-      return (
-        matchesQuery &&
-        (itemType === "All" || item.item_type === itemType) &&
-        (status === "All" || item.status === status) &&
-        (owner === "All" || item.owner_value === owner) &&
-        (bucket === "All" || item.ageBucket === bucket) &&
-        (risk === "All" || item.slaRisk === risk) &&
-        (escalation === "All" || (escalation === "scheduled" ? Boolean(item.next_escalation_on) : !item.next_escalation_on))
-      );
-    });
-
-    return nextRows.sort((left, right) => {
-      if (sortBy === "age") return right.ageDays - left.ageDays;
-      if (sortBy === "employee") return left.employee_name.localeCompare(right.employee_name);
-      if (sortBy === "type") return left.item_type.localeCompare(right.item_type);
-      if (sortBy === "owner") return String(left.owner_label ?? "").localeCompare(String(right.owner_label ?? ""));
-      if (sortBy === "escalation") return String(left.next_escalation_on ?? "9999-12-31").localeCompare(String(right.next_escalation_on ?? "9999-12-31"));
-      return right.daysOverdue - left.daysOverdue || right.attention_rank - left.attention_rank;
-    });
-  }, [bucket, escalation, itemType, owner, query, risk, rows, sortBy, status]);
+  const filteredRows=useMemo(()=>selectLifecycleReport(items,"lifecycle-aging",{q:query,item_type:itemType,status,owner,age_bucket:bucket,sla_risk:risk,escalation,sort:sortBy},asOf).map(item=>toAgingRow(item,asOf)),[items,asOf,query,itemType,status,owner,bucket,risk,escalation,sortBy]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const exportHref = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams();params.set("as_of",asOf);
     if (query.trim()) params.set("q", query.trim());
     if (itemType !== "All") params.set("item_type", itemType);
     if (status !== "All") params.set("status", status);
@@ -177,8 +98,9 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
     if (escalation !== "All") params.set("escalation", escalation);
     params.set("sort", sortBy);
     return `/api/hr-admin/reports/lifecycle-aging?${params.toString()}`;
-  }, [bucket, escalation, itemType, owner, query, risk, sortBy, status]);
+  }, [asOf,bucket, escalation, itemType, owner, query, risk, sortBy, status]);
   const manifestHref = `${exportHref}&format=manifest`;
+  useEffect(()=>{const url=new URL(exportHref,window.location.origin);url.pathname=window.location.pathname;url.searchParams.set('page',String(currentPage));window.history.replaceState(null,'',url);},[exportHref,currentPage]);
 
   function updateFilter(action: () => void) {
     action();
@@ -201,15 +123,10 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
     <section className="section section--tight" aria-label="Lifecycle aging report workspace">
       <div className="report-catalog-workspace lifecycle-aging-report" data-testid="lifecycle-aging-report">
         <div className="report-command-panel">
-          <div>
-            <span className="workspace-card__eyebrow">Lifecycle aging</span>
-            <h2>SLA aging and escalation evidence</h2>
-            <p className="section-copy section-copy-soft">Prioritize overdue lifecycle work, owner gaps, escalation dates, and document blockers before export or print review.</p>
-          </div>
           <div className="report-command-panel__actions">
             <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
             <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
-            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print current page</button>
           </div>
         </div>
 
@@ -307,7 +224,7 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Lifecycle aging report table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table payroll-register-table">
             <thead>
               <tr>
@@ -326,7 +243,7 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
                   <td>
                     <strong>{item.employee_name}</strong>
                     <span>{item.employee_code}</span>
-                    <code>{item.workflow_reference || "workflow.pending"}</code>
+                    {item.workflow_reference ? <code>{item.workflow_reference}</code> : <span>No workflow linked</span>}
                   </td>
                   <td>
                     <div className="payroll-register-stack">
@@ -349,10 +266,10 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
                       <span>{item.daysOverdue} days overdue</span>
                     </div>
                   </td>
-                  <td>
+                  <td className="lifecycle-report-owner">
                     <div className="payroll-register-stack">
                       <span>{item.owner_label || "Unassigned"}</span>
-                      <span>{item.owner_value || "No owner ref"}</span>
+                      {item.owner_value ? <span>{item.owner_value}</span> : null}
                       <span>Escalates {formatDate(item.next_escalation_on)}</span>
                     </div>
                   </td>
@@ -365,12 +282,12 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
                   </td>
                   <td>
                     <div className="report-row-actions">
-                      <Link className="button button--secondary" href={item.detail_href}>
+                      <a data-navigation-mode="document" className="button button--secondary" href={item.detail_href+(item.detail_href.includes("?")?"&":"?")+new URLSearchParams({returnTo:`/hr-admin/reports/lifecycle-aging?${searchParams.toString()}`})}>
                         Open
-                      </Link>
-                      <Link className="button button--ghost" href={`/hr-admin/lifecycle?q=${encodeURIComponent(item.employee_code)}`}>
+                      </a>
+                      <a data-navigation-mode="document" className="button button--ghost" href={`/hr-admin/lifecycle?q=${encodeURIComponent(item.employee_code)}`}>
                         Queue
-                      </Link>
+                      </a>
                     </div>
                   </td>
                 </tr>
@@ -384,7 +301,7 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Lifecycle aging pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

@@ -18,8 +18,8 @@ export default async function HrAdminReportsPage() {
   const state = dashboardResult.state;
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live reports" : "Demo reports"}
         title="Reports"
         description="Find, export, and audit workforce, payroll, compliance, lifecycle, document, and delivery reports."

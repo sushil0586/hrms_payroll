@@ -27,7 +27,7 @@ test("DD-PY-006 browser adjustment uses authorized checker and persists one appl
   try {
     await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=actions&runId=${runId}`, maker);
     await expectPageReady(page, "Payroll Adjustments");
-    const actions = page.getByLabel("Adjustment certification actions");
+    const actions = page.getByLabel("Adjustment actions");
     await actions.getByLabel("Adjustment source reference").fill(sourceRef);
     await actions.getByLabel("Adjustment amount").fill("1250.50");
     const created = await captureJson<{ id: string; status: string; amount: string }>(
@@ -46,7 +46,7 @@ test("DD-PY-006 browser adjustment uses authorized checker and persists one appl
     const submitted = await captureJson<{ status: string }>(
       page,
       new RegExp(`/api/hr-admin/payroll-adjustments/${created.payload.id}/submit/?$`),
-      () => page.getByLabel("Adjustment certification actions").getByRole("button", { name: "Submit selected" }).click(),
+      () => page.getByLabel("Adjustment actions").getByRole("button", { name: "Submit selected" }).click(),
     );
     expect(submitted.payload.status).toBe("submitted");
 
@@ -58,7 +58,7 @@ test("DD-PY-006 browser adjustment uses authorized checker and persists one appl
     const approved = await captureJson<{ status: string }>(
       page,
       new RegExp(`/api/hr-admin/payroll-adjustments/${created.payload.id}/approve/?$`),
-      () => page.getByLabel("Adjustment certification actions").getByRole("button", { name: "Approve selected" }).click(),
+      () => page.getByLabel("Adjustment actions").getByRole("button", { name: "Approve selected" }).click(),
     );
     expect(approved.payload.status).toBe("approved");
 
@@ -70,7 +70,7 @@ test("DD-PY-006 browser adjustment uses authorized checker and persists one appl
     const applied = await captureJson<{ status: string; source_hash: string }>(
       page,
       new RegExp(`/api/hr-admin/payroll-adjustments/${created.payload.id}/apply/?$`),
-      () => page.getByLabel("Adjustment certification actions").getByRole("button", { name: "Apply selected" }).click(),
+      () => page.getByLabel("Adjustment actions").getByRole("button", { name: "Apply selected" }).click(),
     );
     expect(applied.payload.status).toBe("applied");
     expect(applied.payload.source_hash).toMatch(/^[a-f0-9]{64}$/);

@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 
 type HrAdminActionModalProps = {
   children: ReactNode;
+  busy?: boolean;
+  dirty?: boolean;
   documentNavigation?: boolean;
   closeHref: string;
   footer?: ReactNode;
@@ -22,15 +24,22 @@ type HrAdminActionModalProps = {
 
 const focusableSelector = [
   "a[href]",
-  "button:not([disabled])",
-  "textarea:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
+  "button:not(:disabled)",
+  "textarea:not(:disabled)",
+  "input:not(:disabled)",
+  "select:not(:disabled)",
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+function modalFocusables(dialog: HTMLElement) {
+  return Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+    .filter(item => item.offsetParent !== null && !item.matches(":disabled"));
+}
+
 export function HrAdminActionModal({
   children,
+  busy = false,
+  dirty,
   documentNavigation = false,
   closeHref,
   footer,
@@ -54,7 +63,7 @@ export function HrAdminActionModal({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const dialog = dialogRef.current;
-    const focusable = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)) : [];
+    const focusable = dialog ? modalFocusables(dialog) : [];
     const firstInput = focusable.find((item) => item.matches("input, select, textarea"));
     (firstInput ?? focusable[0] ?? dialog)?.focus();
 
@@ -64,8 +73,16 @@ export function HrAdminActionModal({
     };
   }, []);
 
+  useEffect(() => {
+    if (!busy) return;
+    const dialog = dialogRef.current;
+    const active = document.activeElement;
+    if (dialog && (!dialog.contains(active) || active?.matches(":disabled"))) dialog.focus();
+  }, [busy]);
+
   const requestClose = useCallback(() => {
-    if (isDirty && !window.confirm("Discard unsaved changes?")) {
+    if (busy) return;
+    if ((dirty ?? isDirty) && !window.confirm("Discard unsaved changes?")) {
       return;
     }
     if (onClose) {
@@ -77,7 +94,7 @@ export function HrAdminActionModal({
       return;
     }
     router.push(closeHref);
-  }, [closeHref, documentNavigation, isDirty, onClose, router]);
+  }, [busy, closeHref, dirty, documentNavigation, isDirty, onClose, router]);
 
   useEffect(() => {
     window.addEventListener("hr-admin-modal:request-close", requestClose);
@@ -99,9 +116,11 @@ export function HrAdminActionModal({
 
     const dialog = dialogRef.current;
     const focusable = dialog
-      ? Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter((item) => item.offsetParent !== null)
+      ? modalFocusables(dialog)
       : [];
     if (!focusable.length) {
+      event.preventDefault();
+      dialog?.focus();
       return;
     }
 
@@ -132,6 +151,7 @@ export function HrAdminActionModal({
   return (
     <div className="hr-admin-modal-backdrop employee-create-modal-backdrop" role="presentation">
       <section
+        aria-busy={busy || undefined}
         aria-labelledby={labelledBy}
         aria-modal="true"
         className={`accerio-dialog hr-admin-action-modal employee-create-modal employee-maintenance-modal${tabs.length ? " hr-admin-action-modal--with-tabs" : ""}${className ? ` ${className}` : ""}`}
@@ -157,14 +177,14 @@ export function HrAdminActionModal({
             <h2 className="hr-admin-action-modal__title" id={labelledBy}>{title}</h2>
             {description ? <p className="hr-admin-action-modal__description">{description}</p> : null}
           </div>
-          <button aria-label={`Close ${title}`} className="hr-admin-action-modal__close" onClick={requestClose} type="button">
+          <button aria-label={`Close ${title}`} className="hr-admin-action-modal__close" disabled={busy} onClick={requestClose} type="button">
             ×
           </button>
         </header>
         {tabs.length ? (
-          <div className="hr-admin-modal-tabs" aria-label={`${title} sections`}>
-            {tabs.map((tab, index) => (
-              <span aria-selected={index === 0 ? "true" : undefined} className="hr-admin-modal-tab" key={tab} role="tab">
+          <div className="hr-admin-modal-tabs" role="group" aria-label={`${title} sections`}>
+            {tabs.map((tab) => (
+              <span className="hr-admin-modal-tab" key={tab}>
                 {tab}
               </span>
             ))}

@@ -25,8 +25,8 @@ export default async function PayrollCloseReadinessReportPage() {
   ]);
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={inputSetup.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Close Readiness Report"
         description="Run-level close gate combining input lock coverage, review blockers, pending adjustments, pending settlements, output state, and source evidence."

@@ -94,7 +94,7 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes }: Props) {
         </WorkspaceFilterForm>
 
         <div className="employee-directory-layout">
-          <WorkspaceTableScrollRegion className="employee-directory-table-wrap" label="Leave types table scroll">
+          <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Leave types table scroll">
             <table aria-label="Leave types" className="accerio-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>

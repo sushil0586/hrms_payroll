@@ -12,8 +12,8 @@ export default async function PayrollSettlementsReportPage() {
   const result = await getHrAdminPayrollSettlementSetup();
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Settlements Report"
         description="Full-and-final settlement packages by employee, run, package status, approval state, line composition, source hash, and net settlement evidence."

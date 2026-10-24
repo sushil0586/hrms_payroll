@@ -1,4 +1,8 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
+
+import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useState } from "react";
@@ -49,12 +53,7 @@ function buildQueryString(params: Record<string, string | number | boolean | und
 }
 
 function formatDateTime(value: string | null) {
-  if (!value) return "Not submitted";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value));
+  return value ? formatWorkspaceDateTime(value, "Asia/Kolkata") : "Not available";
 }
 
 function titleCase(value: string) {
@@ -209,7 +208,7 @@ export function AttendanceRegularizationQueue({
                     return (
                       <tr className={isSelected ? "employee-directory-table__row--active" : ""} key={item.id}>
                         <td>
-                          <button className="document-table-title-button" onClick={() => setSelectedItemId(item.id)} type="button">
+                          <button className="document-table-title-button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(item.id); }} type="button">
                             <strong>{item.employee_name || "Unknown employee"}</strong>
                             <small>{item.employee_code || "No code"} · {item.department || "Unassigned"}</small>
                           </button>
@@ -231,7 +230,7 @@ export function AttendanceRegularizationQueue({
                           <small>{item.approval_steps?.length ?? 0} approval steps</small>
                         </td>
                         <td>
-                          <button className="button button--secondary button--compact" onClick={() => setSelectedItemId(item.id)} type="button">Inspect</button>
+                          <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(item.id); }} type="button">Inspect</button>
                         </td>
                       </tr>
                     );
@@ -255,7 +254,7 @@ export function AttendanceRegularizationQueue({
                 <p className="section-copy section-copy-soft">Focused detail for the selected correction request.</p>
               </div>
               <div className="record-card__actions">
-                <button className="button button--ghost button--compact" onClick={() => setSelectedItemId("")} type="button">Close</button>
+                <button className="button button--ghost button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
                 {canReviewRegularizations ? (
                   <Link className="button button--secondary button--compact" href={currentQueueHref({ reviewRegularization: selectedItem.id })}>Review request</Link>
                 ) : (

@@ -3,7 +3,9 @@ import path from 'node:path';
 import {readFileSync} from 'node:fs';
 import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona,type IsolatedQaWorkspace} from '../helpers/isolated-qa-workspace';
 let fixture:IsolatedQaWorkspace;
-const root=path.resolve(__dirname,'../../../docs/qa/evidence/hr-admin-standardization/attendance-family');
+const root=process.env.HRMS_MASTER_EVIDENCE_ROOT
+ ? path.resolve(__dirname,'../../..',process.env.HRMS_MASTER_EVIDENCE_ROOT)
+ : path.resolve(__dirname,'../../../docs/qa/evidence/hr-admin-standardization/attendance-family');
 test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info)});
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(fixture)});
 test('all five attendance report CSV actions and manifests use authorized live sources',async({page},info)=>{

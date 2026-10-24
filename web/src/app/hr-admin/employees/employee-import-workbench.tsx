@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { EmployeeImportPanel } from "./employee-import-panel";
 
-import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
-import { submitImportRequest } from "@/lib/ui/import-request";
+import { useMemo } from "react";
+
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeListItem, HrAdminEmployeeWriteInput, HrAdminOptionItem, HrAdminManagerOption } from "@/lib/types";
 
 type EmployeeImportWorkbenchProps = {
@@ -109,7 +108,8 @@ function findByName(items: HrAdminOptionItem[], value: string) {
     return null;
   }
   const normalized = value.trim().toLowerCase();
-  return items.find((item) => item.name.toLowerCase() === normalized) ?? null;
+  const matches = items.filter((item) => item.name.toLowerCase() === normalized);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function findManager(items: HrAdminManagerOption[], value: string) {
@@ -117,7 +117,10 @@ function findManager(items: HrAdminManagerOption[], value: string) {
     return null;
   }
   const normalized = value.trim().toLowerCase();
-  return items.find((item) => item.employee_code.toLowerCase() === normalized || item.name.toLowerCase() === normalized) ?? null;
+  const byCode = items.find((item) => item.employee_code.toLowerCase() === normalized);
+  if (byCode) return byCode;
+  const matches = items.filter((item) => item.name.toLowerCase() === normalized);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function nullableDate(value: string) {
@@ -189,7 +192,7 @@ function buildPayload(
     ["Reporting manager", row.reporting_manager_code, reportingManager],
   ].forEach(([label, value, match]) => {
     if (String(value).trim() && !match) {
-      errors.push(`${label} must match an active option.`);
+      errors.push(`${label} must match one unambiguous active option.`);
     }
   });
 
@@ -270,178 +273,22 @@ function sampleCsv(options: HrAdminEmployeeFormOptions, suffix: string) {
 }
 
 export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWorkbenchProps) {
-  const [csvText, setCsvText] = useState(templateCsv());
-  const [rows, setRows] = useState<ImportRow[]>([]);
-  const [message, setMessage] = useState("");
-  const [isCommitting, setIsCommitting] = useState(false);
-  const existingCodes = useMemo(() => new Set(employees.map((employee) => employee.employee_code.toLowerCase())), [employees]);
-  const readyCount = rows.filter((row) => row.status === "ready").length;
-  const hasFailedRows = rows.some((row) => row.status === "failed");
-
-  async function preview() {
-    const parsed = parseCsv(csvText);
-    if (parsed.error) {
-      setRows([]);
-      setMessage(parsed.error);
-      return;
-    }
-
-    const batchCodes = new Set<string>();
-    const nextRows = parsed.rows.map((row, index) => {
-      const result = buildPayload(row, options, existingCodes, batchCodes);
-      if (row.employee_code.trim()) {
-        batchCodes.add(row.employee_code.trim().toLowerCase());
-      }
-      return {
-        index: index + 1,
-        source: row,
-        payload: result.payload,
-        status: result.errors.length ? "blocked" : "ready",
-        message: result.errors.join(" "),
-      } satisfies ImportRow;
-    });
-
-    setRows(nextRows);
-    setMessage("Preview ready. Review blocked rows before committing.");
-    await recordImportBatchAudit({
-      import_type: "employees",
-      status: "previewed",
-      file_name: "employee-import.csv",
-      source_hash: await sha256Hex(csvText),
-      row_count: nextRows.length,
-      ready_count: nextRows.filter((row) => row.status === "ready").length,
-      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
-      rollback_supported: false,
-      evidence_snapshot: { headers, ui: "employee-import-workbench" },
-      row_errors: nextRows.filter((row) => row.status === "blocked").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
-    });
-  }
-
-  async function commitReadyRows() {
-    if (isCommitting) return;
-    setIsCommitting(true);
-    const nextRows = [...rows];
-
-    for (let index = 0; index < nextRows.length; index += 1) {
-      const row = nextRows[index];
-      if (row.status !== "ready" || !row.payload) {
-        continue;
-      }
-
-      const response = await submitImportRequest("/api/hr-admin/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(row.payload),
-      });
-      const payload = response.payload;
-      nextRows[index] = {
-        ...row,
-        status: response.ok ? "created" : "failed",
-        message: response.ok ? "Created successfully." : payload.detail || Object.values(payload).flat().join(" ") || "Create failed.",
-        createdId: response.ok ? payload.id : undefined,
-      };
-      setRows([...nextRows]);
-    }
-
-    setIsCommitting(false);
-    setMessage(nextRows.some((row) => row.status === "failed")
-      ? "Some employee rows failed. Review the row messages, then preview the preserved CSV again."
-      : "Commit complete. Refresh the directory to verify created employees.");
-    await recordImportBatchAudit({
-      import_type: "employees",
-      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
-      file_name: "employee-import.csv",
-      source_hash: await sha256Hex(csvText),
-      row_count: nextRows.length,
-      ready_count: nextRows.filter((row) => row.status === "ready").length,
-      created_count: nextRows.filter((row) => row.status === "created").length,
-      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
-      failed_count: nextRows.filter((row) => row.status === "failed").length,
-      rollback_supported: false,
-      evidence_snapshot: { headers, ui: "employee-import-workbench", created_ids: nextRows.map((row) => row.createdId).filter(Boolean) },
-      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
-    });
-  }
-
-  return (
-    <section className="section" data-testid="employee-import-workbench">
-      <article className="panel-card-soft organization-import-workbench">
-        <div className="queue-toolbar__header">
-          <div>
-            <h2 className="section-heading-soft">Employee bulk import</h2>
-            <p className="section-copy section-copy-soft">Load employees from CSV, validate every row, and commit only ready records.</p>
-          </div>
-          <span className="queue-summary-chip">
-            <strong>{readyCount}</strong> ready
-          </span>
-        </div>
-
-        <div className="organization-import-grid">
-          <label className="form-field">
-            <span className="text-label-premium">CSV data</span>
-            <textarea className="input-control organization-import-textarea" value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-          </label>
-          <div className="organization-import-actions">
-            <button className="button button--secondary" type="button" onClick={() => setCsvText(sampleCsv(options, String(Date.now()).slice(-5)))}>
-              Load sample template
-            </button>
-            <button className="button button--secondary" type="button" onClick={() => navigator.clipboard.writeText(templateCsv())}>
-              Copy template
-            </button>
-            <a className="button button--secondary" download="employee-import-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(templateCsv())}`}>
-              Download template
-            </a>
-            <label className="button button--secondary">
-              <span>Upload CSV</span>
-              <input
-                className="sr-only"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) {
-                    return;
-                  }
-                  file.text().then(setCsvText);
-                }}
-              />
-            </label>
-            <button className="button button--primary" type="button" onClick={preview}>
-              Preview import
-            </button>
-            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount} pending={isCommitting} pendingLabel="Committing employee rows" onClick={commitReadyRows}>Commit ready rows</AsyncActionButton>
-          </div>
-        </div>
-
-        {message ? <div className={`notice${hasFailedRows ? "" : " notice--success"}`} role={hasFailedRows ? "alert" : "status"}><strong>{hasFailedRows ? "Employee import needs attention." : "Employee import update completed."}</strong><span>{message}</span></div> : null}
-
-        {rows.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Row</th>
-                  <th>Employee</th>
-                  <th>Email</th>
-                  <th>Status</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={`${row.index}-${row.source.employee_code}`}>
-                    <td>{row.index}</td>
-                    <td>{row.source.employee_code || "Missing code"}</td>
-                    <td>{row.source.work_email || "Not provided"}</td>
-                    <td><span className="readiness-badge">{row.status}</span></td>
-                    <td>{row.message || "Valid for import"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </article>
-    </section>
-  );
+  const existingCodes = useMemo(() => new Set(employees.map(employee => employee.employee_code.toLowerCase())), [employees]);
+  return <EmployeeImportPanel<ImportRow>
+    testId="employee-import-workbench" title="Employee import" description="Create employee records from CSV."
+    impact="This creates employee records immediately; it does not provision login access."
+    guidance={`Employee code and first name are required. Use configured organization names and a unique manager code or name. Dates use YYYY-MM-DD. Employment status: ${options.employment_statuses.map(item => item.value).join(", ")}; blank means active.`}
+    template={templateCsv()} sample={() => sampleCsv(options, String(Date.now()).slice(-5))}
+    importType="employees" filename="employee-import.csv"
+    columns={[{key:"employee_code",label:"Employee"},{key:"work_email",label:"Work email"}]}
+    prepare={text => {
+      const parsed=parseCsv(text); const batchCodes=new Set<string>();
+      return {error:parsed.error,rows:parsed.rows.map((row,index) => {
+        const result=buildPayload(row,options,existingCodes,batchCodes);
+        if(row.employee_code.trim()) batchCodes.add(row.employee_code.trim().toLowerCase());
+        return {index:index+1,source:row,payload:result.payload,status:result.errors.length ? "blocked" : "ready",message:result.errors.join(" ")};
+      })};
+    }}
+    request={row => ({url:"/api/hr-admin/employees",method:"POST",body:row.payload})}
+  />;
 }

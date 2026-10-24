@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
@@ -803,7 +805,7 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
       <ActionFeedbackReceipt recordIds={leaveRequests.items.map(item => item.id)} />
       <WorkspaceStandardHeader eyebrow={`${state === "live" ? "Employee" : "Demo"} / Time off`} title="Leave"
         description="Plan time away, check entitlements and follow your requests."
-        actions={<><button className="button button--primary" onClick={(event) => { event.currentTarget.focus(); setApplyOpen(true); }} type="button">Apply leave</button><Link prefetch={false} className="button button--secondary" href="/ess">Overview</Link></>} />
+        actions={<><button className="button button--primary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setApplyOpen(true);  }} type="button">Apply leave</button><Link prefetch={false} className="button button--secondary" href="/ess">Overview</Link></>} />
       {hydrated && submissionSaved ? <div className="notice notice--success" role="status">Leave request submitted. Review its status in your history.</div> : null}
       <WorkspaceStandardPanel title="Your entitlements" description="Current policy balances. Contact HR for leave-year dates, expiry and applicable holidays.">
         <div className="workspace-summary-grid" role="group" aria-label="Leave balance cards">

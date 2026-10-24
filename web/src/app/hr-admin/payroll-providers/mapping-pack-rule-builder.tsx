@@ -1,6 +1,10 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
-import { useEffect, useMemo, useState } from "react";
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { HrAdminPayrollProviderSchemaMappingPack } from "@/lib/types";
@@ -130,20 +134,6 @@ function compactValidationRule(rule: ValidationRule): Record<string, unknown> {
   };
 }
 
-function useEscapeClose(isOpen: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -405,11 +395,6 @@ export function MappingPackRuleBuilder({ pack }: Props) {
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
-  useEscapeClose(open, () => {
-    if (!isSaving && !isSimulating) {
-      setOpen(false);
-    }
-  });
 
   const canEdit = pack.status !== "active" && pack.status !== "archived";
   const invalidRuleCount = useMemo(
@@ -505,25 +490,14 @@ export function MappingPackRuleBuilder({ pack }: Props) {
 
   return (
     <>
-      <button className="button button--secondary" type="button" onClick={() => setOpen(true)}>
+      <button className="button button--secondary" type="button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setOpen(true); }}>
         Edit rules
       </button>
       {open ? (
-        <div className="payroll-rule-builder-shell" role="dialog" aria-modal="true" aria-label={`${pack.mapping_profile_ref} rule builder`}>
-          <button className="payroll-rule-builder-backdrop" type="button" aria-label="Close rule builder" onClick={() => setOpen(false)} />
-          <aside className="payroll-rule-builder-drawer">
-            <div className="payroll-rule-builder-header">
-              <div>
-                <span className="workspace-card__eyebrow">Mapping rule builder</span>
-                <h2>{pack.artifact_kind_label}</h2>
-                <p>{pack.mapping_profile_ref} / v{pack.version}</p>
-              </div>
-              <button className="button button--secondary" type="button" onClick={() => setOpen(false)}>
-                Close
-              </button>
-            </div>
+        <HrAdminActionModal closeHref="/hr-admin/payroll-providers" labelledBy={`mapping-rules-${pack.id}`} title={`${pack.mapping_profile_ref} rule builder`} description={`${pack.artifact_kind_label} / v${pack.version}`} onClose={() => setOpen(false)} busy={isSaving || isSimulating} className="hr-admin-action-modal--wide">
 
-            <div className="payroll-rule-builder-state-grid">
+
+<div className="payroll-rule-builder-state-grid">
               <label>
                 <span>Target schema</span>
                 <input value={targetSchemaRef} onChange={(event) => setTargetSchemaRef(event.target.value)} disabled={!canEdit} />
@@ -544,14 +518,14 @@ export function MappingPackRuleBuilder({ pack }: Props) {
               </div>
             </div>
 
-            {!canEdit ? (
+{!canEdit ? (
               <div className="payroll-rule-builder-lock">
                 <strong>Clone required</strong>
                 <span>Active and archived versions are locked.</span>
               </div>
             ) : null}
 
-            <section className="payroll-rule-builder-section payroll-rule-builder-preview">
+<section className="payroll-rule-builder-section payroll-rule-builder-preview">
               <div className="payroll-rule-builder-section-header">
                 <div>
                   <span className="workspace-card__eyebrow">Simulation preview</span>
@@ -613,7 +587,7 @@ export function MappingPackRuleBuilder({ pack }: Props) {
               ) : null}
             </section>
 
-            <section className="payroll-rule-builder-section">
+<section className="payroll-rule-builder-section">
               <div className="payroll-rule-builder-section-header">
                 <div>
                   <span className="workspace-card__eyebrow">Transforms</span>
@@ -687,7 +661,7 @@ export function MappingPackRuleBuilder({ pack }: Props) {
               </div>
             </section>
 
-            <section className="payroll-rule-builder-section">
+<section className="payroll-rule-builder-section">
               <div className="payroll-rule-builder-section-header">
                 <div>
                   <span className="workspace-card__eyebrow">Validations</span>
@@ -733,7 +707,7 @@ export function MappingPackRuleBuilder({ pack }: Props) {
               </div>
             </section>
 
-            <div className="payroll-rule-builder-footer">
+<div className="payroll-rule-builder-footer">
               <div>
                 <span>{invalidRuleCount} incomplete</span>
                 {notice ? <strong role="status">{notice}</strong> : null}
@@ -742,8 +716,8 @@ export function MappingPackRuleBuilder({ pack }: Props) {
                 {isSaving ? "Saving" : "Save rules"}
               </button>
             </div>
-          </aside>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
     </>
   );

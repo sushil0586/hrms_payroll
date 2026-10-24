@@ -7,8 +7,8 @@ export default async function HrAdminWorkflowTemplatesPage() {
   const result = await getHrAdminWorkflowTemplates();
 
   return (
-    <main className="shell shell--workspace workflow-workbench">
-      <PageIntro
+    <main className="shell shell--workspace workflow-workbench accerio-page">
+      <PageIntro appearance="accerio"
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/workflow-templates/new">Create workflow template</Link>

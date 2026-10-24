@@ -84,13 +84,14 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
   return (
     <WorkspaceHydrationBoundary fallback={<WorkspaceLoading label="Loading Platform Admin workspace" />}>
     <WorkspaceChrome
+      appearance="accerio"
       footerDescription="Customer onboarding, setup templates, tenant admin users, and launch-readiness controls."
       navGroups={menuSource.navGroups}
       navItems={menuSource.navItems}
-      productLabel="HRMS"
+      productLabel="Accerio"
       quickLinks={menuSource.quickLinks}
       roleLabel="Platform Admin"
-      searchHint="Search tenants, leads, templates, and launch status"
+      searchHint="Search pages and actions"
       userLabel={userLabel}
       workspaceLabel="Platform Control Center"
       workspaceTone="admin"

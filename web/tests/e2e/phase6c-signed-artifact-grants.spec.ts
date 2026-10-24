@@ -72,6 +72,7 @@ async function createDisposableSignedArtifact(page: Page) {
     pay_group_id: workspace.manifest.payroll.pay_group_id,
     code: `PW_SIGNED_${runRef}`,
     name: `Browser signed grant ${runRef}`,
+    run_kind: "supplementary",
     status: "collecting_inputs",
     input_profile_ref: "tenant.payroll.input.phase6c.v1",
     snapshot_schema_ref: "tenant.payroll.snapshot.phase6c.v1",
@@ -142,7 +143,7 @@ test.describe("Phase 6C signed payroll artifact grant certification", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-outputs", hrAdmin);
     await expectPageReady(page, "Payroll Outputs");
     const artifact = await selectedSignedArtifact(page);
-    await page.goto(`/hr-admin/payroll-outputs?artifactId=${artifact.id}`);
+    await page.goto(`/hr-admin/payroll-outputs?tab=detail&artifactId=${artifact.id}`);
     await expectPageReady(page, "Payroll Outputs");
     await expect(page.getByText("Storage governance").first()).toBeVisible();
     await expect(page.getByText("Access governance").first()).toBeVisible();
@@ -201,7 +202,7 @@ test.describe("Phase 6C signed payroll artifact grant certification", () => {
     expect(blockedDownload.status()).toBe(403);
     expect(await blockedDownload.json()).toMatchObject({ detail: "Signed access grant has been revoked." });
 
-    await page.goto(`/hr-admin/payroll-outputs?artifactId=${artifact.id}`);
+    await page.goto(`/hr-admin/payroll-outputs?tab=detail&artifactId=${artifact.id}`);
     await expectPageReady(page, "Payroll Outputs");
     await expect(page.getByText("Access governance").first()).toBeVisible();
     await expect(page.getByText("Revoked grants").first()).toBeVisible();

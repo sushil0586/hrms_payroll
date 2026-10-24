@@ -1,11 +1,12 @@
-import Link from "next/link";
+import {LifecycleQueueFocus} from "@/app/hr-admin/lifecycle/lifecycle-queue-focus";
 
 import { createEmptyExitValue, exitToFormValue } from "@/app/hr-admin/exits/form-values";
 import { ExitForm } from "@/app/hr-admin/exits/exit-form";
 import { ExitQueue } from "@/app/hr-admin/exits/exit-queue";
-import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminExits, getHrAdminLifecycleOptions, getHrAdminWorkflowTemplates } from "@/lib/api";
+import {LifecycleEditorDialog} from "@/app/hr-admin/lifecycle/lifecycle-form-state";
+import {LifecycleUnavailable} from "@/app/hr-admin/lifecycle/lifecycle-unavailable";
+import {WorkspaceStandardHeader} from "@/components/patterns/workspace-standard";
+import { getHrAdminExit, getHrAdminExits, getHrAdminLifecycleOptions, getHrAdminWorkflowTemplates } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -18,8 +19,12 @@ function normalizeParam(value: SearchParamValue) {
 
 export default async function HrAdminExitsPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
-  const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
+  const requestedPage=Number(normalizeParam(currentParams.page)??"1");
+  const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?requestedPage:1;
+  const requestedSize=Number(normalizeParam(currentParams.page_size)??"25");
+  const pageSize=[10,25,50,100].includes(requestedSize)?requestedSize:25;
+  const recordLoaded=normalizeParam(currentParams.recordLoaded)??"";
+  const receipt=recordLoaded?await getHrAdminExit(recordLoaded).catch(()=>null):null;
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
   const rehireEligible = normalizeParam(currentParams.rehire_eligible) ?? "";
@@ -33,37 +38,36 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
       q,
       status: status || undefined,
       rehire_eligible: rehireEligible || undefined,
-    }),
-    getHrAdminLifecycleOptions(),
-    getHrAdminWorkflowTemplates(),
+    }).catch(()=>null),
+    getHrAdminLifecycleOptions().catch(()=>null),
+    getHrAdminWorkflowTemplates().catch(()=>null),
   ]);
+  if(result?.state!=="live"||optionsResult?.state!=="live"||templatesResult?.state!=="live")return <LifecycleUnavailable/>;
   const modalCloseHref = `/hr-admin/exits${buildQueryString({ q, status, rehire_eligible: rehireEligible, page, page_size: pageSize })}`;
-  const editItem = editExit ? result.data.items.find((item) => item.id === editExit) : undefined;
+  const selected=editExit?await getHrAdminExit(editExit).catch(()=>null):null;
+  const editItem=selected?.state==="live"&&selected.data.id===editExit?selected.data:undefined;
   const isCreateModalOpen = exitModal === "create";
 
   return (
-    <main className="shell hr-lifecycle-workbench">
-      <PageIntro
+    <main className="shell hr-lifecycle-workbench accerio-page lifecycle-phase3">
+      <LifecycleQueueFocus/>
+      <WorkspaceStandardHeader
         actions={
           <>
-            <Link className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}exitModal=create`}>Create exit</Link>
-            <Link className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</Link>
+            <a data-lifecycle-trigger="create-exit" data-navigation-mode="document" className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}exitModal=create`}>Create exit</a>
+            <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</a>
           </>
         }
         description="Manage resignations, notice periods, clearance, and final exit readiness."
-        eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
-        pills={[
-          `${result.data.total_count} exits`,
-          `${result.data.items.filter((item) => item.status === "active").length} active on this page`,
-        ]}
-        title="Exit operations"
+        title="Exits"
       />
       <section className="attendance-summary-strip" aria-label="Exit summary">
-        <span><strong>{result.data.total_count}</strong> records</span>
+        <span><strong>{result.data.total_count}</strong> matching records</span>
         <span><strong>{result.data.items.length}</strong> on page</span>
-        <span><strong>{result.data.items.filter((item) => item.rehire_eligible).length}</strong> rehire eligible</span>
-        <span><strong>{result.data.items.filter((item) => item.clearance_open_count > 0).length}</strong> clearance open</span>
+        <span><strong>{result.data.items.filter((item) => item.rehire_eligible).length}</strong> rehire eligible on page</span>
+        <span><strong>{result.data.items.filter((item) => item.clearance_open_count > 0).length}</strong> with open clearance on page</span>
       </section>
+      {recordLoaded?<div className="notice" role="status">{receipt?.state==="live"&&receipt.data.id===recordLoaded?<>Current record loaded: {receipt.data.employee_name}. Review its current state in the record editor.</>:<>Requested record could not be confirmed. Reload before relying on this result.</>}</div>:null}
       <ExitQueue
         items={result.data.items}
         exitStatusOptions={optionsResult.data.exit_statuses}
@@ -77,7 +81,7 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
         }}
       />
       {isCreateModalOpen ? (
-        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="exit-create-title" title="Create exit" eyebrow="Lifecycle record">
+        <LifecycleEditorDialog closeHref={modalCloseHref} labelledBy="exit-create-title" title="Create exit">
           <ExitForm
             compact
             cancelHref={modalCloseHref}
@@ -87,10 +91,11 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
             mode="create"
             options={optionsResult.data}
           />
-        </HrAdminActionModal>
+        </LifecycleEditorDialog>
       ) : null}
+      {editExit&&!editItem?<div className="notice" role="status">Selected record unavailable. No other record has been opened. <a href={modalCloseHref}>Return to queue</a></div>:null}
       {editItem ? (
-        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="exit-edit-title" title={`Edit exit: ${editItem.employee_name}`} eyebrow="Lifecycle record">
+        <LifecycleEditorDialog closeHref={modalCloseHref} labelledBy="exit-edit-title" title={`Edit exit: ${editItem.employee_name}`}>
           <ExitForm
             compact
             cancelHref={modalCloseHref}
@@ -101,7 +106,7 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
             mode="edit"
             options={optionsResult.data}
           />
-        </HrAdminActionModal>
+        </LifecycleEditorDialog>
       ) : null}
     </main>
   );

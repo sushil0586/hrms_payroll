@@ -1,4 +1,8 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useEffect, useRef, useState } from "react";
 
@@ -62,14 +66,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
     if (editing) labelRef.current?.focus();
   }, [editing]);
 
-  useEffect(() => {
-    if (!editing) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeDialog();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing]);
+
 
   function openDialog(permission: PlatformPermissionCatalogItem) {
     setEditing(permission);
@@ -142,29 +139,23 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
 
   return (
     <>
-      <button className="button button--secondary" onClick={() => openDialog(permission)} type="button">
+      <button className="button button--secondary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openDialog(permission); }} type="button">
         Edit
       </button>
       {notice ? <span className="muted">{notice}</span> : null}
 
       {editing && form ? (
-        <div className="tenant-modal-shell" role="presentation">
-          <div aria-busy={busy || isRefreshing} aria-describedby="permission-dialog-validation" aria-label="Edit platform permission" aria-modal="true" className="tenant-modal" role="dialog">
-            <div className="tenant-modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">Permission catalog</span>
-                <h3>Edit permission</h3>
-              </div>
-              <button aria-label="Close permission dialog" className="button button--ghost" onClick={closeDialog} type="button">
-                Close
-              </button>
-            </div>
-            <div className="tenant-modal__member-summary">
+        <HrAdminActionModal closeHref="/platform-admin/permissions" labelledBy="workspace-permission-catalog-actions" title="Edit platform permission" onClose={closeDialog} busy={busy || isRefreshing} className="tenant-modal">
+
+
+
+<div className="tenant-modal__member-summary">
               <span className="muted">Key</span>
               <strong>{editing.key}</strong>
               <span className="muted">Keys are immutable. Runtime enforcement still uses the deployed permission key contract.</span>
             </div>
-            <div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
+
+<div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
               <label>
                 Label
                 <input
@@ -235,11 +226,13 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
                 Active in Platform Admin catalog
               </label>
             </div>
-            <div className="tenant-modal__validation" id="permission-dialog-validation" role={formError ? "alert" : "status"}>
+
+<div className="tenant-modal__validation" id="permission-dialog-validation" role={formError ? "alert" : "status"}>
               {formError || "Save updates the DB catalog row and leaves runtime enforcement unchanged."}
             </div>
-            <div className="tenant-modal__actions">
-              <button className="button button--secondary" onClick={closeDialog} type="button">
+
+<div className="tenant-modal__actions">
+              <button className="button button--secondary" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} type="button">
                 Cancel
               </button>
               <AsyncActionButton
@@ -252,8 +245,8 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
                 Save permission
               </AsyncActionButton>
             </div>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
     </>
   );

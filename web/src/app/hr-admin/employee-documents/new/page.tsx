@@ -1,31 +1,33 @@
-import Link from "next/link";
+import { DocumentAccessNotice } from "@/app/hr-admin/documents/document-access-notice";
 
 import { EmployeeDocumentUploadForm } from "@/app/hr-admin/employee-documents/employee-document-upload-form";
-import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminDocumentOptions, getHrAdminEmployees } from "@/lib/api";
-import { requireSessionPermission } from "@/lib/workspace-access";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { getHrAdminDocumentCategories, getHrAdminDocumentOptions, getHrAdminEmployees } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewEmployeeDocumentPage() {
-  await requireSessionPermission({
+  const user = await requireSessionPermission({
     permissionKeys: ["documents.manage"],
     fallbackPath: "/hr-admin/employee-documents",
   });
-  const [optionsResult, employeesResult] = await Promise.all([
+  if (!sessionHasPermission(user, "documents.view")) return <DocumentAccessNotice />;
+  if (!sessionHasPermission(user, "employees.view")) return <DocumentAccessNotice required="employees.view" />;
+
+  const [optionsResult, employeesResult, categoriesResult] = await Promise.all([
     getHrAdminDocumentOptions(),
     getHrAdminEmployees(),
+    getHrAdminDocumentCategories(),
   ]);
 
   return (
-    <main className="shell hr-document-workbench">
-      <PageIntro
-        eyebrow={optionsResult.state === "live" && employeesResult.state === "live" ? "Live upload mode" : "Demo upload mode"}
+    <main className="shell hr-document-workbench accerio-page document-operations document-upload-page">
+      <WorkspaceStandardHeader
         title="Upload employee document"
-        description="Create a clean document artifact record with employee context, category mapping, and review-ready metadata."
-        actions={<Link className="button button--secondary" href="/hr-admin/employee-documents">Back to employee documents</Link>}
-        pills={["Artifact-backed storage", "HR admin intake", "Review-ready metadata"]}
+        description="Choose the employee and category, attach a file and confirm the stored record."
+        actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/employee-documents">Back to employee documents</a>}
       />
 
-      <EmployeeDocumentUploadForm employees={employeesResult.data} options={optionsResult.data} />
+      <EmployeeDocumentUploadForm categories={categoriesResult.data} employees={employeesResult.data} options={optionsResult.data} />
     </main>
   );
 }

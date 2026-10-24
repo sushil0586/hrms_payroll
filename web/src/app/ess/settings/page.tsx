@@ -10,7 +10,7 @@ import {
 export default async function SettingsPage() {
   const { data: profile } = await getEssProfile();
   return (
-    <main className="shell shell--workspace ess-compact">
+    <main className="shell shell--workspace ess-compact accerio-page">
       <WorkspaceStandardHeader
         eyebrow="Employee account"
         title="Settings"

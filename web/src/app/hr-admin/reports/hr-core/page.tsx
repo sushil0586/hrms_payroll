@@ -22,8 +22,8 @@ export default async function HrCoreReportsPage() {
   const reports = reportCatalog.filter((report) => report.category === "HR Core");
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={dashboardResult.state === "live" ? "Live HR core reports" : "Demo HR core reports"}
         title="HR Core Reports"
         description="Workforce, document compliance, and lifecycle reports are separated from payroll and statutory reports for cleaner daily HR operations."

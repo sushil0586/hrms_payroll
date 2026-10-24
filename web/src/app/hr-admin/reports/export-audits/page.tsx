@@ -10,8 +10,8 @@ export default async function ReportExportAuditsPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Compliance evidence"
         title="Export Audit History"
         description="Trace report downloads, manifest requests, filters, checksums, and source evidence."

@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
@@ -150,10 +152,10 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
                       <td><strong>{item.scope_labels?.length ? item.scope_labels[0] : "Tenant default"}</strong><span>{item.scope_labels?.slice(1).join(" · ") || "Applies broadly"}</span></td>
                       <td><strong>{item.priority}</strong><span>{item.employee_id ? "Employee override" : "Organization scope"}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item)}>{item.has_blocking_conflict ? "Blocked" : item.conflict_count ? "Needs review" : item.is_active ? "Active" : "Inactive"}</WorkspaceStatusBadge><span>{item.conflict_summary || "No overlap summary"}</span></td>
-                      <td><button className="button button--secondary button--compact" onClick={(event) => {
-                        event.stopPropagation();
+                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                        triggerEvent.stopPropagation();
                         setSelectedItemId(item.id);
-                      }} type="button">Inspect</button></td>
+                       }} type="button">Inspect</button></td>
                     </tr>
                   );
                 })}
@@ -174,7 +176,7 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
                 <h2 className="section-heading-soft">Assignment detail</h2>
                 <p className="section-copy section-copy-soft">Focused scope and priority context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={() => setSelectedItemId("")} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

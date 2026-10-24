@@ -96,8 +96,8 @@ export default async function TenantSetupGuidePage() {
   const warningAreas = setupAreas.filter((area) => area.status === "warning").length;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live tenant setup" : "Demo tenant setup"}
         title="Tenant Setup Guide"
         description="A first-run control page for completing tenant launch readiness before payroll operations begin."

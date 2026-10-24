@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -186,8 +188,8 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
   const selectedAdjustment = visibleAdjustments.find((item) => item.id === selectedAdjustmentId) ?? visibleAdjustments[0] ?? null;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-adjustments hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-adjustments hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 4A" : "Demo payroll phase 4A"}
         title="Payroll Adjustments"
         description="Control one-time payroll inputs for arrears, bonuses, reimbursements, loans, advances, deductions, corrections, and settlement preparation."
@@ -230,6 +232,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
         <nav className="payroll-setup-tabs" aria-label="Payroll adjustment sections">
           {ADJUSTMENT_TABS.map((tab) => (
             <Link
+              aria-current={activeTab === tab.id ? "page" : undefined}
               className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
               href={adjustmentHref(tab.id, selectedRun?.id, selectedAdjustment?.id)}
               key={tab.id}
@@ -298,7 +301,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                 </article>
               </div>
               {setup.post_lock_impacts.length ? (
-                <div className="payroll-table-scroll">
+                <WorkspaceTableScrollRegion label="Payroll adjustments table 1" className="payroll-table-scroll workspace-table-region">
                   <table className="payroll-readiness-table payroll-setup-table payroll-adjustment-table">
                     <thead>
                       <tr>
@@ -321,7 +324,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </WorkspaceTableScrollRegion>
               ) : null}
             </section>
             ) : null}
@@ -339,7 +342,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                 </div>
                 <span className="payroll-setup-count">{visibleAdjustments.length} records</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll adjustments table 2" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-adjustment-table">
                   <thead>
                     <tr>
@@ -374,7 +377,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </div>
             ) : null}
           </div>

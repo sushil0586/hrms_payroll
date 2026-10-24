@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -209,7 +212,7 @@ export function LwfReadinessWorkspace({
           <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/lwf-package?format=manifest" fileName="lwf-package-manifest.json">Package manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Lwf readiness table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table statutory-deductions-table">
             <thead><tr><th scope="col">Gate</th><th scope="col">Area</th><th scope="col">Status</th><th scope="col">Owner</th><th scope="col">Signal</th><th scope="col">Evidence</th><th scope="col">Source</th><th scope="col">Actions</th></tr></thead>
             <tbody>
@@ -228,7 +231,7 @@ export function LwfReadinessWorkspace({
               {visibleRows.length === 0 ? <tr><td colSpan={8}><div className="empty-state">No Labour Welfare Fund readiness gates match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Labour Welfare Fund readiness pagination">
           <button className="button button--secondary" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">Previous</button>

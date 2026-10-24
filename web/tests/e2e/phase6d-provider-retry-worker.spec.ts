@@ -269,7 +269,7 @@ test.describe("Phase 6D provider retry worker certification", () => {
     await expectPageReady(page, "Payroll Handoff");
 
     const delivery = await ensureRetryableDelivery(page);
-    await page.goto(`/hr-admin/payroll-handoff?handoffId=${delivery.handoff_id}&artifactId=${delivery.output_artifact_id}`);
+    await page.goto(`/hr-admin/payroll-handoff?tab=evidence&handoffId=${delivery.handoff_id}&artifactId=${delivery.output_artifact_id}`);
     await expectPageReady(page, "Payroll Handoff");
     await expect(page.getByText("Retry commands").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Schedule retry" })).toBeVisible();
@@ -290,7 +290,7 @@ test.describe("Phase 6D provider retry worker certification", () => {
     const schedulePayload = await scheduleResponse.json();
     expect(schedulePayload.retry_event.status).toBe("scheduled");
 
-    await page.goto(`/hr-admin/payroll-handoff?handoffId=${delivery.handoff_id}&artifactId=${delivery.output_artifact_id}&evidence=retry:${schedulePayload.retry_event.id}`);
+    await page.goto(`/hr-admin/payroll-handoff?tab=evidence&handoffId=${delivery.handoff_id}&artifactId=${delivery.output_artifact_id}&evidence=retry:${schedulePayload.retry_event.id}`);
     await expect(page.getByRole("heading", { name: "Retry Evidence" })).toBeVisible();
     await expect(page.getByText("Decision snapshot").first()).toBeVisible();
     await expect(page.getByText("Backoff seconds").first()).toBeVisible();
@@ -305,7 +305,7 @@ test.describe("Phase 6D provider retry worker certification", () => {
     const job = refreshed.provider_jobs.find((item) => item.retry_event_id === schedulePayload.retry_event.id);
     expect(job?.status).toBe("completed");
 
-    await page.goto(`/hr-admin/payroll-handoff?handoffId=${delivery.handoff_id}&artifactId=${delivery.output_artifact_id}&evidence=job:${job!.id}`);
+    await page.goto(`/hr-admin/payroll-handoff?tab=evidence&handoffId=${delivery.handoff_id}&artifactId=${delivery.output_artifact_id}&evidence=job:${job!.id}`);
     await expect(page.getByRole("heading", { name: "Queue Runtime Evidence" })).toBeVisible();
     await expect(page.getByText("Runtime policy").first()).toBeVisible();
     await expect(page.getByText("Heartbeat seconds").first()).toBeVisible();

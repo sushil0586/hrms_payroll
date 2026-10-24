@@ -37,8 +37,8 @@ export default async function PayrollReportsPage() {
   const readiness = readinessResult.data.summary;
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={readinessResult.state === "live" ? "Live payroll reports" : "Demo payroll reports"}
         title="Payroll Reports"
         description="Payroll register, exception, adjustment, settlement, payslip, bank advice, and finance handoff reports without mixing HR core or statutory views."

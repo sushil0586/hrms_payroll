@@ -662,7 +662,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   }, [toast]);
 
   return (
-    <main className="shell shell--workspace shell--ess-tax ess-compact">
+    <main className="shell shell--workspace shell--ess-tax ess-compact accerio-page">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <WorkspaceStandardHeader eyebrow={isDemo ? "Demo employee services" : "Employee services"} title="Statutory Declarations"
         description="Review your tax declaration, provide evidence and follow HR verification."

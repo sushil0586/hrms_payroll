@@ -53,8 +53,8 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
   const activeFailureChannels = channelSummaries.filter((item) => item.failed > 0).length;
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         actions={<Link className="button button--secondary" href="/hr-admin/notifications-admin">Back to notifications</Link>}
         description="Inspect generated notifications across modules and review their delivery lifecycle."
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live notification mode" : "Demo notification mode"}

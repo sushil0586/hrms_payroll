@@ -17,8 +17,8 @@ export default async function HrAdminNotificationDeliveryPage() {
   const retryCapped = channelSummaries.reduce((sum, item) => sum + item.retry_capped_count, 0);
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live delivery control" : "Demo delivery control"}
         title="Notification delivery"
         description="Configure tenant routing for in-app, email, SMS, push, and WhatsApp delivery."

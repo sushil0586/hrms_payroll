@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-23",
+  "route_pattern_count": 18,
+  "organization_sections": [
+    "legal_entities",
+    "locations",
+    "branches",
+    "business_units",
+    "departments",
+    "cost_centers",
+    "grades",
+    "designations",
+    "employment_types"
+  ],
+  "routes": [
+    "/hr-admin/organization",
+    "/hr-admin/organization/[section]/new",
+    "/hr-admin/organization/[section]/[itemId]/edit",
+    "/hr-admin/lifecycle",
+    "/hr-admin/onboardings",
+    "/hr-admin/onboardings/new",
+    "/hr-admin/onboardings/[itemId]/edit",
+    "/hr-admin/probation-reviews",
+    "/hr-admin/probation-reviews/new",
+    "/hr-admin/probation-reviews/[itemId]/edit",
+    "/hr-admin/movements",
+    "/hr-admin/movements/new",
+    "/hr-admin/movements/[itemId]/edit",
+    "/hr-admin/exits",
+    "/hr-admin/exits/new",
+    "/hr-admin/exits/[itemId]/edit",
+    "/hr-admin/reports/lifecycle-queue",
+    "/hr-admin/reports/lifecycle-aging"
+  ],
+  "query_dialogs": {
+    "onboardings": [
+      "onboardingModal=create",
+      "editOnboarding=<id>"
+    ],
+    "probation-reviews": [
+      "reviewModal=create",
+      "editReview=<id>"
+    ],
+    "movements": [
+      "movementModal=create",
+      "editMovement=<id>"
+    ],
+    "exits": [
+      "exitModal=create",
+      "editExit=<id>"
+    ],
+    "lifecycle": [
+      "editRecord=<type>:<id>"
+    ]
+  },
+  "scope": "HR Admin owning routes; actual employee/manager handoffs discovered and verified in implementation, no new ESS/MSS routes inferred"
+}

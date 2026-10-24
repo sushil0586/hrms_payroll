@@ -136,7 +136,7 @@ export default async function DocsPage({ params, searchParams }: DocsPageProps) 
                 <span className="docs-eyebrow">{currentPage?.section ?? "Guide"}</span>
                 <span>{currentPage?.relativePath ?? relativePath}</span>
               </div>
-              <div className="docs-article">{renderMarkdown(markdown, relativePath)}</div>
+              <div className="docs-article">{renderMarkdown(markdown, relativePath, { headingOffset: 1 })}</div>
             </>
           )}
         </article>

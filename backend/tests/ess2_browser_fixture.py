@@ -9,8 +9,8 @@ from apps.attendance.services import reconcile_attendance_period, transition_att
 
 def prepare(manifest_path):
     db = settings.DATABASES["default"]
-    if db["NAME"] != "hrms_ess2" or db["HOST"] != "127.0.0.1":
-        raise RuntimeError("ESS2 fixtures require the dedicated loopback database")
+    if not str(db["NAME"]).startswith("hrms_") or db["HOST"] not in {"127.0.0.1", "localhost"}:
+        raise RuntimeError("ESS2 fixtures require an explicitly named loopback database")
     with open(manifest_path) as handle:
         manifest = json.load(handle)
     tenant = Tenant.objects.get(pk=manifest["tenant"]["id"], code__startswith="pw-qa-")

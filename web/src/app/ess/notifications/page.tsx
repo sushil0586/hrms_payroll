@@ -76,7 +76,7 @@ export default async function NotificationsPage({
   const href = (p: number) =>
     `/ess/notifications?${new URLSearchParams({ page: String(p), page_size: String(pageSize), q, status, channel, priority, subject_type: subject })}`;
   return (
-    <main className="shell shell--workspace ess-compact">
+    <main className="shell shell--workspace ess-compact accerio-page">
       <WorkspaceStandardHeader
         eyebrow="Employee inbox"
         title="Notifications"

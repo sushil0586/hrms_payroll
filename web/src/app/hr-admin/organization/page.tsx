@@ -1,13 +1,13 @@
-import Link from "next/link";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { OrganizationAccessNotice } from "./organization-access-notice";
+import { OrganizationWorkflows } from "./organization-workflows";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationItem, getHrAdminOrganizationSnapshot } from "@/lib/api";
 import type { HrAdminOrganizationItem, HrAdminOrganizationSnapshot } from "@/lib/types";
 import { ORGANIZATION_SECTION_CONFIG, isOrganizationSectionKey, type OrganizationSectionKey } from "@/app/hr-admin/organization/section-config";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
-import { OrganizationGuidedSetup } from "./organization-guided-setup";
-import { OrganizationImportWorkbench } from "./organization-import-workbench";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -85,16 +85,6 @@ function filterByStatus(items: HrAdminOrganizationItem[], status: string) {
     return items;
   }
   return items.filter((item) => (status === "active" ? item.is_active : !item.is_active));
-}
-
-function resolveSelectedItem(items: HrAdminOrganizationItem[], selectedId?: string) {
-  if (selectedId) {
-    const selected = items.find((item) => item.id === selectedId);
-    if (selected) {
-      return selected;
-    }
-  }
-  return items[0] ?? null;
 }
 
 function getOrganizationWarnings(item: HrAdminOrganizationItem, section: string) {
@@ -345,307 +335,55 @@ function itemMeta(item: HrAdminOrganizationItem, section: string) {
 }
 
 export default async function HrAdminOrganizationPage({ searchParams }: PageProps) {
-  const sessionUser = await requireSessionPermission({
-    permissionKeys: ["organization.view", "organization.manage"],
-    fallbackPath: "/hr-admin",
-  });
-  const canManageOrganization = sessionHasPermission(sessionUser, "organization.manage");
-  const canViewEmployees = sessionHasPermission(sessionUser, "employees.view");
+  const user = await requireSessionPermission({ permissionKeys: ["organization.view", "organization.manage"], fallbackPath: "/access-denied" });
+  if (!sessionHasPermission(user, "organization.view")) return <OrganizationAccessNotice />;
   const currentParams = (await searchParams) ?? {};
-  const snapshotResult = await getHrAdminOrganizationSnapshot();
-  const sections = getSections(snapshotResult.data);
-  const sectionKey = (normalizeParam(currentParams.section) ?? "departments") as keyof typeof sections;
-  const activeSection = sections[sectionKey] ?? sections.departments;
+  const result = await getHrAdminOrganizationSnapshot().catch(()=>null);
+  if (result?.state !== "live") return <OrganizationAccessNotice unavailable />;
+  const sections = getSections(result.data);
+  const requestedSection = normalizeParam(currentParams.section) ?? "departments";
+  const sectionKey: OrganizationSectionKey = isOrganizationSectionKey(requestedSection) ? requestedSection : "departments";
+  const active = sections[sectionKey];
   const q = normalizeParam(currentParams.q) ?? "";
-  const status = normalizeParam(currentParams.status) ?? "all";
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "10") || 10, 1), 50);
-  const filteredItems = filterByQuery(filterByStatus(activeSection.items, status), q);
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
-  const requestedPage = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const page = Math.min(requestedPage, totalPages);
-  const pagedItems = filteredItems.slice((page - 1) * pageSize, page * pageSize);
-  const selectedItem = resolveSelectedItem(filteredItems, normalizeParam(currentParams.itemId));
-  const selectedDetailResult =
-    selectedItem && isOrganizationSectionKey(sectionKey)
-      ? await getHrAdminOrganizationItem(sectionKey, selectedItem.id)
-      : null;
-  const selectedDetail = (selectedDetailResult?.data as HrAdminOrganizationItem | undefined) ?? selectedItem;
-  const selectedImpact = selectedDetail ? getOrganizationImpactNotice(selectedDetail, sectionKey) : null;
-  const statusTabs = [
-    { key: "all", label: "All" },
-    { key: "active", label: "Active" },
-    { key: "inactive", label: "Inactive" },
-  ];
-  const masterCards = (Object.keys(ORGANIZATION_SECTION_CONFIG) as OrganizationSectionKey[]).map((key) => ({
-    key,
-    label: ORGANIZATION_SECTION_CONFIG[key].label,
-    singular: ORGANIZATION_SECTION_CONFIG[key].singular,
-    items: sections[key].items,
-    description: masterDescriptions[key],
-    dependency: masterDependencyLabels[key],
-  }));
-
-  return (
-    <main className="shell">
-      <PageIntro
-        eyebrow={snapshotResult.state === "live" ? "Live structure mode" : "Demo structure mode"}
-        title="Organization masters"
-        description="Create and maintain the master data that drives employee records, reporting lines, policies, workflows, and payroll readiness."
-        actions={
-          <>
-            <Link className="button button--secondary" href="/hr-admin">
-              Back to admin workspace
-            </Link>
-            {canManageOrganization && isOrganizationSectionKey(sectionKey) ? (
-              <Link className="button button--primary" href={`/hr-admin/organization/${sectionKey}/new`}>
-                Create {activeSection.label.slice(0, -1).toLowerCase()}
-              </Link>
-            ) : null}
-            {canViewEmployees ? (
-              <Link className="button button--secondary" href="/hr-admin/employees">
-                Open employee masters
-              </Link>
-            ) : null}
-          </>
-        }
-        pills={[
-          "Structural backbone for HRMS",
-          "Cross-module master data hygiene",
-          "Ready for employee and policy mapping",
-        ]}
-      />
-
-      <section className="section">
-        <div className="attendance-summary-strip payroll-run-summary-strip">
-          <span><strong>{snapshotResult.data.summary.legal_entities_count}</strong> Legal entities</span>
-          <span><strong>{snapshotResult.data.summary.branches_count}</strong> Branches</span>
-          <span><strong>{snapshotResult.data.summary.cost_centers_count}</strong> Cost centers</span>
-          <span><strong>{snapshotResult.data.summary.employment_types_count}</strong> Employment types</span>
-        </div>
-      </section>
-
-      <section className="section organization-master-hub">
-        <div className="tenant-console-panel__header">
-          <div>
-            <span className="workspace-card__eyebrow">Master data library</span>
-            <h2>Maintain every organization master from one place</h2>
-            <p className="section-copy">Use these cards for everyday HR changes. Add one record at a time, review existing data, and keep inactive records visible for audit.</p>
-          </div>
-          <div className="queue-toolbar__meta">
-            <span className="queue-summary-chip">
-              <strong>{masterCards.reduce((total, card) => total + card.items.length, 0)}</strong> total masters
-            </span>
-            <span className="queue-summary-chip">
-              <strong>{masterCards.length}</strong> setup areas
-            </span>
-          </div>
-        </div>
-        <div className="organization-master-hub__grid">
-          {masterCards.map((card) => (
-            <article className={`organization-master-card${sectionKey === card.key ? " organization-master-card--active" : ""}`} key={card.key}>
-              <div className="organization-master-card__header">
-                <div>
-                  <h3>{card.label}</h3>
-                  <p>{card.description}</p>
-                </div>
-                <span className="record-chip">{card.items.length}</span>
-              </div>
-              <span className="organization-master-card__dependency">{card.dependency}</span>
-              <div className="organization-master-card__actions">
-                <Link className="button button--secondary" href={buildHref("/hr-admin/organization", currentParams, { section: card.key, itemId: undefined, page: "1" })}>
-                  Manage
-                </Link>
-                {canManageOrganization ? (
-                  <Link className="button button--primary" href={`/hr-admin/organization/${card.key}/new`}>
-                    Add {card.singular.toLowerCase()}
-                  </Link>
-                ) : null}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {canManageOrganization ? <OrganizationGuidedSetup snapshot={snapshotResult.data} /> : null}
-
-      <section className="section employee-master-layout" id="structure-catalog">
-        <article className="queue-toolbar">
-          <div className="queue-toolbar__header">
-            <div>
-              <h2>Structure catalog</h2>
-              <p className="section-copy">Move through each structural layer and inspect the current configuration footprint without losing creation context.</p>
-            </div>
-            <div className="queue-toolbar__meta">
-              <span className="queue-summary-chip">
-                <strong>{filteredItems.length}</strong> in active view
-              </span>
-              <span className="queue-summary-chip">
-                <strong>{Object.keys(sections).length}</strong> structure layers
-              </span>
-            </div>
-          </div>
-
-          <form action="/hr-admin/organization" className="directory-filter-bar">
-            <input name="section" type="hidden" value={sectionKey} />
-            <input name="itemId" type="hidden" value={selectedItem?.id ?? ""} />
-            <input name="page" type="hidden" value="1" />
-            <label className="form-field">
-              <span className="text-label-premium">Search</span>
-              <input className="input-control" defaultValue={q} name="q" placeholder="Name, code, parent, location" />
-            </label>
-            <label className="form-field">
-              <span className="text-label-premium">Status</span>
-              <select className="input-control" defaultValue={status} name="status">
-                <option value="all">All statuses</option>
-                <option value="active">Active only</option>
-                <option value="inactive">Inactive only</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="text-label-premium">Page size</span>
-              <select className="input-control" defaultValue={String(pageSize)} name="page_size">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-            </label>
-            <div className="directory-filter-bar__actions">
-              <button className="button button--primary" type="submit">Apply</button>
-              <Link className="button button--ghost" href={buildHref("/hr-admin/organization", currentParams, { q: undefined, status: undefined, itemId: undefined })}>Reset</Link>
-            </div>
-          </form>
-
-          <div className="employee-status-filter">
-              {Object.entries(sections).map(([key, value]) => (
-                <Link
-                  className={`filter-chip-link${sectionKey === key ? " filter-chip-link--active" : ""}`}
-                  href={buildHref("/hr-admin/organization", currentParams, { section: key, itemId: undefined, page: "1" })}
-                  key={key}
-                >
-                  <span>{value.label}</span>
-                  <strong>{value.items.length}</strong>
-                </Link>
-              ))}
-          </div>
-
-          <div className="employee-status-filter">
-            {statusTabs.map((tab) => (
-              <Link
-                className={`filter-chip-link${status === tab.key ? " filter-chip-link--active" : ""}`}
-                href={buildHref("/hr-admin/organization", currentParams, { status: tab.key, itemId: undefined, page: "1" })}
-                key={tab.key}
-              >
-                <span>{tab.label}</span>
-                <strong>{filterByStatus(activeSection.items, tab.key).length}</strong>
-              </Link>
-            ))}
-          </div>
-
-          <div className="employee-directory-list">
-            {filteredItems.length ? (
-              pagedItems.map((item) => {
-                const warnings = getOrganizationWarnings(item, sectionKey);
-                return (
-                  <div
-                    className={`employee-directory-item${selectedItem?.id === item.id ? " employee-directory-item--active" : ""}`}
-                    key={item.id}
-                  >
-                    <Link href={buildHref("/hr-admin/organization", currentParams, { itemId: item.id })}>
-                      <div className="employee-directory-item__header">
-                        <div>
-                          <strong>{item.name}</strong>
-                          <p className="section-copy">{item.code}</p>
-                        </div>
-                        <span className={`record-chip${item.is_active ? " record-chip--accent" : ""}`}>
-                          {item.is_active ? "active" : "inactive"}
-                        </span>
-                      </div>
-                      <div className="employee-directory-item__meta">
-                        {itemMeta(item, sectionKey).filter(Boolean).map((meta) => (
-                          <span key={`${item.id}-${meta}`}>{meta}</span>
-                        ))}
-                      </div>
-                      {warnings.length ? (
-                        <div className="employee-directory-item__meta">
-                          <span>{warnings.length} review warnings</span>
-                          <span>{warnings.slice(0, 2).join(" • ")}</span>
-                        </div>
-                      ) : (
-                        <div className="employee-directory-item__meta">
-                          <span>No active dependency warnings</span>
-                        </div>
-                      )}
-                    </Link>
-                    {canManageOrganization && isOrganizationSectionKey(sectionKey) ? (
-                      <div className="record-card__actions">
-                        <Link className="button button--secondary" href={`/hr-admin/organization/${sectionKey}/${item.id}/edit`}>
-                          Edit
-                        </Link>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })
-            ) : (
-              <div className="notice">
-                <strong>No items match this review state.</strong>
-                <span className="muted">Try another section, reset the filters, or create a new master record.</span>
-              </div>
-            )}
-          </div>
-          <PaginationBar
-            firstHref={buildHref("/hr-admin/organization", currentParams, { page: "1" })}
-            hasNext={page < totalPages}
-            hasPrevious={page > 1}
-            lastHref={buildHref("/hr-admin/organization", currentParams, { page: String(totalPages) })}
-            nextHref={buildHref("/hr-admin/organization", currentParams, { page: String(page + 1) })}
-            page={page}
-            pageSize={pageSize}
-            previousHref={buildHref("/hr-admin/organization", currentParams, { page: String(page - 1) })}
-            totalCount={filteredItems.length}
-          />
-        </article>
-
-        <article className="record-card">
-          <div className="record-card__title-wrap">
-            <div className="record-card__title">
-              <h2>{selectedItem ? `${selectedItem.name} detail` : "Structural summary"}</h2>
-            </div>
-            <p className="section-copy">
-              {selectedDetail
-                ? "Inspect the selected master record and verify its dependency fields before editing."
-                : "A quick audit panel for what is already configured in the tenant setup."}
-            </p>
-          </div>
-          {selectedImpact ? (
-            <div className="notice">
-              <strong>{selectedImpact.title}</strong>
-              <span className="muted">{selectedImpact.message}.</span>
-            </div>
-          ) : null}
-          <div className="detail-grid">
-            {selectedDetail ? (
-              buildItemDetailRows(selectedDetail, sectionKey).map((row) => (
-                <DetailRow key={`${row.label}-${row.value}`} label={row.label} value={row.value} />
-              ))
-            ) : (
-              <>
-                <DetailRow label="Legal Entities" value={String(snapshotResult.data.summary.legal_entities_count)} />
-                <DetailRow label="Locations" value={String(snapshotResult.data.summary.locations_count)} />
-                <DetailRow label="Branches" value={String(snapshotResult.data.summary.branches_count)} />
-                <DetailRow label="Business Units" value={String(snapshotResult.data.summary.business_units_count)} />
-                <DetailRow label="Departments" value={String(snapshotResult.data.summary.departments_count)} />
-                <DetailRow label="Cost Centers" value={String(snapshotResult.data.summary.cost_centers_count)} />
-                <DetailRow label="Grades" value={String(snapshotResult.data.summary.grades_count)} />
-                <DetailRow label="Designations" value={String(snapshotResult.data.summary.designations_count)} />
-                <DetailRow label="Employment Types" value={String(snapshotResult.data.summary.employment_types_count)} />
-              </>
-            )}
-          </div>
-        </article>
-      </section>
-
-      {canManageOrganization ? <OrganizationImportWorkbench snapshot={snapshotResult.data} /> : null}
-    </main>
-  );
+  const requestedStatus = normalizeParam(currentParams.status);
+  const status = requestedStatus === "active" || requestedStatus === "inactive" ? requestedStatus : "all";
+  const pageSizeValue = Number(normalizeParam(currentParams.page_size));
+  const pageSize = [10,25,50].includes(pageSizeValue) ? pageSizeValue : 10;
+  const matched = filterByQuery(filterByStatus(active.items, status), q);
+  const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+  const requestedPage = Number(normalizeParam(currentParams.page));
+  const page = Math.min(Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1, totalPages);
+  const visible = matched.slice((page - 1) * pageSize, page * pageSize);
+  const selectedId = normalizeParam(currentParams.itemId);
+  const selected = selectedId ? active.items.find(item => item.id === selectedId) : undefined;
+  const detailResult = selected ? await getHrAdminOrganizationItem(sectionKey, selected.id).catch(()=>null) : null;
+  const detailData = detailResult?.data as HrAdminOrganizationItem | undefined;
+  const detail = detailResult?.state === "live" && detailData?.id === selectedId ? detailData : null;
+  const impact = detail ? getOrganizationImpactNotice(detail, sectionKey) : null;
+  const canManage = sessionHasPermission(user, "organization.manage");
+  const scope = { ...currentParams, section: sectionKey, page: String(page), page_size: String(pageSize) };
+  const returnHref = buildHref("/hr-admin/organization", scope, { itemId: selectedId, saved: undefined });
+  const createHref = `/hr-admin/organization/${sectionKey}/new?${new URLSearchParams({returnTo:returnHref})}`;
+  const editHref = (id:string) => `/hr-admin/organization/${sectionKey}/${id}/edit?${new URLSearchParams({returnTo:buildHref("/hr-admin/organization",scope,{itemId:id,saved:undefined})})}`;
+  return <main className="shell accerio-page organization-makeover">
+    <WorkspaceStandardHeader title="Organization masters" description="Maintain the structure used by employee records and HR policies." actions={<>{canManage?<a data-navigation-mode="document" className="button button--primary" href={createHref}>Create {ORGANIZATION_SECTION_CONFIG[sectionKey].singular.toLowerCase()}</a>:null}{sessionHasPermission(user,"employees.view")?<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/employees">Employees</a>:null}</>} />
+    <div className="attendance-summary-strip" aria-label="Organization catalog summary"><span><strong>{active.items.length}</strong> loaded {active.label.toLowerCase()}</span><span><strong>{matched.length}</strong> matching</span><span><strong>{visible.length}</strong> on this page</span></div>
+    {normalizeParam(currentParams.saved)==="1" && detail ? <div className="notice notice--success" role="status"><strong>{detail.name}</strong> Current record loaded. {detail.is_active?"Active":"Inactive"} · {detail.code}</div>:null}
+    <section className="organization-catalog" aria-label="Organization catalog">
+      <WorkspaceFilterForm action="/hr-admin/organization" label="Organization filters" className="organization-catalog-filters">
+        <input type="hidden" name="page" value="1" />
+        <label className="form-field">Section<select className="input-control" name="section" defaultValue={sectionKey}>{Object.entries(sections).map(([key,value])=><option key={key} value={key}>{value.label} ({value.items.length})</option>)}</select></label>
+        <label className="form-field">Search<input className="input-control" name="q" defaultValue={q} placeholder="Name, code, parent or location" /></label>
+        <label className="form-field">Status<select className="input-control" name="status" defaultValue={status}><option value="all">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+        <label className="form-field">Page size<select className="input-control" name="page_size" defaultValue={pageSize}>{[10,25,50].map(size=><option key={size}>{size}</option>)}</select></label>
+        <div className="form-actions-bar__buttons"><button className="button button--primary" type="submit">Apply filters</button><a data-navigation-mode="document" className="button button--secondary" href={`/hr-admin/organization?section=${sectionKey}`}>Clear filters</a></div>
+      </WorkspaceFilterForm>
+      <div className="workspace-table-region" role="region" aria-label="Organization master records" tabIndex={0}><table className="workspace-table" aria-label="Organization masters"><thead><tr><th>Name / code</th><th>Status</th><th>Dependencies</th><th>Actions</th></tr></thead><tbody>{visible.map(item=><tr key={item.id}><td><strong>{item.name}</strong><br/>{item.code}</td><td>{item.is_active?"Active":"Inactive"}</td><td>{itemMeta(item,sectionKey).filter(Boolean).join(" · ")||"No additional mapping"}<br/>{getOrganizationWarnings(item,sectionKey).join(" · ")}</td><td><div className="form-actions-bar__buttons"><a data-navigation-mode="document" className="button button--secondary" href={buildHref("/hr-admin/organization",scope,{itemId:item.id,saved:undefined})+"#organization-detail"}>Inspect</a>{canManage?<a data-navigation-mode="document" className="button button--ghost" href={editHref(item.id)}>Edit</a>:null}</div></td></tr>)}</tbody></table></div>
+      {!matched.length?<p role="status">{active.items.length?"No organization records match the filters.":"No records in this organization section yet."}</p>:null}
+      <PaginationBar navigationMode="document" firstHref={buildHref("/hr-admin/organization",scope,{page:"1"})} lastHref={buildHref("/hr-admin/organization",scope,{page:String(totalPages)})} nextHref={buildHref("/hr-admin/organization",scope,{page:String(page+1)})} previousHref={buildHref("/hr-admin/organization",scope,{page:String(page-1)})} hasNext={page<totalPages} hasPrevious={page>1} page={page} pageSize={pageSize} totalCount={matched.length} />
+    </section>
+    {selectedId?<section className="organization-detail" id="organization-detail" aria-label="Selected organization record"><div className="organization-detail-heading"><h2>{detail?detail.name:"Selected record unavailable"}</h2><a data-navigation-mode="document" className="button button--secondary" href={buildHref("/hr-admin/organization",scope,{itemId:undefined,saved:undefined})}>Close detail</a>{detail&&canManage?<a data-navigation-mode="document" className="button button--secondary" href={editHref(detail.id)}>Edit selected record</a>:null}</div>{detail?<>{!matched.some(item=>item.id===detail.id)?<p>This record is outside the current filters. The catalog scope is unchanged.</p>:null}{impact?<p>{impact.message}.</p>:null}<div className="detail-grid">{buildItemDetailRows(detail,sectionKey).map(row=><DetailRow key={row.label} label={row.label} value={row.value}/>)}</div></>:<p>The requested record could not be confirmed in this section. No other record has been selected.</p>}</section>:null}
+    <details className="organization-library"><summary>Master library and dependencies</summary><div className="organization-library-grid">{(Object.keys(ORGANIZATION_SECTION_CONFIG) as OrganizationSectionKey[]).map(key=><article key={key}><h3>{sections[key].label}</h3><p>{masterDescriptions[key]}</p><p>{masterDependencyLabels[key]}</p><a data-navigation-mode="document" href={`/hr-admin/organization?section=${key}`}>Open {sections[key].label.toLowerCase()}</a></article>)}</div></details>
+    {canManage?<OrganizationWorkflows snapshot={result.data}/>:null}
+  </main>;
 }

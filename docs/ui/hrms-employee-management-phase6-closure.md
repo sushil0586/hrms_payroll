@@ -1,0 +1,82 @@
+# Employee Management Phase 6 — Family closure
+
+Status: complete within the recorded Employee Management makeover scope. This record covers integration of the completed directory/detail, master forms, access/bank and imports. It does not replace earlier phase records or certify unrelated HR families.
+
+## Entry artifact and review scope
+
+The starting application matches all 802 entries of the accepted Phase 5 manifest, build `jSAhnfAV3d_QcvbA7viVS`. Initial joined checks use that retained artifact against a fresh task-owned database. No prior phase report or screenshot is overwritten. The shared Leave-derived standard remains the reference for task hierarchy, controls, field groups, table scrolling, persistent feedback and modal lifecycle.
+
+Joined checks cover directory filters/selection/history, edit/save/return, create → provision access → bank account → reporting-manager import, rejected/pending dialogs, read recovery, 1440/1024/768/390/320px compositions, scoped form axe, adjacent Workforce navigation and the shared modal's default uncontrolled consumer. Inactive provisioning is repeated three times per engine with page-error assertions retained to investigate EM-P4-H01. Adjacent Documents/Lifecycle queues are navigation/return checks; their business workflows are not redesigned here.
+
+## Demonstrated integration defect
+
+**EM-P6-01:** after creating an employee whose identity does not match the committed search, the client selected-detail section can correctly load that authorized employee, but server dialog adapters resolve `employeeId` only within `filteredEmployees`. Access/Bank/Edit navigation then has a valid selected employee and action query but no dialog. This is a real handoff failure on the Phase 5 artifact, not a test-selector issue.
+
+Resolve the selected employee from the full already-authorized directory collection, then use the existing authorized detail/options reads and action permission gates. Filters, matching counts, pagination and close URLs remain based on committed directory scope. No fallback to the first matching row, endpoint permission change or backend policy change is introduced. Explicit unmatched-search regressions must verify all three action adapters and absent-ID behavior.
+
+**EM-P6-02:** a Create dialog opened with an existing `employeeId` competes with the selected-detail heading's automatic focus effect. The detail effect skips action dialogs but does not skip `create=1`, so focus can land outside the modal and keyboard traversal starts in the page behind it. Suppress that detail auto-focus while the Create dialog is active; keep ordinary selection/retry focus intact. A first fix exposed the second cause: the shared modal selected controls by an element-level `disabled` attribute, which includes inputs disabled through a parent fieldset. Initial focus silently failed and stayed on BODY even after hydration enabled the form. A diagnostic focus event log confirmed BODY/no focus events. Use native `:disabled` semantics plus visible-element filtering for both initial focus and traversal; retain the modal itself as the keyboard target when busy leaves no eligible controls. Busy transitions also move focus from a newly disabled control into the dialog. Verify initial modal focus and forward/backward traversal with an existing selection.
+
+The initial cross-browser run completed **24 passed / 6 failed**, with both defects reproduced in each engine. The first fix changes two lines across the directory adapter and detail-selection component. Its run passed 29/36: the handoff passed in every engine, but initial focus/geometry cases still failed in all three. One Firefox adjacent navigation was still showing the workspace loader at the 5-second assertion limit; that navigation correctness check now uses a bounded 15-second heading wait, with the historical timeout retained and no latency acceptance claim. The final source additionally fixes the shared modal focusable-element handling. The final joined suite adds explicit unmatched-search/absent-ID and selected-detail/Create-focus regressions. All historical failures remain in the Phase 6 evidence folder.
+
+**EM-P6-03 / EM-09 wording closure:** rendered review found the bank empty state still said a primary account would clear payroll-readiness warnings. Replace that sentence with the narrower payout-account task instruction. This is a copy-only correction; the primary-account, payroll and warning predicates are unchanged.
+
+## Family patterns to carry into future screens
+
+| Concern | Accepted pattern and implementation reference |
+| --- | --- |
+| Operational directory | One page heading and primary create action, scoped totals, committed GET filters, a semantic table with named keyboard scroll region, predictable paging. [Directory adapter](../../web/src/app/hr-admin/employees/page.tsx) retains full authorized lookup separately from visible matches. |
+| Selected detail and handoffs | Full-width non-modal detail below results; independent read/error/retry lifecycle; focus heading on selection and return to the actual row or directory-region fallback. Resolve action targets independently of active result predicates. [Selection component](../../web/src/app/hr-admin/employees/employee-detail-selection.tsx). |
+| Long master forms | Preserve the existing Identity/Contact/Structure/Review workflow with the same fields and payload in both supported entry types; readable section grouping and error/step focus; reachable footer. [Master form](../../web/src/app/hr-admin/employees/employee-form.tsx). Four steps are this task's existing structure, not a requirement for every HR form. |
+| Access and bank maintenance | One employee identity/task header, grouped fields, deliberate sensitive-value reveal, explicit immediate impact and real pending/dirty guards. Reuse the employee adapter and [maintenance draft hook](../../web/src/app/hr-admin/employees/use-maintenance-draft.ts) where the same lifecycle applies. |
+| Imports | Secondary disclosed tasks; preparation separate from preview/commit; invalidate preview on source changes; preserve row outcomes and pause on uncertain writes. [Import panel](../../web/src/app/hr-admin/employees/employee-import-panel.tsx) composes domain adapters without replacing backend contracts. |
+| Modal lifecycle | Named task, body scroll lock, controlled busy/dirty where supplied, default dirty tracking for other consumers, native disabled/visibility-aware focus targets, traversal containment and modal-root fallback during a fully disabled pending state. [Shared modal](../../web/src/components/patterns/hr-admin-action-modal.tsx). Each form's own Cancel and navigation paths still require review. |
+| Feedback and visual language | Shared field/error helpers and async actions, persistent focused receipts, explicit rejected/partial/unconfirmed outcomes, scoped existing tokens and [pattern styles](../../web/src/styles/workspace-patterns.css). Keep data-review labels distinct from payroll approval or access entitlement. |
+
+Future slices should copy the interaction contract and task hierarchy, then refine the actual task composition. A shared-component import alone is not screen adoption. Keep unsupported capabilities visible as limitations, verify affected shared consumers, and record exact image/test scope instead of promoting historical certificates to changed artifacts.
+
+## Evidence lineage
+
+| Phase | Owning record and acceptance boundary |
+| --- | --- |
+| 1 | [Baseline/design](hrms-employee-management-phase1-design-baseline.md): discovery captures and findings, not mutation acceptance. |
+| 2 | [Directory/detail](hrms-employee-management-phase2-makeover.md): full suite plus a separate focused final-artifact follow-up; retain its report/build distinction. |
+| 3 | [Master forms](hrms-employee-management-phase3-makeover.md): main form suite and separate footer/consumer checks on its final artifact. |
+| 4 | [Access/bank](hrms-employee-management-phase4-makeover.md): 51 passing executions on its recorded build; historical hydration event retained. |
+| 5 | [Imports](hrms-employee-management-phase5-makeover.md): 78 passing executions on its recorded build; date/reason and replay limits retained. |
+| 6 | This record: joined checks on a new closing artifact, including two integration corrections, shared focus handling and scoped bank copy. Earlier suites are not silently counted as rerun on it. |
+
+The joined responsive sweep covers the default/Identity state of long forms; it does not rerun every master-form step or the full import suite. Their unchanged source/contract evidence remains in the owning phase. Source continuity is recorded separately from executed scenarios, and no aggregate “unique workflows” count is inferred across phases.
+
+## Reconciliation and acceptance
+
+The closing artifact is **`yZgzuG5se0QVNeeFNH2QD`**, retained at `web/.next/employee-makeover-phase6-closure`. All **36 distinct scenario/browser combinations** now have passing evidence across Chromium, Firefox and WebKit. There are **38 passing executions**, including two repeated provisioning combinations. This is not a claim that the first closing batch passed 36/36.
+
+| Closing verification | Exact result and scope |
+| --- | --- |
+| Main joined batch | 34 passed / 2 failed / 0 skipped / 0 flaky; retries disabled. The two retained WebKit failures concern request/load synchronization as described below. |
+| Focused follow-up, same immutable artifact | 4 passed / 0 failed / 0 skipped / 0 flaky: provisioning in all three engines and the WebKit cross-screen sweep. Two previously passing provisioning combinations repeat; the two missing combinations are now covered. |
+| Joined tasks | Draft/committed search and history, pointer/keyboard selection, off-page focus fallback, edit/save/return, real create → access → bank → manager import, real persisted values and context. |
+| Guards and recovery | All three employee dialog adapters retain dirty drafts, confirm discard, contain focus, block pending close/Escape and retain keyboard focus during pending writes; detail recovery repeats GET; absent employee identity opens no action form; employee persona receives 403 on affected write APIs. |
+| Cross-screen sweep | Ten route/query entry types × 1440/1024/768/390/320 CSS pixels in each engine; 320×568 short height; reachable footer text/actions, no document overflow, initial/traversal focus and modal body lock. Long master forms use their default/Identity state in this sweep. |
+| Scoped axe | Eight form entry types at 390px in each engine, including the corrected WebKit follow-up: WCAG 2 A/AA and 2.1 AA rule tags, zero violations in the accepted scans. |
+| Shared/adjacent consumers | Workforce Documents/Lifecycle navigation and Back restore the employee directory URL/context. One default uncontrolled document-category modal retains Escape keep/discard and Tab behavior. This does not certify that form's own Cancel/save paths or the adjacent family. |
+| Hydration follow-up | Final provisioning follow-up executes three create/provision/reload cycles per engine (nine total, including three Firefox cycles), retaining page-error checks. No page errors occurred. EM-P4-H01 remains historically unlocalized; no causal fix is claimed. |
+| Quality | Closing production build with type validation, targeted ESLint across the four runtime files/tests/configs, separate typecheck and follow-up test lint/typecheck passed. Whitespace, local links and source continuity verified. |
+
+The closing batch's WebKit provisioning assertion checked for the updated button after five seconds while the save was still pending. The backend later recorded 201. The corrected test waits for the actual POST response (bounded at 30 seconds) before verifying the receipt, focus and saved state. The WebKit viewport batch then exceeded its 360-second budget waiting for a page `load` event. High host load was observed concurrently; that observation is not a proven root cause. The focused sweep instead waits for DOMContentLoaded, bounded navigation and actual interactive readiness (enabled actions/client-ready regions), and passed. Full trace capture is disabled only for the focused follow-up to limit capture overhead; failure screenshots and scoped axe attachments remain enabled. Neither page errors nor backend failures are suppressed. **Load-event latency remains unlocalized and outside this acceptance.**
+
+[Accepted coverage](../qa/evidence/employee-makeover-phase6-2026-10-22/accepted-coverage.json) identifies the passing report for every scenario/browser combination. The [main report](../qa/evidence/employee-makeover-phase6-2026-10-22/results.json) retains both failures; the [follow-up report](../qa/evidence/employee-makeover-phase6-2026-10-22/results-provisioning.json) records the corrected synchronization. The test source changed only after the main run finished. Application source remained frozen across both closing runs; all 802 source/config/package entries match the retained build. The four runtime changes and intermediate artifacts are recorded in [artifact deltas](../qa/evidence/employee-makeover-phase6-2026-10-22/artifact-deltas.json) and a [verified Phase 6-only patch](../qa/evidence/employee-makeover-phase6-2026-10-22/phase6-runtime-only.patch).
+
+There are **78 closing-artifact PNGs**: 75 from the main batch and three provisioning follow-up captures. Actual inspection covers **13 closing images**, plus 12 historical images inspected during review. [Closing visual review](../qa/evidence/employee-makeover-phase6-2026-10-22/visual-review.json) and [historical review](../qa/evidence/employee-makeover-phase6-2026-10-22/visual-review-historical.json) enumerate exact paths, hashes and image-pixel dimensions. Other captures are not manually certified. The closing set covers every primary composition, the corrected bank copy, selected-detail focus, short dialogs, a shared consumer and the WebKit import receipt.
+
+### Findings disposition and acceptance boundary
+
+EM-01 through EM-09 now have implemented, scoped phase records; EM-09 includes the final bank wording correction. EM-P6-01 (action targets outside matching results), EM-P6-02 (initial/pending modal focus) and EM-P6-03 (bank copy) are resolved within this slice. [Findings](../qa/evidence/employee-makeover-phase6-2026-10-22/findings.json) retain the historical hydration observation and loading/performance observations as unlocalized, nonblocking follow-ups, with no claim of a causal fix or latency certification.
+
+EM-P5-H01 (manager date/reason are preview-only, updates immediate) and EM-P5-H02 (exact-row replay guard is session-only) remain explicit backend capability limits. There is no new effective-dating/audit contract, durable server idempotency, global unsaved-navigation guard, exhaustive permission/tenant-domain acceptance or CSV/calendar parser certification.
+
+Formal accessibility, actual screen-reader sessions, native zoom, physical devices, very large tenants and performance/SLO acceptance remain unexecuted. No-match results and empty bank records were exercised; a genuinely empty authenticated employee tenant was not certified. Earlier step-specific and import-specific suites remain evidence of their own artifacts; they are not represented as rerun in full here.
+
+Task fixture cleanup verified zero tenants, users, employees, bank accounts, batch audits, employee documents and document artifacts before teardown. The task-owned database container/anonymous volume and Django/Next services were removed/stopped, intermediate Phase 6 builds and private probe/runner files removed, and generated Next config files restored to HEAD. The closing build, earlier accepted phase artifacts, unrelated services/worktree changes and audit history outside the isolated database were preserved. [Database cleanup](../qa/evidence/employee-makeover-phase6-2026-10-22/database-cleanup.json), [resource cleanup](../qa/evidence/employee-makeover-phase6-2026-10-22/resource-cleanup.json) and [final validation](../qa/evidence/employee-makeover-phase6-2026-10-22/final-validation.json) record these checks.
+
+Employee Management Phases 1–6 are complete within these documented makeover scopes. No commit, deployment or whole-product certification is claimed. The [Documents inventory](hrms-document-management-makeover-inventory.md) proposes the next bounded family and sequence; its baseline/design/implementation work has not started.

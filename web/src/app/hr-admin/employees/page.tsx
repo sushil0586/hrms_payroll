@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
-import { EmployeeAccessForm } from "@/app/hr-admin/employees/[employeeId]/access/access-form";
+import { EmployeeDirectoryFilters } from "./employee-directory-filters";
+
 import { employeeAccessDetailToFormValue } from "@/app/hr-admin/employees/[employeeId]/access/form-values";
-import { BankAccountManager } from "@/app/hr-admin/employees/[employeeId]/bank-accounts/bank-account-manager";
-import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { EmployeeMaintenanceDialog } from "./employee-maintenance-dialog";
 import { PageIntro } from "@/components/patterns/page-intro";
 import {
   getHrAdminEmployeeAccessDetail,
@@ -18,7 +17,7 @@ import {
 import type { HrAdminEmployeeDetail, HrAdminEmployeeListItem } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { EmployeeBankImportWorkbench } from "./employee-bank-import-workbench";
-import { EmployeeForm } from "./employee-form";
+import { EmployeeFormDialog } from "./employee-form-dialog";
 import { EmployeeImportWorkbench } from "./employee-import-workbench";
 import { EmployeeManagerImportWorkbench } from "./employee-manager-import-workbench";
 import {
@@ -46,7 +45,7 @@ function buildHref(
 
   Object.entries(currentParams).forEach(([key, value]) => {
     const normalized = normalizeParam(value);
-    if (normalized) {
+    if (normalized && key !== "saved") {
       params.set(key, normalized);
     }
   });
@@ -277,7 +276,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const safePage = Math.min(page, totalPages);
   const pagedEmployees = filteredEmployees.slice((safePage - 1) * pageSize, safePage * pageSize);
   const selectedEmployeeId = normalizeParam(currentParams.employeeId) ?? null;
-  const selectedListItem = resolveSelectedItem(filteredEmployees, selectedEmployeeId ?? undefined);
+  const selectedListItem = resolveSelectedItem(employeesResult.data, selectedEmployeeId ?? undefined);
   const detailResult = selectedListItem ? await getHrAdminEmployeeDetail(selectedListItem.id) : null;
   const detail = detailResult?.data ?? null;
   const editMode = actionMode === "edit" && Boolean(detail);
@@ -302,20 +301,17 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const closeActionHref = buildHref("/hr-admin/employees", currentParams, { action: undefined, create: undefined });
 
   return (
-    <main className="shell hr-admin-compact-ui hr-employee-workbench accerio-page">
+    <main className="shell hr-admin-compact-ui hr-employee-workbench accerio-page employee-directory-phase2">
       <PageIntro
         appearance="accerio"
         eyebrow={state === "live" ? "Live employees" : "Demo employees"}
         title="Employees"
-        description="Operate employee master data, access readiness, manager structure, and payroll prerequisites."
+        description="Find employees and manage their profile, access and payout details."
         className="page-header-surface page-header-surface--compact hr-employee-page-header"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
         actions={
           <>
-            <Link className="button button--secondary" href="/hr-admin">
-              Back to dashboard
-            </Link>
             {canCreateEmployees ? (
               <a data-navigation-mode="document"
                 className="button button--primary"
@@ -326,12 +322,17 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
             ) : null}
           </>
         }
-        pills={["Directory", "Access", "Structure"]}
-        showPills
       />
 
+      {["create", "edit"].includes(normalizeParam(currentParams.saved) ?? "") ? (
+        <div className="notice notice--success" role="status">
+          <strong>{normalizeParam(currentParams.saved) === "create" ? "Employee created." : "Employee changes saved."}</strong>
+          <span>The saved employee is selected below. Directory filters still apply.</span>
+        </div>
+      ) : null}
+
       <section className="section">
-        <div className="hr-employee-summary-strip" aria-label="Employee directory summary">
+        <div className="hr-employee-summary-strip" role="group" aria-label="Directory totals">
           <span>
             <strong>{employeesResult.data.length}</strong>
             <em>employees</em>
@@ -342,8 +343,9 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
           </span>
           <span className={recordsNeedingReview ? "hr-employee-summary-strip__review" : ""}>
             <strong>{recordsNeedingReview}</strong>
-            <em>need review</em>
+            <em>need data review</em>
           </span>
+          <span className="employee-directory-status-totals"><em>{tabs.slice(1).map(value => `${countByStatus(employeesResult.data, value)} ${formatStatusLabel(value).toLowerCase()}`).join(" · ")}</em></span>
         </div>
       </section>
 
@@ -357,7 +359,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
         <article className="queue-toolbar panel-card-soft workspace-list-card">
           <div className="queue-toolbar__header">
             <div>
-              <h2 className="section-heading-soft">Employee directory</h2>
+              <h2 className="section-heading-soft">Directory</h2>
               <p className="section-copy section-copy-soft">Search and filter the master list, then inspect one record in context.</p>
             </div>
             <div className="queue-toolbar__meta">
@@ -377,6 +379,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               <span className="text-label-premium">Search</span>
               <input className="input-control" defaultValue={q} name="q" placeholder="Name, code, email, manager" />
             </label>
+            <EmployeeDirectoryFilters activeCount={[department !== "all", status !== "all", sort !== "name", managerView !== "all", readiness !== "all"].filter(Boolean).length}>
             <label className="form-field">
               <span className="text-label-premium">Department</span>
               <select className="input-control" defaultValue={department} name="department">
@@ -405,9 +408,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                 <option value="code">Code ascending</option><option value="-code">Code descending</option>
               </select>
             </label>
-            <details className="directory-more-filters" open={managerView !== "all" || readiness !== "all"}>
-              <summary className="button button--secondary button--compact">More filters</summary>
-              <div className="directory-more-filters__panel">
+            <div className="employee-directory-advanced">
                 <label className="form-field">
                   <span className="text-label-premium">Manager review</span>
                   <select className="input-control" defaultValue={managerView} name="managerView">
@@ -426,37 +427,13 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                     <option value="ready">Ready records</option>
                   </select>
                 </label>
-              </div>
-            </details>
+            </div>
+            </EmployeeDirectoryFilters>
             <div className="directory-filter-bar__actions workspace-filter-actions">
               <button className="button button--primary" type="submit">Apply</button>
               <a className="button button--ghost" data-navigation-mode="document" href="/hr-admin/employees">Reset</a>
             </div>
           </WorkspaceFilterForm>
-
-          <div className="employee-status-filter" aria-label="Status totals across directory">
-              {tabs.map((tabStatus) => (
-                <a data-navigation-mode="document"
-                  className={`filter-chip-link chip-filter-soft${status === tabStatus ? " filter-chip-link--active" : ""}`}
-                  href={buildHref("/hr-admin/employees", currentParams, {
-                    action: undefined,
-                    create: undefined,
-                    status: tabStatus,
-                    employeeId: undefined,
-                    page: "1",
-                    q: q || undefined,
-                    department: department !== "all" ? department : undefined,
-                    managerView: managerView !== "all" ? managerView : undefined,
-                    readiness: readiness !== "all" ? readiness : undefined,
-                    page_size: String(pageSize),
-                  })}
-                  key={tabStatus}
-                >
-                  <span>{formatStatusLabel(tabStatus)}</span>
-                  <strong>{countByStatus(employeesResult.data, tabStatus)}</strong>
-                </a>
-              ))}
-          </div>
 
           <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Employee directory, scroll for more columns">
             {filteredEmployees.length ? (
@@ -596,79 +573,35 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
       ) : null}
 
       {createMode && canCreateEmployees ? (
-        <HrAdminActionModal
-          documentNavigation
+        <EmployeeFormDialog
           closeHref={buildHref("/hr-admin/employees", currentParams, { create: undefined })}
-          description="A guided setup. Fields marked * are required."
-          eyebrow="Employee master"
-          labelledBy="employee-create-modal-title"
-          title="Create employee"
-        >
-          <EmployeeForm
-            cancelHref={buildHref("/hr-admin/employees", currentParams, { create: undefined })}
-            initialValue={createEmptyEmployeeFormValue(defaultStatus)}
-            mode="create"
-            options={optionsResult.data}
-          />
-        </HrAdminActionModal>
+          initialValue={createEmptyEmployeeFormValue(defaultStatus)}
+          mode="create"
+          options={optionsResult.data}
+        />
       ) : null}
 
       {editMode && canEditEmployees && detail ? (
-        <HrAdminActionModal
-          documentNavigation
+        <EmployeeFormDialog
           closeHref={closeActionHref}
-          description="Update profile, contact, structure, and review before saving."
-          eyebrow={detail.employee_code}
-          labelledBy="employee-edit-modal-title"
-          title="Edit employee"
-        >
-          <EmployeeForm
-            cancelHref={closeActionHref}
-            employeeId={detail.id}
-            initialValue={employeeDetailToFormValue(detail)}
-            mode="edit"
-            options={optionsResult.data}
-          />
-        </HrAdminActionModal>
+          employeeId={detail.id}
+          initialValue={employeeDetailToFormValue(detail)}
+          mode="edit"
+          options={optionsResult.data}
+        />
       ) : null}
 
       {accessMode && canManageEmployeeAccess && detail && accessResult?.data?.employee_id && accessOptionsResult ? (
-        <HrAdminActionModal
-          documentNavigation
-          closeHref={closeActionHref}
-          eyebrow={detail.employee_code}
-          labelledBy="employee-access-modal-title"
-          tabs={["Identity", "Controls", "Roles", "Review"]}
-          title="Manage access"
-        >
-          <EmployeeAccessForm
-            employeeId={detail.id}
-            existingAccess={accessResult.data.has_access}
-            cancelHref={closeActionHref}
-            employeeStatus={detail.employment_status}
-            initialValue={employeeAccessDetailToFormValue(accessResult.data)}
-            options={accessOptionsResult.data}
-          />
-        </HrAdminActionModal>
+        <EmployeeMaintenanceDialog kind="access" closeHref={closeActionHref} employeeCode={detail.employee_code} employeeName={detail.full_name} form={{
+          employeeId: detail.id, existingAccess: accessResult.data.has_access, employeeStatus: detail.employment_status,
+          initialValue: employeeAccessDetailToFormValue(accessResult.data), options: accessOptionsResult.data,
+        }} />
       ) : null}
 
       {bankMode && canEditEmployees && detail && bankAccountsResult ? (
-        <HrAdminActionModal
-          documentNavigation
-          className="employee-bank-modal"
-          closeHref={closeActionHref}
-          eyebrow={detail.employee_code}
-          labelledBy="employee-bank-modal-title"
-          tabs={["Accounts", "Payout", "Primary", "Review"]}
-          title="Manage bank accounts"
-        >
-          <BankAccountManager
-            cancelHref={closeActionHref}
-            employeeId={detail.id}
-            employeeName={detail.full_name}
-            initialAccounts={bankAccountsResult.data ?? []}
-          />
-        </HrAdminActionModal>
+        <EmployeeMaintenanceDialog kind="bank" closeHref={closeActionHref} employeeCode={detail.employee_code} employeeName={detail.full_name} form={{
+          employeeId: detail.id, employeeName: detail.full_name, initialAccounts: bankAccountsResult.data ?? [],
+        }} />
       ) : null}
     </main>
   );

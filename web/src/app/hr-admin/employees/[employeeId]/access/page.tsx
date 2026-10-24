@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmployeeAccessForm } from "@/app/hr-admin/employees/[employeeId]/access/access-form";
@@ -33,22 +32,12 @@ export default async function HrAdminEmployeeAccessPage({ params }: PageProps) {
     employeeResult.state === "live" && accessResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell">
-      <PageIntro
-        eyebrow={state === "live" ? "Live access mode" : "Demo access mode"}
+    <main className="shell hr-admin-compact-ui accerio-page employee-maintenance-phase4">
+      <PageIntro appearance="accerio"
+        eyebrow={`${state === "demo" ? "Demo · " : ""}${employeeResult.data.employee_code} · ${employeeResult.data.employment_status.replaceAll("_", " ")}`}
         title={`Access for ${employeeResult.data.full_name}`}
-        description="Manage login state, tenant membership, and role assignment for this employee."
-        actions={<Link className="button button--secondary" href={`/hr-admin/employees?employeeId=${employeeId}`}>Back to employee detail</Link>}
-        pills={["Login", "Membership", "Roles"]}
+        description={`${employeeResult.data.employee_code} · Employee status: ${employeeResult.data.employment_status.replaceAll("_", " ")}. Manage login state, tenant membership, and role assignment for this employee.`}
       />
-
-      <section className="section">
-        <div className="attendance-summary-strip payroll-run-summary-strip">
-          <span><strong>{accessResult.data.has_access ? "Yes" : "No"}</strong> Access provisioned</span>
-          <span><strong>{accessResult.data.roles.length}</strong> Assigned roles</span>
-          <span><strong>{accessResult.data.membership_status.replace("_", " ")}</strong> Membership status</span>
-        </div>
-      </section>
 
       <EmployeeAccessForm
         employeeId={employeeId}

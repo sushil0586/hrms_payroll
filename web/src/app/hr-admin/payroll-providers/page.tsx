@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -792,8 +794,8 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
   const warningFailureBucketCount = failureBuckets.filter((bucket) => bucket.severity === "warning").length;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-providers">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-providers accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 5Q" : "Demo payroll phase 5Q"}
         title="Payroll Providers"
         description="Onboard, certify, and activate payroll provider connections before finance handoff uses them in production."
@@ -863,6 +865,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
         <nav className="payroll-setup-tabs" aria-label="Payroll provider sections">
           {PROVIDER_TABS.map((tab) => (
             <Link
+              aria-current={activeTab === tab.id ? "page" : undefined}
               className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
               href={providerHref(tab.id, selectedConnection?.id)}
               key={tab.id}
@@ -1028,7 +1031,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                   <LaunchRehearsalActions />
                 </div>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 1" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1064,7 +1067,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
               <div className="payroll-provider-launch-history">
                 <div className="payroll-delivery-card-heading">
                   <div>
@@ -1074,7 +1077,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                   </div>
                   <span className="payroll-setup-count">{launchHistory.length} runs</span>
                 </div>
-                <div className="payroll-table-scroll">
+                <WorkspaceTableScrollRegion label="Payroll providers table 2" className="payroll-table-scroll workspace-table-region">
                   <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                     <thead>
                       <tr>
@@ -1102,7 +1105,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                       ) : null}
                     </tbody>
                   </table>
-                </div>
+                </WorkspaceTableScrollRegion>
               </div>
             </section>
 
@@ -1157,7 +1160,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                   </article>
                 ))}
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 3" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1214,7 +1217,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
             ) : null}
 
@@ -1228,7 +1231,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{setup.summary.blocked_storage_policy_registry_count ?? 0} blocked</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 4" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1284,7 +1287,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
 
             <section className="payroll-setup-assignment-panel">
@@ -1295,7 +1298,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{setup.summary.blocked_package_registry_count ?? 0} blocked</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 5" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1335,7 +1338,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
 
             <section className="payroll-setup-assignment-panel">
@@ -1346,7 +1349,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{setup.summary.blocked_client_registry_count ?? 0} blocked</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 6" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1387,7 +1390,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
 
             <section className="payroll-setup-assignment-panel">
@@ -1398,7 +1401,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{setup.summary.blocked_adapter_registry_count ?? 0} blocked</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 7" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1449,7 +1452,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
               </>
             ) : null}
@@ -1464,7 +1467,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{selectedMappingPacks.length} packs</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 8" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table payroll-provider-mapping-table">
                   <thead>
                     <tr>
@@ -1514,7 +1517,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
 
             <section className="payroll-setup-assignment-panel">
@@ -1525,7 +1528,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{selectedSimulationRuns.length} runs</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 9" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1559,7 +1562,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
               </>
             ) : null}
@@ -1574,7 +1577,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{selectedCertificationRuns.length} runs</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 10" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
                   <thead>
                     <tr>
@@ -1607,7 +1610,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
 
             <section className="payroll-setup-assignment-panel">
@@ -1618,7 +1621,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </div>
                 <span className="payroll-setup-count">{setup.connections.length} providers</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll providers table 11" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-provider-table">
                   <thead>
                     <tr>
@@ -1677,7 +1680,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
             </section>
               </>
             ) : null}

@@ -1,35 +1,28 @@
-import Link from "next/link";
+import {lifecycleReturnHref} from "@/lib/ui/lifecycle-return";
 
-import { ExitForm } from "@/app/hr-admin/exits/exit-form";
+
 import { exitToFormValue } from "@/app/hr-admin/exits/form-values";
-import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminExit, getHrAdminLifecycleOptions, getHrAdminWorkflowTemplates } from "@/lib/api";
+import { ExitForm } from "@/app/hr-admin/exits/exit-form";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { LifecycleUnavailable } from "@/app/hr-admin/lifecycle/lifecycle-unavailable";
+import { getHrAdminLifecycleOptions, getHrAdminExit, getHrAdminWorkflowTemplates } from "@/lib/api";
 
-type PageProps = { params: Promise<{ itemId: string }> };
+type PageProps = { params: Promise<{ itemId: string }>;searchParams?:Promise<Record<string,string|string[]|undefined>> };
 
-export default async function HrAdminEditExitPage({ params }: PageProps) {
+export default async function HrAdminEditExitPage({ params,searchParams }: PageProps) {
+  const query=await searchParams??{};const returnHref=lifecycleReturnHref(query.returnTo,"/hr-admin/exits");
   const { itemId } = await params;
-  const [itemResult, optionsResult, templatesResult] = await Promise.all([
-    getHrAdminExit(itemId),
-    getHrAdminLifecycleOptions(),
-    getHrAdminWorkflowTemplates(),
-  ]);
+  const [itemResult, optionsResult, templatesResult] = await Promise.all([getHrAdminExit(itemId).catch(()=>null), getHrAdminLifecycleOptions().catch(()=>null),getHrAdminWorkflowTemplates().catch(()=>null)]);
 
+  if(templatesResult?.state!=="live" || optionsResult?.state!=="live" || itemResult?.state!=="live" || itemResult.data.id!==itemId)return <LifecycleUnavailable/>;
   return (
-    <main className="shell">
-      <PageIntro
-        actions={<Link className="button button--secondary" href="/hr-admin/exits">Back to exits</Link>}
-        description="Update notice dates, clearance status, and exit readiness."
-        eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
-        title="Edit exit record"
+    <main className="shell accerio-page lifecycle-phase3">
+      <WorkspaceStandardHeader
+        title="Edit exit"
+        description="Review the notice timeline, clearance and employee-state consequences before saving."
+        actions={<a data-navigation-mode="document" className="button button--secondary" href={returnHref}>{returnHref.startsWith("/hr-admin/reports/")?"Back to report":returnHref.startsWith("/hr-admin/lifecycle")?"Back to lifecycle":"Back to exits"}</a>}
       />
-      <ExitForm
-        initialValue={exitToFormValue(itemResult.data)}
-        itemId={itemId}
-        lifecycleTemplates={templatesResult.data}
-        mode="edit"
-        options={optionsResult.data}
-      />
+      <ExitForm lifecycleTemplates={templatesResult.data} cancelHref={returnHref} successHref={returnHref} initialValue={exitToFormValue(itemResult.data)} mode="edit" options={optionsResult.data} itemId={itemId} />
     </main>
   );
 }

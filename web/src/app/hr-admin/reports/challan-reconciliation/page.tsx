@@ -15,8 +15,8 @@ export default async function ChallanReconciliationReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance report" : "Demo compliance report"}
         title="Challan Reconciliation"
         description="Calendar-wise statutory reconciliation across filing windows, employer registrations, provider routes, source hashes, and published deduction artifacts."

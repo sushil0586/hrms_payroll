@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 import Link from "next/link";
 import { useState } from "react";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
@@ -83,11 +85,9 @@ export function EmployeeNotificationInbox({
                   <button
                     className="button button--secondary"
                     type="button"
-                    onClick={(event) => {
-                      // Establish a return target even when pointer activation does not focus buttons.
-                      event.currentTarget.focus({ preventScroll: true });
+                    onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
                       setSelected(row.id);
-                    }}
+                     }}
                     aria-label={`Review notification: ${row.title || row.subject || "Notification"}`}
                   >
                     Review notification

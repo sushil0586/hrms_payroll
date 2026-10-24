@@ -206,7 +206,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <section className="panel-card-soft attendance-directory-panel">
-          <WorkspaceTableScrollRegion label="Leave requests table scroll" className="attendance-directory-table-wrap">
+          <WorkspaceTableScrollRegion label="Leave requests table scroll" className="attendance-directory-table-wrap workspace-table-region">
             <table aria-label="Leave requests" className="workspace-table attendance-directory-table accerio-data-table">
               <thead>
                 <tr>

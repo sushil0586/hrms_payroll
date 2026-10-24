@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
@@ -1182,7 +1185,7 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           </div>
         ) : null}
         {assignmentImportRows.length ? (
-          <div className="table-scroll">
+          <WorkspaceTableScrollRegion label="Salary setup crud table 1" className="table-scroll workspace-table-region">
             <table>
               <thead>
                 <tr>
@@ -1205,7 +1208,7 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
                 ))}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         ) : null}
       </article>
       <ActionSidecar activeTab={activeActionTab} importReadyCount={assignmentImportReadyCount} setup={setup} />

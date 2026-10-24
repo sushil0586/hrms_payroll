@@ -13,8 +13,8 @@ export default async function PayrollReviewExceptionsReportPage() {
   const result = await getHrAdminPayrollReviewSetup();
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Review Exceptions Report"
         description="Calculation and review exceptions by severity, status, component, decision state, and approval impact."

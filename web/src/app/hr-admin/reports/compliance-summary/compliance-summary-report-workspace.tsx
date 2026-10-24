@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -160,7 +163,7 @@ export function ComplianceSummaryReportWorkspace({
           <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/compliance-summary?format=manifest" fileName="compliance-summary-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Compliance summary report table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table statutory-deductions-table">
             <thead><tr><th scope="col">Area</th><th scope="col">Status</th><th scope="col">Owner</th><th scope="col">Signal</th><th scope="col">Evidence</th><th scope="col">Actions</th></tr></thead>
             <tbody>
@@ -177,7 +180,7 @@ export function ComplianceSummaryReportWorkspace({
               {visibleRows.length === 0 ? <tr><td colSpan={6}><div className="empty-state">No compliance summary areas match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Compliance summary pagination">
           <button className="button button--secondary" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">Previous</button>

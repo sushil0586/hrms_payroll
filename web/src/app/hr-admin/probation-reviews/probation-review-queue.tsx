@@ -1,8 +1,10 @@
 "use client";
+import {useDocumentUploadDraft} from "@/lib/ui/use-document-upload-draft";
+import {postLifecycleBulk,lifecycleNavigate} from "@/lib/ui/lifecycle-bulk";
 
-import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -50,16 +52,21 @@ function buildQueryString(params: Record<string, string | number | boolean | und
 }
 
 export function ProbationReviewQueue({ items, state, probationDecisionOptions, lifecycleOwners, currentFilters, pagination }: Props) {
-  const router = useRouter();
+
   const pathname = usePathname();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [feedback,setFeedback]=useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const pending=useRef(false);const noticeRef=useRef<HTMLDivElement>(null);const ready=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
+  useDocumentUploadDraft(false,isSubmitting);
+  useEffect(()=>{if(error||feedback)noticeRef.current?.focus();},[error,feedback]);
   const [search, setSearch] = useState(currentFilters.q);
   const [decision, setDecision] = useState(currentFilters.decision || "all");
   const [owner, setOwner] = useState(currentFilters.owner || "all");
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [bulkOwner, setBulkOwner] = useState(currentFilters.owner || "");
+  useEffect(()=>{const restore=()=>{setSearch(currentFilters.q );setDecision(currentFilters.decision || "all");setOwner(currentFilters.owner || "all");setPageSize(String(currentFilters.page_size));setSelectedIds([]);};window.addEventListener('pageshow',restore);window.addEventListener('popstate',restore);return()=>{window.removeEventListener('pageshow',restore);window.removeEventListener('popstate',restore);};},[currentFilters]);
   const [bulkDecision, setBulkDecision] = useState(probationDecisionOptions[0]?.value ?? "pending");
 
   const allSelected = items.length > 0 && selectedIds.length === items.length;
@@ -74,8 +81,9 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
     setSelectedIds((current) => (current.length === items.length ? [] : items.map((item) => item.id)));
   }
 
-  function goToPage(page: number) {
-    router.push(`${pathname}${buildQueryString({
+  function goToPage(page: number, apply = false) {
+    if(!apply){lifecycleNavigate(queueHref({page}));return;}
+    lifecycleNavigate(`${pathname}${buildQueryString({
       q: search.trim() || undefined,
       decision: decision !== "all" ? decision : undefined,
       owner: owner !== "all" ? owner : undefined,
@@ -84,15 +92,8 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
     })}`);
   }
 
-  function queueHref(params: Record<string, string | number | boolean | undefined>) {
-    return `${pathname}${buildQueryString({
-      q: search.trim() || undefined,
-      decision: decision !== "all" ? decision : undefined,
-      owner: owner !== "all" ? owner : undefined,
-      page: pagination.page,
-      page_size: Number(pageSize) || currentFilters.page_size,
-      ...params,
-    })}`;
+  function queueHref(params: Record<string,string|number|boolean|undefined> = {}) {
+    return `${pathname}${buildQueryString({...currentFilters,...params})}`;
   }
 
   function decisionTone(value: string) {
@@ -109,58 +110,43 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
       return;
     }
     setError("");
+    if(pending.current)return;pending.current=true;
     setIsSubmitting(true);
     const body: HrAdminLifecycleOwnerBulkActionInput = {
       record_type: "probation",
       record_ids: selectedIds,
       owner_value: nextOwnerValue,
     };
-    const response = await fetch("/api/hr-admin/lifecycle-owner-bulk-actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(getErrorMessage(payload));
-      setIsSubmitting(false);
-      return;
-    }
-    setSelectedIds([]);
-    setIsSubmitting(false);
-    router.refresh();
+    try {
+      const count=await postLifecycleBulk("/api/hr-admin/lifecycle-owner-bulk-actions",body);
+      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);setSelectedIds([]);
+    } catch(error){setError(error instanceof Error?error.message:"Update outcome could not be confirmed. Reload before retrying.");}
+    finally {pending.current=false;setIsSubmitting(false);}
   }
 
-  async function handleBulkDecisionAction(nextDecisionValue: string) {
+  async function handleBulkStatusAction(nextDecisionValue: string) {
     if (state !== "live") {
       setError("Bulk status updates are disabled in demo mode.");
       return;
     }
     setError("");
+    if(pending.current)return;pending.current=true;
     setIsSubmitting(true);
     const body: HrAdminLifecycleStatusBulkActionInput = {
       record_type: "probation",
       record_ids: selectedIds,
       status_value: nextDecisionValue,
     };
-    const response = await fetch("/api/hr-admin/lifecycle-status-bulk-actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(getErrorMessage(payload));
-      setIsSubmitting(false);
-      return;
-    }
-    setSelectedIds([]);
-    setIsSubmitting(false);
-    router.refresh();
+    try {
+      const count=await postLifecycleBulk("/api/hr-admin/lifecycle-status-bulk-actions",body);
+      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);setSelectedIds([]);
+    } catch(error){setError(error instanceof Error?error.message:"Update outcome could not be confirmed. Reload before retrying.");}
+    finally {pending.current=false;setIsSubmitting(false);}
   }
 
   return (
-    <section className="section queue-layout lifecycle-queue-layout">
+    <section className="section queue-layout lifecycle-queue-layout"><fieldset className="lifecycle-fields" disabled={!ready||isSubmitting} data-hydrated={ready}>
+      {error||feedback?<div className="notice" role={error?"alert":"status"} ref={noticeRef} tabIndex={-1}>{error?<p>{error}</p>:null}{feedback?<p>{feedback}</p>:null}<a data-navigation-mode="document" href={queueHref()}>Reload queue</a></div>:null}
       <section className="queue-toolbar panel-card-soft lifecycle-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
@@ -169,32 +155,29 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
           </div>
           <div className="queue-toolbar__meta">
             <span className="queue-summary-chip"><strong>{pagination.total_count}</strong> total reviews</span>
-            <span className="queue-summary-chip"><strong>{items.length}</strong> on this page</span>
             <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
           </div>
         </div>
         <div className="queue-toolbar__grid">
           <label className="form-field">
             <span className="muted">Search</span>
-            <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Employee, code, reviewer, workflow, remarks" value={search} />
+            <input className="input-control" onChange={(event) => setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();goToPage(1,true);}}} placeholder="Employee, code, reviewer, workflow, remarks" value={search} />
           </label>
           <label className="form-field">
-            <span className="muted">Decision</span>
-            <select className="input-control" onChange={(event) => setDecision(event.target.value)} value={decision}>
+            <span className="muted">Decision</span><select aria-label="Decision" className="input-control" onChange={(event) => setDecision(event.target.value)} value={decision}>
               <option value="all">All decisions</option>
               {probationDecisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
           <label className="form-field">
-            <span className="muted">Owner</span>
-            <select className="input-control" onChange={(event) => setOwner(event.target.value)} value={owner}>
+            <span className="muted">Owner</span><select aria-label="Owner" className="input-control" onChange={(event) => setOwner(event.target.value)} value={owner}>
               <option value="all">All owners</option>
               {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
         </div>
         <div className="queue-toolbar__actions">
-          <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
+          <button className="button button--primary" onClick={() => goToPage(1,true)} type="button">Apply filters</button>
           <button className="button button--ghost" onClick={() => {
             setSelectedIds([]);
             setError("");
@@ -204,7 +187,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
             setPageSize("25");
             setBulkOwner("");
             setBulkDecision(probationDecisionOptions[0]?.value ?? "pending");
-            router.push(pathname);
+            lifecycleNavigate(pathname);
           }} type="button">Clear filters</button>
           <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
             {allSelected ? "Clear selection" : "Select page"}
@@ -213,8 +196,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
         <div className="queue-toolbar__bulk-grid lifecycle-bulk-grid">
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
-              <span className="muted">Bulk owner</span>
-              <select className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
+              <span className="muted">Bulk owner</span><select aria-label="Bulk owner" className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
                 <option value="">Clear owner assignment</option>
                 {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -240,8 +222,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
           </div>
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
-              <span className="muted">Bulk decision</span>
-              <select className="input-control" onChange={(event) => setBulkDecision(event.target.value)} value={bulkDecision}>
+              <span className="muted">Bulk decision</span><select aria-label="Bulk decision" className="input-control" onChange={(event) => setBulkDecision(event.target.value)} value={bulkDecision}>
                 {probationDecisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
@@ -249,7 +230,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
               <button
                 className="button button--secondary"
                 disabled={isSubmitting || selectedIds.length === 0 || extendBlockedItems.length > 0}
-                onClick={() => handleBulkDecisionAction(bulkDecision)}
+                onClick={() => handleBulkStatusAction(bulkDecision)}
                 type="button"
               >
                 Set decision ({selectedIds.length || 0})
@@ -274,8 +255,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
           <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
           <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
         </div>
-        {error ? <div className="notice notice--error" role="alert"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
-      </section>
+              </section>
 
       <WorkspaceDataTable ariaLabel="Probation review records" className="lifecycle-table">
         <thead>
@@ -302,7 +282,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
               <td><strong>{item.probation_end_date || "TBD"}</strong></td>
               <td><strong>{item.reviewer_identifier || "Unassigned"}</strong><span>{item.owner_value || "No owner value"}</span></td>
               <td><strong>{item.extension_end_date || "No extension"}</strong></td>
-              <td><Link className="button button--secondary" href={queueHref({ editReview: item.id })}>Edit</Link></td>
+              <td><a data-navigation-mode="document" className="button button--secondary" data-lifecycle-trigger={`edit-probation-${item.id}`} href={queueHref({ editReview: item.id })}>Edit</a></td>
             </tr>
           );
         })}
@@ -310,8 +290,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
       </WorkspaceDataTable>
       <div className="lifecycle-pagination-row">
         <label className="form-field form-field--inline">
-          <span className="muted">Rows</span>
-          <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+          <span className="muted">Rows</span><select aria-label="Rows" className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
             {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
           </select>
         </label>
@@ -334,6 +313,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
         pageSize={pagination.page_size}
         totalCount={pagination.total_count}
       />
+    </fieldset>
     </section>
   );
 }

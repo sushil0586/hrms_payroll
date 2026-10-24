@@ -5055,6 +5055,8 @@ def save_hr_admin_onboarding(actor, validated_data, *, item=None):
         employee = Employee.objects.filter(tenant=tenant, id=validated_data["employee_id"]).first() if validated_data["employee_id"] else None
         if validated_data["employee_id"] and not employee:
             raise serializers.ValidationError({"employee_id": "Invalid selection."})
+        if EmployeeOnboarding.objects.filter(tenant=tenant, employee=employee).exclude(id=item.id).exists():
+            raise serializers.ValidationError({"employee_id": "An onboarding record already exists for this employee."})
         item.employee = employee
 
     for field in [
@@ -18856,10 +18858,21 @@ class HrAdminLifecycleQueueView(HrAdminContextMixin, APIView):
         primary_date_from = parse_date((request.query_params.get("primary_date_from") or "").strip())
         primary_date_to = parse_date((request.query_params.get("primary_date_to") or "").strip())
 
+        record_filter = (request.query_params.get("record") or "").strip()
+        record_id = None
+        if record_filter:
+            record_type, separator, raw_id = record_filter.partition(":")
+            if not separator or record_type not in {"onboarding", "probation", "movement", "exit"}:
+                raise serializers.ValidationError({"record": "Use a lifecycle type and record ID."})
+            record_id = serializers.UUIDField().run_validation(raw_id)
+            item_type_filter = record_type
+
         lifecycle_items = []
         document_attention_cache = {}
 
         onboardings = EmployeeOnboarding.objects.filter(tenant=employee.tenant).select_related("employee")
+        if record_id:
+            onboardings = onboardings.filter(id=record_id)
         if employee_id_filter:
             onboardings = onboardings.filter(employee_id=employee_id_filter)
         if status_filter:
@@ -18891,6 +18904,8 @@ class HrAdminLifecycleQueueView(HrAdminContextMixin, APIView):
             )
 
         probation_reviews = ProbationReview.objects.filter(tenant=employee.tenant).select_related("employee")
+        if record_id:
+            probation_reviews = probation_reviews.filter(id=record_id)
         if employee_id_filter:
             probation_reviews = probation_reviews.filter(employee_id=employee_id_filter)
         if status_filter:
@@ -18921,6 +18936,8 @@ class HrAdminLifecycleQueueView(HrAdminContextMixin, APIView):
             )
 
         movements = EmployeeMovement.objects.filter(tenant=employee.tenant).select_related("employee", "to_department", "to_designation", "to_manager__membership__user")
+        if record_id:
+            movements = movements.filter(id=record_id)
         if employee_id_filter:
             movements = movements.filter(employee_id=employee_id_filter)
         if status_filter:
@@ -18961,6 +18978,11 @@ class HrAdminLifecycleQueueView(HrAdminContextMixin, APIView):
             )
 
         exits = EmployeeExit.objects.filter(tenant=employee.tenant).select_related("employee")
+        # Exit queue items expose no record owner; they cannot match a selected owner.
+        if owner_filter.startswith(("identifier:", "employee:")):
+            exits = exits.none()
+        if record_id:
+            exits = exits.filter(id=record_id)
         if employee_id_filter:
             exits = exits.filter(employee_id=employee_id_filter)
         if status_filter:

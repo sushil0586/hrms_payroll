@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -205,7 +208,7 @@ export function PayrollAdjustmentsReportWorkspace({
           <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Payroll adjustments report table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table payroll-register-table">
             <thead><tr><th scope="col">Employee</th><th scope="col">Run</th><th scope="col">Adjustment</th><th scope="col">Amount</th><th scope="col">Approval</th><th scope="col">Timeline</th><th scope="col">Evidence</th><th scope="col">Post-lock</th><th scope="col">Actions</th></tr></thead>
             <tbody>
@@ -231,7 +234,7 @@ export function PayrollAdjustmentsReportWorkspace({
               {visibleRows.length === 0 ? <tr><td colSpan={9}><div className="empty-state">No payroll adjustment rows match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Payroll adjustments pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

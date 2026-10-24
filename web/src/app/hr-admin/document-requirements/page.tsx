@@ -1,9 +1,11 @@
-import Link from "next/link";
+import { DocumentAccessNotice } from "@/app/hr-admin/documents/document-access-notice";
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 import { createEmptyDocumentRequirementValue, documentRequirementToFormValue } from "@/app/hr-admin/document-requirements/form-values";
 import { DocumentRequirementForm } from "@/app/hr-admin/document-requirements/document-requirement-form";
-import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { DocumentSetupDialog } from "@/app/hr-admin/documents/document-setup-dialog";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getHrAdminDocumentOptions, getHrAdminDocumentRequirements } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -37,6 +39,7 @@ export default async function HrAdminDocumentRequirementsPage({ searchParams }: 
     permissionKeys: ["documents.view", "documents.manage"],
     fallbackPath: "/hr-admin/documents",
   });
+  if (!sessionHasPermission(sessionUser, "documents.view")) return <DocumentAccessNotice />;
   const canManageDocuments = sessionHasPermission(sessionUser, "documents.manage");
   const [result, optionsResult] = await Promise.all([
     getHrAdminDocumentRequirements(),
@@ -48,32 +51,31 @@ export default async function HrAdminDocumentRequirementsPage({ searchParams }: 
       ? result.data.find((item) => item.id === editRequirementId) ?? null
       : null;
   const editItem = editRequirementId ? result.data.find((item) => item.id === editRequirementId) : null;
-  const closeHref = "/hr-admin/document-requirements";
+  const closeHref = selectedRequirementId ? `/hr-admin/document-requirements?selectedRequirement=${encodeURIComponent(selectedRequirementId)}` : "/hr-admin/document-requirements";
 
   return (
-    <main className="shell hr-document-workbench">
-      <PageIntro
+    <main className="shell hr-document-workbench accerio-page document-operations document-setup-page">
+      <WorkspaceStandardHeader
         actions={
           <>
-            {canManageDocuments ? <Link className="button button--primary" href="/hr-admin/document-requirements?requirementModal=create">Create requirement</Link> : null}
-            <Link className="button button--secondary" href="/hr-admin/documents">Back to documents</Link>
+            {canManageDocuments ? <a data-navigation-mode="document" className="button button--primary" href="/hr-admin/document-requirements?requirementModal=create">Create requirement</a> : null}
+            <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/documents">Back to documents</a>
           </>
         }
         description="Define where documents are mandatory across org structure and employee context."
-        eyebrow={result.state === "live" ? "Live document mode" : "Demo document mode"}
-        pills={[`${result.data.length} requirement rules`]}
         title="Document requirements"
       />
 
+      {normalizeParam(currentParams.setup_saved) === "1" ? <div className="notice notice--success" role="status">Setup saved. The register reflects the confirmed changes.</div> : null}
       <section className="workspace-section" aria-label="Document requirement summary">
         <div className="attendance-summary-strip">
           <span><strong>{result.data.length}</strong> requirement rules</span>
           <span><strong>{result.data.filter((item) => item.is_mandatory).length}</strong> mandatory</span>
-          <span><strong>{result.data.reduce((sum, item) => sum + item.priority, 0)}</strong> priority total</span>
+          <span><strong>{result.data.filter((item) => item.is_active).length}</strong> active rules</span>
         </div>
       </section>
 
-      <section className="workspace-section queue-review-split">
+      <section className={`workspace-section${selected ? " queue-review-split" : ""}`}>
         <article className="workspace-data-panel record-card document-directory-panel">
           <div className="workspace-data-panel__header">
             <div>
@@ -81,7 +83,7 @@ export default async function HrAdminDocumentRequirementsPage({ searchParams }: 
               <p className="section-copy section-copy-soft">Define mandatory document rules by employee scope.</p>
             </div>
           </div>
-          <div className="workspace-table-scroll">
+          <WorkspaceTableScrollRegion label="Document requirements scroll region" className="workspace-table-scroll workspace-table-region">
             {result.data.length ? (
               <table className="workspace-table attendance-directory-table document-control-table" aria-label="Document requirements">
                 <thead>
@@ -107,8 +109,8 @@ export default async function HrAdminDocumentRequirementsPage({ searchParams }: 
                       <td>{item.required_within_days_of_joining} day(s)</td>
                       <td>
                         <div className="table-actions">
-                          <Link className="button button--secondary button--compact" href={`/hr-admin/document-requirements?selectedRequirement=${item.id}`}>Inspect</Link>
-                          {canManageDocuments ? <Link className="button button--ghost button--compact" href={`/hr-admin/document-requirements?editRequirement=${item.id}`}>Edit</Link> : null}
+                          <a data-navigation-mode="document" className="button button--secondary button--compact" href={`/hr-admin/document-requirements?selectedRequirement=${item.id}`}>Inspect</a>
+                          {canManageDocuments ? <a data-navigation-mode="document" className="button button--ghost button--compact" href={`/hr-admin/document-requirements?editRequirement=${item.id}`}>Edit</a> : null}
                         </div>
                       </td>
                     </tr>
@@ -121,7 +123,7 @@ export default async function HrAdminDocumentRequirementsPage({ searchParams }: 
                 <span className="muted">Create rules to make categories visible as required or optional in ESS.</span>
               </div>
             )}
-          </div>
+          </WorkspaceTableScrollRegion>
         </article>
         {selected ? (
           <article className="record-card panel-card-soft employee-detail-drawer document-detail-drawer">
@@ -130,8 +132,8 @@ export default async function HrAdminDocumentRequirementsPage({ searchParams }: 
                 <div className="record-card__title"><h3>{selected.category_name}</h3><p>{scopeLabel(selected)}</p></div>
               </div>
               <div className="record-card__actions">
-                <Link className="button button--secondary button--compact" href={closeHref}>Close</Link>
-                {canManageDocuments ? <Link className="button button--primary button--compact" href={`/hr-admin/document-requirements?editRequirement=${selected.id}`}>Edit</Link> : null}
+                <a data-navigation-mode="document" className="button button--secondary button--compact" href={closeHref}>Close</a>
+                {canManageDocuments ? <a data-navigation-mode="document" className="button button--primary button--compact" href={`/hr-admin/document-requirements?selectedRequirement=${selected.id}&editRequirement=${selected.id}`}>Edit</a> : null}
               </div>
             </div>
             <div className="detail-grid">
@@ -147,27 +149,25 @@ export default async function HrAdminDocumentRequirementsPage({ searchParams }: 
       </section>
 
       {createModal && canManageDocuments ? (
-        <HrAdminActionModal
+        <DocumentSetupDialog
           closeHref={closeHref}
           description="Scope a document requirement by organization and employment context."
-          eyebrow={optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
-          labelledBy="document-requirement-create-modal"
+            labelledBy="document-requirement-create-modal"
           title="Create document requirement"
         >
           <DocumentRequirementForm compact initialValue={createEmptyDocumentRequirementValue()} mode="create" options={optionsResult.data} returnPath={closeHref} />
-        </HrAdminActionModal>
+        </DocumentSetupDialog>
       ) : null}
 
       {editItem && canManageDocuments ? (
-        <HrAdminActionModal
+        <DocumentSetupDialog
           closeHref={closeHref}
           description="Adjust the organizational scope and due timing for this required document rule."
-          eyebrow={optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
-          labelledBy={`document-requirement-edit-modal-${editItem.id}`}
+            labelledBy={`document-requirement-edit-modal-${editItem.id}`}
           title={`Edit ${editItem.category_name}`}
         >
           <DocumentRequirementForm compact initialValue={documentRequirementToFormValue(editItem)} itemId={editItem.id} mode="edit" options={optionsResult.data} returnPath={closeHref} />
-        </HrAdminActionModal>
+        </DocumentSetupDialog>
       ) : null}
     </main>
   );

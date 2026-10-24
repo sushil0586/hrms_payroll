@@ -1,6 +1,6 @@
 # Accerio HR Admin experience standard
 
-Status: proposed implementation contract, grounded in the [page audit](hrms-hr-admin-page-audit.md). Apply incrementally through the [146-route tracker](hrms-hr-admin-coverage-tracker.md). This document does not mark existing pages compliant or authorize staging deployment.
+Status: HR Admin implementation contract, consolidated 21 October 2026. Use the [cross-workspace UI/UX standard](hrms-ui-ux-standard.md) as the shared baseline, the [makeover reference](hrms-leave-attendance-makeover-reference.md) for implemented examples, and the [adoption checklist](hrms-ui-ux-screen-adoption-checklist.md) for each screen family. Apply incrementally through the [146-route tracker](hrms-hr-admin-coverage-tracker.md). This document does not mark untouched pages compliant or authorize staging deployment.
 
 See the [pre-implementation shell/dialog review](hrms-shared-shell-dialog-design-review.md) for sidebar, header, footer and popup recommendations. Visual consistency is an acceptance requirement in every phase.
 
@@ -8,7 +8,7 @@ See the [pre-implementation shell/dialog review](hrms-shared-shell-dialog-design
 
 Reuse `web/src/styles/tokens.css`, semantic `--ds-*` tokens in `styles/accerio.css`, `WorkspaceChrome`, `WorkspaceStandardHeader`, `WorkspaceStandardPanel`, `WorkspaceFilterBar`, `WorkspaceDataTable`, `WorkspaceTableScrollRegion`, status/feedback patterns, `PaginationBar`, `HrAdminActionModal` and existing form/action primitives. Keep module-specific data, permissions, action eligibility and calculations in their current domain/API layers. Do not introduce another component library or copy ESS components with HR-specific names.
 
-HR currently opts out of `.accerio-workspace`; use a reviewed shell integration with regression evidence, not a global CSS switch before testing legacy components. Shared presentation must also remain usable by ESS/MSS. HR navigation groups, commercial entitlements and RBAC remain unchanged unless a separate approved contract requires it.
+The shared Accerio shell has since been implemented and scoped-tested; see the [global shell certificate](hrms-hr-admin-global-shell-certification.md) and later [Leave Phase 2](hrms-leave-phase2-design-certification.md). Shell appearance and page-content adoption are separate boundaries: reuse the existing integration and verify affected legacy consumers rather than switching global classes indiscriminately. Shared presentation must also remain usable by ESS/MSS. HR navigation groups, commercial entitlements and RBAC remain unchanged unless a separate approved contract requires it.
 
 ## Page composition
 
@@ -36,11 +36,11 @@ Default list/report interaction is **draft fields + Apply**, using a real form w
 | Search | Trim consistently; document supported fields; use backend query semantics. No decorative search inputs. |
 | Invalid/out-of-range page | Preserve filters and safely recover to a valid page or clearly explain the empty range; never drop the entire workspace. |
 
-Small **complete** catalogs may use immediate filtering if explicitly documented and consistently labeled; omit Apply in that mode and persist meaningful URL state. A current array is not proven complete merely because its current page is small. For consistency, prefer the default Apply contract when migrating Leave Types/Policies.
+Small **complete** catalogs may use immediate filtering if explicitly documented and consistently labeled; omit Apply in that mode and persist meaningful URL state. A current array is not proven complete merely because its current page is small. Preserve the documented immediate-filter contracts in the standardized catalogs/reports; use the default Apply contract for new multi-field server-paginated queues unless their documented behavior requires otherwise.
 
 Use an adapter for existing query names (`managerView`, `manager_view`, etc.); do not silently rename API keys. Filter schemas define key, label, type, default, authorized options, serialization, validation and scope. They do not grant permissions. Sorting is available only for backend-supported fields across the full filtered dataset, or explicitly labeled “this page.” Use a stable tie-breaker and preserve filters/page-size when sorting.
 
-Presentation reuse to implement: one accessible filter-form composition and common query utilities, shared draft/committed synchronization, loading/error/result announcements and pagination. The current `WorkspaceFilterBar` is only a styled div; it does not implement these semantics. Fix the behavior at a shared boundary, with per-module schemas and adapters. Avoid ten copies of synchronization effects; do not blindly remount an entire form/workspace and lose unsaved business edits.
+Implemented reuse: `WorkspaceFilterForm` supplies the committed GET form and browser-restoration boundary; `use-workspace-query-filter.ts` supplies immediate URL updates. Modules still own their inputs, validation, query serialization and announcements. The current `WorkspaceFilterBar` is only a styled div; it does not implement these semantics. Fix the behavior at a shared boundary, with per-module schemas and adapters. Avoid ten copies of synchronization effects; do not blindly remount an entire form/workspace and lose unsaved business edits.
 
 ## Tables, selection and details
 

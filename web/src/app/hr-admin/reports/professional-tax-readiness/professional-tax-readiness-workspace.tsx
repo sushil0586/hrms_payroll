@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -209,7 +212,7 @@ export function ProfessionalTaxReadinessWorkspace({
           <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/professional-tax-package?format=manifest" fileName="professional-tax-package-manifest.json">Package manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Professional tax readiness table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table statutory-deductions-table">
             <thead><tr><th scope="col">Gate</th><th scope="col">Area</th><th scope="col">Status</th><th scope="col">Owner</th><th scope="col">Signal</th><th scope="col">Evidence</th><th scope="col">Source</th><th scope="col">Actions</th></tr></thead>
             <tbody>
@@ -228,7 +231,7 @@ export function ProfessionalTaxReadinessWorkspace({
               {visibleRows.length === 0 ? <tr><td colSpan={8}><div className="empty-state">No Professional Tax readiness gates match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Professional Tax readiness pagination">
           <button className="button button--secondary" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">Previous</button>

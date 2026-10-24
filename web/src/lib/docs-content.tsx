@@ -240,7 +240,7 @@ function parseTable(lines: string[], currentRelativePath: string, key: string) {
   );
 }
 
-export function renderMarkdown(markdown: string, currentRelativePath: string) {
+export function renderMarkdown(markdown: string, currentRelativePath: string, { headingOffset = 0 }: { headingOffset?: number } = {}) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks: MarkdownBlock[] = [];
   let index = 0;
@@ -268,7 +268,7 @@ export function renderMarkdown(markdown: string, currentRelativePath: string) {
 
     const heading = line.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
-      const level = heading[1].length;
+      const level = Math.min(6, heading[1].length + headingOffset);
       const content = renderInline(heading[2], currentRelativePath);
       blocks.push({ key, node: createElement(`h${level}`, null, content) });
       index += 1;

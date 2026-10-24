@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -236,7 +239,7 @@ export function BankAdviceReportWorkspace({
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Bank advice report table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table payroll-register-table">
             <thead>
               <tr>
@@ -306,7 +309,7 @@ export function BankAdviceReportWorkspace({
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Bank advice pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

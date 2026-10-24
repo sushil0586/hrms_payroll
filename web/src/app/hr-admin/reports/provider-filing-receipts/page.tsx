@@ -13,8 +13,8 @@ export default async function ProviderFilingReceiptsReportPage() {
   const handoffResult = await getHrAdminPayrollFinanceHandoffSetup();
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={handoffResult.state === "live" ? "Live compliance report" : "Demo compliance report"}
         title="Provider Filing Receipts"
         description="Provider delivery receipt tracking across submissions, acknowledgements, callbacks, retries, worker jobs, checksums, and failure evidence."

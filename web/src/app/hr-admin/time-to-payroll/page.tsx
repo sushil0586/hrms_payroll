@@ -219,8 +219,8 @@ export default async function TimeToPayrollControlPage() {
   const nextAction = steps.find((step) => step.status === "blocked") ?? steps.find((step) => step.status === "warning") ?? steps[steps.length - 1];
 
   return (
-    <main className="shell shell--payroll-setup" data-testid="time-to-payroll-control">
-      <PageIntro
+    <main className="shell shell--payroll-setup accerio-page" data-testid="time-to-payroll-control">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live time to payroll" : "Demo time to payroll"}
         title="Time to Payroll Control"
         description="One operational view from roster and leave through attendance derivation, payroll input reconciliation, and post-lock arrears."

@@ -118,8 +118,14 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
           setPollFailures((value) => ({ ...value, [action.id]: nextFailureCount }));
           return;
         }
-        const payload = await response.json() as { job?: PayrollJob };
-        if (!payload.job || disposed) return;
+        const payload = await response.json().catch(() => null) as { job?: PayrollJob } | null;
+        if (!payload?.job) {
+          const nextFailureCount = (pollFailureCountsRef.current[action.id] ?? 0) + 1;
+          pollFailureCountsRef.current[action.id] = nextFailureCount;
+          setPollFailures((value) => ({ ...value, [action.id]: nextFailureCount }));
+          return;
+        }
+        if (disposed) return;
         pollFailureCountsRef.current[action.id] = 0;
         setPollFailures((value) => value[action.id] ? { ...value, [action.id]: 0 } : value);
         setLastJobUpdate((value) => ({ ...value, [action.id]: new Date().toISOString() }));
@@ -210,6 +216,9 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
       const payload = await response.json().catch(() => ({})) as ActionResult;
       if (!response.ok) {
         throw new Error(payload.detail || "Payroll action failed.");
+      }
+      if (action.background && !payload.job) {
+        throw new Error("Payroll action was not confirmed. Check the job queue before trying again.");
       }
       if (action.background && payload.job) {
         window.localStorage.setItem(`payroll-job:${action.endpoint}`, JSON.stringify(payload.job));

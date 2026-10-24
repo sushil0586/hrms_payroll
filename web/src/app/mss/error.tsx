@@ -9,9 +9,11 @@ type Props = {
   reset: () => void;
 };
 
-export default function MssError({ error, reset }: Props) {
+export default function MssError({ error }: Props) {
   return (
     <WorkspaceErrorState
+      appearance="accerio"
+      userFacing
       actions={
         <>
           <Link className="button button--secondary" href="/ess">
@@ -24,7 +26,7 @@ export default function MssError({ error, reset }: Props) {
       }
       detail={error.message}
       eyebrow="MSS load issue"
-      onRetry={reset}
+      onRetry={() => window.location.reload()}
       title="Manager workspace could not load the live approval inbox"
     />
   );

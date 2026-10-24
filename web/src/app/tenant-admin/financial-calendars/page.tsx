@@ -14,8 +14,8 @@ export default async function FinancialCalendarsPage() {
   });
   const workspace = await getFinancialCalendarWorkspace();
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Finance governance"
         title="Financial years and periods"
         description="Configure explicit fiscal boundaries and control posting-period lifecycle with audited transitions."

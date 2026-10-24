@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -291,10 +293,10 @@ export function AttendanceRecordBulkManager({
                         <span>{item.is_regularized ? "Regularized" : "Not regularized"}</span>
                       </td>
                       <td>
-                        <button className="button button--secondary button--compact" onClick={(event) => {
-                          event.stopPropagation();
+                        <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                          triggerEvent.stopPropagation();
                           setSelectedItemId(item.id);
-                        }} type="button">
+                         }} type="button">
                           Inspect
                         </button>
                       </td>
@@ -321,7 +323,7 @@ export function AttendanceRecordBulkManager({
                 <h2 className="section-heading-soft">Attendance detail</h2>
                 <p className="section-copy section-copy-soft">Focused context for the selected record.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={() => setSelectedItemId("")} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

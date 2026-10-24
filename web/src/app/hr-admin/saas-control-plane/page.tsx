@@ -51,8 +51,8 @@ export default async function HrAdminSaasControlPlanePage() {
   const data = result.data;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live control plane" : "Demo control plane"}
         title="SaaS Control Plane"
         description="Tenant plan, edition, entitlement, and usage-limit readiness."

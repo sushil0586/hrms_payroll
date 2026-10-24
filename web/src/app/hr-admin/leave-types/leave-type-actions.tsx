@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { apiErrorMessage, mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
 
@@ -102,7 +104,7 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
     <>
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       {successMessage ? <span className="record-chip record-chip--success" role="status">{successMessage}</span> : null}
-      <button className="button button--ghost" onClick={openDialog} type="button">Remove</button>
+      <button className="button button--ghost" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openDialog(); }} type="button">Remove</button>
       {dialogOpen ? (
         <HrAdminActionModal
           closeHref="/hr-admin/leave-types"

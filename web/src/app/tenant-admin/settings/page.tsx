@@ -31,8 +31,8 @@ export default async function TenantAdminSettingsPage() {
   const canManageChangeRequests = sessionHasPermission(sessionUser, "tenant.change_requests.manage");
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live account settings" : "Demo account settings"}
         title="Tenant Settings"
         description="Review tenant identity, platform-owned identifiers, and the governed path for account profile changes."

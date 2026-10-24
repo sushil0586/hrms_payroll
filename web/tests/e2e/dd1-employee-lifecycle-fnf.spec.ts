@@ -48,7 +48,7 @@ test("DD-EL-005/006 connects an approved exit to a maker/checker FnF settlement"
 
     await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=actions&runId=${runId}`, maker);
     await expectPageReady(page, "Payroll Settlements");
-    const panel = page.getByLabel("Settlement certification actions");
+    const panel = page.getByLabel("Settlement actions");
     await expect(panel.getByLabel("Settlement exit record")).toContainText(employee.employee_code);
     await panel.getByLabel("Settlement source reference").fill(sourceRef);
     await panel.getByLabel("Settlement gross due").fill("42000");
@@ -75,7 +75,7 @@ test("DD-EL-005/006 connects an approved exit to a maker/checker FnF settlement"
     const submitted = await captureJson<{ status: string }>(
       page,
       new RegExp(`/api/hr-admin/payroll-settlements/${settlement.payload.id}/submit/?$`),
-      async () => page.getByLabel("Settlement certification actions").getByRole("button", { name: "Submit selected" }).click(),
+      async () => page.getByLabel("Settlement actions").getByRole("button", { name: "Submit selected" }).click(),
     );
     expect(submitted.status).toBe(200);
     expect(submitted.payload.status).toBe("submitted");
@@ -83,7 +83,7 @@ test("DD-EL-005/006 connects an approved exit to a maker/checker FnF settlement"
     const makerApproval = await captureJson<{ detail?: string }>(
       page,
       new RegExp(`/api/hr-admin/payroll-settlements/${settlement.payload.id}/approve/?$`),
-      async () => page.getByLabel("Settlement certification actions").getByRole("button", { name: "Approve selected" }).click(),
+      async () => page.getByLabel("Settlement actions").getByRole("button", { name: "Approve selected" }).click(),
     );
     expect(makerApproval.status).toBe(400);
     expect(makerApproval.payload.detail).toMatch(/different authorized user/i);
@@ -96,7 +96,7 @@ test("DD-EL-005/006 connects an approved exit to a maker/checker FnF settlement"
     const approved = await captureJson<{ status: string }>(
       page,
       new RegExp(`/api/hr-admin/payroll-settlements/${settlement.payload.id}/approve/?$`),
-      async () => page.getByLabel("Settlement certification actions").getByRole("button", { name: "Approve selected" }).click(),
+      async () => page.getByLabel("Settlement actions").getByRole("button", { name: "Approve selected" }).click(),
     );
     expect(approved.status).toBe(200);
     expect(approved.payload.status).toBe("approved");
@@ -109,7 +109,7 @@ test("DD-EL-005/006 connects an approved exit to a maker/checker FnF settlement"
     const applied = await captureJson<{ status: string; totals_snapshot: { net_settlement: string } }>(
       page,
       new RegExp(`/api/hr-admin/payroll-settlements/${settlement.payload.id}/apply/?$`),
-      async () => page.getByLabel("Settlement certification actions").getByRole("button", { name: "Apply selected" }).click(),
+      async () => page.getByLabel("Settlement actions").getByRole("button", { name: "Apply selected" }).click(),
     );
     expect(applied.status).toBe(200);
     expect(applied.payload.status).toBe("applied");

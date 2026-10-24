@@ -1,396 +1,94 @@
 "use client";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { WorkspaceDataTable } from "@/components/patterns/workspace-standard";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
+import { useDocumentUploadDraft } from "@/lib/ui/use-document-upload-draft";
+import type { HrAdminEmployeeListItem, HrAdminEnumOption, HrAdminGeneratedLetter, HrAdminGeneratedLetterDraft, HrAdminGeneratedLetterPreview } from "@/lib/types";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-
-import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
-import type {
-  HrAdminEmployeeListItem,
-  HrAdminEnumOption,
-  HrAdminGeneratedLetter,
-  HrAdminGeneratedLetterDraft,
-  HrAdminGeneratedLetterPreview,
-} from "@/lib/types";
-
-type Props = {
-  employees: HrAdminEmployeeListItem[];
-  letterTypes: HrAdminEnumOption[];
-  initialLetters: HrAdminGeneratedLetter[];
-};
-
-const DEFAULT_TEMPLATE_BODY =
-  "Dear {{ first_name }},\n\nThis confirms {{ employee_name }} as {{ designation }} at {{ legal_entity }} effective {{ issue_date }}.\n\nRegards,\nPeople Operations";
-
-function getErrorMessage(payload: unknown, fallback: string) {
-  if (!payload || typeof payload !== "object") return fallback;
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
+type Props = { employees: HrAdminEmployeeListItem[]; letterTypes: HrAdminEnumOption[]; initialLetters: HrAdminGeneratedLetter[] };
+const template = "Dear {{ first_name }},\n\nThis confirms {{ employee_name }} as {{ designation }} at {{ legal_entity }} effective {{ issue_date }}.\n\nRegards,\nPeople Operations";
+function errorMessage(payload: unknown) {
+  if (payload && typeof payload === "object") for (const value of Object.values(payload)) {
+    if (typeof value === "string") return value;
     if (Array.isArray(value) && value.length) return String(value[0]);
-    if (typeof value === "string" && value) return value;
   }
-  return fallback;
+  return "The action could not be completed.";
 }
-
-function parsePayloadValues(value: string) {
-  if (!value.trim()) return {};
-  const parsed = JSON.parse(value);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Payload values must be a JSON object.");
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function humanizeStatus(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function statusTone(value: string) {
-  if (["generated", "issued", "active", "completed"].includes(value)) return "success";
-  if (["failed", "cancelled", "revoked"].includes(value)) return "danger";
-  if (["draft", "pending"].includes(value)) return "warning";
-  return "neutral";
-}
-
-export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetters }: Props) {
-  const router = useRouter();
-  const defaultEmployeeId = employees[0]?.id ?? "";
-  const defaultLetterType = letterTypes[0]?.value ?? "other";
-  const [draft, setDraft] = useState<HrAdminGeneratedLetterDraft>({
-    employee_id: defaultEmployeeId,
-    letter_type: defaultLetterType,
-    title: "Confirmation Letter",
-    template_code: "confirmation-standard",
-    issue_date: "2026-06-07",
-    workflow_reference: "",
-    template_body: DEFAULT_TEMPLATE_BODY,
-    payload_values: {},
-  });
-  const [payloadJson, setPayloadJson] = useState("{\n  \"reference_number\": \"HR/CONF/0042\"\n}");
-  const [preview, setPreview] = useState<HrAdminGeneratedLetterPreview | null>(null);
-  const [generatedLetter, setGeneratedLetter] = useState<HrAdminGeneratedLetter | null>(null);
-  const [error, setError] = useState("");
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => setIsHydrated(true), 0);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  const selectedEmployee = useMemo(
-    () => employees.find((employee) => employee.id === draft.employee_id),
-    [draft.employee_id, employees],
-  );
-  const canGenerate = Boolean(draft.employee_id && draft.title.trim() && draft.template_body.trim());
-
-  function update<Key extends keyof HrAdminGeneratedLetterDraft>(
-    key: Key,
-    value: HrAdminGeneratedLetterDraft[Key],
-  ) {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
-
-  function buildRequestPayload() {
-    const payloadValues = parsePayloadValues(payloadJson);
-    return { ...draft, payload_values: payloadValues };
-  }
-
-  async function handlePreview() {
+export function GeneratedLetterWorkspace({employees,letterTypes,initialLetters}: Props) {
+  const [draft,setDraft] = useState<HrAdminGeneratedLetterDraft>({employee_id:"",letter_type:letterTypes[0]?.value??"other",title:"",template_code:"",issue_date:"",workflow_reference:"",template_body:template,payload_values:{}});
+  const [payloadJson,setPayloadJson] = useState("{}");
+  const [preview,setPreview] = useState<HrAdminGeneratedLetterPreview|null>(null);
+  const [previewKey,setPreviewKey] = useState("");
+  const [generated,setGenerated] = useState<HrAdminGeneratedLetter|null>(null);
+  const [letters,setLetters] = useState(initialLetters);
+  const [error,setError] = useState("");
+  const [busy,setBusy] = useState<"preview"|"generate"|null>(null);
+  const [search,setSearch] = useState("");
+  const [page,setPage] = useState(1);
+  const ready = useSyncExternalStore(()=>()=>{},()=>true,()=>false);
+  const [initial] = useState(() => JSON.stringify({draft,payloadJson}));
+  const currentKey = JSON.stringify({draft,payloadJson});
+  const [savedKey,setSavedKey] = useState("");
+  const dirty = currentKey !== savedKey && currentKey !== initial;
+  useDocumentUploadDraft(dirty,Boolean(busy));
+  const inFlight = useRef(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLElement>(null);
+  const fresh = Boolean(preview && previewKey === currentKey);
+  useEffect(()=>{if(error)errorRef.current?.focus();},[error]);
+  useEffect(()=>{if(generated)receiptRef.current?.focus();},[generated]);
+  useEffect(()=>{if(preview)previewRef.current?.focus();},[preview]);
+  function update<K extends keyof HrAdminGeneratedLetterDraft>(key:K,value:HrAdminGeneratedLetterDraft[K]) {setDraft(valueBefore=>({...valueBefore,[key]:value}));}
+  async function perform(kind:"preview"|"generate") {
+    if(inFlight.current || (kind==="generate" && !fresh))return;
     setError("");
-    setPreview(null);
-    setGeneratedLetter(null);
-    setIsPreviewing(true);
-    let payload: HrAdminGeneratedLetterDraft;
+    let values:unknown;
+    try {values=JSON.parse(payloadJson || "{}");if(!values||typeof values!=="object"||Array.isArray(values))throw Error();}
+    catch {setError("Payload values must be a valid JSON object.");return;}
+    if(!draft.employee_id || !draft.title.trim() || !draft.template_body.trim()) {setError("Select an employee and enter a title and template body.");return;}
+    inFlight.current=true;setBusy(kind);
     try {
-      payload = buildRequestPayload();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Payload values must be valid JSON.");
-      setIsPreviewing(false);
-      return;
-    }
-
-    let response: Response;
-    try {
-      response = await fetch("/api/hr-admin/generated-letters/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
-      setIsPreviewing(false);
-      return;
-    }
-    const responsePayload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(getErrorMessage(responsePayload, "Unable to preview generated letter."));
-      setIsPreviewing(false);
-      return;
-    }
-    setPreview(responsePayload as HrAdminGeneratedLetterPreview);
-    setIsPreviewing(false);
+      const response=await fetch(`/api/hr-admin/generated-letters${kind==="preview"?"/preview":""}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...draft,issue_date:draft.issue_date||null,payload_values:values})});
+      const value=await response.json().catch(()=>null);
+      if(!response.ok) {setError(response.status>=500 && kind==="generate" ? "Generation outcome could not be confirmed. Check generated letters before retrying; your draft is retained." : errorMessage(value));return;}
+      if(kind==="preview") {
+        if(typeof value?.rendered_text!=="string" || !Array.isArray(value.used_variables) || !Array.isArray(value.missing_variables))throw Error();
+        setPreview(value);setPreviewKey(currentKey);
+      } else {
+        if(!value?.id || !value.artifact_id || !value.file_name || typeof value.rendered_text!=="string")throw Error();
+        setGenerated(value);setSavedKey(currentKey);setLetters(before=>[value,...before.filter(item=>item.id!==value.id)]);
+      }
+    } catch {setError(kind==="generate"?"Generation outcome could not be confirmed. Check generated letters before retrying; your draft is retained.":"Preview could not be loaded. Your draft is retained; try preview again.");}
+    finally {inFlight.current=false;setBusy(null);}
   }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setGeneratedLetter(null);
-    setIsGenerating(true);
-    let payload: HrAdminGeneratedLetterDraft;
-    try {
-      payload = buildRequestPayload();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Payload values must be valid JSON.");
-      setIsGenerating(false);
-      return;
-    }
-
-    let response: Response;
-    try {
-      response = await fetch("/api/hr-admin/generated-letters", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
-      setIsGenerating(false);
-      return;
-    }
-    const responsePayload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(getErrorMessage(responsePayload, "Unable to generate letter."));
-      setIsGenerating(false);
-      return;
-    }
-    setGeneratedLetter(responsePayload as HrAdminGeneratedLetter);
-    setPreview({
-      rendered_text: (responsePayload as HrAdminGeneratedLetter).rendered_text,
-      missing_variables: [],
-      used_variables: [],
-      payload: (responsePayload as HrAdminGeneratedLetter).payload_snapshot,
-    });
-    setIsGenerating(false);
-    router.refresh();
-  }
-
-  return (
-    <section
-      className="section overview-split document-letter-workspace"
-      data-hydrated={isHydrated ? "true" : "false"}
-      suppressHydrationWarning
-    >
-      <form className="form-shell-card overview-split__primary document-child-form document-letter-form" onSubmit={handleSubmit}>
-        <div className="form-shell-card__header">
-          <div>
-            <h2>Generate letter</h2>
-            <p className="section-copy">Create a stored employee artifact from a variable-based draft.</p>
-          </div>
-          <div className="form-shell-card__meta">
-            <span className="queue-summary-chip"><strong>{draft.letter_type}</strong> type</span>
-            <span className="queue-summary-chip"><strong>{selectedEmployee?.employee_code ?? "No employee"}</strong> employee</span>
-            <span className="queue-summary-chip"><strong>{canGenerate ? "Ready" : "Needs input"}</strong> draft</span>
-          </div>
-        </div>
-        {employees.length === 0 ? (
-          <div className="notice">
-            <strong>No employees available.</strong>
-            <span className="muted">Create or import employees before generating HR letters.</span>
-          </div>
-        ) : null}
-
-        <div className="form-shell-card__grid">
+  function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();void perform("generate");}
+  const matched=letters.filter(item=>`${item.title} ${item.employee_name} ${item.employee_code} ${item.letter_type}`.toLowerCase().includes(search.toLowerCase()));
+  const currentPage=Math.min(page,Math.max(1,Math.ceil(matched.length/10)));
+  const visible=matched.slice((currentPage-1)*10,currentPage*10);
+  return <section className="document-letter-workspace letter-makeover" data-hydrated={ready}>
+    <div className="attendance-summary-strip"><span><strong>{letters.length}</strong> loaded letters</span><span><strong>{letters.filter(item=>item.artifact_id).length}</strong> stored files</span><span><strong>{letterTypes.length}</strong> letter types</span></div>
+    <div className="letter-composition">
+      <form className="workspace-standard-panel document-letter-form" noValidate onSubmit={submit}>
+        <fieldset className="letter-fields" disabled={!ready||Boolean(busy)}>
+          <legend>Letter draft</legend>
           <div className="form-grid">
-            <label className="form-field">
-              <span className="muted">Employee</span>
-              <select
-                className="input-control"
-                required
-                disabled={employees.length === 0}
-                value={draft.employee_id}
-                onChange={(event) => update("employee_id", event.target.value)}
-              >
-                {employees.length === 0 ? <option value="">No employees available</option> : null}
-                {employees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.full_name} ({employee.employee_code})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Letter type</span>
-              <select
-                className="input-control"
-                value={draft.letter_type}
-                onChange={(event) => update("letter_type", event.target.value)}
-              >
-                {letterTypes.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Title</span>
-              <input
-                className="input-control"
-                required
-                value={draft.title}
-                onChange={(event) => update("title", event.target.value)}
-              />
-            </label>
-            <label className="form-field">
-              <span className="muted">Template code</span>
-              <input
-                className="input-control"
-                value={draft.template_code}
-                onChange={(event) => update("template_code", event.target.value)}
-              />
-            </label>
-            <label className="form-field">
-              <span className="muted">Issue date</span>
-              <input
-                className="input-control"
-                type="date"
-                value={draft.issue_date}
-                onChange={(event) => update("issue_date", event.target.value)}
-              />
-            </label>
-            <label className="form-field">
-              <span className="muted">Workflow reference</span>
-              <input
-                className="input-control"
-                placeholder="WF-CONF-0042"
-                value={draft.workflow_reference}
-                onChange={(event) => update("workflow_reference", event.target.value)}
-              />
-            </label>
-            <label className="form-field form-field--full">
-              <span className="muted">Template body</span>
-              <textarea
-                className="input-control"
-                rows={8}
-                value={draft.template_body}
-                onChange={(event) => update("template_body", event.target.value)}
-              />
-            </label>
-            <label className="form-field form-field--full">
-              <span className="muted">Payload values JSON</span>
-              <textarea
-                className="input-control"
-                rows={4}
-                value={payloadJson}
-                onChange={(event) => setPayloadJson(event.target.value)}
-              />
-            </label>
+            <div className="form-field"><label htmlFor="letter-employee">Employee (required)</label><select id="letter-employee" className="input-control" required value={draft.employee_id} onChange={e=>update("employee_id",e.target.value)}><option value="">Select employee</option>{employees.map(item=><option key={item.id} value={item.id}>{item.full_name} ({item.employee_code})</option>)}</select></div>
+            <div className="form-field"><label htmlFor="letter-type">Letter type</label><select id="letter-type" className="input-control" value={draft.letter_type} onChange={e=>update("letter_type",e.target.value)}>{letterTypes.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            {([['title','Title (required)',255],['template_code','Template code',80],['issue_date','Issue date',undefined],['workflow_reference','Workflow reference',120]] as const).map(([key,label,max])=><div className="form-field" key={key}><label htmlFor={`letter-${key}`}>{label}</label><input id={`letter-${key}`} className="input-control" type={key==="issue_date"?"date":"text"} maxLength={max} required={key==="title"} value={draft[key]} onChange={e=>update(key,e.target.value)} />{key==="issue_date"?<span className="field-help-text">Blank uses the server date. Preview resolves the effective date.</span>:null}</div>)}
+            <div className="form-field form-field--full"><label htmlFor="letter-body">Template body (required)</label><textarea id="letter-body" className="input-control" rows={7} required value={draft.template_body} onChange={e=>update("template_body",e.target.value)} /></div>
+            <div className="form-field form-field--full"><label htmlFor="letter-values">Payload values JSON</label><textarea id="letter-values" className="input-control" rows={3} value={payloadJson} onChange={e=>setPayloadJson(e.target.value)} /><span className="field-help-text">An object of variable overrides; missing variables are reported by preview.</span></div>
           </div>
-        </div>
-
-        {error ? <div className="notice notice--error" role="alert"><strong>Letter action failed.</strong><span className="muted">{error}</span></div> : null}
-        {generatedLetter ? (
-          <div className="notice">
-            <strong>Letter generated.</strong>
-            <span className="muted">{generatedLetter.title} is stored as {generatedLetter.file_name}.</span>
-            {generatedLetter.artifact_id ? <a className="button button--ghost" href={`/api/hr-admin/generated-letters/${generatedLetter.id}/download`}>Download generated letter</a> : null}
-          </div>
-        ) : null}
-
-        <div className="form-actions-bar form-actions-bar--static">
-          <span className="muted">Preview before generating so missing variables are visible.</span>
-          <div className="form-actions-bar__buttons">
-            <button className="button button--secondary" disabled={isPreviewing || isGenerating} onClick={handlePreview} type="button">
-              {isPreviewing ? "Previewing..." : "Preview letter"}
-            </button>
-            <button className="button button--primary" disabled={isGenerating || !canGenerate} type="submit">
-              {isGenerating ? "Generating..." : "Generate letter"}
-            </button>
-          </div>
-        </div>
+        </fieldset>
+        {error?<div ref={errorRef} tabIndex={-1} className="notice notice--error" role="alert">{error}</div>:null}
+        <div className="letter-actions"><button className="button button--secondary" disabled={!ready||Boolean(busy)} type="button" onClick={()=>void perform("preview")}>{busy==="preview"?"Previewing…":"Preview letter"}</button><button className="button button--primary" disabled={!ready||Boolean(busy)||!fresh} type="submit">{busy==="generate"?"Generating…":"Generate letter"}</button><span className="field-help-text">{fresh?"Current draft previewed. Generation resolves server variables again.":"Preview the current draft before generating."}</span></div>
       </form>
-
-      <aside className="workspace-standard-panel overview-split__secondary document-record-card document-letter-preview">
-        <div className="workspace-standard-panel__header">
-          <div>
-            <h2>Preview</h2>
-            <p className="section-copy section-copy-soft">Rendered text before storage.</p>
-          </div>
-        </div>
-        {preview ? (
-          <>
-            <div className="detail-grid">
-              <div className="detail-row"><span className="detail-label">Variables</span><span className="detail-value">{preview.used_variables.length || "Ready"}</span></div>
-              <div className="detail-row"><span className="detail-label">Missing</span><span className="detail-value">{preview.missing_variables.length}</span></div>
-            </div>
-            {preview.missing_variables.length ? (
-              <div className="notice">
-                <strong>Missing variables.</strong>
-                <span className="muted">{preview.missing_variables.join(", ")}</span>
-              </div>
-            ) : (
-              <div className="notice">
-                <strong>Preview ready.</strong>
-                <span className="muted">No missing variables were reported for this draft.</span>
-              </div>
-            )}
-            <pre className="notice" style={{ whiteSpace: "pre-wrap" }}>{preview.rendered_text}</pre>
-          </>
-        ) : (
-          <div className="notice"><strong>No preview yet.</strong><span className="muted">Preview or generate a letter to inspect the rendered text.</span></div>
-        )}
-      </aside>
-
-      <section className="workspace-standard-panel document-record-card document-letter-artifacts">
-        <div className="workspace-standard-panel__header">
-          <div>
-            <h2>Generated artifacts</h2>
-            <p className="section-copy section-copy-soft">Stored letters attached to employee records.</p>
-          </div>
-          <div className="workspace-standard-panel__meta">
-            <span className="queue-summary-chip"><strong>{initialLetters.length}</strong> visible</span>
-          </div>
-        </div>
-        <WorkspaceDataTable ariaLabel="Generated HR letters" className="document-control-table generated-letter-table">
-          <thead>
-            <tr>
-              <th>Letter</th>
-              <th>Employee</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Issue date</th>
-              <th>Workflow</th>
-              <th>File</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {initialLetters.map((item) => (
-              <tr key={item.id}>
-                <td><strong>{item.title}</strong><span>{item.template_code || "Manual template"}</span></td>
-                <td><strong>{item.employee_name}</strong><span>{item.employee_code}</span></td>
-                <td><WorkspaceStatusBadge tone="info">{humanizeStatus(item.letter_type)}</WorkspaceStatusBadge></td>
-                <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{humanizeStatus(item.status)}</WorkspaceStatusBadge></td>
-                <td><strong>{item.issue_date || "Not set"}</strong><span>Updated {item.updated_at || "NA"}</span></td>
-                <td><strong>{item.workflow_reference || "Not linked"}</strong></td>
-                <td><strong>{item.file_name || "Pending"}</strong><span>{item.artifact_id ? "Stored artifact" : "No artifact"}</span></td>
-                <td>{item.artifact_id ? <a className="button button--ghost" href={`/api/hr-admin/generated-letters/${item.id}/download`}>Download</a> : <span className="muted">Unavailable</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </WorkspaceDataTable>
-          {initialLetters.length === 0 ? (
-            <div className="empty-state">
-              <strong>No generated letters found.</strong>
-              <span className="muted">Use the generator to create the first stored employee artifact.</span>
-            </div>
-          ) : null}
-      </section>
+      <aside ref={previewRef} tabIndex={-1} className="workspace-standard-panel document-letter-preview" aria-label="Letter preview"><h2>Preview</h2>{preview?<><p role="status">{fresh?"Preview matches this draft.":"Draft changed. Preview again before generating."}</p><p>{preview.used_variables.length} variables · {preview.missing_variables.length} missing</p><pre>{preview.rendered_text}</pre></>:<p>No preview yet. Select an employee and complete the draft.</p>}</aside>
+    </div>
+    {generated?<div ref={receiptRef} tabIndex={-1} className="notice notice--success letter-receipt" role="status"><strong>Letter stored.</strong><span>{generated.title} · {generated.file_name}</span>{preview && generated.rendered_text!==preview.rendered_text?<span>Server context changed since preview. Inspect the stored file before sharing.</span>:null}<AsyncDownloadButton href={`/api/hr-admin/generated-letters/${generated.id}/download`} fileName={generated.file_name}>Download generated letter</AsyncDownloadButton></div>:null}
+    <section className="workspace-standard-panel letter-register"><h2>Generated letters</h2><p>{matched.length} matching of {letters.length} loaded letters. Collection limit: 10,000; reads are not a transactional snapshot.</p><label className="form-field">Search generated letters<input className="input-control" disabled={!ready||Boolean(busy)} value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}} /></label>
+      <WorkspaceDataTable ariaLabel="Generated HR letters" scrollLabel="Generated letter records" className="generated-letter-table"><thead><tr><th>Letter</th><th>Employee</th><th>Type / status</th><th>Issue date</th><th>File</th><th>Action</th></tr></thead><tbody>{visible.map(item=><tr key={item.id}><td>{item.title}<br/>{item.workflow_reference||"No workflow reference"}</td><td>{item.employee_name}<br/>{item.employee_code}</td><td>{item.letter_type} · {item.status}</td><td>{item.issue_date||"Not set"}</td><td>{item.file_name||"No stored file"}</td><td>{item.artifact_id?<AsyncDownloadButton href={`/api/hr-admin/generated-letters/${item.id}/download`} fileName={item.file_name}>Download</AsyncDownloadButton>:"Unavailable"}</td></tr>)}</tbody></WorkspaceDataTable>
+      {!matched.length?<p>No generated letters match this view.</p>:null}<div className="pagination-bar"><button type="button" className="button button--secondary" disabled={currentPage===1} onClick={()=>setPage(currentPage-1)}>Previous</button><span>Page {currentPage} of {Math.max(1,Math.ceil(matched.length/10))}</span><button type="button" className="button button--secondary" disabled={currentPage*10>=matched.length} onClick={()=>setPage(currentPage+1)}>Next</button></div>
     </section>
-  );
+  </section>;
 }

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmployeeForm } from "@/app/hr-admin/employees/employee-form";
@@ -31,13 +30,11 @@ export default async function HrAdminEditEmployeePage({ params }: PageProps) {
   const state = detailResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell hr-admin-compact-ui hr-employee-form-page">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui hr-employee-form-page accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live edit mode" : "Demo edit mode"}
         title={`Edit employee: ${detailResult.data.full_name}`}
         description="Update profile, employment status, and structural mappings in one guided flow."
-        actions={<Link className="button button--secondary" href={`/hr-admin/employees?employeeId=${detailResult.data.id}`}>Back to employee detail</Link>}
-        pills={["Profile", "Structure", "Readiness"]}
       />
 
       <EmployeeForm

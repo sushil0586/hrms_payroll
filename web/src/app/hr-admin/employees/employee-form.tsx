@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useValidationFocus } from "@/lib/ui/use-validation-focus";
+import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
 
 import { FormSection } from "@/components/patterns/form-section";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
@@ -9,13 +11,16 @@ import { WorkspaceFormFooter } from "@/components/patterns/workspace-standard";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeWriteInput, HrAdminOptionItem } from "@/lib/types";
 import { hasFieldErrors, requireText, validateDateOrder, validateEmail } from "@/lib/ui/validation";
 
-type EmployeeFormProps = {
+export type EmployeeFormProps = {
   initialValue: HrAdminEmployeeWriteInput;
   mode: "create" | "edit";
   options: HrAdminEmployeeFormOptions;
   employeeId?: string;
   cancelHref?: string;
+  onSubmittingChange?: (busy: boolean) => void;
 };
+
+const subscribeToHydration = () => () => {};
 
 type FieldErrors = Partial<Record<keyof HrAdminEmployeeWriteInput, string>>;
 type EmployeeFormStep = "identity" | "contact" | "structure" | "review";
@@ -49,7 +54,7 @@ function normalizePayload(value: HrAdminEmployeeWriteInput) {
   );
 }
 
-function extractErrors(payload: unknown): { message: string; fieldErrors: FieldErrors } {
+function extractErrors(payload: unknown, values: HrAdminEmployeeWriteInput): { message: string; fieldErrors: FieldErrors } {
   if (!payload || typeof payload !== "object") {
     return { message: "Unable to save employee master.", fieldErrors: {} };
   }
@@ -58,6 +63,7 @@ function extractErrors(payload: unknown): { message: string; fieldErrors: FieldE
   const fieldErrors: FieldErrors = {};
 
   Object.entries(record).forEach(([key, value]) => {
+    if (!(key in values)) return;
     if (Array.isArray(value) && value.length) {
       fieldErrors[key as keyof HrAdminEmployeeWriteInput] = String(value[0]);
     } else if (typeof value === "string" && key !== "detail") {
@@ -68,6 +74,10 @@ function extractErrors(payload: unknown): { message: string; fieldErrors: FieldE
   const firstFieldError = Object.values(fieldErrors)[0];
   if (firstFieldError) {
     return { message: firstFieldError, fieldErrors };
+  }
+
+  if (Array.isArray(record.non_field_errors) && record.non_field_errors.length) {
+    return { message: String(record.non_field_errors[0]), fieldErrors };
   }
 
   if ("detail" in record) {
@@ -94,8 +104,8 @@ function FieldHint({ children, tone = "default" }: { children: string; tone?: "d
   return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
 }
 
-function FieldError({ message }: { message?: string }) {
-  return message ? <span className="field-error-text" role="alert">{message}</span> : null;
+function FieldError({ message, field }: { message?: string; field: string }) {
+  return message ? <span id={`employee-error-${field}`} className="field-error-text">{message}</span> : null;
 }
 
 function ReviewRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -115,10 +125,11 @@ function findOptionName(items: HrAdminOptionItem[], id: string | null | undefine
 }
 
 function stepForErrors(errors: FieldErrors): EmployeeFormStep {
-  if (errors.employee_code || errors.first_name || errors.employment_status) {
+  if (errors.employee_code || errors.first_name || errors.middle_name || errors.last_name || errors.preferred_name || errors.employment_status) {
     return "identity";
   }
   if (
+    errors.phone_number ||
     errors.work_email ||
     errors.personal_email ||
     errors.date_of_birth ||
@@ -228,14 +239,52 @@ function sanitizeStructureValue(
   return nextValue;
 }
 
-export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHref }: EmployeeFormProps) {
-  const router = useRouter();
+export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHref, onSubmittingChange }: EmployeeFormProps) {
+  const ready = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const [formValue, setFormValue] = useState(initialValue);
   const [activeStep, setActiveStep] = useState<EmployeeFormStep>("identity");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const formRef = useValidationFocus(fieldErrors);
+  const feedbackRef = useFeedbackFocus(error, isSubmitting, hasFieldErrors(fieldErrors));
+  const stepBodyRef = useRef<HTMLDivElement>(null);
+  const focusStepRef = useRef(false);
+  const savedRef = useRef(false);
+  const dirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
+
+  useEffect(() => { onSubmittingChange?.(isSubmitting); }, [isSubmitting, onSubmittingChange]);
+  useEffect(() => {
+    if (!focusStepRef.current) return;
+    focusStepRef.current = false;
+    stepBodyRef.current?.querySelector<HTMLElement>("h2")?.focus();
+  }, [activeStep]);
+  useEffect(() => {
+    if (cancelHref) return;
+    function beforeUnload(event: BeforeUnloadEvent) {
+      if (!savedRef.current && (dirty || isSubmittingRef.current)) { event.preventDefault(); event.returnValue = ""; }
+    }
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [cancelHref, dirty]);
+
+  function selectStep(step: EmployeeFormStep) {
+    if (isSubmittingRef.current || step === activeStep) return;
+    focusStepRef.current = true;
+    setActiveStep(step);
+  }
+
+  function cancel() {
+    if (isSubmittingRef.current) return;
+    if (cancelHref) {
+      window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"));
+    } else if (!dirty || window.confirm("Discard unsaved changes?")) {
+      savedRef.current = true;
+      window.location.assign(employeeId ? `/hr-admin/employees?employeeId=${encodeURIComponent(employeeId)}` : "/hr-admin/employees");
+    }
+  }
+
 
   const selectedBranch = options.branches.find((branch) => branch.id === formValue.branch_id);
   const selectedDepartment = options.departments.find((department) => department.id === formValue.department_id);
@@ -325,22 +374,18 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
   }
 
   function goToPreviousStep() {
-    setActiveStep((current) => {
-      const currentIndex = employeeFormSteps.findIndex((step) => step.id === current);
-      return employeeFormSteps[Math.max(0, currentIndex - 1)].id;
-    });
+    const index = employeeFormSteps.findIndex((step) => step.id === activeStep);
+    selectStep(employeeFormSteps[Math.max(0, index - 1)].id);
   }
 
   function goToNextStep() {
-    setActiveStep((current) => {
-      const currentIndex = employeeFormSteps.findIndex((step) => step.id === current);
-      return employeeFormSteps[Math.min(employeeFormSteps.length - 1, currentIndex + 1)].id;
-    });
+    const index = employeeFormSteps.findIndex((step) => step.id === activeStep);
+    selectStep(employeeFormSteps[Math.min(employeeFormSteps.length - 1, index + 1)].id);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmittingRef.current) {
+    if (!ready || isSubmittingRef.current) {
       return;
     }
     isSubmittingRef.current = true;
@@ -379,7 +424,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
         body: JSON.stringify(normalizePayload(formValue)),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      setError(networkMutationMessage);
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -387,25 +432,32 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const nextErrors = extractErrors(payload);
-      setError(nextErrors.message);
+      const nextErrors = extractErrors(payload, formValue);
+      setError(mutationErrorMessage(payload, response.status, nextErrors.message));
       setFieldErrors(nextErrors.fieldErrors);
-      setActiveStep(stepForErrors(nextErrors.fieldErrors));
+      if (hasFieldErrors(nextErrors.fieldErrors)) setActiveStep(stepForErrors(nextErrors.fieldErrors));
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
 
     const redirectId = payload.id || employeeId;
-    window.location.assign(new URL(`/hr-admin/employees${redirectId ? `?employeeId=${redirectId}` : ""}`, window.location.origin));
+    const destination = new URL(cancelHref || "/hr-admin/employees", window.location.origin);
+    destination.searchParams.delete("create");
+    destination.searchParams.delete("action");
+    if (redirectId) destination.searchParams.set("employeeId", redirectId);
+    destination.searchParams.set("saved", mode);
+    // Successful navigation must not prompt to discard the values just saved.
+    savedRef.current = true;
+    window.location.assign(destination);
   }
 
   return (
-    <form className="section form-layout-modern employee-child-form" noValidate onSubmit={handleSubmit}>
+    <form ref={formRef} aria-busy={isSubmitting} className="section form-layout-modern employee-child-form employee-master-form" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
-            <h2>{mode === "create" ? "Create employee master" : "Edit employee master"}</h2>
+            <h2>Employee details</h2>
             <p className="section-copy">
               Work through identity, contact dates, and structural mapping before saving.
             </p>
@@ -420,22 +472,31 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
           </div>
         </div>
 
-        <div className="employee-form-stepper" aria-label="Employee form progress">
+        <nav className="employee-form-stepper" aria-label="Employee form progress">
           {employeeFormSteps.map((step, index) => (
             <button
               aria-current={activeStep === step.id ? "step" : undefined}
               className="employee-form-stepper__item"
               key={step.id}
-              onClick={() => setActiveStep(step.id)}
+              disabled={!ready || isSubmitting}
+              onClick={() => selectStep(step.id)}
               type="button"
             >
               <span>{index + 1}.</span>
               {step.label}
             </button>
           ))}
-        </div>
+        </nav>
 
-        <div className="form-shell-card__grid employee-form-step-body">
+        <p className="employee-form-required-note">Required: employee code and first name.</p>
+        <fieldset disabled={!ready || isSubmitting} className="employee-master-form__fields">
+        <div
+          ref={(element) => {
+            stepBodyRef.current = element;
+            element?.querySelectorAll("h2").forEach((heading) => { heading.tabIndex = -1; });
+          }}
+          className="form-shell-card__grid employee-form-step-body"
+        >
           {dateWarnings.length ? (
             <div className="notice notice--error form-shell-card__notice" role="alert">
               <strong>Date review needed.</strong>
@@ -453,36 +514,39 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Employee code</span>
-                <input aria-invalid={Boolean(fieldErrors.employee_code)} className="input-control" required value={formValue.employee_code} onChange={(event) => updateField("employee_code", event.target.value)} />
-                <FieldError message={fieldErrors.employee_code} />
+                <input name="employee_code" aria-invalid={Boolean(fieldErrors.employee_code)} aria-describedby={fieldErrors.employee_code ? "employee-error-employee_code" : undefined} className="input-control" required value={formValue.employee_code} onChange={(event) => updateField("employee_code", event.target.value)} />
+                <FieldError field="employee_code" message={fieldErrors.employee_code} />
               </label>
               <label className="form-field">
                 <span className="muted">Employment status</span>
-                <select className="input-control" value={formValue.employment_status} onChange={(event) => updateField("employment_status", event.target.value)}>
+                <select name="employment_status" aria-invalid={Boolean(fieldErrors.employment_status)} aria-describedby={fieldErrors.employment_status ? "employee-error-employment_status" : undefined} className="input-control" value={formValue.employment_status} onChange={(event) => updateField("employment_status", event.target.value)}>
                   {options.employment_statuses.map((option) => (
                     <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
                 </select>
-                <FieldError message={fieldErrors.employment_status} />
+                <FieldError field="employment_status" message={fieldErrors.employment_status} />
               </label>
               <label className="form-field">
                 <span className="muted">First name</span>
-                <input aria-invalid={Boolean(fieldErrors.first_name)} className="input-control" required value={formValue.first_name} onChange={(event) => updateField("first_name", event.target.value)} />
-                <FieldError message={fieldErrors.first_name} />
+                <input name="first_name" aria-invalid={Boolean(fieldErrors.first_name)} aria-describedby={fieldErrors.first_name ? "employee-error-first_name" : undefined} className="input-control" required value={formValue.first_name} onChange={(event) => updateField("first_name", event.target.value)} />
+                <FieldError field="first_name" message={fieldErrors.first_name} />
               </label>
               <label className="form-field">
                 <span className="muted">Middle name</span>
-                <input className="input-control" value={formValue.middle_name} onChange={(event) => updateField("middle_name", event.target.value)} />
+                <input name="middle_name" aria-invalid={Boolean(fieldErrors.middle_name)} aria-describedby={fieldErrors.middle_name ? "employee-error-middle_name" : undefined} className="input-control" value={formValue.middle_name} onChange={(event) => updateField("middle_name", event.target.value)} />
+                <FieldError field="middle_name" message={fieldErrors.middle_name} />
               </label>
               <label className="form-field">
                 <span className="muted">Last name</span>
-                <input className="input-control" value={formValue.last_name} onChange={(event) => updateField("last_name", event.target.value)} />
+                <input name="last_name" aria-invalid={Boolean(fieldErrors.last_name)} aria-describedby={fieldErrors.last_name ? "employee-error-last_name" : undefined} className="input-control" value={formValue.last_name} onChange={(event) => updateField("last_name", event.target.value)} />
+                <FieldError field="last_name" message={fieldErrors.last_name} />
               </label>
               <label className="form-field">
                 <span className="muted">Preferred name</span>
-                <input className="input-control" value={formValue.preferred_name} onChange={(event) => updateField("preferred_name", event.target.value)} />
+                <input name="preferred_name" aria-invalid={Boolean(fieldErrors.preferred_name)} aria-describedby={fieldErrors.preferred_name ? "employee-error-preferred_name" : undefined} className="input-control" value={formValue.preferred_name} onChange={(event) => updateField("preferred_name", event.target.value)} />
+                <FieldError field="preferred_name" message={fieldErrors.preferred_name} />
               </label>
             </div>
           </FormSection>
@@ -493,37 +557,38 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Work email</span>
-                <input aria-invalid={Boolean(fieldErrors.work_email)} className="input-control" type="email" value={formValue.work_email} onChange={(event) => updateField("work_email", event.target.value)} />
-                <FieldError message={fieldErrors.work_email} />
+                <input name="work_email" aria-invalid={Boolean(fieldErrors.work_email)} aria-describedby={fieldErrors.work_email ? "employee-error-work_email" : undefined} className="input-control" type="email" value={formValue.work_email} onChange={(event) => updateField("work_email", event.target.value)} />
+                <FieldError field="work_email" message={fieldErrors.work_email} />
               </label>
               <label className="form-field">
                 <span className="muted">Personal email</span>
-                <input aria-invalid={Boolean(fieldErrors.personal_email)} className="input-control" type="email" value={formValue.personal_email} onChange={(event) => updateField("personal_email", event.target.value)} />
-                <FieldError message={fieldErrors.personal_email} />
+                <input name="personal_email" aria-invalid={Boolean(fieldErrors.personal_email)} aria-describedby={fieldErrors.personal_email ? "employee-error-personal_email" : undefined} className="input-control" type="email" value={formValue.personal_email} onChange={(event) => updateField("personal_email", event.target.value)} />
+                <FieldError field="personal_email" message={fieldErrors.personal_email} />
               </label>
               <label className="form-field">
                 <span className="muted">Phone number</span>
-                <input className="input-control" value={formValue.phone_number} onChange={(event) => updateField("phone_number", event.target.value)} />
+                <input name="phone_number" aria-invalid={Boolean(fieldErrors.phone_number)} aria-describedby={fieldErrors.phone_number ? "employee-error-phone_number" : undefined} className="input-control" value={formValue.phone_number} onChange={(event) => updateField("phone_number", event.target.value)} />
+                <FieldError field="phone_number" message={fieldErrors.phone_number} />
               </label>
               <label className="form-field">
                 <span className="muted">Date of birth</span>
-                <input aria-invalid={Boolean(fieldErrors.date_of_birth)} className="input-control" type="date" value={formValue.date_of_birth ?? ""} onChange={(event) => updateField("date_of_birth", event.target.value || null)} />
-                <FieldError message={fieldErrors.date_of_birth} />
+                <input name="date_of_birth" aria-invalid={Boolean(fieldErrors.date_of_birth)} aria-describedby={fieldErrors.date_of_birth ? "employee-error-date_of_birth" : undefined} className="input-control" type="date" value={formValue.date_of_birth ?? ""} onChange={(event) => updateField("date_of_birth", event.target.value || null)} />
+                <FieldError field="date_of_birth" message={fieldErrors.date_of_birth} />
               </label>
               <label className="form-field">
                 <span className="muted">Date of joining</span>
-                <input className="input-control" type="date" value={formValue.date_of_joining ?? ""} onChange={(event) => updateField("date_of_joining", event.target.value || null)} />
-                <FieldError message={fieldErrors.date_of_joining} />
+                <input name="date_of_joining" aria-invalid={Boolean(fieldErrors.date_of_joining)} aria-describedby={fieldErrors.date_of_joining ? "employee-error-date_of_joining" : undefined} className="input-control" type="date" value={formValue.date_of_joining ?? ""} onChange={(event) => updateField("date_of_joining", event.target.value || null)} />
+                <FieldError field="date_of_joining" message={fieldErrors.date_of_joining} />
               </label>
               <label className="form-field">
                 <span className="muted">Probation end date</span>
-                <input aria-invalid={Boolean(fieldErrors.probation_end_date)} className="input-control" type="date" value={formValue.probation_end_date ?? ""} onChange={(event) => updateField("probation_end_date", event.target.value || null)} />
-                <FieldError message={fieldErrors.probation_end_date} />
+                <input name="probation_end_date" aria-invalid={Boolean(fieldErrors.probation_end_date)} aria-describedby={fieldErrors.probation_end_date ? "employee-error-probation_end_date" : undefined} className="input-control" type="date" value={formValue.probation_end_date ?? ""} onChange={(event) => updateField("probation_end_date", event.target.value || null)} />
+                <FieldError field="probation_end_date" message={fieldErrors.probation_end_date} />
               </label>
               <label className="form-field form-field--full">
                 <span className="muted">Confirmation date</span>
-                <input aria-invalid={Boolean(fieldErrors.confirmation_date)} className="input-control" type="date" value={formValue.confirmation_date ?? ""} onChange={(event) => updateField("confirmation_date", event.target.value || null)} />
-                <FieldError message={fieldErrors.confirmation_date} />
+                <input name="confirmation_date" aria-invalid={Boolean(fieldErrors.confirmation_date)} aria-describedby={fieldErrors.confirmation_date ? "employee-error-confirmation_date" : undefined} className="input-control" type="date" value={formValue.confirmation_date ?? ""} onChange={(event) => updateField("confirmation_date", event.target.value || null)} />
+                <FieldError field="confirmation_date" message={fieldErrors.confirmation_date} />
               </label>
             </div>
           </FormSection>
@@ -538,15 +603,15 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Legal entity</span>
-                <select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(event) => updateField("legal_entity_id", event.target.value || null)}>
+                <select name="legal_entity_id" aria-invalid={Boolean(fieldErrors.legal_entity_id)} aria-describedby={fieldErrors.legal_entity_id ? "employee-error-legal_entity_id" : undefined} className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(event) => updateField("legal_entity_id", event.target.value || null)}>
                   {selectOptions(options.legal_entities)}
                 </select>
                 <FieldHint>Filters branch and cost center.</FieldHint>
-                <FieldError message={fieldErrors.legal_entity_id} />
+                <FieldError field="legal_entity_id" message={fieldErrors.legal_entity_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Branch</span>
-                <select
+                <select name="branch_id" aria-invalid={Boolean(fieldErrors.branch_id)} aria-describedby={fieldErrors.branch_id ? "employee-error-branch_id" : undefined}
                   className="input-control"
                   disabled={Boolean(branchWarning)}
                   value={formValue.branch_id ?? ""}
@@ -557,31 +622,31 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
                 <FieldHint tone={branchWarning ? "warning" : "default"}>
                   {branchWarning ?? "Can set location automatically."}
                 </FieldHint>
-                <FieldError message={fieldErrors.branch_id} />
+                <FieldError field="branch_id" message={fieldErrors.branch_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Location</span>
-                <select className="input-control" value={formValue.location_id ?? ""} onChange={(event) => updateField("location_id", event.target.value || null)}>
+                <select name="location_id" aria-invalid={Boolean(fieldErrors.location_id)} aria-describedby={fieldErrors.location_id ? "employee-error-location_id" : undefined} className="input-control" value={formValue.location_id ?? ""} onChange={(event) => updateField("location_id", event.target.value || null)}>
                   {selectOptions(filteredLocations)}
                 </select>
                 <FieldHint tone={branchLocationWarning ? "warning" : "default"}>
                   {branchLocationWarning ?? "Filtered by branch when mapped."}
                 </FieldHint>
-                <FieldError message={fieldErrors.location_id} />
+                <FieldError field="location_id" message={fieldErrors.location_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Business unit</span>
-                <select className="input-control" value={formValue.business_unit_id ?? ""} onChange={(event) => updateField("business_unit_id", event.target.value || null)}>
+                <select name="business_unit_id" aria-invalid={Boolean(fieldErrors.business_unit_id)} aria-describedby={fieldErrors.business_unit_id ? "employee-error-business_unit_id" : undefined} className="input-control" value={formValue.business_unit_id ?? ""} onChange={(event) => updateField("business_unit_id", event.target.value || null)}>
                   {selectOptions(filteredBusinessUnits)}
                 </select>
                 <FieldHint tone={departmentBusinessUnitWarning ? "warning" : "default"}>
                   {departmentBusinessUnitWarning ?? "Can align from department."}
                 </FieldHint>
-                <FieldError message={fieldErrors.business_unit_id} />
+                <FieldError field="business_unit_id" message={fieldErrors.business_unit_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Department</span>
-                <select
+                <select name="department_id" aria-invalid={Boolean(fieldErrors.department_id)} aria-describedby={fieldErrors.department_id ? "employee-error-department_id" : undefined}
                   className="input-control"
                   disabled={Boolean(departmentWarning)}
                   value={formValue.department_id ?? ""}
@@ -592,11 +657,11 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
                 <FieldHint tone={departmentWarning ? "warning" : "default"}>
                   {departmentWarning ?? "Filtered by business unit."}
                 </FieldHint>
-                <FieldError message={fieldErrors.department_id} />
+                <FieldError field="department_id" message={fieldErrors.department_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Cost center</span>
-                <select
+                <select name="cost_center_id" aria-invalid={Boolean(fieldErrors.cost_center_id)} aria-describedby={fieldErrors.cost_center_id ? "employee-error-cost_center_id" : undefined}
                   className="input-control"
                   disabled={Boolean(costCenterWarning)}
                   value={formValue.cost_center_id ?? ""}
@@ -607,35 +672,36 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
                 <FieldHint tone={costCenterWarning ? "warning" : "default"}>
                   {costCenterWarning ?? "Filtered by legal entity."}
                 </FieldHint>
-                <FieldError message={fieldErrors.cost_center_id} />
+                <FieldError field="cost_center_id" message={fieldErrors.cost_center_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Designation</span>
-                <select className="input-control" value={formValue.designation_id ?? ""} onChange={(event) => updateField("designation_id", event.target.value || null)}>
+                <select name="designation_id" aria-invalid={Boolean(fieldErrors.designation_id)} aria-describedby={fieldErrors.designation_id ? "employee-error-designation_id" : undefined} className="input-control" value={formValue.designation_id ?? ""} onChange={(event) => updateField("designation_id", event.target.value || null)}>
                   {selectOptions(filteredDesignations)}
                 </select>
                 <FieldHint>Can align grade automatically.</FieldHint>
-                <FieldError message={fieldErrors.designation_id} />
+                <FieldError field="designation_id" message={fieldErrors.designation_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Grade</span>
-                <select className="input-control" value={formValue.grade_id ?? ""} onChange={(event) => updateField("grade_id", event.target.value || null)}>
+                <select name="grade_id" aria-invalid={Boolean(fieldErrors.grade_id)} aria-describedby={fieldErrors.grade_id ? "employee-error-grade_id" : undefined} className="input-control" value={formValue.grade_id ?? ""} onChange={(event) => updateField("grade_id", event.target.value || null)}>
                   {selectOptions(filteredGrades)}
                 </select>
                 <FieldHint tone={gradeWarning ? "warning" : "default"}>
                   {gradeWarning ?? "Filtered by designation."}
                 </FieldHint>
-                <FieldError message={fieldErrors.grade_id} />
+                <FieldError field="grade_id" message={fieldErrors.grade_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Employment type</span>
-                <select className="input-control" value={formValue.employment_type_id ?? ""} onChange={(event) => updateField("employment_type_id", event.target.value || null)}>
+                <select name="employment_type_id" aria-invalid={Boolean(fieldErrors.employment_type_id)} aria-describedby={fieldErrors.employment_type_id ? "employee-error-employment_type_id" : undefined} className="input-control" value={formValue.employment_type_id ?? ""} onChange={(event) => updateField("employment_type_id", event.target.value || null)}>
                   {selectOptions(options.employment_types)}
                 </select>
+                <FieldError field="employment_type_id" message={fieldErrors.employment_type_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Reporting manager</span>
-                <select className="input-control" value={formValue.reporting_manager_id ?? ""} onChange={(event) => updateField("reporting_manager_id", event.target.value || null)}>
+                <select name="reporting_manager_id" aria-invalid={Boolean(fieldErrors.reporting_manager_id)} aria-describedby={fieldErrors.reporting_manager_id ? "employee-error-reporting_manager_id" : undefined} className="input-control" value={formValue.reporting_manager_id ?? ""} onChange={(event) => updateField("reporting_manager_id", event.target.value || null)}>
                   <option value="">Select an option</option>
                   {options.managers.map((manager) => (
                     <option key={manager.id} value={manager.id}>
@@ -643,7 +709,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
                     </option>
                   ))}
                 </select>
-                <FieldError message={fieldErrors.reporting_manager_id} />
+                <FieldError field="reporting_manager_id" message={fieldErrors.reporting_manager_id} />
               </label>
             </div>
           </FormSection>
@@ -683,9 +749,11 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
           ) : null}
         </div>
 
+        </fieldset>
+
         {error ? (
-          <div className="notice notice--error" role="alert">
-            <strong>Save failed.</strong>
+          <div ref={feedbackRef} tabIndex={-1} className="notice notice--error" role="alert">
+            <strong>Save needs attention.</strong>
             <span className="muted">{error}</span>
           </div>
         ) : null}
@@ -697,7 +765,8 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
         >
           <button
             className="button button--secondary"
-            onClick={() => cancelHref ? window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close")) : router.back()}
+            disabled={!ready || isSubmitting}
+            onClick={cancel}
             type="button"
           >
             Cancel
@@ -705,6 +774,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
           {activeStep !== "identity" ? (
             <button
               className="button button--secondary"
+              disabled={!ready || isSubmitting}
               onClick={(event) => {
                 event.preventDefault();
                 goToPreviousStep();
@@ -717,6 +787,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
           {activeStep !== "review" ? (
             <button
               className="button button--primary"
+              disabled={!ready || isSubmitting}
               onClick={(event) => {
                 event.preventDefault();
                 goToNextStep();
@@ -728,7 +799,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
           ) : (
             <AsyncActionButton
               className="button button--primary"
-              disabled={isSubmitting}
+              disabled={!ready || isSubmitting}
               pending={isSubmitting}
               pendingLabel={mode === "create" ? "Creating employee" : "Saving changes"}
               type="submit"

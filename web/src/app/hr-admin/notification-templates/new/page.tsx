@@ -9,8 +9,8 @@ export default async function HrAdminNewNotificationTemplatePage() {
   const optionsResult = await getHrAdminNotificationOptions();
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={optionsResult.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Create notification template"
         description="Define reusable content for a notification channel using the same centralized, modern form language as the rest of the app."

@@ -347,7 +347,11 @@ export function PayrollRuleOperationsPanel({
   }
 
   return (
-    <section className="section section--tight salary-crud-console payroll-rule-operations-panel" aria-labelledby="payroll-rule-operations-title">
+    <section
+      aria-labelledby="payroll-rule-operations-title"
+      className="section section--tight salary-crud-console payroll-rule-operations-panel"
+      data-active-action={activeActionTab}
+    >
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
           <span className="workspace-card__eyebrow">Browser CRUD</span>

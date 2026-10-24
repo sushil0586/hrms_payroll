@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BankAccountManager } from "@/app/hr-admin/employees/[employeeId]/bank-accounts/bank-account-manager";
@@ -32,22 +31,12 @@ export default async function HrAdminEmployeeBankAccountsPage({ params }: PagePr
   const state = employeeResult.state === "live" && bankResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell">
-      <PageIntro
-        eyebrow={state === "live" ? "Live banking mode" : "Demo banking mode"}
+    <main className="shell hr-admin-compact-ui accerio-page employee-maintenance-phase4">
+      <PageIntro appearance="accerio"
+        eyebrow={`${state === "demo" ? "Demo · " : ""}${employeeResult.data.employee_code} · ${employeeResult.data.employment_status.replaceAll("_", " ")}`}
         title={`Bank accounts for ${employeeResult.data.full_name}`}
-        description="Maintain payout accounts used by payroll readiness and bank advice exports."
-        actions={<Link className="button button--secondary" href={`/hr-admin/employees?employeeId=${employeeId}`}>Back to employee detail</Link>}
-        pills={["Payout", "Primary", "Payroll ready"]}
+        description={`${employeeResult.data.employee_code} · Employee status: ${employeeResult.data.employment_status.replaceAll("_", " ")}. Maintain payout accounts used by payroll readiness and bank advice exports.`}
       />
-
-      <section className="section">
-        <div className="attendance-summary-strip payroll-run-summary-strip">
-          <span><strong>{accounts.length}</strong> Bank accounts</span>
-          <span><strong>{primaryCount}</strong> Primary accounts</span>
-          <span><strong>{employeeResult.data.employment_status.replace("_", " ")}</strong> Employee status</span>
-        </div>
-      </section>
 
       <BankAccountManager
         employeeId={employeeId}

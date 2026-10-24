@@ -6,7 +6,7 @@ type WorkspaceLoadingProps = {
 export function WorkspaceLoading({ label, embedded = false }: WorkspaceLoadingProps) {
   const Container = embedded ? "div" : "main";
   return (
-    <Container aria-busy="true" aria-label={label} className="shell app-loading-shell" role="status">
+    <Container aria-busy="true" aria-label={label} aria-live="polite" className="shell app-loading-shell" role={embedded ? "status" : undefined}>
       <span className="sr-only">{label}</span>
       <section aria-hidden="true" className="page-header-surface page-header-surface--compact loading-card">
         <div className="loading-line loading-line--eyebrow" />

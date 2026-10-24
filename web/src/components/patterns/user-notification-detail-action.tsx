@@ -1,7 +1,11 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 
 import { NotificationReadToggle } from "@/components/patterns/notification-read-toggle";
@@ -40,45 +44,22 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function useEscapeClose(isOpen: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-}
 
 export function UserNotificationDetailAction({ endpoint, item, sourceHref, variant = "secondary" }: Props) {
   const [isOpen, setIsOpen] = useState(false);
-  useEscapeClose(isOpen, () => setIsOpen(false));
+
 
   const title = item.title || item.event_definition_name || "Notification";
   const attempts = `${item.attempt_count}/${item.max_attempts}`;
   const modal = isOpen && typeof document !== "undefined"
     ? createPortal(
-        <div className="modal-shell" role="presentation">
-          <div aria-label={`Notification detail for ${title}`} aria-modal="true" className="modal user-notification-modal" role="dialog">
-            <div className="modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">Notification detail</span>
-                <h2>{title}</h2>
-                <p className="section-copy section-copy-soft">
+        <HrAdminActionModal closeHref="/mss/notifications" labelledBy="workspace-user-notification-detail-action" title={`Notification detail for ${title}`} onClose={() => setIsOpen(false)} busy={false} className="modal user-notification-modal">
+<p className="section-copy section-copy-soft">
                   {titleCase(item.channel)} / {titleCase(item.priority)} / {titleCase(item.status)}
                 </p>
-              </div>
-              <button className="button button--secondary" onClick={() => setIsOpen(false)} type="button">
-                Close
-              </button>
-            </div>
 
-            <div>
+
+<div>
               <div className="user-notification-modal-summary">
                 <article>
                   <span>Status</span>
@@ -153,15 +134,15 @@ export function UserNotificationDetailAction({ endpoint, item, sourceHref, varia
                 </section>
               </div>
             </div>
-          </div>
-        </div>,
+
+</HrAdminActionModal>,
         document.body,
       )
     : null;
 
   return (
     <>
-      <button className={`button button--${variant}`} onClick={() => setIsOpen(true)} type="button">
+      <button className={`button button--${variant}`} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setIsOpen(true); }} type="button">
         Review notification
       </button>
 

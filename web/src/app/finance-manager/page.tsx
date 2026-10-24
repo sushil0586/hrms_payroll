@@ -109,8 +109,8 @@ export default async function FinanceManagerLandingPage() {
   const latestHandoff = data.handoffs[0] ?? null;
 
   return (
-    <main className="shell shell--finance-manager">
-      <PageIntro
+    <main className="shell shell--finance-manager accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live finance" : "Demo finance"}
         title="Finance control center"
         description="Payroll close, payout handoff, statutory liability, provider delivery, and audit evidence for finance signoff."

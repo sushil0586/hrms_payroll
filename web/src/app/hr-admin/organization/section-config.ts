@@ -15,7 +15,7 @@ export const ORGANIZATION_SECTION_CONFIG = {
 export type OrganizationSectionKey = keyof typeof ORGANIZATION_SECTION_CONFIG;
 
 export function isOrganizationSectionKey(value: string): value is OrganizationSectionKey {
-  return value in ORGANIZATION_SECTION_CONFIG;
+  return Object.prototype.hasOwnProperty.call(ORGANIZATION_SECTION_CONFIG, value);
 }
 
 export function createEmptyOrganizationFormValue(section: OrganizationSectionKey): HrAdminOrganizationWriteInput {
@@ -57,4 +57,13 @@ export function organizationItemToFormValue(item: HrAdminOrganizationItem): HrAd
     description: item.description ?? "",
     is_payroll_eligible: item.is_payroll_eligible ?? true,
   };
+}
+
+/** Only return to this catalog and the editor's owning section. */
+export function organizationReturnHref(value: string | undefined, section: OrganizationSectionKey) {
+  const fallback = `/hr-admin/organization?section=${section}`;
+  if (!value) return fallback;
+  try { const url = new URL(value, "https://organization.invalid");
+    return url.origin === "https://organization.invalid" && url.pathname === "/hr-admin/organization" && url.searchParams.get("section") === section ? `${url.pathname}${url.search}` : fallback;
+  } catch { return fallback; }
 }

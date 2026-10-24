@@ -43,7 +43,7 @@ export default async function MssLayout({ children }: { children: React.ReactNod
         ...(canAccessHrAdmin ? [{ href: "/hr-admin", label: "HR Admin" }] : []),
       ]}
       roleLabel="Manager"
-      searchHint="Search approvals, team requests, and exceptions"
+      searchHint="Search pages and actions"
       userLabel={userLabel}
       workspaceLabel="Manager inbox"
       workspaceTone="manager"

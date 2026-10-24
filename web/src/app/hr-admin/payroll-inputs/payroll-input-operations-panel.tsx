@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
@@ -33,6 +33,11 @@ const operationTabs: Array<{ value: OperationTab; label: string; detail: string 
   { value: "snapshot", label: "Input snapshot", detail: "Employee source evidence" },
   { value: "lock", label: "Lock gate", detail: "Final input control" },
 ];
+
+function operationFromHash(hash: string): OperationTab {
+  const value = hash.replace(/^#payroll-input-operation-/, "");
+  return operationTabs.some((tab) => tab.value === value) ? value as OperationTab : "run";
+}
 
 const payrollSnapshotImportHeaders = ["employee_code", "monthly_gross", "present_days", "lop_days", "overtime_hours", "leave_days", "working_days"];
 
@@ -193,6 +198,18 @@ export function PayrollInputOperationsPanel({
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [activeOperation, setActiveOperation] = useState<OperationTab>("run");
   const [bulkCsv, setBulkCsv] = useState("");
+
+  useEffect(() => {
+    const syncOperation = () => setActiveOperation(operationFromHash(window.location.hash));
+    syncOperation();
+    window.addEventListener("hashchange", syncOperation);
+    return () => window.removeEventListener("hashchange", syncOperation);
+  }, []);
+
+  function selectOperation(operation: OperationTab) {
+    setActiveOperation(operation);
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#payroll-input-operation-${operation}`);
+  }
 
   const selectedPeriod = useMemo(() => setup.options.periods.find((item) => item.id === runForm.period_id), [runForm.period_id, setup.options.periods]);
   const compatiblePayGroups = useMemo(
@@ -399,7 +416,7 @@ export function PayrollInputOperationsPanel({
     }));
     setSnapshotForm(snapshotToForm(snapshot));
     setFeedback({ tone: "success", message: "Payroll input snapshot saved." });
-    setActiveOperation("lock");
+    selectOperation("lock");
     router.refresh();
   }
 
@@ -481,12 +498,16 @@ export function PayrollInputOperationsPanel({
       return;
     }
     setFeedback({ tone: payload.failed_count ? "error" : "success", message: `${payload.created_count ?? 0} payroll input snapshots imported; ${payload.failed_count ?? 0} blocked.` });
-    setActiveOperation("lock");
+    selectOperation("lock");
     router.refresh();
   }
 
   return (
-    <section className="section section--tight salary-crud-console payroll-input-operations-panel" aria-labelledby="payroll-input-operations-title">
+    <section
+      aria-labelledby="payroll-input-operations-title"
+      className="section section--tight salary-crud-console payroll-input-operations-panel"
+      data-active-operation={activeOperation}
+    >
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
           <span className="workspace-card__eyebrow">Browser operations</span>
@@ -503,7 +524,7 @@ export function PayrollInputOperationsPanel({
             className={`payroll-input-operation-tab ${activeOperation === tab.value ? "payroll-input-operation-tab--active" : ""}`}
             key={tab.value}
             type="button"
-            onClick={() => setActiveOperation(tab.value)}
+            onClick={() => selectOperation(tab.value)}
           >
             <span>{index + 1}</span>
             <strong>{tab.label}</strong>
@@ -639,7 +660,7 @@ export function PayrollInputOperationsPanel({
           {!canManageInputs ? <span className="muted">{manageDisabledReason}</span> : null}
         </form>
 
-        <div className="salary-crud-form" aria-label="Payroll input bulk import" data-testid="payroll-input-bulk-import">
+        <div className="salary-crud-form" aria-label="Payroll input bulk import" data-operation-panel="snapshot" data-testid="payroll-input-bulk-import">
           <div className="salary-crud-form__header">
             <div><span className="workspace-card__eyebrow">Bulk import</span><h3>Payroll snapshots</h3></div>
           </div>

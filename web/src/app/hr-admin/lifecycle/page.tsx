@@ -1,8 +1,10 @@
-import Link from "next/link";
+import {LifecycleQueueFocus} from "./lifecycle-queue-focus";
+
 import { LifecycleQueue } from "@/app/hr-admin/lifecycle/lifecycle-queue";
 import { ActionMenu } from "@/components/patterns/action-menu";
-import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminExits, getHrAdminLifecycleOptions, getHrAdminLifecycleQueue, getHrAdminMovements, getHrAdminOnboardings, getHrAdminProbationReview, getHrAdminProbationReviews } from "@/lib/api";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { LifecycleUnavailable } from "./lifecycle-unavailable";
+import { getHrAdminOnboarding, getHrAdminWorkflowTemplates, getHrAdminExits, getHrAdminLifecycleOptions, getHrAdminLifecycleQueue, getHrAdminMovements, getHrAdminOnboardings, getHrAdminProbationReview, getHrAdminProbationReviews } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -15,8 +17,10 @@ function normalizeParam(value: SearchParamValue) {
 
 export default async function HrAdminLifecyclePage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
-  const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
+  const requestedPage=Number(normalizeParam(currentParams.page)??"1");
+  const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?requestedPage:1;
+  const requestedSize=Number(normalizeParam(currentParams.page_size)??"25");
+  const pageSize=[10,25,50,100].includes(requestedSize)?requestedSize:25;
   const q = normalizeParam(currentParams.q) ?? "";
   const itemType = normalizeParam(currentParams.item_type) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
@@ -38,24 +42,33 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
       owner: owner || undefined,
       primary_date_from: primaryDateFrom || undefined,
       primary_date_to: primaryDateTo || undefined,
-    }),
-    getHrAdminLifecycleOptions(),
-    getHrAdminOnboardings({ page: 1, page_size: 1 }),
-    getHrAdminProbationReviews({ page: 1, page_size: 1, decision: "pending" }),
-    getHrAdminMovements({ page: 1, page_size: 1 }),
-    getHrAdminExits({ page: 1, page_size: 1 }),
+    }).catch(()=>null),
+    getHrAdminLifecycleOptions().catch(()=>null),
+    getHrAdminOnboardings({ page: 1, page_size: 1 }).catch(()=>null),
+    getHrAdminProbationReviews({ page: 1, page_size: 1, decision: "pending" }).catch(()=>null),
+    getHrAdminMovements({ page: 1, page_size: 1 }).catch(()=>null),
+    getHrAdminExits({ page: 1, page_size: 1 }).catch(()=>null),
   ]);
-  const editProbationResult = editRecordType === "probation" && editRecordId ? await getHrAdminProbationReview(editRecordId) : null;
+  const recordKey=normalizeParam(currentParams.record)??"";
+  const [recordResult,editRecordResult,editProbationResult,editOnboardingResult,templatesResult]=await Promise.all([
+    recordKey?getHrAdminLifecycleQueue({record:recordKey,page:1,page_size:1}).catch(()=>null):null,
+    editRecord?getHrAdminLifecycleQueue({record:editRecord,page:1,page_size:1}).catch(()=>null):null,
+    editRecordType==="probation"&&editRecordId?getHrAdminProbationReview(editRecordId).catch(()=>null):null,
+    editRecordType==="onboarding"&&editRecordId?getHrAdminOnboarding(editRecordId).catch(()=>null):null,
+    editRecordType==="onboarding"?getHrAdminWorkflowTemplates().catch(()=>null):null,
+  ]);
+
   const state =
-    queueResult.state === "live" &&
-    optionsResult.state === "live" &&
-    onboardingsResult.state === "live" &&
-    probationResult.state === "live" &&
-    movementsResult.state === "live" &&
-    exitsResult.state === "live"
+    queueResult?.state === "live" &&
+    optionsResult?.state === "live" &&
+    onboardingsResult?.state === "live" &&
+    probationResult?.state === "live" &&
+    movementsResult?.state === "live" &&
+    exitsResult?.state === "live"
       ? "live"
       : "demo";
 
+  if(!queueResult||!optionsResult||!onboardingsResult||!probationResult||!movementsResult||!exitsResult||state!=="live")return <LifecycleUnavailable/>;
   const statusOptionsByType = {
     onboarding: optionsResult.data.onboarding_statuses,
     probation: optionsResult.data.probation_decisions,
@@ -65,17 +78,18 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
   const documentBlockedCount = queueResult.data.items.filter((item) => item.document_attention_state === "blocked").length;
   const documentUpcomingCount = queueResult.data.items.filter((item) => item.document_attention_state === "warning" || item.document_attention_state === "upcoming").length;
 
+  if(state!=="live")return <LifecycleUnavailable/>;
   return (
-    <main className="shell hr-lifecycle-workbench">
-      <PageIntro
-        eyebrow={state === "live" ? "Live lifecycle" : "Demo lifecycle"}
+    <main className="shell hr-lifecycle-workbench accerio-page lifecycle-phase3">
+      <LifecycleQueueFocus/>
+      <WorkspaceStandardHeader
         title="Lifecycle"
         description="Joiners, movers, reviews, and exits in one queue."
         actions={
           <>
-            <Link className="button button--secondary" href="/hr-admin">
+            <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin">
               Admin
-            </Link>
+            </a>
             <ActionMenu
               label="Queues"
               items={[
@@ -113,7 +127,11 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
         }}
         statusOptionsByType={statusOptionsByType}
         lifecycleOptions={optionsResult.data}
-        editProbationReview={editProbationResult?.data ?? null}
+        editProbationReview={editProbationResult?.state==="live"&&editProbationResult.data.id===editRecordId?editProbationResult.data:null}
+        editOnboarding={editOnboardingResult?.state==="live"&&editOnboardingResult.data.id===editRecordId&&templatesResult?.state==="live"?editOnboardingResult.data:null}
+        workflowTemplates={templatesResult?.state==="live"?templatesResult.data:[]}
+        recordItem={recordResult?.state==="live"?recordResult.data.items.find(item=>`${item.item_type}:${item.id}`===recordKey)??null:null}
+        editRecordItem={editRecordResult?.state==="live"?editRecordResult.data.items.find(item=>`${item.item_type}:${item.id}`===editRecord)??null:null}
         summary={{
           documentBlockedCount,
           documentUpcomingCount,

@@ -599,7 +599,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
   }, [eligible.length, isRefreshing, refreshError]);
 
   return (
-    <main className="shell shell--workspace ess-experience-shell ess-compact ess-attendance">
+    <main className="shell shell--workspace ess-experience-shell ess-compact ess-attendance accerio-page">
       <WorkspaceStandardHeader title="Attendance" description="Review your recorded days and request an authorized correction." actions={<><button className="button button--primary" disabled={!eligible.length || isDemo || isRefreshing || Boolean(refreshError)} ref={correctionActionRef} onClick={(event) => requestCorrection(undefined, event.currentTarget)} type="button">Regularize attendance</button><a data-navigation-mode="document" className="button button--secondary" href="/ess">Overview</a></>} />
       <p className="sr-only" id="ess-attendance-table-scroll-help">When this table region is focused, use Left and Right arrow keys to scroll its columns.</p>
       {invalidMonth ? <p className="notice notice--error" role="alert">The requested month is invalid. Showing the current tenant month; choose a month below to continue.</p> : null}
@@ -607,7 +607,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
       {refreshError ? <div role="alert" className="notice notice--error"><p>{refreshError}</p><button className="button button--secondary" disabled={isRefreshing} onClick={() => void refreshRecords()} type="button">Retry refresh</button></div> : null}
       {submitted ? <p className="notice notice--success" role="status">Attendance regularization submitted. Track the approval in Regularizations below.</p> : null}
       {isDemo ? <p className="notice">Preview mode. Corrections are unavailable.</p> : null}
-      <div className="attendance-summary-strip" aria-label="Attendance period summary">
+      <div className="attendance-summary-strip" role="group" aria-label="Attendance period summary">
         <span><strong>{attendance.summary.recorded_days}</strong> recorded days</span>
         <span><strong>{attendance.summary.worked_hours}</strong> recorded hours</span>
         <span><strong>{attendance.summary.locked_days}</strong> finalized days</span>

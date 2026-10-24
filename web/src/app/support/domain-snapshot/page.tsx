@@ -63,8 +63,8 @@ function SupportDomainSnapshotDeniedPage({
   sessionRef: string;
 }) {
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Live support diagnostics"
         title="Support Domain Snapshot"
         description="Read-only tenant diagnostics for approved, time-boxed support sessions."
@@ -158,8 +158,8 @@ export default async function SupportDomainSnapshotPage({ searchParams }: PagePr
   ].find((item) => Object.keys(item).length) || {};
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live support diagnostics" : "Demo support diagnostics"}
         title="Support Domain Snapshot"
         description="Read-only tenant diagnostics for approved, time-boxed support sessions."

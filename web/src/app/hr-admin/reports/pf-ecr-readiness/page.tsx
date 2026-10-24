@@ -15,8 +15,8 @@ export default async function PfEcrReadinessReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance readiness" : "Demo compliance readiness"}
         title="PF ECR Readiness"
         description="Control-center view for provident fund ECR readiness, employer EPFO registration, UAN coverage, wage evidence, challan state, statutory artifacts, and provider filing gates."

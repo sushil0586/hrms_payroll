@@ -1,3 +1,5 @@
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { PageIntro } from "@/components/patterns/page-intro";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -132,28 +134,20 @@ export function UserNotificationCenter({
   const failedOnPage = data.items.filter((item) => item.status === "failed").length;
 
   return (
-    <main className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace}`}>
-      <header className="workspace-control-header">
-        <div className="workspace-control-header__copy">
-          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live notifications" : "Demo notifications"}</span>
-          <h1>{title ?? "Notifications"}</h1>
-          <p>{description ?? (workspace === "mss" ? "Manager alerts, approval nudges, and queue follow-up." : "Personal alerts, document prompts, and request updates.")}</p>
-          <div className="workspace-control-header__metrics">
-            <span>{data.total_count} in view</span>
-            <span>{unreadOnPage} unread on page</span>
-            <span>{workspacePill ?? (workspace === "mss" ? "Manager inbox" : "Employee inbox")}</span>
-          </div>
-        </div>
-        <div className="workspace-control-header__actions">
-          {actions}
-        </div>
-      </header>
+    <main className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace} accerio-page`}>
+      <PageIntro
+        appearance="accerio"
+        eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
+        title={title ?? "Notifications"}
+        description={description ?? (workspace === "mss" ? "Manager alerts, approval nudges, and queue follow-up." : "Personal alerts, document prompts, and request updates.")}
+        actions={actions}
+      />
 
-      <section className="workspace-section user-notification-summary" aria-label="Notification metrics">
+      <section className="workspace-section user-notification-summary" aria-label={workspacePill ?? "Notification metrics"}>
         <div className="attendance-summary-strip">
           <span><strong>{data.total_count}</strong> notifications</span>
           <span><strong>{unreadOnPage}</strong> unread on page</span>
-          <span><strong>{highPriorityOnPage}</strong> high priority</span>
+          <span><strong>{highPriorityOnPage}</strong> high priority on page</span>
           <span><strong>{failedOnPage}</strong> failed on page</span>
         </div>
       </section>
@@ -264,7 +258,7 @@ export function UserNotificationCenter({
                 Open {crossWorkspaceLabel}
               </Link>
             </div>
-            <div className="workspace-table-scroll user-notification-table-scroll">
+            <WorkspaceTableScrollRegion label="Notifications table" className="workspace-table-scroll user-notification-table-scroll workspace-table-region">
               {data.items.length ? (
                 <table className="workspace-table attendance-directory-table user-notification-table" aria-label="Notifications">
                   <thead>
@@ -309,7 +303,7 @@ export function UserNotificationCenter({
                   </Link>
                 </div>
               )}
-            </div>
+            </WorkspaceTableScrollRegion>
           </article>
         </div>
       </section>

@@ -14,8 +14,8 @@ export default async function HrAdminEditWorkflowTemplateAssignmentPage({ params
   const [itemResult, optionsResult] = await Promise.all([getHrAdminWorkflowTemplateAssignment(itemId), getHrAdminWorkflowOptions()]);
 
   return (
-    <main className="shell shell--workspace workflow-workbench">
-      <PageIntro
+    <main className="shell shell--workspace workflow-workbench accerio-page">
+      <PageIntro appearance="accerio"
         actions={<Link className="button button--secondary" href="/hr-admin/workflow-template-assignments">Back to workflow assignments</Link>}
         description="Update where this template applies so different teams and org scopes can use different approval chains."
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live workflow mode" : "Demo workflow mode"}

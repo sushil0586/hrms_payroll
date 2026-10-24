@@ -106,7 +106,7 @@ export default async function HrAdminLayout({ children }: { children: React.Reac
       "statutory.filing.view",
       "reports.catalog.view",
     ],
-    fallbackPath: "/",
+    fallbackPath: "/access-denied",
   });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;

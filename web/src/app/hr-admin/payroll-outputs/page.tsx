@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -13,9 +15,22 @@ type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
+type OutputTab = "overview" | "register" | "detail" | "actions";
+
+const OUTPUT_TABS: Array<{ id: OutputTab; label: string; helper: string }> = [
+  { id: "overview", label: "Overview", helper: "Totals and reconciliation" },
+  { id: "register", label: "Register", helper: "Generated output artifacts" },
+  { id: "detail", label: "Detail", helper: "Artifact and access evidence" },
+  { id: "actions", label: "Actions", helper: "Publish and create handoff" },
+];
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeOutputTab(value: SearchParamValue): OutputTab {
+  const candidate = normalizeParam(value);
+  return OUTPUT_TABS.some((tab) => tab.id === candidate) ? candidate as OutputTab : "overview";
 }
 
 function numberParam(value: SearchParamValue, fallback: number) {
@@ -338,6 +353,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
   const canPublishOutputs = !sessionUser || sessionHasPermission(sessionUser, "payroll.publish");
   const canGenerateHandoff = !sessionUser || sessionHasPermission(sessionUser, "finance.handoff.create");
   const currentParams = (await searchParams) ?? {};
+  const activeTab = normalizeOutputTab(currentParams.tab);
   const selectedBatchId = normalizeParam(currentParams.batchId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);
   const batchPageSize = Math.min(numberParam(currentParams.batchPageSize, 8), 25);
@@ -375,8 +391,8 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
   const handoffReadinessStatus = !selectedBatch ? "blocked" : canGenerateSelectedHandoff ? "ready" : selectedBatch.status;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-outputs hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-outputs hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 3B" : "Demo payroll phase 3B"}
         title="Payroll Outputs"
         description="Generate and publish payroll output artifacts from final-locked reviews while preserving source hashes and configurable template references."
@@ -439,6 +455,22 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
       </section>
 
       <section className="section section--tight">
+        <nav className="payroll-setup-tabs" aria-label="Payroll output sections">
+          {OUTPUT_TABS.map((tab) => (
+            <Link
+              aria-current={activeTab === tab.id ? "page" : undefined}
+              className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              href={buildHref("/hr-admin/payroll-outputs", currentParams, { tab: tab.id })}
+              key={tab.id}
+            >
+              <strong>{tab.label}</strong>
+              <span>{tab.helper}</span>
+            </Link>
+          ))}
+        </nav>
+      </section>
+
+      <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-output-workspace">
           <BatchRail
             allBatches={setup.output_batches}
@@ -458,7 +490,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
               {selectedBatch ? <StatusBadge status={selectedBatch.status} /> : null}
             </div>
 
-            <div className="payroll-calc-total-grid payroll-output-total-grid">
+            {activeTab === "overview" ? <><div className="payroll-calc-total-grid payroll-output-total-grid">
               <article>
                 <span>Gross earnings</span>
                 <strong>{formatMoney(totals.gross_earnings)}</strong>
@@ -502,9 +534,9 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                 <strong>{reconciliation?.mismatch_count ?? 0} mismatches</strong>
                 <span>{reconciliation?.matched_employee_count ?? 0}/{reconciliation?.payslip_count ?? 0} payslips checked</span>
               </div>
-            </div>
+            </div></> : null}
 
-            <PayrollCloseActionsPanel
+            {activeTab === "actions" ? <PayrollCloseActionsPanel
               eyebrow="Payroll operations"
               title="Output controls"
               description="Publish generated payroll outputs and create downstream finance handoff packages from selected batches."
@@ -541,9 +573,9 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                         : `Batch status is ${titleCase(selectedBatch.status)}; publish outputs before finance handoff.`,
                 },
               ]}
-            />
+            /> : null}
 
-            <div className="payroll-setup-assignment-panel">
+            {activeTab === "register" ? <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
                   <span className="workspace-card__eyebrow">Artifact register</span>
@@ -551,7 +583,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                 </div>
                 <span className="payroll-setup-count">{visibleArtifacts.length} artifacts</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll outputs table 1" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-output-artifact-table">
                   <thead>
                     <tr>
@@ -597,7 +629,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                     ) : null}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
               {artifactTotalPages > 1 ? (
                 <PaginationBar
                   firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
@@ -611,9 +643,9 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   totalCount={visibleArtifacts.length}
                 />
               ) : null}
-            </div>
+            </div> : null}
 
-            <section className="payroll-setup-assignment-panel payroll-output-handoff-panel">
+            {activeTab === "overview" ? <section className="payroll-setup-assignment-panel payroll-output-handoff-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
                   <span className="workspace-card__eyebrow">Handoff readiness</span>
@@ -635,10 +667,10 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   <span>Bank files, accounting exports, and statutory files remain separate controlled phases.</span>
                 </article>
               </div>
-            </section>
+            </section> : null}
           </div>
 
-          <ArtifactDetail artifact={selectedArtifact} />
+          {activeTab === "detail" ? <ArtifactDetail artifact={selectedArtifact} /> : null}
         </div>
       </section>
     </main>

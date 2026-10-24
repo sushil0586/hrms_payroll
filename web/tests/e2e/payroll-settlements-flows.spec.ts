@@ -34,7 +34,7 @@ test.describe("HR admin payroll settlement flows", () => {
     }
 
     await openSettlementTab(page, /Actions/);
-    await expect(page.getByLabel("Settlement certification actions")).toBeVisible();
+    await expect(page.getByLabel("Settlement actions")).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
   });

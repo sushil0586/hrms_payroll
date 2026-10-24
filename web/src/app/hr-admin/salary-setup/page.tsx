@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -305,7 +307,7 @@ function ComponentTable({
           New component
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Salary setup table 1" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table salary-setup-table">
           <thead>
             <tr>
@@ -335,7 +337,7 @@ function ComponentTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!components.length ? <EmptyState title="No components yet" detail="Create salary components from Setup Actions." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -374,7 +376,7 @@ function StructureTable({
           New structure
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Salary setup table 2" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table salary-setup-table">
           <thead>
             <tr>
@@ -404,7 +406,7 @@ function StructureTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!structures.length ? <EmptyState title="No structures yet" detail="Create structures after components and pay groups are ready." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -441,7 +443,7 @@ function VersionTable({
           New version
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Salary setup table 3" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table salary-setup-table">
           <thead>
             <tr>
@@ -469,7 +471,7 @@ function VersionTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!versions.length ? <EmptyState title="No versions in this view" detail="Create a version after a salary structure exists." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -506,7 +508,7 @@ function LineTable({
           New line
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Salary setup table 4" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table">
           <thead>
             <tr>
@@ -532,7 +534,7 @@ function LineTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!lines.length ? <EmptyState title="No component lines in this view" detail="Add lines after a salary structure version exists." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -569,7 +571,7 @@ function AssignmentTable({
           New assignment
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Salary setup table 5" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table">
           <thead>
             <tr>
@@ -597,7 +599,7 @@ function AssignmentTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!assignments.length ? <EmptyState title="No salary assignments yet" detail="Assign employees to salary versions before payroll inputs are locked." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -625,8 +627,8 @@ export default async function HrAdminSalarySetupPage({ searchParams }: PageProps
   const selectedLines = setup.structure_components.filter((line) => selectedVersionIds.has(line.structure_version_id));
 
   return (
-    <main className="shell shell--payroll-setup shell--salary-setup">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--salary-setup accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 1B" : "Demo payroll phase 1B"}
         title="Salary Setup"
         description="Configurable salary components, structure versions, component lines, and employee assignment coverage."

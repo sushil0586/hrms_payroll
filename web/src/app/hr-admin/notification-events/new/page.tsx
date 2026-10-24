@@ -9,8 +9,8 @@ export default async function HrAdminNewNotificationEventPage() {
   const optionsResult = await getHrAdminNotificationOptions();
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={optionsResult.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Create notification event"
         description="Define a trigger, audience, and delivery rule for notifications using the same modern form system as the rest of HR admin."

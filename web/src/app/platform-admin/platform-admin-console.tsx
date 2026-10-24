@@ -1,4 +1,8 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -805,19 +809,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
     }
   }, [showAddContactModal, showCreateTenantModal]);
 
-  useEffect(() => {
-    if (!showCreateTenantModal && !showAddContactModal && !confirmAction && !selectedAuditEvent) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busyRef) {
-        setShowCreateTenantModal(false);
-        setShowAddContactModal(false);
-        setConfirmAction(null);
-        setSelectedAuditEvent(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [busyRef, confirmAction, selectedAuditEvent, showAddContactModal, showCreateTenantModal]);
+
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
     setBusyRef(path);
@@ -1460,8 +1452,8 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
   }
 
   return (
-    <main aria-busy={Boolean(busyRef)} className={`shell platform-admin-shell platform-admin-shell--${initialPanel}`}>
-      <PageIntro
+    <main aria-busy={Boolean(busyRef)} className={`shell platform-admin-shell platform-admin-shell--${initialPanel} accerio-page`}>
+      <PageIntro appearance="accerio"
         eyebrow="Live platform operations"
         title={pageTitle}
         description={pageDescription}
@@ -1981,7 +1973,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
           </div>
           <div className="form-actions-bar">
             <span className="muted">The tenant form opens in a focused dialog with validation notes.</span>
-            <button className="button button--primary" type="button" onClick={() => setShowCreateTenantModal(true)}>
+            <button className="button button--primary" type="button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setShowCreateTenantModal(true); }}>
               Create tenant
             </button>
           </div>
@@ -2271,7 +2263,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
               </div>
                 <div className="form-actions-bar">
                   <span className="muted">Add or edit contacts before creating the first tenant admin login.</span>
-                  <button className="button button--primary" type="button" onClick={() => setShowAddContactModal(true)}>Add contact</button>
+                  <button className="button button--primary" type="button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setShowAddContactModal(true); }}>Add contact</button>
                 </div>
             </article>
 
@@ -2745,7 +2737,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
                       aria-label={`View evidence for ${titleCase(event.event_type)}`}
                       className="button button--secondary button--compact"
                       type="button"
-                      onClick={() => setSelectedAuditEvent(event)}
+                      onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedAuditEvent(event); }}
                     >
                       View evidence
                     </button>
@@ -2775,80 +2767,35 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         </>
       ) : null}
       {selectedAuditEvent ? (
-        <div
-          className="tenant-modal-shell"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setSelectedAuditEvent(null);
-            }
-          }}
-        >
-          <div
-            aria-describedby="platform-audit-evidence-description"
-            aria-labelledby="platform-audit-evidence-title"
-            aria-modal="true"
-            className="tenant-modal tenant-modal--audit"
-            role="dialog"
-          >
-            <div className="tenant-modal__header">
-              <div>
-                <span className="eyebrow">Audit evidence</span>
-                <h3 id="platform-audit-evidence-title">{titleCase(selectedAuditEvent.event_type)}</h3>
-              </div>
-              <button
-                aria-label="Close audit evidence"
-                className="button button--secondary"
-                type="button"
-                onClick={() => setSelectedAuditEvent(null)}
-              >
-                Close
-              </button>
-            </div>
-            <p className="tenant-modal__validation" id="platform-audit-evidence-description">
+        <HrAdminActionModal closeHref="/platform-admin" labelledBy="platform-audit-evidence-title" title={titleCase(selectedAuditEvent.event_type)} onClose={() => setSelectedAuditEvent(null)} busy={Boolean(busyRef)} className="tenant-modal tenant-modal--audit">
+
+
+<p className="tenant-modal__validation" id="platform-audit-evidence-description">
               {selectedAuditEvent.summary || "Event recorded."}
             </p>
-            <div className="detail-grid platform-audit-evidence__meta">
+
+<div className="detail-grid platform-audit-evidence__meta">
               <DetailRow label="Tenant" value={onboarding ? `${onboarding.tenant_name} (${onboarding.tenant_code})` : "Not selected"} />
               <DetailRow label="Actor" value={selectedAuditEvent.actor_identifier || "system"} />
               <DetailRow label="Timestamp" value={formatDateTime(selectedAuditEvent.created_at)} />
               <DetailRow label="Event ID" value={selectedAuditEvent.id} />
             </div>
-            <div className="platform-audit-evidence__payload">
+
+<div className="platform-audit-evidence__payload">
               <div>
                 <strong>Payload</strong>
                 <span className="muted">Sensitive credential-like fields are redacted before display.</span>
               </div>
               <pre aria-label="Audit evidence payload">{auditEvidenceText(selectedAuditEvent)}</pre>
             </div>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
       {showCreateTenantModal ? (
-        <div
-          className="tenant-modal-shell"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !busyRef) {
-              setShowCreateTenantModal(false);
-            }
-          }}
-        >
-          <div
-            aria-describedby="create-platform-tenant-description"
-            aria-labelledby="create-platform-tenant-title"
-            aria-modal="true"
-            className="tenant-modal"
-            role="dialog"
-          >
-            <div className="tenant-modal__header">
-              <div>
-                <span className="eyebrow">Tenant onboarding</span>
-                <h3 id="create-platform-tenant-title">Create platform tenant</h3>
-              </div>
-              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Close</button>
-            </div>
-            <form className="form-grid tenant-membership-form-grid--dialog" noValidate onSubmit={handleTenantCreate}>
+        <HrAdminActionModal closeHref="/platform-admin" labelledBy="create-platform-tenant-title" title="Create platform tenant" onClose={() => setShowCreateTenantModal(false)} busy={Boolean(busyRef)} className="tenant-modal">
+
+
+<form className="form-grid tenant-membership-form-grid--dialog" noValidate onSubmit={handleTenantCreate}>
               <div className="notice notice--compact platform-validation-strip form-field--full" id="create-platform-tenant-description">
                 <strong>Before creating</strong>
                 <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation still needs tenant admin login access and readiness signoff.</span>
@@ -2865,40 +2812,20 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
               <label className="form-field"><span className="muted">Country</span><input aria-label="Country" className="input-control" name="country_code" defaultValue="IN" maxLength={2} /></label>
               <label className="form-field"><span className="muted">Sandbox</span><input aria-label="Sandbox" name="is_sandbox" type="checkbox" defaultChecked /></label>
               <div className="tenant-modal__actions form-field--full">
-                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Cancel</button>
+                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))}>Cancel</button>
                 <AsyncActionButton className="button button--primary button--pending-stable" disabled={Boolean(busyRef)} pending={busyRef === "/api/platform/tenants"} pendingLabel="Creating tenant" type="submit">
                   Create tenant
                 </AsyncActionButton>
               </div>
             </form>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
       {showAddContactModal && selectedTenant ? (
-        <div
-          className="tenant-modal-shell"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !busyRef) {
-              setShowAddContactModal(false);
-            }
-          }}
-        >
-          <div
-            aria-describedby="add-platform-admin-contact-description"
-            aria-labelledby="add-platform-admin-contact-title"
-            aria-modal="true"
-            className="tenant-modal"
-            role="dialog"
-          >
-            <div className="tenant-modal__header">
-              <div>
-                <span className="eyebrow">First admin</span>
-                <h3 id="add-platform-admin-contact-title">Add platform admin contact</h3>
-              </div>
-              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowAddContactModal(false)}>Close</button>
-            </div>
-            <form className="form-grid tenant-membership-form-grid--dialog" noValidate onSubmit={handleContactCreate}>
+        <HrAdminActionModal closeHref="/platform-admin" labelledBy="add-platform-admin-contact-title" title="Add platform admin contact" onClose={() => setShowAddContactModal(false)} busy={Boolean(busyRef)} className="tenant-modal">
+
+
+<form className="form-grid tenant-membership-form-grid--dialog" noValidate onSubmit={handleContactCreate}>
               <div className="notice notice--compact platform-validation-strip form-field--full" id="add-platform-admin-contact-description">
                 <strong>Contact validation</strong>
                 <span className="muted">A primary contact is required before the customer can be marked ready. Make sure the email belongs to the real tenant admin.</span>
@@ -2910,43 +2837,24 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
               <label className="form-field"><span className="muted">Primary</span><input name="is_primary" type="checkbox" defaultChecked /></label>
               <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" /></label>
               <div className="tenant-modal__actions form-field--full">
-                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowAddContactModal(false)}>Cancel</button>
+                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))}>Cancel</button>
                 <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Add contact</button>
               </div>
             </form>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
       {confirmAction ? (
-        <div
-          className="tenant-modal-shell"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !busyRef) {
-              setConfirmAction(null);
-            }
-          }}
-        >
-          <div
-            aria-describedby="platform-confirm-action-description"
-            aria-labelledby="platform-confirm-action-title"
-            aria-modal="true"
-            className="tenant-modal tenant-modal--small"
-            role="dialog"
-          >
-            <div className="tenant-modal__header">
-              <div>
-                <span className="eyebrow">Confirm action</span>
-                <h3 id="platform-confirm-action-title">{confirmAction.title}</h3>
-              </div>
-              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setConfirmAction(null)}>Close</button>
-            </div>
-            <div className="tenant-modal__validation" id="platform-confirm-action-description">
+        <HrAdminActionModal closeHref="/platform-admin" labelledBy="platform-confirm-action-title" title={confirmAction.title} onClose={() => setConfirmAction(null)} busy={Boolean(busyRef)} className="tenant-modal tenant-modal--small">
+
+
+<div className="tenant-modal__validation" id="platform-confirm-action-description">
               <strong>{confirmAction.tone === "danger" ? "This changes customer state." : "Review before continuing."}</strong>
               <span>{confirmAction.description}</span>
             </div>
-            <div className="tenant-modal__actions">
-              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setConfirmAction(null)}>Cancel</button>
+
+<div className="tenant-modal__actions">
+              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))}>Cancel</button>
               <button
                 className={`button ${confirmAction.tone === "danger" ? "button--danger" : "button--primary"}`}
                 disabled={Boolean(busyRef)}
@@ -2960,8 +2868,8 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
                 {confirmAction.confirmLabel}
               </button>
             </div>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
     </main>
   );

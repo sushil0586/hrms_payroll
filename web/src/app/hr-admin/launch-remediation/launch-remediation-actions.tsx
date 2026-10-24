@@ -1,6 +1,10 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
-import { useEffect, useState } from "react";
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
@@ -34,20 +38,6 @@ function toDateTimeLocal(value: string | null) {
   return date.toISOString().slice(0, 16);
 }
 
-function useEscapeClose(isOpen: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-}
 
 export function LaunchRemediationActions({
   assignmentId,
@@ -65,11 +55,7 @@ export function LaunchRemediationActions({
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  useEscapeClose(isOpen, () => {
-    if (!isSaving) {
-      setIsOpen(false);
-    }
-  });
+
 
   async function submitAction(action: "acknowledge" | "assign" | "set_due_date" | "send_reminder" | "escalate" | "ignore") {
     setIsSaving(true);
@@ -98,25 +84,11 @@ export function LaunchRemediationActions({
   }
 
   const dialog = isOpen ? (
-    <div className="modal-shell launch-remediation-modal-shell" role="presentation">
-      <section
-        aria-modal="true"
-        aria-labelledby={`launch-remediation-action-${assignmentId}`}
-        className="modal launch-remediation-modal"
-        role="dialog"
-      >
-        <div className="modal__header">
-          <div>
-            <span className="workspace-card__eyebrow">Launch action</span>
-            <h2 id={`launch-remediation-action-${assignmentId}`}>Manage blocker</h2>
-            <p>Update routing, due date, reminder, escalation, or accepted-risk decision.</p>
-          </div>
-          <button className="button button--ghost" type="button" onClick={() => setIsOpen(false)}>
-            Close
-          </button>
-        </div>
+    <HrAdminActionModal closeHref="/hr-admin/launch-remediation" labelledBy={`launch-remediation-action-${assignmentId}`} title="Manage blocker" onClose={() => setIsOpen(false)} busy={isSaving} className="modal launch-remediation-modal">
+<p>Update routing, due date, reminder, escalation, or accepted-risk decision.</p>
 
-        <div className="launch-remediation-actions__inputs">
+
+<div className="launch-remediation-actions__inputs">
           <label>
             <span>Owner role</span>
             <input value={ownerRoleRef} onChange={(event) => setOwnerRoleRef(event.target.value)} />
@@ -139,7 +111,7 @@ export function LaunchRemediationActions({
           </label>
         </div>
 
-        <div className="launch-remediation-actions__buttons">
+<div className="launch-remediation-actions__buttons">
           <button className="button button--secondary" type="button" onClick={() => submitAction("acknowledge")} disabled={isSaving}>
             Acknowledge
           </button>
@@ -159,16 +131,17 @@ export function LaunchRemediationActions({
             Ignore
           </button>
         </div>
-        {notice ? <span className="launch-remediation-modal__notice" role="status">{notice}</span> : null}
-      </section>
-    </div>
+
+{notice ? <span className="launch-remediation-modal__notice" role="status">{notice}</span> : null}
+
+</HrAdminActionModal>
   ) : null;
 
   return (
     <div className="launch-remediation-actions">
       <div className="launch-remediation-actions__summary">
         {notice ? <span role="status">{notice}</span> : <span>Owner, due date, escalation, and risk decision.</span>}
-        <button className="button button--secondary" type="button" onClick={() => setIsOpen(true)}>
+        <button className="button button--secondary" type="button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setIsOpen(true); }}>
           Manage
         </button>
       </div>

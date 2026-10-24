@@ -109,7 +109,6 @@ test.describe("HR admin payroll input snapshot flows", () => {
     await expect(page.getByRole("region", { name: "Input snapshot review" })).toBeVisible();
     await expect(page.getByText("Selected run").first()).toBeVisible();
     await expect(page.getByText(/recon findings/i).or(page.getByText("Reconciliation findings")).first()).toBeVisible();
-    await expect(page.getByText("Recon blockers").first()).toBeVisible();
     await expect(page.getByText(/reconciliation/i).first()).toBeVisible();
     await expect(page.getByText("Employee snapshots", { exact: true })).toBeVisible();
     await expect(page.getByLabel("payroll input snapshot pagination").or(page.getByText("No input snapshots")).or(page.getByRole("link", { name: "Inspect" })).first()).toBeVisible();
@@ -119,13 +118,18 @@ test.describe("HR admin payroll input snapshot flows", () => {
 
     const snapshotLink = page.locator("main a[href*='snapshotId=']").first();
     if (await snapshotLink.isVisible().catch(() => false)) {
-      await snapshotLink.click();
+      const snapshotHref = await snapshotLink.getAttribute("href");
+      expect(snapshotHref).toContain("snapshotId=");
+      await page.goto(snapshotHref!);
       await expect(page).toHaveURL(/snapshotId=/);
       await expect(page.getByText("Source hash").or(page.getByRole("heading", { name: "Lock readiness" })).first()).toBeVisible();
       await expect(page.getByRole("heading", { name: "Attendance and payroll input check" })).toBeVisible();
       await expect(page.getByText("Schedule working")).toBeVisible();
       await expect(page.getByText("Attendance present")).toBeVisible();
     }
+
+    await page.getByRole("navigation", { name: "Payroll input operation steps" }).getByRole("button", { name: /Lock gate/ }).click();
+    await expect(page.getByTestId("payroll-input-lock-form").getByText("Recon blockers")).toBeVisible();
 
     await page.getByRole("navigation", { name: "Payroll input operation steps" }).getByRole("button", { name: /Input snapshot/ }).click();
     await page.getByPlaceholder("Code, name, or email").fill("EMP");

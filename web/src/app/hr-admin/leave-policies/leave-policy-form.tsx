@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -703,7 +705,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
       <section className="form-shell-card">
         <div className="form-shell-card__header form-shell-card__header--actionable">
           <div className="form-shell-card__meta">
-            <button className="button button--secondary" onClick={openPreviewDialog} type="button">
+            <button className="button button--secondary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openPreviewDialog(); }} type="button">
               Preview policy
             </button>
             <span className="queue-summary-chip"><strong>{formValue.status}</strong> status</span>
@@ -1488,7 +1490,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
             <div className="form-actions-bar">
               <span className="muted">The preview uses the same backend routing rules as real leave submission.</span>
               <div className="form-actions-bar__buttons">
-                <button className="button button--secondary" onClick={handlePreview} type="button">
+                <button className="button button--secondary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); handlePreview(); }} type="button">
                   {isPreviewLoading ? "Previewing..." : "Preview route"}
                 </button>
               </div>
@@ -1630,7 +1632,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
               <div className="form-actions-bar">
                 <span className="muted">This preview does not submit leave. It uses the same backend policy resolver as real requests.</span>
                 <div className="form-actions-bar__buttons">
-                  <button className="button button--primary" disabled={isPreviewLoading} onClick={handlePreview} type="button">
+                  <button className="button button--primary" disabled={isPreviewLoading} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); handlePreview(); }} type="button">
                     {isPreviewLoading ? "Previewing..." : "Run preview"}
                   </button>
                 </div>

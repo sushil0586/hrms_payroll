@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { LifecycleFormActions, useLifecycleFormState } from "@/app/hr-admin/lifecycle/lifecycle-form-state";
 
 import { LifecycleItemEditor } from "@/app/hr-admin/lifecycle/lifecycle-item-editor";
 import { FormSection } from "@/components/patterns/form-section";
@@ -107,10 +107,15 @@ function getReadinessPreview(formValue: HrAdminOnboardingWriteInput) {
 }
 
 export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
-  const router = useRouter();
+
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formId=`lifecycle-onboardings-${itemId??"create"}`;
+  const pending = useRef(false);const errorRef=useRef<HTMLDivElement>(null);const formRef=useRef<HTMLFormElement>(null);const focused=useRef(false);
+  const navigation=useLifecycleFormState(formValue,initialValue,isSubmitting,cancelHref??"/hr-admin/onboardings");
+  useEffect(()=>{if(error)errorRef.current?.focus();},[error]);
+  useEffect(()=>{if(navigation.ready&&compact&&!focused.current){focused.current=true;formRef.current?.querySelector<HTMLElement>('select,input,textarea')?.focus();}},[navigation.ready,compact]);
   const readinessPreview = getReadinessPreview(formValue);
 
   const checklistItems = readinessPreview.checklistIsValid ? parseChecklistItems(formValue.checklist_snapshot) : [];
@@ -125,6 +130,8 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending.current) return;
+    pending.current=true;
     setIsSubmitting(true);
     setError("");
     let checklistSnapshot: HrAdminLifecycleWorkItem[] = [];
@@ -132,9 +139,10 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
       checklistSnapshot = parseChecklistItems(formValue.checklist_snapshot);
     } catch {
       setError("Checklist data must stay valid.");
-      setIsSubmitting(false);
+      setIsSubmitting(false);pending.current=false;
       return;
     }
+    try {
     const response = await fetch(mode === "create" ? "/api/hr-admin/onboardings" : `/api/hr-admin/onboardings/${itemId}`, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -142,45 +150,31 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
-      setIsSubmitting(false);
+      setError(response.status>=500?"Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.":getErrorMessage(payload));
+      setIsSubmitting(false);pending.current=false;
       return;
     }
-    router.push(successHref ?? "/hr-admin/onboardings");
-    router.refresh();
+    if(typeof payload?.id!=="string" || !payload.id || (itemId&&payload.id!==itemId)) {setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");return;}
+    const destination=new URL(successHref??"/hr-admin/onboardings",window.location.origin);
+    destination.searchParams.set(destination.pathname==='/hr-admin/lifecycle'?'record':'recordLoaded',destination.pathname==='/hr-admin/lifecycle'?`onboarding:${payload.id}`:payload.id);
+    navigation.complete(destination.href);
+    } catch {setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");}
+    finally {pending.current=false;setIsSubmitting(false);}
   }
 
-  function handleCancel() {
-    if (cancelHref) {
-      router.push(cancelHref);
-      return;
-    }
-    router.back();
-  }
+  function handleCancel() {navigation.cancel();}
 
   return (
-    <form className={`section form-layout-modern lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`} onSubmit={handleSubmit}>
-      <section className="form-shell-card">
-        <div className="form-shell-card__header">
-          <div>
-            <h2>{mode === "create" ? "Create onboarding workflow" : "Edit onboarding workflow"}</h2>
-            <p className="section-copy">Capture joiner timing, ownership, workflow context, and readiness details in one place.</p>
-          </div>
-          <div className="form-shell-card__meta">
-            <span className="queue-summary-chip"><strong>{formValue.status || "not_started"}</strong> current status</span>
-            <span className="queue-summary-chip"><strong>{readinessPreview.totalCount}</strong> checklist items</span>
-            {item ? <span className="queue-summary-chip"><strong>{item.missing_required_document_count}</strong> required missing</span> : null}
-          </div>
-        </div>
-
+    <form id={formId} ref={formRef} data-hydrated={navigation.ready} className={`section form-layout-modern lifecycle-phase3-form lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`} onSubmit={handleSubmit}>
+      <fieldset className="lifecycle-fields" disabled={!navigation.ready||isSubmitting}><section className="form-shell-card">
         <div className="form-shell-card__grid">
           <FormSection
             description="Basic record identity, status, and dates that drive onboarding readiness."
             title="Joiner and status"
           >
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Employee</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
-              <label className="form-field"><span className="muted">Status</span><select className="input-control" value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.onboarding_statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+              <label className="form-field"><span className="muted">Employee (required)</span><select required aria-label="Employee" className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
+              <label className="form-field"><span className="muted">Status</span><select aria-label="Status" className="input-control" value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.onboarding_statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
               <label className="form-field"><span className="muted">Expected joining date</span><input className="input-control" type="date" value={formValue.expected_joining_date ?? ""} onChange={(e) => update("expected_joining_date", e.target.value || null)} /></label>
               <label className="form-field"><span className="muted">Actual joining date</span><input className="input-control" type="date" value={formValue.actual_joining_date ?? ""} onChange={(e) => update("actual_joining_date", e.target.value || null)} /></label>
             </div>
@@ -197,7 +191,7 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
                   {buildLifecycleTemplateTriggerOptions(lifecycleTemplates, formValue.onboarding_template_code)}
                 </select>
               </label>
-              <label className="form-field"><span className="muted">Assigned owner</span><select className="input-control" value={formValue.owner_value} onChange={(e) => update("owner_value", e.target.value)}><option value="">Select an owner</option>{options.lifecycle_owners.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="form-field"><span className="muted">Assigned owner</span><select aria-label="Assigned owner" className="input-control" value={formValue.owner_value} onChange={(e) => update("owner_value", e.target.value)}><option value="">Select an owner</option>{options.lifecycle_owners.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
               <label className="form-field" style={{ gridColumn: "1 / -1" }}><span className="muted">Workflow reference</span><input className="input-control" value={formValue.workflow_reference} onChange={(e) => update("workflow_reference", e.target.value)} /></label>
             </div>
             <div className="notice notice--spaced">
@@ -258,15 +252,15 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
             <span className="muted">{readinessPreview.completionWarning}</span>
           </div>
         ) : null}
-        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
-        <div className="form-actions-bar">
-          <span className="muted">Changes save back into the onboarding queue and readiness checks immediately.</span>
+        {error ? <div className="notice notice--error" role="alert" tabIndex={-1} ref={errorRef}><strong>Review save outcome.</strong><span className="muted">{error}</span></div> : null}
+        <LifecycleFormActions><div className="form-actions-bar">
+          <span className="muted">Completion requires the joining date, finished checklist work and required documents.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create onboarding" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
+            <button className="button button--primary" disabled={!navigation.ready||isSubmitting} form={formId} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create onboarding" : "Save changes"}</button>
+            <button className="button button--secondary" disabled={!navigation.ready||isSubmitting} onClick={handleCancel} type="button">Cancel</button>
           </div>
-        </div>
-      </section>
+        </div></LifecycleFormActions>
+      </section></fieldset>
     </form>
   );
 }

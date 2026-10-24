@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getMssApprovalInbox } from "@/lib/api";
@@ -51,17 +52,17 @@ function buildManagerActions(
     {
       label: "Today exceptions",
       value: summary.attendance_exceptions_today,
-      detail: "Same-day attendance signals needing manager attention.",
+      detail: "Same-day attendance signals. The attendance queue shows correction requests.",
       href: "/mss/approvals?queue=attendance",
-      action: "Open exceptions",
+      action: "Open attendance queue",
       status: actionStatus(summary.attendance_exceptions_today),
     },
     {
       label: "Team on leave",
       value: summary.employees_on_leave_today,
-      detail: "People away today for capacity and handoff planning.",
+      detail: "People away today. The leave queue shows requests awaiting a decision.",
       href: "/mss/approvals?queue=leave",
-      action: "View leave context",
+      action: "Open leave queue",
       status: "ready" as const,
     },
   ];
@@ -117,8 +118,9 @@ export default async function MssControlCenterPage() {
   const dailyPriority = priorityCopy(totalPending, activeSignals);
 
   return (
-    <main className="shell shell--mss-control">
+    <main className="shell shell--mss-control accerio-page">
       <PageIntro
+        appearance="accerio"
         eyebrow={result.state === "live" ? "Live manager inbox" : "Demo manager inbox"}
         title="Manager dashboard"
         description="Review team decisions, attendance signals, and approval risk from one calm daily workspace."
@@ -140,11 +142,10 @@ export default async function MssControlCenterPage() {
           </>
         }
         pills={["Daily manager view", "Team approvals", "Payroll aware"]}
-        showPills
       />
 
       <section className="workspace-section">
-        <div className="attendance-summary-strip" aria-label="Manager summary">
+        <div className="attendance-summary-strip" role="group" aria-label="Manager summary">
           <span><strong>{summary.team_size}</strong> team members</span>
           <span><strong>{totalPending}</strong> pending decisions</span>
           {canApproveLeave ? <span><strong>{summary.pending_leave_approvals_count}</strong> leave approvals</span> : null}
@@ -174,7 +175,7 @@ export default async function MssControlCenterPage() {
             </div>
             <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
           </div>
-          <div className="workspace-table-scroll">
+          <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Manager actions table">
             {actions.length ? (
               <table className="workspace-table attendance-directory-table mss-action-table" aria-label="Manager actions">
                 <thead>
@@ -211,7 +212,7 @@ export default async function MssControlCenterPage() {
                 <span className="muted">Use ESS for personal employee tasks or ask HR to confirm manager permissions.</span>
               </div>
             )}
-          </div>
+          </WorkspaceTableScrollRegion>
         </article>
 
         <article className="panel-card-soft mss-dashboard-card">

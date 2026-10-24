@@ -1,14 +1,24 @@
 "use client";
+import {useDocumentUploadDraft} from "@/lib/ui/use-document-upload-draft";
+import {postLifecycleBulk,lifecycleNavigate} from "@/lib/ui/lifecycle-bulk";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
-import { useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+
 
 import { probationReviewToFormValue } from "@/app/hr-admin/probation-reviews/form-values";
+import {OnboardingForm} from "@/app/hr-admin/onboardings/onboarding-form";
+import {onboardingToFormValue} from "@/app/hr-admin/onboardings/form-values";
+import {LifecycleEditorDialog} from "./lifecycle-form-state";
 import { ProbationReviewForm } from "@/app/hr-admin/probation-reviews/probation-review-form";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
-import type { HrAdminEnumOption, HrAdminLifecycleEmployeeOption, HrAdminLifecycleOptions, HrAdminLifecycleOwnerBulkActionInput, HrAdminLifecycleOwnerOption, HrAdminLifecycleQueueItem, HrAdminLifecycleStatusBulkActionInput, HrAdminProbationReview } from "@/lib/types";
+import type { HrAdminEnumOption, HrAdminLifecycleEmployeeOption, HrAdminLifecycleOptions, HrAdminLifecycleOwnerBulkActionInput, HrAdminLifecycleOwnerOption, HrAdminLifecycleQueueItem, HrAdminLifecycleStatusBulkActionInput, HrAdminProbationReview, HrAdminOnboarding, HrAdminWorkflowTemplate } from "@/lib/types";
 
 type Props = {
   items: HrAdminLifecycleQueueItem[];
@@ -36,6 +46,10 @@ type Props = {
   statusOptionsByType: Record<string, HrAdminEnumOption[]>;
   lifecycleOptions: HrAdminLifecycleOptions;
   editProbationReview?: HrAdminProbationReview | null;
+  editOnboarding?: HrAdminOnboarding|null;
+  workflowTemplates:HrAdminWorkflowTemplate[];
+  recordItem?:HrAdminLifecycleQueueItem|null;
+  editRecordItem?:HrAdminLifecycleQueueItem|null;
   summary: {
     documentBlockedCount: number;
     documentUpcomingCount: number;
@@ -81,10 +95,10 @@ export function LifecycleQueue({
   pagination,
   statusOptionsByType,
   lifecycleOptions,
-  editProbationReview,
+  editProbationReview,editOnboarding,workflowTemplates,recordItem,editRecordItem,
   summary,
 }: Props) {
-  const router = useRouter();
+
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const openRecordKey = searchParams.get("record") ?? "";
@@ -93,6 +107,9 @@ export function LifecycleQueue({
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const pending=useRef(false);const noticeRef=useRef<HTMLDivElement>(null);const ready=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
+  useDocumentUploadDraft(false,isSubmitting);
+  useEffect(()=>{if(error||feedback)noticeRef.current?.focus();},[error,feedback]);
   const [search, setSearch] = useState(currentFilters.q);
   const [itemType, setItemType] = useState(currentFilters.item_type || "all");
   const [status, setStatus] = useState(currentFilters.status || "all");
@@ -102,9 +119,12 @@ export function LifecycleQueue({
   const [primaryDateTo, setPrimaryDateTo] = useState(currentFilters.primary_date_to);
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [bulkOwner, setBulkOwner] = useState(currentFilters.owner || "");
+  useEffect(()=>{const restore=()=>{setSearch(currentFilters.q );setStatus(currentFilters.status || "all");setItemType(currentFilters.item_type || "all");setEmployeeId(currentFilters.employee_id || "all");setOwner(currentFilters.owner || "all");setPrimaryDateFrom(currentFilters.primary_date_from );setPrimaryDateTo(currentFilters.primary_date_to );setPageSize(String(currentFilters.page_size));setSelectedKeys([]);};window.addEventListener('pageshow',restore);window.addEventListener('popstate',restore);return()=>{window.removeEventListener('pageshow',restore);window.removeEventListener('popstate',restore);};},[currentFilters]);
   const [bulkStatus, setBulkStatus] = useState("");
-  const [selectedItemKey, setSelectedItemKey] = useState(items[0] ? `${items[0].item_type}:${items[0].id}` : "");
+  const inspectTrigger=useRef<HTMLButtonElement|null>(null);const detailRef=useRef<HTMLElement|null>(null);
+  const [selectedItemKey, setSelectedItemKey] = useState("");
 
+  useEffect(()=>{if(selectedItemKey){detailRef.current?.scrollIntoView({block:"start"});detailRef.current?.focus({preventScroll:true});}},[selectedItemKey]);
   const statusOptions = itemType !== "all" ? (statusOptionsByType[itemType] ?? []) : [];
   const assignableItems = items.filter((item) => BULK_ASSIGNABLE_TYPES.has(item.item_type));
   const assignableKeys = assignableItems.map((item) => `${item.item_type}:${item.id}`);
@@ -130,9 +150,9 @@ export function LifecycleQueue({
   const statusBulkOptions = statusBulkType ? (statusOptionsByType[statusBulkType] ?? []) : [];
   const selectedStatusItems = items.filter((item) => selectedKeys.includes(getItemKey(item)) && item.item_type === statusBulkType);
   const selectedItem = items.find((item) => getItemKey(item) === selectedItemKey) ?? null;
-  const modalItem = items.find((item) => getItemKey(item) === openRecordKey) ?? null;
-  const editItem = items.find((item) => getItemKey(item) === editRecordKey) ?? null;
-  const numericPageSize = Number(pageSize) || currentFilters.page_size;
+  const modalItem = recordItem??null;
+  const editItem = editRecordItem??null;
+  const numericPageSize = pagination.page_size;
   const totalPages = Math.max(1, Math.ceil(pagination.total_count / Math.max(numericPageSize, 1)));
   const pageStart = pagination.total_count === 0 ? 0 : ((pagination.page - 1) * numericPageSize) + 1;
   const pageEnd = pagination.total_count === 0 ? 0 : Math.min(pagination.page * numericPageSize, pagination.total_count);
@@ -143,8 +163,9 @@ export function LifecycleQueue({
         ? selectedStatusItems.filter((item) => item.bulk_status_warning)
         : [];
 
-  function goToPage(page: number) {
-    router.push(`${pathname}${buildQueryString({
+  function goToPage(page: number, apply = false) {
+    if(!apply){lifecycleNavigate(currentQueueHref({page}));return;}
+    lifecycleNavigate(`${pathname}${buildQueryString({
       q: search.trim() || undefined,
       item_type: itemType !== "all" ? itemType : undefined,
       status: status !== "all" ? status : undefined,
@@ -153,23 +174,12 @@ export function LifecycleQueue({
       primary_date_from: primaryDateFrom || undefined,
       primary_date_to: primaryDateTo || undefined,
       page,
-      page_size: numericPageSize,
+      page_size: Number(pageSize)||currentFilters.page_size,
     })}`);
   }
 
-  function currentQueueHref(params: Record<string, string | number | boolean | undefined> = {}) {
-    return `${pathname}${buildQueryString({
-      q: search.trim() || undefined,
-      item_type: itemType !== "all" ? itemType : undefined,
-      status: status !== "all" ? status : undefined,
-      employee_id: employeeId !== "all" ? employeeId : undefined,
-      owner: owner !== "all" ? owner : undefined,
-      primary_date_from: primaryDateFrom || undefined,
-      primary_date_to: primaryDateTo || undefined,
-      page: pagination.page,
-      page_size: numericPageSize,
-      ...params,
-    })}`;
+  function currentQueueHref(params: Record<string,string|number|boolean|undefined> = {}) {
+    return `${pathname}${buildQueryString({...currentFilters,...params})}`;
   }
 
   async function handleBulkOwnerAction(nextOwnerValue: string) {
@@ -193,7 +203,9 @@ export function LifecycleQueue({
 
     setError("");
     setFeedback("");
+    if(pending.current)return;pending.current=true;
     setIsSubmitting(true);
+    let confirmed=0;
     try {
       for (const recordType of ["onboarding", "probation", "movement"] as const) {
         if (groupedIds[recordType].length === 0) {
@@ -204,23 +216,16 @@ export function LifecycleQueue({
           record_ids: groupedIds[recordType],
           owner_value: nextOwnerValue,
         };
-        const response = await fetch("/api/hr-admin/lifecycle-owner-bulk-actions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(getErrorMessage(payload));
-        }
+        const count=await postLifecycleBulk("/api/hr-admin/lifecycle-owner-bulk-actions",body);
+        confirmed+=count;setFeedback(`${confirmed} requested records confirmed updated so far. Reload the queue for current rows.`);
       }
       setSelectedKeys([]);
-      setFeedback("Owner updated.");
-      router.refresh();
+      setFeedback(`${confirmed} records confirmed updated. Other selected records were not reported updated. Reload the queue for current rows.`);
+
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update lifecycle owners.");
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false);pending.current=false;
     }
   }
 
@@ -243,6 +248,7 @@ export function LifecycleQueue({
 
     setError("");
     setFeedback("");
+    if(pending.current)return;pending.current=true;
     setIsSubmitting(true);
     const body: HrAdminLifecycleStatusBulkActionInput = {
       record_type: statusBulkType,
@@ -250,33 +256,27 @@ export function LifecycleQueue({
       status_value: nextStatusValue,
     };
     try {
-      const response = await fetch("/api/hr-admin/lifecycle-status-bulk-actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(getErrorMessage(payload));
-      }
+      const count=await postLifecycleBulk("/api/hr-admin/lifecycle-status-bulk-actions",body);
+      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);
       setSelectedKeys([]);
-      setFeedback("Status updated.");
-      router.refresh();
+
+
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update lifecycle statuses.");
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false);pending.current=false;
     }
   }
 
   return (
-    <section className="section queue-layout lifecycle-queue-layout">
+    <section className="section queue-layout lifecycle-queue-layout"><fieldset className="lifecycle-fields" disabled={!ready||isSubmitting} data-hydrated={ready}>
+      {error||feedback?<div className="notice" role={error?"alert":"status"} ref={noticeRef} tabIndex={-1}>{error?<p>{error}</p>:null}{feedback?<p>{feedback}</p>:null}<a data-navigation-mode="document" href={currentQueueHref()}>Reload queue</a></div>:null}
       <div className="hr-employee-summary-strip lifecycle-summary-strip">
-        <span><strong>{pagination.total_count}</strong> records</span>
+        <span><strong>{pagination.total_count}</strong> matching records</span>
         <span><strong>{summary.onboardingCount}</strong> onboardings</span>
         <span><strong>{summary.pendingProbationCount}</strong> probation pending</span>
-        <span><strong>{summary.documentBlockedCount}</strong> doc blockers</span>
-        <span><strong>{summary.documentUpcomingCount}</strong> doc upcoming</span>
+        <span><strong>{summary.documentBlockedCount}</strong> on-page doc blockers</span>
+        <span><strong>{summary.documentUpcomingCount}</strong> on-page doc upcoming</span>
       </div>
 
       <section className="queue-toolbar panel-card-soft lifecycle-queue-toolbar">
@@ -286,7 +286,7 @@ export function LifecycleQueue({
             <p className="section-copy section-copy-soft">Filter by type, owner, employee, or date.</p>
           </div>
           <div className="queue-toolbar__meta">
-            <span className="queue-summary-chip"><strong>{items.length}</strong> in this view</span>
+            <span className="queue-summary-chip"><strong>{pagination.total_count}</strong> matching records</span>
             <span className="queue-summary-chip"><strong>{items.length}</strong> on this page</span>
             <span className="queue-summary-chip"><strong>{selectedKeys.length}</strong> selected</span>
           </div>
@@ -294,7 +294,7 @@ export function LifecycleQueue({
         <WorkspaceFilterBar className="queue-toolbar__grid">
           <label className="form-field">
             <span className="muted">Search</span>
-            <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Employee, owner, workflow, notes" value={search} />
+            <input className="input-control" onChange={(event) => setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();goToPage(1,true);}}} placeholder="Employee, owner, workflow, notes" value={search} />
           </label>
           <label className="form-field">
             <span className="muted">Lifecycle type</span>
@@ -314,8 +314,7 @@ export function LifecycleQueue({
             </select>
           </label>
           <label className="form-field">
-            <span className="muted">Status</span>
-            <select className="input-control" disabled={itemType === "all"} onChange={(event) => setStatus(event.target.value)} value={status}>
+            <span className="muted">Status</span><select aria-label="Status" className="input-control" disabled={itemType === "all"} onChange={(event) => setStatus(event.target.value)} value={status}>
               <option value="all">{itemType === "all" ? "Choose a type first" : "All statuses"}</option>
               {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
@@ -324,15 +323,13 @@ export function LifecycleQueue({
             <summary className="button button--secondary button--compact">More filters</summary>
             <div className="directory-more-filters__panel lifecycle-more-filters__panel">
               <label className="form-field">
-                <span className="muted">Employee</span>
-                <select className="input-control" onChange={(event) => setEmployeeId(event.target.value)} value={employeeId}>
+                <span className="muted">Employee</span><select aria-label="Employee" className="input-control" onChange={(event) => setEmployeeId(event.target.value)} value={employeeId}>
                   <option value="all">All employees</option>
                   {employees.map((option) => <option key={option.id} value={option.id}>{option.name} ({option.employee_code})</option>)}
                 </select>
               </label>
               <label className="form-field">
-                <span className="muted">Owner</span>
-                <select className="input-control" onChange={(event) => setOwner(event.target.value)} value={owner}>
+                <span className="muted">Owner</span><select aria-label="Owner" className="input-control" onChange={(event) => setOwner(event.target.value)} value={owner}>
                   <option value="all">All owners</option>
                   {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
@@ -349,8 +346,8 @@ export function LifecycleQueue({
           </details>
         </WorkspaceFilterBar>
         <div className="queue-toolbar__actions">
-          <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
-          <button className="button button--ghost" onClick={() => {
+          <button className="button button--primary" onClick={() => goToPage(1,true)} type="button">Apply filters</button>
+          <button className="button button--ghost" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
             setSelectedKeys([]);
             setError("");
             setFeedback("");
@@ -364,8 +361,8 @@ export function LifecycleQueue({
             setPageSize("25");
             setBulkOwner("");
             setBulkStatus("");
-            router.push(pathname);
-          }} type="button">Clear filters</button>
+            lifecycleNavigate(pathname);
+           }} type="button">Clear filters</button>
           <button className="button button--secondary" disabled={assignableItems.length === 0} onClick={toggleAssignablePage} type="button">
             {allAssignableSelected ? "Clear selection" : "Select page"}
           </button>
@@ -373,8 +370,7 @@ export function LifecycleQueue({
         <div className="queue-toolbar__bulk-grid lifecycle-bulk-grid">
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
-              <span className="muted">Bulk owner</span>
-              <select className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
+              <span className="muted">Bulk owner</span><select aria-label="Bulk owner" className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
                 <option value="">Clear owner assignment</option>
                 {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -400,8 +396,7 @@ export function LifecycleQueue({
           </div>
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
-              <span className="muted">Bulk status</span>
-              <select className="input-control" disabled={!statusBulkType} onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
+              <span className="muted">Bulk status</span><select aria-label="Bulk status" className="input-control" disabled={!statusBulkType} onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
                 <option value="">{statusBulkType ? "Choose a status" : "Choose a single lifecycle type first"}</option>
                 {statusBulkOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -432,13 +427,11 @@ export function LifecycleQueue({
             </span>
           </div>
         ) : null}
-        {feedback ? <div className="notice"><strong>{feedback}</strong><span className="muted">The lifecycle inbox has been refreshed with the latest queue state.</span></div> : null}
-        {error ? <div className="notice notice--error" role="alert"><strong>Lifecycle bulk action failed.</strong><span className="muted">{error}</span></div> : null}
-      </section>
+                      </section>
 
       <div className={`lifecycle-review-workbench${selectedItem ? " lifecycle-review-workbench--with-detail" : ""}`}>
         <article className="record-card panel-card-soft lifecycle-directory-panel">
-          <div className="employee-directory-table-wrap lifecycle-directory-table-wrap">
+          <WorkspaceTableScrollRegion label="Lifecycle table 1" className="employee-directory-table-wrap lifecycle-directory-table-wrap workspace-table-region">
             {items.length ? (
               <table className="employee-directory-table lifecycle-directory-table">
                 <thead>
@@ -460,8 +453,8 @@ export function LifecycleQueue({
                       <tr className={isSelected ? "employee-directory-table__row--active" : ""} key={itemKey}>
                         <td>
                           <div className="document-table-title-cell">
-                            <input checked={selectedKeys.includes(itemKey)} disabled={!isAssignable} onChange={() => toggleOne(item)} type="checkbox" />
-                            <button className="document-table-title-button" onClick={() => setSelectedItemKey(itemKey)} type="button">
+                            <input aria-label={`Select ${item.item_label} for ${item.employee_name}`} checked={selectedKeys.includes(itemKey)} disabled={!isAssignable} onChange={() => toggleOne(item)} type="checkbox" />
+                            <button className="document-table-title-button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); inspectTrigger.current=triggerEvent.currentTarget;setSelectedItemKey(itemKey); }} type="button">
                               <strong>{item.employee_name}</strong>
                               <small>{item.employee_code}</small>
                             </button>
@@ -492,7 +485,7 @@ export function LifecycleQueue({
                           <small>{item.document_attention_summary}</small>
                         </td>
                         <td>
-                          <button className="button button--secondary button--compact" onClick={() => setSelectedItemKey(itemKey)} type="button">
+                          <button data-lifecycle-trigger={`inspect-${itemKey}`} className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); inspectTrigger.current=triggerEvent.currentTarget;setSelectedItemKey(itemKey); }} type="button">
                             Inspect
                           </button>
                         </td>
@@ -507,20 +500,20 @@ export function LifecycleQueue({
                 <span className="muted">Try clearing one or more filters to widen the review queue.</span>
               </div>
             )}
-          </div>
+          </WorkspaceTableScrollRegion>
         </article>
 
         {selectedItem ? (
-          <article className="record-card panel-card-soft employee-detail-drawer lifecycle-detail-drawer">
+          <article tabIndex={-1} ref={detailRef} className="record-card panel-card-soft employee-detail-drawer lifecycle-detail-drawer">
             <div className="record-card__header">
               <div className="record-card__title-wrap">
                 <h2 className="section-heading-soft">Lifecycle detail</h2>
                 <p className="section-copy section-copy-soft">Focused detail for the selected workflow record.</p>
               </div>
               <div className="record-card__actions">
-                <button className="button button--ghost button--compact" onClick={() => setSelectedItemKey("")} type="button">Close</button>
-                <Link className="button button--secondary button--compact" href={currentQueueHref({ editRecord: undefined, record: getItemKey(selectedItem) })}>Open record</Link>
-                <Link className="button button--primary button--compact" href={currentQueueHref({ record: undefined, editRecord: getItemKey(selectedItem) })}>Edit record</Link>
+                <button className="button button--ghost button--compact" onClick={() => { inspectTrigger.current?.focus();setSelectedItemKey(""); }} type="button">Close</button>
+                <a data-navigation-mode="document" className="button button--secondary button--compact" data-lifecycle-trigger={`record-${getItemKey(selectedItem)}`} href={currentQueueHref({ editRecord: undefined, record: getItemKey(selectedItem) })}>Open record</a>
+                <a data-navigation-mode="document" className="button button--primary button--compact" data-lifecycle-trigger={`edit-${getItemKey(selectedItem)}`} href={currentQueueHref({ record: undefined, editRecord: getItemKey(selectedItem) })}>Edit record</a>
               </div>
             </div>
             <div className="document-detail-identity">
@@ -577,7 +570,7 @@ export function LifecycleQueue({
                 {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
               </select>
             </label>
-            <button className="button button--secondary button--compact" onClick={() => goToPage(1)} type="button">Apply</button>
+            <button className="button button--secondary button--compact" onClick={() => goToPage(1,true)} type="button">Apply</button>
           </div>
           {totalPages > 1 ? (
             <div className="pagination-bar__actions">
@@ -589,8 +582,9 @@ export function LifecycleQueue({
           ) : null}
         </div>
       </section>
+      {openRecordKey&&!modalItem || editRecordKey&&!editItem?<div className="notice" role="status">Selected record unavailable. No other record has been opened. <a data-navigation-mode="document" href={currentQueueHref()}>Return to queue</a></div>:null}
       {modalItem ? (
-        <HrAdminActionModal
+        <HrAdminActionModal documentNavigation dirty={false}
           closeHref={currentQueueHref({ record: undefined })}
           description="Review lifecycle context without leaving the queue."
           eyebrow="Lifecycle record"
@@ -598,7 +592,7 @@ export function LifecycleQueue({
             <>
               <span className="workspace-form-footer__note">Close returns to the lifecycle queue.</span>
               <div className="workspace-form-footer__actions">
-                <Link className="button button--secondary" href={currentQueueHref({ record: undefined })}>Close</Link>
+                <a data-navigation-mode="document" className="button button--secondary" href={currentQueueHref({ record: undefined })}>Close</a>
               </div>
             </>
           }
@@ -637,11 +631,8 @@ export function LifecycleQueue({
         </HrAdminActionModal>
       ) : null}
       {editItem ? (
-        <HrAdminActionModal
-          className="lifecycle-edit-record-modal"
+        <LifecycleEditorDialog
           closeHref={currentQueueHref({ editRecord: undefined })}
-          description="Update this lifecycle record without leaving the queue."
-          eyebrow="Lifecycle edit"
           labelledBy="lifecycle-edit-record-modal-title"
           title={`Edit ${editItem.employee_name} - ${editItem.item_label}`}
         >
@@ -655,15 +646,18 @@ export function LifecycleQueue({
               options={lifecycleOptions}
               successHref={currentQueueHref({ editRecord: undefined })}
             />
+          ) : editItem.item_type==="onboarding"&&editOnboarding ? (
+            <OnboardingForm compact cancelHref={currentQueueHref()} successHref={currentQueueHref()} initialValue={onboardingToFormValue(editOnboarding)} item={editOnboarding} itemId={editOnboarding.id} lifecycleTemplates={workflowTemplates} mode="edit" options={lifecycleOptions}/>
           ) : (
             <div className="notice">
-              <strong>Edit popup migration is pending for this record type.</strong>
-              <span className="muted">Use the existing edit page for now; the queue state and business rules are preserved.</span>
-              <Link className="button button--primary button--compact" href={editItem.detail_href}>Open legacy edit page</Link>
+              <strong>Use the dedicated record editor.</strong>
+              <span className="muted">Movement and exit records have dedicated editors for their full workflow.</span>
+              <a data-navigation-mode="document" className="button button--primary button--compact" href={["movement","exit"].includes(editItem.item_type)?`${editItem.detail_href}${editItem.detail_href.includes("?")?"&":"?"}returnTo=${encodeURIComponent(currentQueueHref({editRecord:undefined,record:undefined}))}`:editItem.detail_href}>Open record editor</a>
             </div>
           )}
-        </HrAdminActionModal>
+        </LifecycleEditorDialog>
       ) : null}
+    </fieldset>
     </section>
   );
 }

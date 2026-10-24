@@ -69,7 +69,7 @@ export default async function TenantAdminLayout({ children }: { children: React.
       productLabel="Accerio"
       quickLinks={menuSource.quickLinks}
       roleLabel="Tenant Admin"
-      searchHint="Search users, setup, audit..."
+      searchHint="Search pages and actions"
       userLabel={userLabel}
       workspaceLabel="Account Control Center"
       workspaceTone="tenant"

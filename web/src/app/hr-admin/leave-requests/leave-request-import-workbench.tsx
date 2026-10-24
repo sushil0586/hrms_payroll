@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import { useMemo, useState } from "react";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
@@ -314,7 +317,7 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
         </div>
         {message ? <div className={`notice${hasFailedRows || lookupFailed ? " notice--error" : " notice--success"}`} role={hasFailedRows || lookupFailed ? "alert" : "status"}><strong>{hasFailedRows || lookupFailed ? "Leave import needs attention." : "Leave import update completed."}</strong><span>{message}</span></div> : null}
         {rows.length ? (
-          <div className="table-scroll">
+          <WorkspaceTableScrollRegion label="Leave request import table 1" className="table-scroll workspace-table-region">
             <table>
               <thead>
                 <tr>
@@ -341,7 +344,7 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
                 ))}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         ) : null}
       </article>
     </section>

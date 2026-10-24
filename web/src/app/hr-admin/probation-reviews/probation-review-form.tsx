@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { LifecycleFormActions, useLifecycleFormState } from "@/app/hr-admin/lifecycle/lifecycle-form-state";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminLifecycleOptions, HrAdminProbationReviewWriteInput } from "@/lib/types";
@@ -33,10 +33,15 @@ function ownerOptions(items: Array<{ value: string; label: string }>) {
 }
 
 export function ProbationReviewForm({ initialValue, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
-  const router = useRouter();
+
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formId=`lifecycle-probation-reviews-${itemId??"create"}`;
+  const pending = useRef(false);const errorRef=useRef<HTMLDivElement>(null);const formRef=useRef<HTMLFormElement>(null);const focused=useRef(false);
+  const navigation=useLifecycleFormState(formValue,initialValue,isSubmitting,cancelHref??"/hr-admin/probation-reviews");
+  useEffect(()=>{if(error)errorRef.current?.focus();},[error]);
+  useEffect(()=>{if(navigation.ready&&compact&&!focused.current){focused.current=true;formRef.current?.querySelector<HTMLElement>('select,input,textarea')?.focus();}},[navigation.ready,compact]);
 
   function update<Key extends keyof HrAdminProbationReviewWriteInput>(key: Key, value: HrAdminProbationReviewWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -44,8 +49,11 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId, cance
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending.current) return;
+    pending.current=true;
     setIsSubmitting(true);
     setError("");
+    try {
     const response = await fetch(mode === "create" ? "/api/hr-admin/probation-reviews" : `/api/hr-admin/probation-reviews/${itemId}`, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -53,61 +61,50 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId, cance
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
-      setIsSubmitting(false);
+      setError(response.status>=500?"Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.":getErrorMessage(payload));
+      setIsSubmitting(false);pending.current=false;
       return;
     }
-    router.push(successHref ?? "/hr-admin/probation-reviews");
-    router.refresh();
+    if(typeof payload?.id!=="string" || !payload.id || (itemId&&payload.id!==itemId)) {setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");return;}
+    const destination=new URL(successHref??"/hr-admin/probation-reviews",window.location.origin);
+    destination.searchParams.set(destination.pathname==='/hr-admin/lifecycle'?'record':'recordLoaded',destination.pathname==='/hr-admin/lifecycle'?`probation:${payload.id}`:payload.id);
+    navigation.complete(destination.href);
+    } catch {setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");}
+    finally {pending.current=false;setIsSubmitting(false);}
   }
 
-  function handleCancel() {
-    if (cancelHref) {
-      router.push(cancelHref);
-      return;
-    }
-    router.back();
-  }
+  function handleCancel() {navigation.cancel();}
 
   return (
-    <form
+    <form id={formId}
       aria-label="Probation review form"
-      className={`section form-layout-modern lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`}
+      className={`section form-layout-modern lifecycle-phase3-form lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`}
       data-testid="probation-review-form"
+      data-hydrated={navigation.ready}
+      ref={formRef}
       onSubmit={handleSubmit}
     >
-      <section className="form-shell-card">
-        <div className="form-shell-card__header">
-          <div>
-            <h2>{mode === "create" ? "Create probation review" : "Edit probation review"}</h2>
-            <p className="section-copy">Capture the decision window, extension details, reviewer ownership, and workflow context in a cleaner review flow.</p>
-          </div>
-          <div className="form-shell-card__meta">
-            <span className="queue-summary-chip"><strong>{formValue.decision || "pending"}</strong> current decision</span>
-            <span className="queue-summary-chip"><strong>{formValue.extension_end_date || "No extension"}</strong> extension state</span>
-          </div>
-        </div>
-
+      <fieldset className="lifecycle-fields" disabled={!navigation.ready||isSubmitting}><section className="form-shell-card">
         <div className="form-shell-card__grid">
           <FormSection
             description="Capture the employee, review date, and main probation timeline."
             title="Review schedule"
           >
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Employee</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
-              <label className="form-field"><span className="muted">Review date</span><input className="input-control" type="date" value={formValue.review_date ?? ""} onChange={(e) => update("review_date", e.target.value || null)} /></label>
+              <label className="form-field"><span className="muted">Employee (required)</span><select required aria-label="Employee" className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
+              <label className="form-field"><span className="muted">Review date (required)</span><input required aria-label="Review date" className="input-control" type="date" value={formValue.review_date ?? ""} onChange={(e) => update("review_date", e.target.value || null)} /></label>
               <label className="form-field"><span className="muted">Probation end date</span><input className="input-control" type="date" value={formValue.probation_end_date ?? ""} onChange={(e) => update("probation_end_date", e.target.value || null)} /></label>
-              <label className="form-field"><span className="muted">Decision</span><select className="input-control" value={formValue.decision} onChange={(e) => update("decision", e.target.value)}>{options.probation_decisions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+              <label className="form-field"><span className="muted">Decision</span><select aria-label="Decision" className="input-control" value={formValue.decision} onChange={(e) => update("decision", e.target.value)}>{options.probation_decisions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
             </div>
           </FormSection>
 
           <FormSection
-            description="Use the shared owner vocabulary so queue filters and edits stay aligned."
+            description="Choose the reviewer and rationale. Extension decisions require an extension end date."
             title="Extension and ownership"
           >
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Extension end date</span><input className="input-control" type="date" value={formValue.extension_end_date ?? ""} onChange={(e) => update("extension_end_date", e.target.value || null)} /></label>
-              <label className="form-field"><span className="muted">Reviewer</span><select className="input-control" value={formValue.owner_value} onChange={(e) => update("owner_value", e.target.value)}>{ownerOptions(options.lifecycle_owners)}</select></label>
+              <label className="form-field"><span className="muted">Extension end date (required for Extend)</span><input aria-label="Extension end date" aria-required={formValue.decision==="extend"} className="input-control" type="date" value={formValue.extension_end_date ?? ""} onChange={(e) => update("extension_end_date", e.target.value || null)} /></label>
+              <label className="form-field"><span className="muted">Reviewer</span><select aria-label="Reviewer" className="input-control" value={formValue.owner_value} onChange={(e) => update("owner_value", e.target.value)}>{ownerOptions(options.lifecycle_owners)}</select></label>
               <label className="form-field" style={{ gridColumn: "1 / -1" }}><span className="muted">Workflow reference</span><input className="input-control" value={formValue.workflow_reference} onChange={(e) => update("workflow_reference", e.target.value)} /></label>
             </div>
           </FormSection>
@@ -130,15 +127,15 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId, cance
             <span className="muted">An extension decision should include an extension end date so the probation queue can process it safely.</span>
           </div>
         ) : null}
-        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
-        <div className="form-actions-bar">
-          <span className="muted">This review will immediately reflect in the probation queue and lifecycle inbox.</span>
+        {error ? <div className="notice notice--error" role="alert" tabIndex={-1} ref={errorRef}><strong>Review save outcome.</strong><span className="muted">{error}</span></div> : null}
+        <LifecycleFormActions><div className="form-actions-bar">
+          <span className="muted">Confirmation and extension decisions can update the employee’s probation dates.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create probation review" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
+            <button className="button button--primary" disabled={!navigation.ready||isSubmitting} form={formId} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create probation review" : "Save changes"}</button>
+            <button className="button button--secondary" disabled={!navigation.ready||isSubmitting} onClick={handleCancel} type="button">Cancel</button>
           </div>
-        </div>
-      </section>
+        </div></LifecycleFormActions>
+      </section></fieldset>
     </form>
   );
 }

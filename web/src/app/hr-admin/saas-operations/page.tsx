@@ -42,8 +42,8 @@ export default async function HrAdminSaasOperationsPage() {
   const data = result.data;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live operations" : "Demo operations"}
         title="SaaS Operations"
         description="Tenant health, queue posture, support activity, and commercial evidence."

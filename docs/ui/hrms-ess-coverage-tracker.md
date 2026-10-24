@@ -1,5 +1,7 @@
 # ESS workspace coverage tracker
 
+Cross-workspace reconciliation (22 October 2026): see the [current route inventory and UI/UX gap tracker](hrms-ui-ux-gap-tracker.md). It preserves this tracker's historical results and distinguishes current source signals from fresh acceptance.
+
 Date: 2026-10-19 IST. This is the single implementation tracker for ESS. The [horizontal tracker](hrms-horizontal-module-coverage-tracker.md) retains the UX-0 census; this file records implementation and certification status. ESS-1 remains conditionally completed. ESS-2 is implemented and certified locally for review. ESS-3 Leave is implemented: scoped local functional PASS, release CONDITIONAL. ESS-4 documents/payslips and ESS-4A P0 remediation are implemented; local functional PASS / release CONDITIONAL. ESS-5 is implemented: scoped local functional PASS / release CONDITIONAL. ESS-6 consolidation initially failed; ESS-6A remediation now has local functional PASS / release CONDITIONAL / deployment NO-GO. No release-gate promotion is authorized by this tracker.
 
 **Latest assessment — [final blocker remediation](hrms-ess-final-blocker-closure.md): local ESS CONDITIONAL; Lightsail NO-GO.** The reproducible dashboard/ledger concurrency defect is remediated. Fresh final selections: 204 frozen + 72 focused/stress browser executions passed; 69 backend/API/PostgreSQL tests passed. The original Firefox transport-reset trigger remains unproven/open. Earlier diagnostic failures are preserved; the report below qualifies historical PASS decisions without promoting production gates.

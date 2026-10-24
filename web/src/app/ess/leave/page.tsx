@@ -14,7 +14,7 @@ export default async function EssLeavePage({ searchParams }: { searchParams?: Pr
   const rawRequest = first(currentParams.requestId);
   const requestId = rawRequest && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawRequest) ? rawRequest : undefined;
   const { filters, errors } = normalizeLeaveHistoryFilters(currentParams);
-  if (errors.length) return <main className="shell shell--workspace ess-experience-shell ess-compact"><WorkspaceStandardHeader title="Leave filters need attention" description="Correct the filters or return to your complete history." /><div className="notice notice--error" role="alert">{errors.join(" ")}</div><a className="button button--secondary" href="/ess/leave">Clear filters</a></main>;
+  if (errors.length) return <main className="shell shell--workspace ess-experience-shell ess-compact accerio-page"><WorkspaceStandardHeader title="Leave filters need attention" description="Correct the filters or return to your complete history." /><div className="notice notice--error" role="alert">{errors.join(" ")}</div><a className="button button--secondary" href="/ess/leave">Clear filters</a></main>;
   const result = await getEssLeaveWorkspace({ ...filters, status, page, requestId });
   return <LeaveWorkspace balances={result.dashboard.leave.balances} currentParams={{ ...currentParams, status }}
     linkedDetail={result.detail} isDemo={result.state !== "live"} leaveRequests={result.requests} leaveTypes={result.types} state={result.state} />;

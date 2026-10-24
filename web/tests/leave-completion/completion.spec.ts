@@ -110,7 +110,7 @@ test('assignment import detects an off-page existing pair and creates only the e
  const csv=(code:string)=>`employee_code,leave_policy_name,effective_from,effective_to,priority,is_active\n${code},${data.policy_name},${data.today},,999,true`;
  let writes=0;page.on('request',r=>{if(r.method()==='POST'&&/\/api\/hr-admin\/leave-policy-assignments\/bulk-import\/?$/.test(r.url()))writes++;});
  await page.route('**/api/hr-admin/import-batches',route=>route.abort(),{times:1});
- await box.fill(csv(data.employee_code));await page.getByRole('button',{name:'Preview assignment import'}).click();await expect(table).toContainText('ambiguous active route');await expect(page.getByRole('alert').filter({hasText:'import-batch audit could not be confirmed'})).toBeVisible();await expect(page.getByRole('button',{name:'Commit ready assignment rows'})).toBeDisabled();expect(writes).toBe(0);
+ await box.fill(csv(data.employee_code));await page.getByRole('button',{name:'Preview assignment import'}).click();await expect(table).toContainText('Existing employee/policy assignment found');await expect(table).toContainText('overlaps with other active assignments');await expect(page.getByRole('alert').filter({hasText:'import-batch audit could not be confirmed'})).toBeVisible();expect(writes).toBe(0);
  await box.fill(csv(data.exact_code));await expect(table).toHaveCount(0);
  await page.getByRole('button',{name:'Preview assignment import'}).click();await expect(table).toContainText('ready');
  await commitAssignments(page);await expect(table).toContainText('created');expect(writes).toBe(1);

@@ -1,9 +1,11 @@
-import Link from "next/link";
+import { DocumentAccessNotice } from "@/app/hr-admin/documents/document-access-notice";
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 import { createEmptyDocumentCategoryValue, documentCategoryToFormValue } from "@/app/hr-admin/document-categories/form-values";
 import { DocumentCategoryForm } from "@/app/hr-admin/document-categories/document-category-form";
-import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { DocumentSetupDialog } from "@/app/hr-admin/documents/document-setup-dialog";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getHrAdminDocumentCategories, getHrAdminDocumentOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -44,6 +46,7 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
     permissionKeys: ["documents.view", "documents.manage"],
     fallbackPath: "/hr-admin/documents",
   });
+  if (!sessionHasPermission(sessionUser, "documents.view")) return <DocumentAccessNotice />;
   const canManageDocuments = sessionHasPermission(sessionUser, "documents.manage");
   const [result, optionsResult] = await Promise.all([
     getHrAdminDocumentCategories(),
@@ -55,23 +58,22 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
       ? result.data.find((item) => item.id === editCategoryId) ?? null
       : null;
   const editItem = editCategoryId ? result.data.find((item) => item.id === editCategoryId) : null;
-  const closeHref = "/hr-admin/document-categories";
+  const closeHref = selectedCategoryId ? `/hr-admin/document-categories?selectedCategory=${encodeURIComponent(selectedCategoryId)}` : "/hr-admin/document-categories";
 
   return (
-    <main className="shell hr-document-workbench">
-      <PageIntro
+    <main className="shell hr-document-workbench accerio-page document-operations document-setup-page">
+      <WorkspaceStandardHeader
         actions={
           <>
-            {canManageDocuments ? <Link className="button button--primary" href="/hr-admin/document-categories?categoryModal=create">Create category</Link> : null}
-            <Link className="button button--secondary" href="/hr-admin/documents">Back to documents</Link>
+            {canManageDocuments ? <a data-navigation-mode="document" className="button button--primary" href="/hr-admin/document-categories?categoryModal=create">Create category</a> : null}
+            <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/documents">Back to documents</a>
           </>
         }
         description="Maintain reusable document types, upload behavior, and verification rules."
-        eyebrow={result.state === "live" ? "Live document mode" : "Demo document mode"}
-        pills={[`${result.data.length} categories`]}
         title="Document categories"
       />
 
+      {normalizeParam(currentParams.setup_saved) === "1" ? <div className="notice notice--success" role="status">Setup saved. The register reflects the confirmed changes.</div> : null}
       <section className="workspace-section" aria-label="Document category summary">
         <div className="attendance-summary-strip">
           <span><strong>{result.data.length}</strong> categories</span>
@@ -80,7 +82,7 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
         </div>
       </section>
 
-      <section className="workspace-section queue-review-split">
+      <section className={`workspace-section${selected ? " queue-review-split" : ""}`}>
         <article className="workspace-data-panel record-card document-directory-panel">
           <div className="workspace-data-panel__header">
             <div>
@@ -88,7 +90,7 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
               <p className="section-copy section-copy-soft">Manage reusable document types and upload behavior.</p>
             </div>
           </div>
-          <div className="workspace-table-scroll">
+          <WorkspaceTableScrollRegion label="Document categories scroll region" className="workspace-table-scroll workspace-table-region">
             {result.data.length ? (
               <table className="workspace-table attendance-directory-table document-control-table" aria-label="Document categories">
                 <thead>
@@ -109,8 +111,8 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
                       <td><span className="workspace-table__secondary">{categoryReviewLabel(item)}</span></td>
                       <td>
                         <div className="table-actions">
-                          <Link className="button button--secondary button--compact" href={`/hr-admin/document-categories?selectedCategory=${item.id}`}>Inspect</Link>
-                          {canManageDocuments ? <Link className="button button--ghost button--compact" href={`/hr-admin/document-categories?editCategory=${item.id}`}>Edit</Link> : null}
+                          <a data-navigation-mode="document" className="button button--secondary button--compact" href={`/hr-admin/document-categories?selectedCategory=${item.id}`}>Inspect</a>
+                          {canManageDocuments ? <a data-navigation-mode="document" className="button button--ghost button--compact" href={`/hr-admin/document-categories?editCategory=${item.id}`}>Edit</a> : null}
                         </div>
                       </td>
                     </tr>
@@ -123,7 +125,7 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
                 <span className="muted">Create a category before defining requirements or accepting uploads.</span>
               </div>
             )}
-          </div>
+          </WorkspaceTableScrollRegion>
         </article>
         {selected ? (
           <article className="record-card panel-card-soft employee-detail-drawer document-detail-drawer">
@@ -132,8 +134,8 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
                 <div className="record-card__title"><h3>{selected.name}</h3><p>{selected.code} - {humanizeStatus(selected.category_type)}</p></div>
               </div>
               <div className="record-card__actions">
-                <Link className="button button--secondary button--compact" href={closeHref}>Close</Link>
-                {canManageDocuments ? <Link className="button button--primary button--compact" href={`/hr-admin/document-categories?editCategory=${selected.id}`}>Edit</Link> : null}
+                <a data-navigation-mode="document" className="button button--secondary button--compact" href={closeHref}>Close</a>
+                {canManageDocuments ? <a data-navigation-mode="document" className="button button--primary button--compact" href={`/hr-admin/document-categories?selectedCategory=${selected.id}&editCategory=${selected.id}`}>Edit</a> : null}
               </div>
             </div>
             <div className="detail-grid">
@@ -149,27 +151,25 @@ export default async function HrAdminDocumentCategoriesPage({ searchParams }: Pa
       </section>
 
       {createModal && canManageDocuments ? (
-        <HrAdminActionModal
+        <DocumentSetupDialog
           closeHref={closeHref}
           description="Create a reusable document type with upload, verification, and expiry behavior."
-          eyebrow={optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
-          labelledBy="document-category-create-modal"
+            labelledBy="document-category-create-modal"
           title="Create document category"
         >
           <DocumentCategoryForm compact initialValue={createEmptyDocumentCategoryValue(optionsResult.data.document_category_types[0]?.value)} mode="create" options={optionsResult.data} returnPath={closeHref} />
-        </HrAdminActionModal>
+        </DocumentSetupDialog>
       ) : null}
 
       {editItem && canManageDocuments ? (
-        <HrAdminActionModal
+        <DocumentSetupDialog
           closeHref={closeHref}
           description="Update behavior, validation, and upload expectations for this category."
-          eyebrow={optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
-          labelledBy={`document-category-edit-modal-${editItem.id}`}
+            labelledBy={`document-category-edit-modal-${editItem.id}`}
           title={`Edit ${editItem.name}`}
         >
           <DocumentCategoryForm compact initialValue={documentCategoryToFormValue(editItem)} itemId={editItem.id} mode="edit" options={optionsResult.data} returnPath={closeHref} />
-        </HrAdminActionModal>
+        </DocumentSetupDialog>
       ) : null}
     </main>
   );

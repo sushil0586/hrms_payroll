@@ -142,8 +142,8 @@ export default async function TenantAdminSecurityReadinessPage() {
   const checksByPrefix = (prefix: string) => data.checks.filter((check) => check.ref.startsWith(prefix));
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live enterprise security" : "Demo enterprise security"}
         title="Enterprise Security Readiness"
         description="Tenant-visible MFA, SSO, SCIM, session, audit, and data-protection launch posture."

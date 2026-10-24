@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { formatWorkspaceDateTime as formatDateTime } from "@/lib/ui/date-time-format";
 import { ActionMenu } from "@/components/patterns/action-menu";
 import type { HrAdminEmployeeDetail } from "@/lib/types";
 
@@ -12,10 +13,11 @@ type SelectionState = "idle" | "loading" | "ready" | "error";
 
 type SelectionContextValue = {
   detail: HrAdminEmployeeDetail | null;
+  dismiss: (href: string) => void;
   error: string;
   retry: () => void;
   selectedId: string | null;
-  select: (employeeId: string, href: string) => void;
+  select: (employeeId: string, href: string, trigger: HTMLAnchorElement) => void;
   state: SelectionState;
 };
 
@@ -49,7 +51,6 @@ export function EmployeeSelectionProvider({
   initialDetail,
   initialSelectedId,
 }: SelectionProviderProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const initialCache = useMemo(() => {
@@ -65,6 +66,7 @@ export function EmployeeSelectionProvider({
   const [state, setState] = useState<SelectionState>(initialSelectedId ? (initialDetail ? "ready" : "loading") : "idle");
   const [error, setError] = useState("");
   const selectedIdRef = useRef<string | null>(initialSelectedId);
+  const triggerRef = useRef<HTMLAnchorElement | null>(null);
 
   const loadDetail = useCallback(async (employeeId: string, useCached = true) => {
     const cached = cacheRef.current.get(employeeId);
@@ -112,13 +114,32 @@ export function EmployeeSelectionProvider({
     }
   }, [initialDetail, initialSelectedId, loadDetail]);
 
-  const select = useCallback((employeeId: string, href: string) => {
+  const select = useCallback((employeeId: string, href: string, trigger: HTMLAnchorElement) => {
+    triggerRef.current = trigger;
     // This ref guards async responses before React commits the selected row state.
     selectedIdRef.current = employeeId;
     setSelectedId(employeeId);
     void loadDetail(employeeId);
-    router.push(href, { scroll: false });
-  }, [loadDetail, router]);
+    // Next integrates native history with useSearchParams; selection data has its own scoped read.
+    window.history.pushState(null, "", href);
+  }, [loadDetail]);
+
+  const dismiss = useCallback((href: string) => {
+    const selected = selectedIdRef.current;
+    const trigger = triggerRef.current?.isConnected ? triggerRef.current : selected
+      ? document.querySelector<HTMLAnchorElement>(`tr[data-employee-id="${CSS.escape(selected)}"] .employee-directory-table__identity`)
+      : null;
+    requestRef.current?.controller.abort();
+    selectedIdRef.current = null;
+    setSelectedId(null);
+    setDetail(null);
+    setError("");
+    setState("idle");
+    window.history.pushState(null, "", href);
+    const returnTarget = trigger ?? document.querySelector<HTMLElement>(".employee-directory-table-wrap");
+    returnTarget?.focus({preventScroll:true});
+    returnTarget?.scrollIntoView({block:"nearest"});
+  }, []);
 
   const retry = useCallback(() => {
     if (selectedIdRef.current) void loadDetail(selectedIdRef.current, false);
@@ -146,12 +167,13 @@ export function EmployeeSelectionProvider({
 
   const contextValue = useMemo<SelectionContextValue>(() => ({
     detail,
+    dismiss,
     error,
     retry,
     selectedId,
     select,
     state,
-  }), [detail, error, retry, selectedId, select, state]);
+  }), [detail, dismiss, error, retry, selectedId, select, state]);
 
   return (
     <SelectionContext.Provider value={contextValue}>
@@ -195,11 +217,13 @@ export function EmployeeSelectionLink({ children, className, employeeId, href }:
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    select(employeeId, href);
+    select(employeeId, href, event.currentTarget);
   }
 
   return (
     <Link
+      data-navigation-mode="document"
+      prefetch={false}
       aria-current={selected ? "true" : undefined}
       aria-describedby={selected && state === "loading" ? "employee-detail-loading-status" : undefined}
       className={className}
@@ -215,17 +239,6 @@ export function EmployeeSelectionLink({ children, className, employeeId, href }:
 function formatDate(value: string | null) {
   if (!value) return "Not available";
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return "Not available";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 function label(value: string) {
@@ -293,7 +306,7 @@ function EmployeeDetailContent({ detail }: { detail: HrAdminEmployeeDetail }) {
     <>
       <div className="hr-employee-profile-summary">
         <div className="hr-employee-avatar" aria-hidden="true">{detail.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div>
-        <div><h3>{detail.full_name}</h3><p>{detail.employee_code} • {detail.department || "No department"} • {detail.designation || "No designation"}</p></div>
+        <div><p>{detail.employee_code} • {detail.department || "No department"} • {detail.designation || "No designation"}</p></div>
         <span className={statusChipClass(detail.employment_status)}>{label(detail.employment_status)}</span>
       </div>
       <div className="hr-employee-readiness-strip">
@@ -316,7 +329,7 @@ function EmployeeDetailContent({ detail }: { detail: HrAdminEmployeeDetail }) {
           <DetailRow title="Personal Email" value={detail.personal_email || "Not available"} />
           <DetailRow title="Phone Number" value={detail.phone_number || "Not available"} />
         </DetailSection>
-        <DetailSection title="Structure">
+        <DetailSection title="Structure" open>
           <DetailRow title="Legal Entity" value={detail.legal_entity || "Not mapped"} />
           <DetailRow title="Branch" value={detail.branch || "Not mapped"} />
           <DetailRow title="Location" value={detail.location || "Not mapped"} />
@@ -329,14 +342,14 @@ function EmployeeDetailContent({ detail }: { detail: HrAdminEmployeeDetail }) {
           <DetailRow title="Reporting Manager" value={detail.reporting_manager || "Not assigned"} />
           <DetailRow title="Direct Reports" value={String(detail.direct_reports_count)} />
         </DetailSection>
-        <DetailSection title="Access and dates">
+        <DetailSection title="Access and dates" open>
           <DetailRow title="Access Provisioned" value={detail.has_access ? "Yes" : "No"} />
           <DetailRow title="Membership Status" value={detail.membership_status ? detail.membership_status.replaceAll("_", " ") : "Not provisioned"} />
           <DetailRow title="Assigned Roles" value={String(detail.assigned_role_count)} />
           <DetailRow title="Date of Joining" value={formatDate(detail.date_of_joining)} />
           <DetailRow title="Probation End Date" value={formatDate(detail.probation_end_date)} />
           <DetailRow title="Confirmation Date" value={formatDate(detail.confirmation_date)} />
-          <DetailRow title="Last Updated" value={formatDateTime(detail.updated_at)} />
+          <DetailRow title="Last updated (IST)" value={formatDateTime(detail.updated_at)} />
         </DetailSection>
       </div>
     </>
@@ -347,9 +360,18 @@ function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess }: {
   canEditEmployees: boolean;
   canManageEmployeeAccess: boolean;
 }) {
-  const { detail, error, retry, selectedId, state } = useEmployeeSelection();
+  const { detail, dismiss, error, retry, selectedId, state } = useEmployeeSelection();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const focusedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedId || searchParams.get("action") || searchParams.get("create") === "1" || focusedIdRef.current === selectedId) return;
+    focusedIdRef.current = selectedId;
+    headingRef.current?.focus({preventScroll:true});
+    headingRef.current?.scrollIntoView({block:"start"});
+  }, [selectedId, searchParams]);
 
   function href(updates: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -359,22 +381,20 @@ function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess }: {
   }
 
   const actionItems = detail ? [
-    ...(canEditEmployees ? [{ href: href({ action: "edit", employeeId: detail.id }), title: "Edit employee", description: "Update profile, org mapping, and employment data." }] : []),
     ...(canManageEmployeeAccess ? [{ href: href({ action: "access", employeeId: detail.id }), title: "Manage access", description: "Review roles, login state, and membership access." }] : []),
-    ...(canEditEmployees ? [{ href: href({ action: "bank", employeeId: detail.id }), title: "Manage bank accounts", description: "Maintain payout account coverage for payroll readiness." }] : []),
+    ...(canEditEmployees ? [{ href: href({ action: "bank", employeeId: detail.id }), title: "Manage bank accounts", description: "Maintain employee payout account details." }] : []),
   ] : [];
 
   return (
     <article aria-busy={state === "loading"} aria-labelledby="employee-master-detail-title" className="record-card panel-card-soft employee-detail-drawer">
       <div className="record-card__header">
-        <div className="record-card__title-wrap"><div className="record-card__title"><h2 className="section-heading-soft" id="employee-master-detail-title">Employee master detail</h2></div><p className="section-copy section-copy-soft">Focused detail for the selected employee.</p></div>
+        <div className="record-card__title-wrap"><div className="record-card__title"><h2 className="section-heading-soft" id="employee-master-detail-title" ref={headingRef} tabIndex={-1}>{detail?.full_name ?? "Employee details"}</h2></div><p className="section-copy section-copy-soft">Focused detail for the selected employee.</p></div>
         <div className="record-card__actions">
-          <Link className="button button--ghost button--compact" href={href({ employeeId: undefined, action: undefined })} scroll={false}>Close</Link>
+          <Link data-navigation-mode="document" prefetch={false} className="button button--ghost button--compact" href={href({ employeeId: undefined, action: undefined })} scroll={false} onClick={event=>{if(event.button===0&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey){event.preventDefault();dismiss(href({employeeId:undefined,action:undefined}));}}}>Close details</Link>
           {detail && (canEditEmployees || canManageEmployeeAccess) ? (
             <div className="employee-detail-primary-actions">
               {canEditEmployees ? <a className="button button--secondary button--compact" data-navigation-mode="document" href={href({ action: "edit", employeeId: detail.id })}>Edit</a> : null}
-              {canManageEmployeeAccess ? <a className="button button--secondary button--compact" data-navigation-mode="document" href={href({ action: "access", employeeId: detail.id })}>Access</a> : null}
-              <ActionMenu items={actionItems} label="Actions" />
+              <ActionMenu documentNavigation items={actionItems} label="Actions" />
             </div>
           ) : null}
         </div>

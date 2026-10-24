@@ -69,7 +69,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
   const sharedParams = { q, year, page_size: data.page_size, payslipId: selectedPayslip?.id };
 
   return (
-    <PayslipReadStateProvider><main className="shell shell--workspace shell--ess-payslips ess-experience-shell ess-compact">
+    <PayslipReadStateProvider><main className="shell shell--workspace shell--ess-payslips ess-experience-shell ess-compact accerio-page">
       <WorkspaceStandardHeader eyebrow="Employee self service" title="Payslips" description="Review published payroll documents, download copies and acknowledge receipt." actions={<Link prefetch={false} className="button button--secondary" href="/ess/documents">Employee documents</Link>} />
       <WorkspaceStandardPanel title="Published payroll" description="Pay dates are payroll dates, not confirmation of a bank payment.">
         <WorkspaceInformation fields={[
@@ -109,7 +109,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
               </WorkspaceFilterBar>
             </form>
 
-            <WorkspaceTableScrollRegion className="workspace-table-scroll" label="Payslip history table">
+            <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Payslip history table">
               <table className="workspace-table " aria-label="Published payslips">
                 <thead>
                   <tr>

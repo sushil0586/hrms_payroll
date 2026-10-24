@@ -104,8 +104,8 @@ export default async function HrAdminPoliciesPage() {
   ];
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live policy mode" : "Demo policy mode"}
         title="Policy control"
         description="Control leave and attendance rules, assignments, and rollout surfaces from one policy workspace."

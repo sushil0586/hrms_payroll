@@ -48,8 +48,8 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
   const canManageChangeRequests = sessionHasPermission(sessionUser, "tenant.change_requests.manage");
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live plan control" : "Demo plan control"}
         title="Plan & Billing"
         description="Review the active subscription, usage position, and governed commercial requests before plan or billing changes are made."

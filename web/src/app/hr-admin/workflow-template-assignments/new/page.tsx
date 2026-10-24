@@ -9,8 +9,8 @@ export default async function HrAdminNewWorkflowTemplateAssignmentPage() {
   const optionsResult = await getHrAdminWorkflowOptions();
 
   return (
-    <main className="shell shell--workspace workflow-workbench">
-      <PageIntro
+    <main className="shell shell--workspace workflow-workbench accerio-page">
+      <PageIntro appearance="accerio"
         actions={<Link className="button button--secondary" href="/hr-admin/workflow-template-assignments">Back to workflow assignments</Link>}
         description="Scope a workflow template to the entity, branch, department, business unit, or grade where it should apply."
         eyebrow={optionsResult.state === "live" ? "Live workflow mode" : "Demo workflow mode"}

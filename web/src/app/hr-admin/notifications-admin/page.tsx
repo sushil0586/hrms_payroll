@@ -115,8 +115,8 @@ export default async function HrAdminNotificationsAdminPage() {
   ];
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
         title="Notifications"
         description="Templates, triggers, and queue visibility."

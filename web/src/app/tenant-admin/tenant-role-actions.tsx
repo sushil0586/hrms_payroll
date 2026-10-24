@@ -1,4 +1,8 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -193,13 +197,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
     if (dialogMode) nameRef.current?.focus();
   }, [dialogMode]);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && dialogMode) closeDialog();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [closeDialog, dialogMode]);
+
 
   async function saveRole() {
     if (busyRef) return;
@@ -285,7 +283,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
           <span className="workspace-card__eyebrow">Roles & Permissions</span>
           <h2>Access model</h2>
         </div>
-        <button className="button button--primary" disabled={!canManageRoles} onClick={openCreateDialog} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
+        <button className="button button--primary" disabled={!canManageRoles} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openCreateDialog(); }} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
           Add role
         </button>
       </div>
@@ -336,7 +334,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
                     <p>{role.description || "No description set."}</p>
                   </div>
                   <div className="tenant-role-row__actions">
-                    <button className="button button--secondary" disabled={!canManageRoles || busyRef.startsWith(role.id)} onClick={() => openEditDialog(role)} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
+                    <button className="button button--secondary" disabled={!canManageRoles || busyRef.startsWith(role.id)} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openEditDialog(role); }} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
                       Edit
                     </button>
                     {role.is_active ? (
@@ -420,18 +418,11 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       </div>
 
       {dialogMode ? (
-        <div className="tenant-modal-shell" role="presentation">
-          <div aria-describedby="role-dialog-validation" aria-label={dialogMode === "edit" ? "Update tenant role" : "Create tenant role"} aria-modal="true" className="tenant-modal" role="dialog">
-            <div className="tenant-modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">{dialogMode === "edit" ? "Role setup" : "New role"}</span>
-                <h3>{dialogMode === "edit" ? "Update role" : "Create role"}</h3>
-              </div>
-              <button aria-label="Close role dialog" className="button button--ghost" onClick={closeDialog} type="button">
-                Close
-              </button>
-            </div>
-            <div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
+        <HrAdminActionModal closeHref="/tenant-admin/roles" labelledBy="workspace-tenant-role-actions" title={dialogMode === "edit" ? "Update tenant role" : "Create tenant role"} onClose={closeDialog} busy={Boolean(busyRef)} className="tenant-modal">
+
+
+
+<div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
               <label>
                 <span>Role name</span>
                 <input aria-describedby="role-dialog-validation" aria-invalid={Boolean(formError || validation)} onChange={(event) => setName(event.target.value)} placeholder="Leave Approver" ref={nameRef} value={name} />
@@ -441,11 +432,13 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
                 <input disabled={Boolean(editingRole?.is_system_role)} onChange={(event) => setCode(event.target.value)} placeholder="leave-approver" value={code} />
               </label>
             </div>
-            <label className="tenant-modal__note">
+
+<label className="tenant-modal__note">
               <span>Description</span>
               <textarea onChange={(event) => setDescription(event.target.value)} placeholder="What this role is responsible for" value={description} />
             </label>
-            <div className="tenant-modal__note">
+
+<div className="tenant-modal__note">
               <span>Permissions</span>
               <div className="tenant-permission-matrix">
                 <div className="tenant-permission-summary">
@@ -498,23 +491,26 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
                 </div>
               </div>
             </div>
-            <label className="tenant-role-active-toggle">
+
+<label className="tenant-role-active-toggle">
               <input checked={isActive} disabled={Boolean(editingRole?.is_system_role)} onChange={(event) => setIsActive(event.target.checked)} type="checkbox" />
               <span>{isActive ? "Role is active" : "Role is inactive"}</span>
             </label>
-            <div className="tenant-modal__validation" id="role-dialog-validation" role={formError || validation ? "alert" : "status"}>
+
+<div className="tenant-modal__validation" id="role-dialog-validation" role={formError || validation ? "alert" : "status"}>
               <span>{formError || validation || (editingRole?.is_system_role ? "System role name and permissions can be documented; code and active state are protected." : "Role is ready to save.")}</span>
             </div>
-            <div className="tenant-modal__actions">
-              <button className="button button--secondary" onClick={closeDialog} type="button">
+
+<div className="tenant-modal__actions">
+              <button className="button button--secondary" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} type="button">
                 Cancel
               </button>
               <AsyncActionButton className="button button--primary" disabled={Boolean(validation)} onClick={saveRole} pending={Boolean(busyRef)} pendingLabel={dialogMode === "edit" ? "Updating role" : "Creating role"} type="button">
                 {dialogMode === "edit" ? "Update role" : "Create role"}
               </AsyncActionButton>
             </div>
-          </div>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
     </div>
   );

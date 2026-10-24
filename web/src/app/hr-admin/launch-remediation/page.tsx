@@ -63,8 +63,8 @@ export default async function HrAdminLaunchRemediationPage({ searchParams }: Pag
   const data = result.data;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live launch desk" : "Demo launch desk"}
         title="Launch Blockers"
         description="Route blockers, assign owners, and capture launch-risk decisions."

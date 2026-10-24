@@ -24,7 +24,7 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, on
   return (
     <div className="employee-directory-layout">
       <ActionFeedbackReceipt recordIds={assignments.map(item => item.id)} />
-      <WorkspaceTableScrollRegion className="employee-directory-table-wrap" label="Leave assignments table scroll">
+      <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Leave assignments table scroll">
         <table aria-label="Leave assignments" className="accerio-data-table workspace-table attendance-directory-table">
           <thead>
             <tr>

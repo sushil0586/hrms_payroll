@@ -9,9 +9,11 @@ type Props = {
   reset: () => void;
 };
 
-export default function PlatformAdminError({ error, reset }: Props) {
+export default function PlatformAdminError({ error }: Props) {
   return (
     <WorkspaceErrorState
+      appearance="accerio"
+      userFacing
       actions={
         <>
           <Link className="button button--secondary" href="/login">
@@ -24,7 +26,7 @@ export default function PlatformAdminError({ error, reset }: Props) {
       }
       detail={error.message}
       eyebrow="Platform admin load issue"
-      onRetry={reset}
+      onRetry={() => window.location.reload()}
       title="Platform console could not load tenant onboarding data"
     />
   );

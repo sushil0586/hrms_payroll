@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { EmployeeImportPanel } from "./employee-import-panel";
 
-import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
-import { submitImportRequest } from "@/lib/ui/import-request";
+import { useMemo } from "react";
+
 import type { HrAdminEmployeeBankAccountWriteInput, HrAdminEmployeeListItem } from "@/lib/types";
 
 type EmployeeBankImportWorkbenchProps = {
@@ -172,186 +171,21 @@ function sampleCsv(employees: HrAdminEmployeeListItem[], suffix: string) {
 }
 
 export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWorkbenchProps) {
-  const [csvText, setCsvText] = useState(templateCsv());
-  const [rows, setRows] = useState<ImportRow[]>([]);
-  const [message, setMessage] = useState("");
-  const [isCommitting, setIsCommitting] = useState(false);
-  const employeesByCode = useMemo(
-    () => new Map(employees.map((employee) => [employee.employee_code.toLowerCase(), employee])),
-    [employees],
-  );
-  const readyCount = rows.filter((row) => row.status === "ready").length;
-  const hasFailedRows = rows.some((row) => row.status === "failed");
-  const createdCount = rows.filter((row) => row.status === "created").length;
-
-  async function preview() {
-    const parsed = parseCsv(csvText);
-    if (parsed.error) {
-      setRows([]);
-      setMessage(parsed.error);
-      return;
-    }
-
-    const batchPrimaryEmployees = new Set<string>();
-    const nextRows = parsed.rows.map((row, index) => {
-      const result = buildPayload(row, employeesByCode, batchPrimaryEmployees);
-      return {
-        index: index + 1,
-        source: row,
-        employeeId: result.employeeId,
-        payload: result.payload,
-        status: result.errors.length ? "blocked" : "ready",
-        message: result.errors.join(" "),
-      } satisfies ImportRow;
-    });
-
-    setRows(nextRows);
-    setMessage("Preview ready. Commit ready bank accounts after checking blocked rows.");
-    await recordImportBatchAudit({
-      import_type: "employee_bank_accounts",
-      status: "previewed",
-      file_name: "employee-bank-import.csv",
-      source_hash: await sha256Hex(csvText),
-      row_count: nextRows.length,
-      ready_count: nextRows.filter((row) => row.status === "ready").length,
-      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
-      rollback_supported: false,
-      evidence_snapshot: { headers, ui: "employee-bank-import-workbench" },
-      row_errors: nextRows.filter((row) => row.status === "blocked").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
-    });
-  }
-
-  async function commitReadyRows() {
-    if (isCommitting) return;
-    setIsCommitting(true);
-    const nextRows = [...rows];
-
-    for (let index = 0; index < nextRows.length; index += 1) {
-      const row = nextRows[index];
-      if (row.status !== "ready" || !row.payload || !row.employeeId) {
-        continue;
-      }
-
-      const response = await submitImportRequest(`/api/hr-admin/employees/${row.employeeId}/bank-accounts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(row.payload),
-      });
-      const payload = response.payload;
-      nextRows[index] = {
-        ...row,
-        status: response.ok ? "created" : "failed",
-        message: response.ok ? "Bank account created." : payload.detail || Object.values(payload).flat().join(" ") || "Create failed.",
-      };
-      setRows([...nextRows]);
-    }
-
-    setIsCommitting(false);
-    setMessage(nextRows.some((row) => row.status === "failed")
-      ? "Some bank rows failed. Review the row messages, then preview the preserved CSV again."
-      : "Commit complete. Open the employee bank account page or payroll readiness to verify coverage.");
-    await recordImportBatchAudit({
-      import_type: "employee_bank_accounts",
-      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
-      file_name: "employee-bank-import.csv",
-      source_hash: await sha256Hex(csvText),
-      row_count: nextRows.length,
-      ready_count: nextRows.filter((row) => row.status === "ready").length,
-      created_count: nextRows.filter((row) => row.status === "created").length,
-      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
-      failed_count: nextRows.filter((row) => row.status === "failed").length,
-      rollback_supported: false,
-      evidence_snapshot: { headers, ui: "employee-bank-import-workbench" },
-      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
-    });
-  }
-
-  return (
-    <section className="section" data-testid="employee-bank-import-workbench">
-      <article className="panel-card-soft organization-import-workbench">
-        <div className="queue-toolbar__header">
-          <div>
-            <h2 className="section-heading-soft">Employee bank import</h2>
-            <p className="section-copy section-copy-soft">Load payout accounts by employee code and commit ready rows through the bank account workflow.</p>
-          </div>
-          <div className="queue-toolbar__meta">
-            <span className="queue-summary-chip">
-              <strong>{readyCount}</strong> ready
-            </span>
-            <span className="queue-summary-chip">
-              <strong>{createdCount}</strong> created
-            </span>
-          </div>
-        </div>
-
-        <div className="organization-import-grid">
-          <label className="form-field">
-            <span className="text-label-premium">Bank CSV data</span>
-            <textarea className="input-control organization-import-textarea" value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-          </label>
-          <div className="organization-import-actions">
-            <button className="button button--secondary" type="button" onClick={() => setCsvText(sampleCsv(employees, String(Date.now()).slice(-5)))}>
-              Load sample template
-            </button>
-            <button className="button button--secondary" type="button" onClick={() => navigator.clipboard.writeText(templateCsv())}>
-              Copy template
-            </button>
-            <a className="button button--secondary" download="employee-bank-import-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(templateCsv())}`}>
-              Download template
-            </a>
-            <label className="button button--secondary">
-              <span>Upload CSV</span>
-              <input
-                className="sr-only"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) {
-                    return;
-                  }
-                  file.text().then(setCsvText);
-                }}
-              />
-            </label>
-            <button className="button button--primary" type="button" onClick={preview}>
-              Preview bank import
-            </button>
-            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount} pending={isCommitting} pendingLabel="Committing bank rows" onClick={commitReadyRows}>Commit ready bank rows</AsyncActionButton>
-          </div>
-        </div>
-
-        {message ? <div className={`notice${hasFailedRows ? "" : " notice--success"}`} role={hasFailedRows ? "alert" : "status"}><strong>{hasFailedRows ? "Bank import needs attention." : "Bank import update completed."}</strong><span>{message}</span></div> : null}
-
-        {rows.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Row</th>
-                  <th>Employee</th>
-                  <th>Bank</th>
-                  <th>Primary</th>
-                  <th>Status</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={`${row.index}-${row.source.employee_code}-${row.source.account_number}`}>
-                    <td>{row.index}</td>
-                    <td>{row.source.employee_code || "Missing code"}</td>
-                    <td>{row.source.bank_name || "Missing bank"}</td>
-                    <td>{parseBoolean(row.source.is_primary || "true") ? "Yes" : "No"}</td>
-                    <td><span className="readiness-badge">{row.status}</span></td>
-                    <td>{row.message || "Valid for import"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </article>
-    </section>
-  );
+  const employeesByCode=useMemo(() => new Map(employees.map(employee => [employee.employee_code.toLowerCase(),employee])),[employees]);
+  return <EmployeeImportPanel<ImportRow>
+    testId="employee-bank-import-workbench" title="Bank account import" description="Add payout accounts to existing employees."
+    impact="Primary accounts take effect immediately and replace the employee's previous primary account. Blank is_primary means true."
+    guidance="Employee code, account holder, bank name and account number are required. Use an existing employee code. IFSC is optional and uses the 11-character bank format. Use true or false for primary; blank means true."
+    template={templateCsv()} sample={() => sampleCsv(employees,String(Date.now()).slice(-5))}
+    importType="employee_bank_accounts" filename="employee-bank-import.csv"
+    columns={[{key:"employee_code",label:"Employee"},{key:"bank_name",label:"Bank"},{key:"is_primary",label:"Primary (blank = true)"}]}
+    prepare={text => {
+      const parsed=parseCsv(text);const primary=new Set<string>();
+      return {error:parsed.error,rows:parsed.rows.map((row,index) => {
+        const result=buildPayload(row,employeesByCode,primary);
+        return {index:index+1,source:row,employeeId:result.employeeId,payload:result.payload,status:result.errors.length ? "blocked" : "ready",message:result.errors.join(" ")};
+      })};
+    }}
+    request={row => ({url:`/api/hr-admin/employees/${row.employeeId}/bank-accounts`,method:"POST",body:row.payload})}
+  />;
 }

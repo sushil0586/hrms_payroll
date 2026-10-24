@@ -1,0 +1,2 @@
+import {defineConfig,devices} from '@playwright/test';
+export default defineConfig({testDir:'./tests/document-makeover',testMatch:'unavailable.spec.ts',workers:1,retries:0,timeout:60000,outputDir:'../docs/qa/evidence/document-makeover-phase1-followup-2026-10-22/unavailable-results',reporter:[['list'],['json',{outputFile:'../docs/qa/evidence/document-makeover-phase1-followup-2026-10-22/results-unavailable.json'}]],use:{...devices['Desktop Chrome'],baseURL:'http://127.0.0.1:3274',trace:'off'}});

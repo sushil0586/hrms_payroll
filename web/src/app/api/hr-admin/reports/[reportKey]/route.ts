@@ -1,3 +1,4 @@
+import {collectLifecycleReport,selectLifecycleReport,lifecycleAsOf,lifecycleDaysSince,lifecycleAgeBucket,lifecycleSlaState,lifecycleSlaRisk} from "@/lib/lifecycle-report";
 import { availableLeaveUnits, leaveUtilizationPercent, leaveBalanceState as leaveLiabilityState, leaveRiskAssessment as leaveLiabilityRisk } from "@/lib/ui/leave-balance-presentation";
 import { completeReport } from "@/lib/complete-report";
 import { createHash } from "crypto";
@@ -641,7 +642,7 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       employee_code: row.employee_code, employee_name: row.employee_name,
       leave_policy_name: row.leave_policy_name, leave_type_name: row.leave_type_name,
       period_year: row.period_year, liability_state: row.liability_state, liability_risk: row.liability_risk,
-    } : row, query)) return false;
+    } : reportKey === "document-compliance" ? Object.fromEntries(["employee_code","employee_name","category","title","document_number","file_name","verification_status","status","expiry_label","uploaded_by_identifier","verified_by_identifier","rejection_reason"].map(key=>[key,row[key]])) : row, query)) return false;
     if (reportKey === "challan-reconciliation") {
       if (filters.payment_status && row.payment_status !== filters.payment_status) return false;
       if (filters.provider_ref && row.provider_ref !== filters.provider_ref) return false;
@@ -1478,7 +1479,7 @@ async function getWorkforceExportRows(reportKey: string, token: string) {
 async function getDocumentComplianceExportRows(reportKey: string, token: string) {
   if (reportKey !== "document-compliance") return null;
 
-  const documentResult = await upstreamJson<HrAdminEmployeeDocumentListResponse>("/hr-admin/employee-documents/?page=1&page_size=500", token);
+  const documentResult = await completeAttendanceSource<HrAdminEmployeeDocumentListResponse>("/hr-admin/employee-documents/", token);
   if (!documentResult.ok) return { error: documentResult };
 
   const documents = documentResult.data;
@@ -1548,43 +1549,21 @@ function daysOverdue(value: string | null | undefined) {
   return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86_400_000));
 }
 
-function lifecycleAgeBucket(ageDays: number) {
-  if (ageDays >= 30) return "30+ days";
-  if (ageDays >= 15) return "15-29 days";
-  if (ageDays >= 8) return "8-14 days";
-  return "0-7 days";
-}
-
-function lifecycleSlaState(item: HrAdminLifecycleQueueItem) {
-  const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
-  if (overdue > 0) return "Overdue";
-  if (item.next_escalation_on) return "Escalation scheduled";
-  if (!item.owner_value) return "Owner missing";
-  if (item.document_attention_state === "blocked") return "Document blocked";
-  return "On track";
-}
-
-function lifecycleSlaRisk(item: HrAdminLifecycleQueueItem) {
-  const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
-  if (overdue >= 3 || item.document_attention_state === "blocked" || !item.owner_value) return "High";
-  if (overdue > 0 || item.next_escalation_on || item.attention_rank >= 40 || item.document_attention_state === "warning") return "Medium";
-  return "Low";
-}
-
-async function getLifecycleQueueExportRows(reportKey: string, token: string) {
+async function getLifecycleQueueExportRows(reportKey: string, token: string, filters:ExportFilters) {
   if (reportKey !== "lifecycle-queue" && reportKey !== "lifecycle-aging") return null;
 
-  const lifecycleResult = await upstreamJson<HrAdminLifecycleQueueListResponse>("/hr-admin/lifecycle-queue/?page=1&page_size=500", token);
-  if (!lifecycleResult.ok) return { error: lifecycleResult };
-
-  const lifecycle = lifecycleResult.data;
-  if (!lifecycle) return { error: { ok: false, status: 502, data: null, detail: "Live lifecycle queue source data is unavailable." } };
+  const asOf=lifecycleAsOf(filters.as_of);filters.as_of=asOf;
+  let items:HrAdminLifecycleQueueItem[];
+  let upstreamFailure: {ok:boolean;status:number;data:unknown;detail:string}|undefined;
+  try {items=await collectLifecycleReport(async page=>{const result=await upstreamJson<HrAdminLifecycleQueueListResponse>(`/hr-admin/lifecycle-queue/?page=${page}&page_size=100`,token);if(!result.ok||!result.data){upstreamFailure=result;throw new Error("Live lifecycle report source is unavailable.");}return result.data;});}
+  catch(error){return {error:upstreamFailure??{ok:false,status:502,data:null,detail:error instanceof Error?error.message:"Live lifecycle report source is unavailable."}};}
+  const selected=selectLifecycleReport(items,reportKey,filters,asOf);
 
   if (reportKey === "lifecycle-aging") {
     return {
-      rows: lifecycle.items.map((item) => {
-        const ageDays = daysSince(item.created_at);
-        const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
+      rows: selected.map((item) => {
+        const ageDays = lifecycleDaysSince(item.created_at,asOf);
+        const overdue = lifecycleDaysSince(item.next_due_on ?? item.attention_due_on,asOf);
         return {
           item_type: item.item_type,
           item_label: item.item_label,
@@ -1603,8 +1582,8 @@ async function getLifecycleQueueExportRows(reportKey: string, token: string) {
           age_days: ageDays,
           age_bucket: lifecycleAgeBucket(ageDays),
           days_overdue: overdue,
-          sla_state: lifecycleSlaState(item),
-          sla_risk: lifecycleSlaRisk(item),
+          sla_state: lifecycleSlaState(item,asOf),
+          sla_risk: lifecycleSlaRisk(item,asOf),
           owner_gap: !item.owner_value,
           document_blocker_count: item.missing_required_document_count + item.expired_document_count,
           document_attention_state: item.document_attention_state,
@@ -1617,7 +1596,7 @@ async function getLifecycleQueueExportRows(reportKey: string, token: string) {
   }
 
   return {
-    rows: lifecycle.items.map((item) => ({
+    rows: selected.map((item) => ({
       item_type: item.item_type,
       item_label: item.item_label,
       employee_code: item.employee_code,
@@ -2937,10 +2916,19 @@ export async function GET(request: NextRequest, { params }: Props) {
           return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
         }
       }
-      return exportResponse(request, reportKey, applyExportFilters(reportKey, documentComplianceExport.rows, filters), filters, auditContext);
+      const rows = applyExportFilters(reportKey, documentComplianceExport.rows, filters);
+      rows.sort((left,right)=> {
+        if (filters.sort === "employee") return String(left.employee_name).localeCompare(String(right.employee_name));
+        if (filters.sort === "verification") return String(left.verification_status).localeCompare(String(right.verification_status));
+        if (filters.sort === "expiry") return Number(left.days_until_expiry ?? 99999)-Number(right.days_until_expiry ?? 99999);
+        if (filters.sort === "category") return String(left.category).localeCompare(String(right.category));
+        const ranks: Record<string,number> = {High:0,Medium:1,Low:2};
+        return ranks[String(left.compliance_risk)]-ranks[String(right.compliance_risk)];
+      });
+      return exportResponse(request, reportKey, rows, filters, auditContext);
     }
 
-    const lifecycleQueueExport = await getLifecycleQueueExportRows(reportKey, token);
+    const lifecycleQueueExport = await getLifecycleQueueExportRows(reportKey, token, filters);
     if (lifecycleQueueExport) {
       if ("error" in lifecycleQueueExport) {
         const exportError = lifecycleQueueExport.error;
@@ -2948,7 +2936,7 @@ export async function GET(request: NextRequest, { params }: Props) {
           return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
         }
       }
-      return exportResponse(request, reportKey, applyExportFilters(reportKey, lifecycleQueueExport.rows, filters), filters, auditContext);
+      return exportResponse(request, reportKey, lifecycleQueueExport.rows, filters, auditContext);
     }
 
     const attendanceRegisterExport = await getAttendanceRegisterExportRows(reportKey, token, filters);

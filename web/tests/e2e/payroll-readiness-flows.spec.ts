@@ -33,7 +33,7 @@ test.describe("HR admin payroll readiness flows", () => {
     await page.goto("/hr-admin/payroll-readiness?tab=employees", { waitUntil: "domcontentloaded" });
     await page.getByRole("textbox", { name: "Search" }).fill("A");
     await Promise.all([
-      page.waitForURL((url) => url.searchParams.get("q") === "A"),
+      page.waitForURL((url) => url.searchParams.get("q") === "A", { waitUntil: "commit" }),
       page.getByRole("button", { name: "Apply" }).click(),
     ]);
     await expect(page.getByText("Source data readiness").or(page.getByRole("columnheader", { name: "Employee" })).first()).toBeVisible();

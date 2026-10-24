@@ -15,8 +15,8 @@ export default async function TdsEfileReadinessReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance readiness" : "Demo compliance readiness"}
         title="TDS E-file Readiness"
         description="Control-center view for Form 24Q readiness, TAN registration, PAN/declaration coverage, challan evidence, statutory artifacts, and provider filing gates."

@@ -24,7 +24,7 @@ export default async function EssPage() {
   ];
 
   return (
-    <main className="shell shell--workspace ess-experience-shell ess-compact" id="ess-main">
+    <main className="shell shell--workspace ess-experience-shell ess-compact accerio-page" id="ess-main">
       <WorkspaceStandardHeader title="My workspace" description="Your working day, requests and employee services." actions={<Link prefetch={false} className="button button--secondary" href="/ess/profile">My Profile</Link>} />
       <EssIdentity profile={dashboard.profile} />
       {state === "demo" ? <p className="notice">Preview data · Sign in to a connected workspace for your employee information.</p> : null}
@@ -33,7 +33,7 @@ export default async function EssPage() {
           <EssFields fields={[["Date", essDate(today.date)], ["Shift", today.shift || "Not assigned"], ["Check-in", today.check_in_at ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" }).format(new Date(today.check_in_at)) : "Not recorded"], ["Month to date hours", String(dashboard.attendance.month_to_date.work_duration_hours)]]} />
         </WorkspaceStandardPanel> : null}
         {canLeave ? <WorkspaceStandardPanel title="Leave balances" description={`Leave year ${dashboard.leave.period_year}`} actions={<Link prefetch={false} href="/ess/leave">View leave</Link>}>
-          {dashboard.leave.balances.length ? <WorkspaceTableScrollRegion className="workspace-table-scroll" label="Leave balance details"><table className="workspace-table ess-balance-table" aria-label="Leave balances"><thead><tr><th scope="col">Leave type</th><th scope="col">Available</th><th scope="col">Used</th><th scope="col">Reserved</th></tr></thead><tbody>{dashboard.leave.balances.map((balance, index) => <tr key={`${balance.leave_type}-${index}`}><th scope="row">{balance.leave_type}<small>{balance.policy_name}</small></th><td>{balance.closing_balance}</td><td>{balance.consumed_amount}</td><td>{balance.reserved_amount}</td></tr>)}</tbody></table></WorkspaceTableScrollRegion> : <p className="ess-empty">No leave balances are mapped yet. Contact HR if you expected an entitlement.</p>}
+          {dashboard.leave.balances.length ? <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Leave balance details"><table className="workspace-table ess-balance-table" aria-label="Leave balances"><thead><tr><th scope="col">Leave type</th><th scope="col">Available</th><th scope="col">Used</th><th scope="col">Reserved</th></tr></thead><tbody>{dashboard.leave.balances.map((balance, index) => <tr key={`${balance.leave_type}-${index}`}><th scope="row">{balance.leave_type}<small>{balance.policy_name}</small></th><td>{balance.closing_balance}</td><td>{balance.consumed_amount}</td><td>{balance.reserved_amount}</td></tr>)}</tbody></table></WorkspaceTableScrollRegion> : <p className="ess-empty">No leave balances are mapped yet. Contact HR if you expected an entitlement.</p>}
         </WorkspaceStandardPanel> : null}
         {canLeave || canAttendance ? <WorkspaceStandardPanel title="Awaiting approval" description="Requests waiting for review by your approver.">
           <ul className="ess-request-list">

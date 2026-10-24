@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -269,7 +272,7 @@ export function PfEcrReadinessWorkspace({
           <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/pf-ecr-package?format=manifest" fileName="pf-ecr-package-manifest.json">Package manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Pf ecr readiness table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table statutory-deductions-table">
             <thead>
               <tr>
@@ -316,7 +319,7 @@ export function PfEcrReadinessWorkspace({
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="PF readiness pagination">
           <button className="button button--secondary" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">

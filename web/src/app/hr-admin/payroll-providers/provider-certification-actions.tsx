@@ -27,19 +27,28 @@ export function ProviderCertificationActions({ connectionId, disabled }: Props) 
   async function runCertification() {
     setIsRunning(true);
     setNotice("");
-    const response = await fetch(`/api/hr-admin/payroll-provider-connections/${connectionId}/run-certification`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const result = await response.json().catch(() => ({}));
-    setIsRunning(false);
-    if (!response.ok) {
-      setNotice(apiErrorMessage(result, "Certification run could not be completed."));
-      return;
+    try {
+      const response = await fetch(`/api/hr-admin/payroll-provider-connections/${connectionId}/run-certification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(apiErrorMessage(result, "Certification run could not be completed."));
+        return;
+      }
+      if (!(result as { certification_run?: { id?: string; status?: string } }).certification_run?.id) {
+        setNotice("The certification outcome was not confirmed. Verify the connection before retrying.");
+        return;
+      }
+      setNotice("Certification run completed.");
+      router.refresh();
+    } catch {
+      setNotice("The certification outcome could not be confirmed. Verify the connection before retrying.");
+    } finally {
+      setIsRunning(false);
     }
-    setNotice("Certification run completed.");
-    router.refresh();
   }
 
   return (

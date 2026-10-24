@@ -23,8 +23,8 @@ export default async function TenantAdminUsersPage() {
   const hiddenRoleCoverageCount = Math.max(0, data.role_coverage.length - visibleRoleCoverage.length);
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live user management" : "Demo user management"}
         title="Tenant User Management"
         description="Invite members, assign workspace roles, and manage access status from one focused directory."

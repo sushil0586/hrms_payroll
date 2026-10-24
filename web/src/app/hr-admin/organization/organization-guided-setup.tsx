@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { HrAdminOrganizationItem, HrAdminOrganizationSnapshot, HrAdminOrganizationWriteInput } from "@/lib/types";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import type { OrganizationWorkflowState } from "./organization-workflows";
 
 type GuidedSetupProps = {
   snapshot: HrAdminOrganizationSnapshot;
@@ -47,28 +47,28 @@ type StepStatus = {
 };
 
 const initialFormValue: SetupFormValue = {
-  legalEntityCode: "LE-ACCERIO-IN",
-  legalEntityName: "Accerio India",
-  registeredName: "Accerio India Pvt Ltd",
-  primaryEmail: "sushil@accerio.in",
+  legalEntityCode: "",
+  legalEntityName: "",
+  registeredName: "",
+  primaryEmail: "",
   primaryPhone: "",
-  locationCode: "LOC-INDORE",
-  locationName: "Indore Office",
-  addressLine1: "Indore Office",
+  locationCode: "",
+  locationName: "",
+  addressLine1: "",
   addressLine2: "",
-  city: "Indore",
-  state: "Madhya Pradesh",
-  postalCode: "452001",
-  branchCode: "BR-INDORE",
-  branchName: "Indore Branch",
-  branchType: "Head Office",
-  businessUnitCode: "BU-OPS",
-  businessUnitName: "Operations",
-  departmentCode: "DEP-PEOPLE",
-  departmentName: "People Operations",
-  employmentTypeCode: "ET-FT",
-  employmentTypeName: "Full Time",
-  employmentTypeDescription: "Full-time regular employment",
+  city: "",
+  state: "",
+  postalCode: "",
+  branchCode: "",
+  branchName: "",
+  branchType: "",
+  businessUnitCode: "",
+  businessUnitName: "",
+  departmentCode: "",
+  departmentName: "",
+  employmentTypeCode: "",
+  employmentTypeName: "",
+  employmentTypeDescription: "",
   countryCode: "IN",
   timezone: "Asia/Kolkata",
   isPayrollEligible: true,
@@ -107,8 +107,9 @@ async function createMaster(section: string, payload: HrAdminOrganizationWriteIn
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = typeof body.detail === "string" ? body.detail : typeof body.code === "string" ? body.code : "Create failed.";
-    throw new Error(message);
+    throw new Error(response.status >= 500 ? "Step outcome could not be confirmed. Check the catalog before retrying; earlier confirmed steps are retained." : message);
   }
+  if (typeof body?.id !== "string" || !body.id || body.code !== payload.code || typeof body.name !== "string") throw new Error("Step outcome could not be confirmed. Check the catalog before retrying.");
   return body as HrAdminOrganizationItem;
 }
 
@@ -127,13 +128,17 @@ function readinessCount(snapshot: HrAdminOrganizationSnapshot) {
   return checks.filter(Boolean).length;
 }
 
-export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
+export function OrganizationGuidedSetup({ snapshot, onStateChange }: GuidedSetupProps & {onStateChange?: (state:OrganizationWorkflowState)=>void}) {
   const [formValue, setFormValue] = useState<SetupFormValue>(initialFormValue);
   const [steps, setSteps] = useState<StepStatus[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [savedKey,setSavedKey] = useState(()=>JSON.stringify(initialFormValue));
+  const pending = useRef(false);const confirmed = useRef<Record<string,HrAdminOrganizationItem>>({});
+  const feedback = useRef<HTMLDivElement>(null);
+  useEffect(()=>{onStateChange?.({dirty:JSON.stringify(formValue)!==savedKey,busy:isSubmitting});},[formValue,savedKey,isSubmitting,onStateChange]);
+  useEffect(()=>{if(error||notice)feedback.current?.focus();},[error,notice]);
   const missingRequired = useMemo(
     () => requiredFields.filter((field) => !String(formValue[field.key]).trim()).map((field) => field.label),
     [formValue],
@@ -164,24 +169,29 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
     code: string,
     payload: HrAdminOrganizationWriteInput,
   ) {
-    const existing = findByCode(existingItems, code);
+    const key = `${section}:${normalizeCode(code)}`;
+    const existing = confirmed.current[key] ?? findByCode(existingItems, code);
     if (existing) {
       setStep(label, "skipped", "Already exists.");
       return existing;
     }
     setStep(label, "running", "Creating...");
-    const created = await createMaster(section, payload);
+    let created: HrAdminOrganizationItem;
+    try { created = await createMaster(section, payload); } catch (error) { throw new Error(error instanceof TypeError ? "Step outcome could not be confirmed. Check the catalog before retrying; earlier confirmed steps are retained." : error instanceof Error ? error.message : "Step outcome could not be confirmed."); }
+    confirmed.current[key] = created;
     setStep(label, "created", "Created.");
     return created;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending.current) return;
     if (missingRequired.length) {
       setError(`Complete required fields: ${missingRequired.join(", ")}.`);
       return;
     }
 
+    pending.current=true;
     setIsSubmitting(true);
     setError("");
     setNotice("");
@@ -236,14 +246,15 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
         is_active: true,
       });
 
-      setNotice("Organization setup saved. Refreshing the catalog and launch readiness.");
-      refresh();
+      setNotice("Setup steps confirmed. Review created and reused records; reload the catalog for current counts.");
+      setSavedKey(JSON.stringify(formValue));
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to complete organization setup.");
       setSteps((current) =>
         current.map((step) => (step.status === "running" ? { ...step, status: "failed", message: "Failed." } : step)),
       );
     } finally {
+      pending.current=false;
       setIsSubmitting(false);
     }
   }
@@ -261,7 +272,7 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
           </span>
           <span className="button button--secondary button--compact">Open setup</span>
         </summary>
-      <form aria-busy={isSubmitting || isRefreshing} className="organization-guided-setup" onSubmit={handleSubmit}>
+      <form aria-busy={isSubmitting} className="organization-guided-setup" onSubmit={handleSubmit}><fieldset className="organization-fields" disabled={isSubmitting}>
         <div className="tenant-console-panel__header">
           <div>
             <span className="workspace-card__eyebrow">Guided setup</span>
@@ -281,27 +292,27 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
             <div className="form-grid">
               <label className="form-field">
                 <span className="text-label-premium">Code</span>
-                <input className="input-control" required value={formValue.legalEntityCode} onChange={(event) => updateField("legalEntityCode", event.target.value)} />
+                <input className="input-control" required id="setup-legalEntityCode" value={formValue.legalEntityCode} onChange={(event) => updateField("legalEntityCode", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Name</span>
-                <input className="input-control" required value={formValue.legalEntityName} onChange={(event) => updateField("legalEntityName", event.target.value)} />
+                <input className="input-control" required id="setup-legalEntityName" value={formValue.legalEntityName} onChange={(event) => updateField("legalEntityName", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Registered name</span>
-                <input className="input-control" value={formValue.registeredName} onChange={(event) => updateField("registeredName", event.target.value)} />
+                <input className="input-control" id="setup-registeredName" value={formValue.registeredName} onChange={(event) => updateField("registeredName", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Primary email</span>
-                <input className="input-control" type="email" value={formValue.primaryEmail} onChange={(event) => updateField("primaryEmail", event.target.value)} />
+                <input className="input-control" type="email" id="setup-primaryEmail" value={formValue.primaryEmail} onChange={(event) => updateField("primaryEmail", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Primary phone</span>
-                <input className="input-control" value={formValue.primaryPhone} onChange={(event) => updateField("primaryPhone", event.target.value)} />
+                <input className="input-control" id="setup-primaryPhone" value={formValue.primaryPhone} onChange={(event) => updateField("primaryPhone", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Timezone</span>
-                <input className="input-control" value={formValue.timezone} onChange={(event) => updateField("timezone", event.target.value)} />
+                <input className="input-control" id="setup-timezone" value={formValue.timezone} onChange={(event) => updateField("timezone", event.target.value)} />
               </label>
             </div>
           </fieldset>
@@ -311,39 +322,39 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
             <div className="form-grid">
               <label className="form-field">
                 <span className="text-label-premium">Location code</span>
-                <input className="input-control" required value={formValue.locationCode} onChange={(event) => updateField("locationCode", event.target.value)} />
+                <input className="input-control" required id="setup-locationCode" value={formValue.locationCode} onChange={(event) => updateField("locationCode", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Location name</span>
-                <input className="input-control" required value={formValue.locationName} onChange={(event) => updateField("locationName", event.target.value)} />
+                <input className="input-control" required id="setup-locationName" value={formValue.locationName} onChange={(event) => updateField("locationName", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Address line 1</span>
-                <input className="input-control" value={formValue.addressLine1} onChange={(event) => updateField("addressLine1", event.target.value)} />
+                <input className="input-control" id="setup-addressLine1" value={formValue.addressLine1} onChange={(event) => updateField("addressLine1", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">City</span>
-                <input className="input-control" value={formValue.city} onChange={(event) => updateField("city", event.target.value)} />
+                <input className="input-control" id="setup-city" value={formValue.city} onChange={(event) => updateField("city", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">State</span>
-                <input className="input-control" value={formValue.state} onChange={(event) => updateField("state", event.target.value)} />
+                <input className="input-control" id="setup-state" value={formValue.state} onChange={(event) => updateField("state", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">PIN code</span>
-                <input className="input-control" value={formValue.postalCode} onChange={(event) => updateField("postalCode", event.target.value)} />
+                <input className="input-control" id="setup-postalCode" value={formValue.postalCode} onChange={(event) => updateField("postalCode", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Branch code</span>
-                <input className="input-control" required value={formValue.branchCode} onChange={(event) => updateField("branchCode", event.target.value)} />
+                <input className="input-control" required id="setup-branchCode" value={formValue.branchCode} onChange={(event) => updateField("branchCode", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Branch name</span>
-                <input className="input-control" required value={formValue.branchName} onChange={(event) => updateField("branchName", event.target.value)} />
+                <input className="input-control" required id="setup-branchName" value={formValue.branchName} onChange={(event) => updateField("branchName", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Branch type</span>
-                <input className="input-control" value={formValue.branchType} onChange={(event) => updateField("branchType", event.target.value)} />
+                <input className="input-control" id="setup-branchType" value={formValue.branchType} onChange={(event) => updateField("branchType", event.target.value)} />
               </label>
             </div>
           </fieldset>
@@ -353,27 +364,27 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
             <div className="form-grid">
               <label className="form-field">
                 <span className="text-label-premium">Business unit code</span>
-                <input className="input-control" required value={formValue.businessUnitCode} onChange={(event) => updateField("businessUnitCode", event.target.value)} />
+                <input className="input-control" required id="setup-businessUnitCode" value={formValue.businessUnitCode} onChange={(event) => updateField("businessUnitCode", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Business unit name</span>
-                <input className="input-control" required value={formValue.businessUnitName} onChange={(event) => updateField("businessUnitName", event.target.value)} />
+                <input className="input-control" required id="setup-businessUnitName" value={formValue.businessUnitName} onChange={(event) => updateField("businessUnitName", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Department code</span>
-                <input className="input-control" required value={formValue.departmentCode} onChange={(event) => updateField("departmentCode", event.target.value)} />
+                <input className="input-control" required id="setup-departmentCode" value={formValue.departmentCode} onChange={(event) => updateField("departmentCode", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Department name</span>
-                <input className="input-control" required value={formValue.departmentName} onChange={(event) => updateField("departmentName", event.target.value)} />
+                <input className="input-control" required id="setup-departmentName" value={formValue.departmentName} onChange={(event) => updateField("departmentName", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Employment type code</span>
-                <input className="input-control" required value={formValue.employmentTypeCode} onChange={(event) => updateField("employmentTypeCode", event.target.value)} />
+                <input className="input-control" required id="setup-employmentTypeCode" value={formValue.employmentTypeCode} onChange={(event) => updateField("employmentTypeCode", event.target.value)} />
               </label>
               <label className="form-field">
                 <span className="text-label-premium">Employment type name</span>
-                <input className="input-control" required value={formValue.employmentTypeName} onChange={(event) => updateField("employmentTypeName", event.target.value)} />
+                <input className="input-control" required id="setup-employmentTypeName" value={formValue.employmentTypeName} onChange={(event) => updateField("employmentTypeName", event.target.value)} />
               </label>
               <label className="toggle-field organization-guided-setup__toggle">
                 <div>
@@ -397,32 +408,32 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
           </div>
         ) : null}
         {error ? (
-          <div className="notice notice--error" role="alert">
+          <div ref={feedback} tabIndex={-1} className="notice notice--error" role="alert">
             <strong>Setup could not be completed.</strong>
             <span className="muted">{error}</span>
           </div>
         ) : null}
         {notice ? (
-          <div className="notice">
-            <strong>{notice}</strong>
+          <div ref={feedback} tabIndex={-1} className="notice" role="status">
+            <strong>{notice}</strong><a data-navigation-mode="document" href="/hr-admin/organization">Reload catalog</a>
           </div>
         ) : null}
 
         <div className="form-actions-bar">
-          <span className="muted">Use this for first-time tenant setup. CSV remains available below for bulk imports.</span>
+          <span className="muted">Steps run sequentially. Confirmed earlier steps are retained if a later step fails.</span>
           <div className="form-actions-bar__buttons">
             <AsyncActionButton
               className="button button--primary"
               disabled={missingRequired.length > 0}
-              pending={isSubmitting || isRefreshing}
-              pendingLabel={isRefreshing ? "Refreshing organization catalog" : "Saving organization setup"}
+              pending={isSubmitting}
+              pendingLabel="Saving organization setup"
               type="submit"
             >
               Save organization setup
             </AsyncActionButton>
           </div>
         </div>
-      </form>
+      </fieldset></form>
       </details>
     </section>
   );

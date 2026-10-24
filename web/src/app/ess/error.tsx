@@ -9,7 +9,7 @@ export default function EssError() {
     window.location.reload();
   }
   return (
-    <main className="shell shell--workspace ess-compact">
+    <main className="shell shell--workspace ess-compact accerio-page">
       <h1>Employee information is unavailable</h1>
       <p role="alert">We could not load your employee information. Try again. If the problem continues, contact HR to check your employee access.</p>
       <div className="ess-related-links">

@@ -195,7 +195,7 @@ test.describe("Phase 6B provider callback mutation certification", () => {
     expect(rejectedPayload.callback_event.verification_snapshot.signature_valid).toBe(false);
     expect(rejectedPayload.callback_event.verification_snapshot.callback_security.blocking_gate_refs).toContain("callback_signature_matched");
 
-    await page.goto(`/hr-admin/payroll-handoff?handoffId=${delivery.handoff_id}`);
+    await page.goto(`/hr-admin/payroll-handoff?tab=delivery&handoffId=${delivery.handoff_id}`);
     await expectPageReady(page, "Payroll Handoff");
     await expect(page.getByRole("heading", { name: "Provider callbacks" })).toBeVisible();
     await expect(page.getByText(`evt-bank-phase6b-${runRef}`)).toBeVisible();

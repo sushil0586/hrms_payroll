@@ -17,8 +17,8 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
     .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         actions={<Link className="button button--secondary" href="/hr-admin/notifications">Back to queue</Link>}
         description="Inspect one notification payload and its current state."
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}

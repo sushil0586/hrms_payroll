@@ -13,8 +13,8 @@ export default async function FinanceHandoffExceptionsReportPage() {
   const result = await getHrAdminPayrollFinanceHandoffSetup();
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-handoff">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-handoff accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Finance Handoff Exceptions Report"
         description="Failed, queued, retried, acknowledged, and audit-pack-ready payroll finance handoff evidence for finance operations."

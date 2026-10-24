@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -57,8 +59,8 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
   const templatedInView = filteredEvents.filter((item) => item.template_name).length;
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Notification events"
         description="Map operational triggers to audiences, templates, priorities, and channel delivery rules in a way that feels explicit and easy to audit."
@@ -170,7 +172,7 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
             </span>
           </div>
           {filteredEvents.length ? (
-            <div className="notification-table-scroll">
+            <WorkspaceTableScrollRegion label="Notification events table 1" className="notification-table-scroll workspace-table-region">
               <table className="notification-catalog-table notification-catalog-table--events">
                 <thead>
                   <tr>
@@ -218,7 +220,7 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
                   ))}
                 </tbody>
               </table>
-            </div>
+            </WorkspaceTableScrollRegion>
           ) : null}
           {filteredEvents.length === 0 ? (
             <div className="card panel panel-card-soft">

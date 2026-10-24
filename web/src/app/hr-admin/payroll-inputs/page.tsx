@@ -472,8 +472,8 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
     : null;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-inputs hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-inputs hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 1C" : "Demo payroll phase 1C"}
         title="Payroll Inputs"
         description="Immutable period snapshots across employee, organization, salary, attendance, leave, lifecycle, documents, and banking."

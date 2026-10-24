@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { OrganizationWorkflowState } from "./organization-workflows";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import type { HrAdminOrganizationSnapshot, HrAdminOrganizationWriteInput } from "@/lib/types";
@@ -12,7 +16,7 @@ type ImportRow = {
   data: Record<string, string>;
   errors: string[];
   payload: HrAdminOrganizationWriteInput | null;
-  status: "ready" | "blocked" | "created" | "failed";
+  status: "ready" | "blocked" | "created" | "failed" | "unconfirmed";
   message: string;
 };
 
@@ -271,46 +275,41 @@ function buildRows(csvText: string, snapshot: HrAdminOrganizationSnapshot): Impo
   });
 }
 
-export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrganizationSnapshot }) {
+export function OrganizationImportWorkbench({ snapshot, onStateChange }: { snapshot: HrAdminOrganizationSnapshot; onStateChange?: (state:OrganizationWorkflowState)=>void }) {
   const [csvText, setCsvText] = useState(templateCsv());
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [isCommitting, setIsCommitting] = useState(false);
   const [summary, setSummary] = useState("");
+  const [previewText,setPreviewText]=useState("");const [confirmedText,setConfirmedText]=useState("");
+  const [baseline,setBaseline]=useState(()=>templateCsv());const pending=useRef(false);const feedback=useRef<HTMLDivElement>(null);
+  useEffect(()=>{onStateChange?.({dirty:csvText!==baseline,busy:isCommitting});},[csvText,baseline,isCommitting,onStateChange]);
+  useEffect(()=>{if(summary)feedback.current?.focus();},[summary]);
   const parsedRows = useMemo(() => buildRows(csvText, snapshot), [csvText, snapshot]);
   const readyCount = rows.filter((row) => row.status === "ready").length;
   const blockedCount = rows.filter((row) => row.status === "blocked").length;
   const createdCount = rows.filter((row) => row.status === "created").length;
 
   function preview() {
+    if(pending.current)return;
+    setPreviewText(csvText);
     setRows(parsedRows.map((row) => ({ ...row, data: { ...row.data }, errors: [...row.errors], payload: row.payload ? { ...row.payload } : null })));
     setSummary(parsedRows.length ? "Preview ready. Review blocked rows before committing." : "Add CSV rows before preview.");
   }
 
   async function commitReadyRows() {
-    if (isCommitting) return;
-    setIsCommitting(true);
-    const nextRows = [...rows];
-    const readyRows = nextRows.filter((row) => row.status === "ready");
+    if (pending.current || previewText!==csvText || confirmedText===csvText) return;
+    const nextRows=rows.map(row=>({...row}));const readyRows=nextRows.filter(row=>row.status==="ready");if(!readyRows.length)return;
+    pending.current=true;setIsCommitting(true);
     try {
-      const response = await submitImportRequest("/api/hr-admin/organization/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: readyRows.map((row) => ({ row_number: row.rowNumber, section: row.data.section, data: row.data })) }),
-      });
-      if (response.ok) {
-        readyRows.forEach((row) => { row.status = "created"; row.message = "Created"; });
-      } else {
-        const message = JSON.stringify(response.payload.rows ?? response.payload.detail ?? "Atomic import failed");
-        readyRows.forEach((row) => { row.status = "failed"; row.message = message; });
-      }
-    } catch {
-      readyRows.forEach((row) => { row.status = "failed"; row.message = "Network failure; no rows were created."; });
-    }
-    setRows([...nextRows]);
-    setIsCommitting(false);
-    setSummary(nextRows.some((row) => row.status === "failed")
-      ? "Some organization rows failed. Review the row messages, then preview the preserved CSV again."
-      : "Commit complete. Refresh the catalog to verify created masters.");
+      const response=await submitImportRequest("/api/hr-admin/organization/import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({rows:readyRows.map(row=>({row_number:row.rowNumber,section:row.data.section,data:row.data}))})});
+      const created=response.payload?.created;
+      const confirmed=response.ok && Array.isArray(created) && created.length===readyRows.length && new Set(created.map((item:{id?:string}|null)=>item?.id)).size===readyRows.length && readyRows.every(row=>created.filter((item:{row_number:number;id:string;section:string;code:string})=>item && item.row_number===row.rowNumber&&typeof item.id==="string"&&item.section===row.data.section&&item.code===row.data.code).length===1);
+      const uncertain=response.status===0 || response.status>=500 || (response.ok&&!confirmed);
+      const message=confirmed?"Created in the submitted batch.":uncertain?"Outcome unconfirmed. Check the catalog before retrying.":JSON.stringify(response.payload?.rows??response.payload?.detail??"The submitted batch was rejected.");
+      readyRows.forEach(row=>{row.status=confirmed?"created":uncertain?"unconfirmed":"failed";row.message=message;});
+      if(confirmed){setConfirmedText(csvText);setBaseline(csvText);}
+      setSummary(confirmed?"Submitted ready rows confirmed. Blocked rows were not submitted. Reload the catalog before another batch.":uncertain?"Import outcome could not be confirmed. The CSV is retained; check the catalog before retrying.":"The submitted batch was rejected. Review the messages and preview the retained CSV again.");
+    } finally { setRows(nextRows);pending.current=false;setIsCommitting(false); }
   }
 
   return (
@@ -327,12 +326,12 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
           </span>
           <span className="button button--secondary button--compact">Open import</span>
         </summary>
-      <article className="organization-import-workbench">
+      <article className="organization-import-workbench"><fieldset className="organization-fields" disabled={isCommitting}>
         <div className="tenant-console-panel__header">
           <div>
             <span className="workspace-card__eyebrow">Bulk onboarding</span>
             <h2>Organization master import</h2>
-            <p className="section-copy">Paste or upload CSV, preview dependency errors, then create valid master rows from the browser.</p>
+            <p className="section-copy">Preview locally, then submit ready rows as one atomic backend batch. Guided setup uses separate sequential steps.</p>
           </div>
           <div className="queue-toolbar__meta">
             <span className="queue-summary-chip"><strong>{readyCount}</strong> ready</span>
@@ -343,12 +342,12 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
         <div className="organization-import-grid">
           <label className="form-field">
             <span className="text-label-premium">CSV data</span>
-            <textarea className="input-control organization-import-textarea" value={csvText} onChange={(event) => setCsvText(event.target.value)} />
+            <textarea aria-label="CSV data" className="input-control organization-import-textarea" value={csvText} onChange={(event) => setCsvText(event.target.value)} />
           </label>
           <div className="organization-import-actions">
             <button className="button button--secondary" type="button" onClick={() => setCsvText(templateCsv())}>Load sample template</button>
             <button className="button button--secondary" type="button" onClick={() => navigator.clipboard?.writeText(templateCsv())}>Copy template</button>
-            <a className="button button--secondary" download="organization-master-import-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(templateCsv())}`}>Download template</a>
+            <a data-navigation-mode="document" className="button button--secondary" download="organization-master-import-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(templateCsv())}`}>Download template</a>
             <label className="button button--secondary">
               Upload CSV
               <input
@@ -363,11 +362,13 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
               />
             </label>
             <button className="button button--primary" type="button" onClick={preview}>Preview import</button>
-            <AsyncActionButton className="button button--primary" type="button" disabled={!rows.some((row) => row.status === "ready")} pending={isCommitting} pendingLabel="Creating organization rows" onClick={commitReadyRows}>Commit ready rows</AsyncActionButton>
+            <AsyncActionButton className="button button--primary" type="button" disabled={!rows.some((row) => row.status === "ready") || previewText!==csvText || confirmedText===csvText} pending={isCommitting} pendingLabel="Creating organization rows" onClick={commitReadyRows}>Commit ready rows</AsyncActionButton>
           </div>
         </div>
-        {summary ? <div className="notice"><strong>{summary}</strong></div> : null}
-        <div className="responsive-table-wrap">
+        {previewText && previewText!==csvText ? <p role="status">CSV changed. Preview again before committing.</p> : null}
+        {summary ? <div ref={feedback} tabIndex={-1} className="notice" role="status"><strong>{summary}</strong><a data-navigation-mode="document" href="/hr-admin/organization">Reload catalog</a></div> : null}
+        {!rows.length ? <p>Preview CSV to review rows and batch totals.</p> : null}
+        <WorkspaceTableScrollRegion label="Organization import table 1" className="responsive-table-wrap workspace-table-region">
           <table className="data-table">
             <thead>
               <tr>
@@ -380,7 +381,7 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
               </tr>
             </thead>
             <tbody>
-              {(rows.length ? rows : parsedRows.slice(0, 5)).map((row) => (
+              {rows.map((row) => (
                 <tr key={`${row.rowNumber}-${row.data.code}`}>
                   <td>{row.rowNumber}</td>
                   <td>{row.data.section}</td>
@@ -392,8 +393,8 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
               ))}
           </tbody>
         </table>
-      </div>
-      </article>
+      </WorkspaceTableScrollRegion>
+      </fieldset></article>
       </details>
     </section>
   );

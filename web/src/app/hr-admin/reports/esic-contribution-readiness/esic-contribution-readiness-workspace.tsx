@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -250,7 +253,7 @@ export function EsicContributionReadinessWorkspace({
           <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/esic-contribution-package?format=manifest" fileName="esic-contribution-package-manifest.json">Package manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Esic contribution readiness table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table statutory-deductions-table">
             <thead>
               <tr>
@@ -297,7 +300,7 @@ export function EsicContributionReadinessWorkspace({
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="ESIC readiness pagination">
           <button className="button button--secondary" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">

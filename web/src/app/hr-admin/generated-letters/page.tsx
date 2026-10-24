@@ -1,41 +1,16 @@
-import Link from "next/link";
-
-import { GeneratedLetterWorkspace } from "@/app/hr-admin/generated-letters/generated-letter-workspace";
-import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminDocumentOptions, getHrAdminEmployees, getHrAdminGeneratedLetters } from "@/lib/api";
-
+import { GeneratedLetterWorkspace } from "./generated-letter-workspace";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { DocumentAccessNotice } from "@/app/hr-admin/documents/document-access-notice";
+import { getHrAdminDocumentOptions, getHrAdminEmployees, getHrAdminGeneratedLetters, getSessionUser } from "@/lib/api";
+import { completeReport } from "@/lib/complete-report";
+import { sessionHasPermission } from "@/lib/workspace-access";
 export default async function HrAdminGeneratedLettersPage() {
-  const [lettersResult, optionsResult, employeesResult] = await Promise.all([
-    getHrAdminGeneratedLetters(),
-    getHrAdminDocumentOptions(),
-    getHrAdminEmployees(),
-  ]);
-  const generatedWithArtifacts = lettersResult.data.items.filter((item) => item.artifact_id).length;
-
-  return (
-    <main className="shell hr-document-workbench">
-      <PageIntro
-        eyebrow={lettersResult.state === "live" && optionsResult.state === "live" ? "Live letter mode" : "Demo letter mode"}
-        title="Generated HR letters"
-        description="Preview variables, generate HR letters, and keep issued files attached to employee records."
-        actions={
-          <>
-            <Link className="button button--secondary" href="/hr-admin/documents">Open document control center</Link>
-            <Link className="button button--ghost" href="/hr-admin/employee-documents">Open employee documents</Link>
-          </>
-        }
-        pills={["Preview first", "Stored artifacts", "Workflow reference"]}
-      />
-      <section className="attendance-summary-strip" aria-label="Generated letter summary">
-        <span><strong>{lettersResult.data.total_count}</strong> generated letters</span>
-        <span><strong>{generatedWithArtifacts}</strong> stored files</span>
-        <span><strong>{optionsResult.data.letter_types.length}</strong> letter types</span>
-      </section>
-      <GeneratedLetterWorkspace
-        employees={employeesResult.data}
-        initialLetters={lettersResult.data.items}
-        letterTypes={optionsResult.data.letter_types}
-      />
-    </main>
-  );
+  const user = await getSessionUser();
+  if (!sessionHasPermission(user,"documents.view")) return <DocumentAccessNotice />;
+  if (!sessionHasPermission(user,"employees.view")) return <DocumentAccessNotice required="employees.view" />;
+  const [letters,options,employees] = await Promise.all([completeReport(getHrAdminGeneratedLetters),getHrAdminDocumentOptions(),getHrAdminEmployees()]);
+  return <main className="shell hr-document-workbench accerio-page document-operations">
+    <WorkspaceStandardHeader title="Generated HR letters" description="Compose the draft, preview current variables and confirm the stored letter." actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/documents">Back to documents</a>} />
+    <GeneratedLetterWorkspace employees={employees.data} initialLetters={letters.data.items} letterTypes={options.data.letter_types} />
+  </main>;
 }

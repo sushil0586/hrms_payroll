@@ -9,9 +9,11 @@ type Props = {
   reset: () => void;
 };
 
-export default function HrAdminError({ error, reset }: Props) {
+export default function HrAdminError({ error }: Props) {
   return (
     <WorkspaceErrorState
+      appearance="accerio"
+      userFacing
       actions={
         <>
           <Link className="button button--secondary" href="/hr-admin/reports">
@@ -24,7 +26,7 @@ export default function HrAdminError({ error, reset }: Props) {
       }
       detail={error.message}
       eyebrow="HR admin load issue"
-      onRetry={reset}
+      onRetry={() => window.location.reload()}
       title="HR admin could not load the current workspace"
     />
   );

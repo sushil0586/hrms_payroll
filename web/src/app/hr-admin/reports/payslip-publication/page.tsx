@@ -12,8 +12,8 @@ export default async function PayslipPublicationReportPage() {
   const outputSetup = await getHrAdminPayrollOutputSetup();
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={outputSetup.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payslip Publication Report"
         description="Payslip delivery, employee acknowledgement, signed access, download activity, and source-hash evidence from published payroll outputs."

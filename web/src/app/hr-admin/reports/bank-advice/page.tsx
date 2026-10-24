@@ -17,8 +17,8 @@ export default async function BankAdviceReportPage() {
   });
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-handoff">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-handoff accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Bank Advice Report"
         description="Payout-ready bank advice artifacts, provider delivery state, reconciliation evidence, and finance handoff routing."

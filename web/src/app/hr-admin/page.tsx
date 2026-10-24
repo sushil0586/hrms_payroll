@@ -201,8 +201,8 @@ export default async function HrAdminLandingPage() {
   ];
 
   return (
-    <main className="shell hr-admin-enterprise-dashboard hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-enterprise-dashboard hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="HR Admin"
         title="HR Control Center"
         description="Prioritize payroll, workforce, documents, and launch readiness from one operating view."

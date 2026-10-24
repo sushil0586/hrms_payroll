@@ -1,26 +1,28 @@
-import Link from "next/link";
+import {lifecycleReturnHref} from "@/lib/ui/lifecycle-return";
+
 
 import { movementToFormValue } from "@/app/hr-admin/movements/form-values";
 import { MovementForm } from "@/app/hr-admin/movements/movement-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { LifecycleUnavailable } from "@/app/hr-admin/lifecycle/lifecycle-unavailable";
 import { getHrAdminLifecycleOptions, getHrAdminMovement } from "@/lib/api";
 
-type PageProps = { params: Promise<{ itemId: string }> };
+type PageProps = { params: Promise<{ itemId: string }>;searchParams?:Promise<Record<string,string|string[]|undefined>> };
 
-export default async function HrAdminEditMovementPage({ params }: PageProps) {
+export default async function HrAdminEditMovementPage({ params,searchParams }: PageProps) {
+  const query=await searchParams??{};const returnHref=lifecycleReturnHref(query.returnTo,"/hr-admin/movements");
   const { itemId } = await params;
-  const [itemResult, optionsResult] = await Promise.all([getHrAdminMovement(itemId), getHrAdminLifecycleOptions()]);
+  const [itemResult, optionsResult] = await Promise.all([getHrAdminMovement(itemId).catch(()=>null), getHrAdminLifecycleOptions().catch(()=>null)]);
 
+  if(optionsResult?.state!=="live" || itemResult?.state!=="live" || itemResult.data.id!==itemId)return <LifecycleUnavailable/>;
   return (
-    <main className="shell">
-      <PageIntro
-        eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
+    <main className="shell accerio-page lifecycle-phase3">
+      <WorkspaceStandardHeader
         title="Edit movement"
-        description="Refine the structural change details without drifting from the movement queue or lifecycle inbox."
-        actions={<Link className="button button--secondary" href="/hr-admin/movements">Back to movements</Link>}
-        pills={["Queue-linked status model", "Shared owner contract", "Structured destination mapping"]}
+        description="Review source and destination structure, effective date and status before saving."
+        actions={<a data-navigation-mode="document" className="button button--secondary" href={returnHref}>{returnHref.startsWith("/hr-admin/reports/")?"Back to report":returnHref.startsWith("/hr-admin/lifecycle")?"Back to lifecycle":"Back to movements"}</a>}
       />
-      <MovementForm initialValue={movementToFormValue(itemResult.data)} mode="edit" options={optionsResult.data} itemId={itemId} />
+      <MovementForm cancelHref={returnHref} successHref={returnHref} initialValue={movementToFormValue(itemResult.data)} mode="edit" options={optionsResult.data} itemId={itemId} />
     </main>
   );
 }

@@ -15,8 +15,8 @@ export default async function ProfessionalTaxReadinessReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance readiness" : "Demo compliance readiness"}
         title="Professional Tax Readiness"
         description="Control-center view for Professional Tax setup, state coverage, employer registration, filing calendar, deduction artifacts, source hash evidence, and provider filing gates."

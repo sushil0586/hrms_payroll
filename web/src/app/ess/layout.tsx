@@ -57,7 +57,7 @@ export default async function EssLayout({ children }: { children: React.ReactNod
       productLabel="Accerio"
       quickLinks={quickLinks}
       roleLabel="Employee"
-      searchHint="Find an employee service"
+      searchHint="Search pages and actions"
       userLabel={userLabel}
       workspaceLabel="Self service"
       workspaceTone="employee"

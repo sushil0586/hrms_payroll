@@ -16,8 +16,8 @@ export default async function PayrollInputExceptionsReportPage() {
   ]);
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Input Exceptions Report"
         description="Pre-close input readiness across employee snapshots, blockers, warnings, lock state, and source hash evidence."

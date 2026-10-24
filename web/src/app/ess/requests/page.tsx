@@ -44,7 +44,7 @@ export default async function RequestsPage({
   const href = (page: number) =>
     `/ess/requests?type=${type}&status=${status}&page=${page}`;
   return (
-    <main className="shell shell--workspace ess-compact">
+    <main className="shell shell--workspace ess-compact accerio-page">
       <WorkspaceStandardHeader
         eyebrow="Employee services"
         title="My Requests"

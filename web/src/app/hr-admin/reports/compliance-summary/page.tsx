@@ -16,8 +16,8 @@ export default async function ComplianceSummaryReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance control" : "Demo compliance control"}
         title="Compliance Summary"
         description="One control-center report for statutory setup, employee coverage, deduction evidence, filing calendars, challan readiness, provider receipts, and blocked compliance actions."

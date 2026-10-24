@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useDocumentUploadDraft } from "@/lib/ui/use-document-upload-draft";
 
 import { ORGANIZATION_SECTION_CONFIG, type OrganizationSectionKey } from "@/app/hr-admin/organization/section-config";
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminOrganizationFormOptions, HrAdminOrganizationItem, HrAdminOrganizationWriteInput } from "@/lib/types";
 
 type OrganizationFormProps = {
+  returnHref: string;
   initialValue: HrAdminOrganizationWriteInput;
   mode: "create" | "edit";
   section: OrganizationSectionKey;
@@ -124,14 +125,18 @@ function FieldError({ message }: { message?: string }) {
   return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
-export function OrganizationForm({ initialValue, mode, section, options, itemId, currentItem }: OrganizationFormProps) {
-  const router = useRouter();
+export function OrganizationForm({ initialValue, mode, section, options, itemId, currentItem, returnHref }: OrganizationFormProps) {
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<OrganizationFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const sectionMeta = ORGANIZATION_SECTION_CONFIG[section];
+  const ready = useSyncExternalStore(()=>()=>{},()=>true,()=>false);
+  const [baseline] = useState(()=>JSON.stringify(initialValue));
+  const navigation = useDocumentUploadDraft(JSON.stringify(formValue)!==baseline,isSubmitting);
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{if(error)errorRef.current?.focus();},[error]);
   const filteredBusinessUnits = itemId ? options.business_units.filter((item) => item.id !== itemId) : options.business_units;
   const filteredDepartments = itemId ? options.departments.filter((item) => item.id !== itemId) : options.departments;
   const deactivationGuidance = !formValue.is_active && mode === "edit" ? getDeactivationGuidance(currentItem, section) : [];
@@ -161,7 +166,7 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
         body: JSON.stringify(normalizePayload(formValue)),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      setError("Save outcome could not be confirmed. Check the catalog before retrying; your draft is retained.");
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -170,36 +175,23 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       const nextErrors = extractErrors(payload);
-      setError(nextErrors.message);
+      setError(response.status >= 500 ? "Save outcome could not be confirmed. Check the catalog before retrying; your draft is retained." : nextErrors.message);
       setFieldErrors(nextErrors.fieldErrors);
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
 
-    window.location.assign(new URL(`/hr-admin/organization?section=${section}`, window.location.origin));
+    if (typeof payload?.id !== "string" || (itemId && payload.id !== itemId) || typeof payload.code !== "string" || typeof payload.name !== "string") {
+      setError("Save outcome could not be confirmed. Check the catalog before retrying; your draft is retained.");setIsSubmitting(false);isSubmittingRef.current=false;return;
+    }
+    const destination = new URL(returnHref, window.location.origin);destination.searchParams.set("itemId",payload.id);destination.searchParams.set("saved","1");
+    navigation.complete(destination.pathname+destination.search);
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern organization-editor" data-hydrated={ready} onSubmit={handleSubmit}><fieldset className="organization-fields" disabled={!ready || isSubmitting}>
       <section className="form-shell-card">
-        <div className="form-shell-card__header">
-          <div>
-            <h2>{mode === "create" ? `Create ${sectionMeta.singular}` : `Edit ${sectionMeta.singular}`}</h2>
-            <p className="section-copy">
-              Keep this master data clean and consistent, because downstream policy scope, workflow routing, and payroll logic all depend on it.
-            </p>
-          </div>
-          <div className="form-shell-card__meta">
-            <span className="queue-summary-chip">
-              <strong>{sectionMeta.singular}</strong> record type
-            </span>
-            <span className="queue-summary-chip">
-              <strong>{formValue.is_active ? "active" : "inactive"}</strong> status
-            </span>
-          </div>
-        </div>
-
         <div className="form-shell-card__grid">
           {!formValue.is_active && mode === "edit" ? (
             <div className="notice">
@@ -222,18 +214,18 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
           <FormSection title="Core identity" description="Every organization master starts with a stable code, readable name, and active-state choice.">
             <div className="form-grid">
               <label className="form-field">
-                <span className="muted">Code</span>
-                <input className="input-control" required value={formValue.code} onChange={(event) => updateField("code", event.target.value)} />
+                <span className="muted">Code (required)</span>
+                <input className="input-control" required id="organization-code" aria-invalid={Boolean(fieldErrors.code)} value={formValue.code} onChange={(event) => updateField("code", event.target.value)} />
                 <FieldError message={fieldErrors.code} />
               </label>
               <label className="form-field">
-                <span className="muted">Name</span>
-                <input className="input-control" required value={formValue.name} onChange={(event) => updateField("name", event.target.value)} />
+                <span className="muted">Name (required)</span>
+                <input className="input-control" required id="organization-name" aria-invalid={Boolean(fieldErrors.name)} value={formValue.name} onChange={(event) => updateField("name", event.target.value)} />
                 <FieldError message={fieldErrors.name} />
               </label>
               <label className="form-field">
                 <span className="muted">Active</span>
-                <select className="input-control" value={formValue.is_active ? "true" : "false"} onChange={(event) => updateField("is_active", event.target.value === "true")}>
+                <select aria-label="Active" className="input-control" value={formValue.is_active ? "true" : "false"} onChange={(event) => updateField("is_active", event.target.value === "true")}>
                   <option value="true">Active</option>
                   <option value="false">Inactive</option>
                 </select>
@@ -425,24 +417,24 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
         </div>
 
         {error ? (
-          <div className="notice notice--error" role="alert">
-            <strong>Save failed.</strong>
+          <div ref={errorRef} tabIndex={-1} className="notice notice--error" role="alert">
+            <strong>Review this outcome.</strong>
             <span className="muted">{error}</span>
           </div>
         ) : null}
 
         <div className="form-actions-bar">
-          <span className="muted">This saves directly back into the structure catalog so downstream setup can use the updated master immediately.</span>
+          <span className="muted">Saving returns to the current catalog scope.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? `Create ${sectionMeta.singular.toLowerCase()}` : "Save changes"}
             </button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button className="button button--secondary" disabled={isSubmitting} onClick={() => navigation.cancel(returnHref)} type="button">
               Cancel
             </button>
           </div>
         </div>
       </section>
-    </form>
+    </fieldset></form>
   );
 }

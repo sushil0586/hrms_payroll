@@ -16,8 +16,8 @@ export default async function WorkforceReportPage() {
   const managerGapCount = employees.filter((item) => !item.reporting_manager && item.direct_reports_count === 0).length;
 
   return (
-    <main className="shell">
-      <PageIntro
+    <main className="shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live HR core report" : "Demo HR core report"}
         title="Employee Master Report"
         description="Workforce structure, manager coverage, access readiness, and organization mapping evidence."

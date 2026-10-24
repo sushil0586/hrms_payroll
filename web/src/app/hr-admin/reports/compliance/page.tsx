@@ -35,8 +35,8 @@ export default async function ComplianceReportHubPage() {
   const handoff = handoffResult.data;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance hub" : "Demo compliance hub"}
         title="Compliance Reports"
         description="Payroll statutory reporting workspace for deductions, filing status, challan reconciliation, provider receipts, and TDS e-file readiness."

@@ -1,11 +1,13 @@
-import Link from "next/link";
+import {LifecycleQueueFocus} from "@/app/hr-admin/lifecycle/lifecycle-queue-focus";
+
 
 import { createEmptyProbationReviewValue, probationReviewToFormValue } from "@/app/hr-admin/probation-reviews/form-values";
 import { ProbationReviewForm } from "@/app/hr-admin/probation-reviews/probation-review-form";
 import { ProbationReviewQueue } from "@/app/hr-admin/probation-reviews/probation-review-queue";
-import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminLifecycleOptions, getHrAdminProbationReviews } from "@/lib/api";
+import { LifecycleEditorDialog } from "@/app/hr-admin/lifecycle/lifecycle-form-state";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { LifecycleUnavailable } from "@/app/hr-admin/lifecycle/lifecycle-unavailable";
+import { getHrAdminProbationReview, getHrAdminLifecycleOptions, getHrAdminProbationReviews } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -18,8 +20,12 @@ function normalizeParam(value: SearchParamValue) {
 
 export default async function HrAdminProbationReviewsPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
-  const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
+  const recordLoaded=normalizeParam(currentParams.recordLoaded)??"";
+  const receipt=recordLoaded?await getHrAdminProbationReview(recordLoaded).catch(()=>null):null;
+  const requestedPage=Number(normalizeParam(currentParams.page)??"1");
+  const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?requestedPage:1;
+  const requestedSize=Number(normalizeParam(currentParams.page_size)??"25");
+  const pageSize=[10,25,50,100].includes(requestedSize)?requestedSize:25;
   const q = normalizeParam(currentParams.q) ?? "";
   const decision = normalizeParam(currentParams.decision) ?? "";
   const owner = normalizeParam(currentParams.owner) ?? "";
@@ -33,37 +39,36 @@ export default async function HrAdminProbationReviewsPage({ searchParams }: Page
       q,
       decision: decision || undefined,
       owner: owner || undefined,
-    }),
-    getHrAdminLifecycleOptions(),
+    }).catch(()=>null),
+    getHrAdminLifecycleOptions().catch(()=>null),
   ]);
+  if(result?.state!=="live" || optionsResult?.state!=="live")return <LifecycleUnavailable/>;
   const modalCloseHref = `/hr-admin/probation-reviews${buildQueryString({ q, decision, owner, page, page_size: pageSize })}`;
-  const editItem = editReview ? result.data.items.find((item) => item.id === editReview) : undefined;
+  const selectedResult = editReview ? await getHrAdminProbationReview(editReview).catch(()=>null) : null;
+  const editItem = selectedResult?.state === "live" && selectedResult.data.id === editReview ? selectedResult.data : undefined;
   const isCreateModalOpen = reviewModal === "create";
 
+  if(result?.state!=="live" || optionsResult?.state!=="live")return <LifecycleUnavailable/>;
   return (
-    <main className="shell hr-lifecycle-workbench">
-      <PageIntro
-        eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
+    <main className="shell hr-lifecycle-workbench accerio-page lifecycle-phase3">
+      <LifecycleQueueFocus/>
+      <WorkspaceStandardHeader
         title="Probation reviews"
         description="Review confirmation decisions, extensions, owners, and blockers."
         actions={
           <>
-            <Link className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}reviewModal=create`}>Create probation review</Link>
-            <Link className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</Link>
+            <a data-lifecycle-trigger="create-probation" data-navigation-mode="document" className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}reviewModal=create`}>Create probation review</a>
+            <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</a>
           </>
         }
-        pills={[
-          "Extension pre-checks in queue",
-          "Bulk owner and decision actions",
-          "Shareable filter state",
-        ]}
       />
       <section className="attendance-summary-strip" aria-label="Probation review summary">
-        <span><strong>{result.data.total_count}</strong> records</span>
+        <span><strong>{result.data.total_count}</strong> matching records</span>
         <span><strong>{result.data.items.length}</strong> on page</span>
         <span><strong>{optionsResult.data.probation_decisions.length}</strong> decisions</span>
         <span><strong>{optionsResult.data.lifecycle_owners.length}</strong> owners</span>
       </section>
+      {recordLoaded?<div className="notice" role="status">{receipt?.state==="live"&&receipt.data.id===recordLoaded?<>Current record loaded: {receipt.data.employee_name}. Review its current state in the record editor.</>:<>Requested record could not be confirmed. Reload the queue before relying on this result.</>}</div>:null}
       <ProbationReviewQueue
         items={result.data.items}
         state={result.state}
@@ -79,7 +84,7 @@ export default async function HrAdminProbationReviewsPage({ searchParams }: Page
         }}
       />
       {isCreateModalOpen ? (
-        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="probation-create-title" title="Create probation review" eyebrow="Lifecycle record">
+        <LifecycleEditorDialog closeHref={modalCloseHref} labelledBy="probation-create-title" title="Create probation review">
           <ProbationReviewForm
             compact
             cancelHref={modalCloseHref}
@@ -88,10 +93,11 @@ export default async function HrAdminProbationReviewsPage({ searchParams }: Page
             mode="create"
             options={optionsResult.data}
           />
-        </HrAdminActionModal>
+        </LifecycleEditorDialog>
       ) : null}
+      {editReview && !editItem ? <div className="notice" role="status">Selected record unavailable. No other record has been opened. <a data-navigation-mode="document" href={modalCloseHref}>Return to queue</a></div> : null}
       {editItem ? (
-        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="probation-edit-title" title={`Edit probation review: ${editItem.employee_name}`} eyebrow="Lifecycle record">
+        <LifecycleEditorDialog closeHref={modalCloseHref} labelledBy="probation-edit-title" title={`Edit probation review: ${editItem.employee_name}`}>
           <ProbationReviewForm
             compact
             cancelHref={modalCloseHref}
@@ -101,7 +107,7 @@ export default async function HrAdminProbationReviewsPage({ searchParams }: Page
             mode="edit"
             options={optionsResult.data}
           />
-        </HrAdminActionModal>
+        </LifecycleEditorDialog>
       ) : null}
     </main>
   );

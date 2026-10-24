@@ -1,10 +1,15 @@
 "use client";
 
-import Link from "next/link";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
+
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import {useSearchParams} from "next/navigation";
+import {selectLifecycleReport,lifecyclePriority as lifecycleRisk} from "@/lib/lifecycle-report";
 import type { HrAdminLifecycleQueueItem } from "@/lib/types";
 
 const PAGE_SIZE = 10;
@@ -33,21 +38,17 @@ function statusClass(status: string) {
   return "record-chip";
 }
 
-function lifecycleRisk(item: HrAdminLifecycleQueueItem) {
-  if (item.attention_rank >= 80 || item.document_attention_state === "blocked" || item.bulk_status_warning) return "High";
-  if (item.attention_rank >= 40 || item.document_attention_state === "warning" || item.document_attention_state === "upcoming") return "Medium";
-  return "Low";
-}
 
-export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecycleQueueItem[] }) {
-  const [query, setQuery] = useState("");
-  const [itemType, setItemType] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [owner, setOwner] = useState("All");
-  const [attentionState, setAttentionState] = useState("All");
-  const [documentAttentionState, setDocumentAttentionState] = useState("All");
-  const [sortBy, setSortBy] = useState("attention");
-  const [page, setPage] = useState(1);
+export function LifecycleQueueReportWorkspace({ items, asOf }: { items: HrAdminLifecycleQueueItem[]; asOf:string }) {
+  const searchParams=useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q")??"");
+  const [itemType, setItemType] = useState(searchParams.get("item_type")??"All");
+  const [status, setStatus] = useState(searchParams.get("status")??"All");
+  const [owner, setOwner] = useState(searchParams.get("owner")??"All");
+  const [attentionState, setAttentionState] = useState(searchParams.get("attention_state")??"All");
+  const [documentAttentionState, setDocumentAttentionState] = useState(searchParams.get("document_attention_state")??"All");
+  const [sortBy, setSortBy] = useState(searchParams.get("sort")??"attention");
+  const [page, setPage] = useState(Math.max(1,Number(searchParams.get("page"))||1));
 
   const itemTypes = useMemo(() => ["All", ...unique(items.map((item) => item.item_type))], [items]);
   const statuses = useMemo(() => ["All", ...unique(items.map((item) => item.status))], [items]);
@@ -55,53 +56,14 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
   const attentionStates = useMemo(() => ["All", ...unique(items.map((item) => item.attention_state))], [items]);
   const documentAttentionStates = useMemo(() => ["All", ...unique(items.map((item) => item.document_attention_state))], [items]);
 
-  const filteredRows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const nextRows = items.filter((item) => {
-      const matchesType = itemType === "All" || item.item_type === itemType;
-      const matchesStatus = status === "All" || item.status === status;
-      const matchesOwner = owner === "All" || item.owner_value === owner;
-      const matchesAttention = attentionState === "All" || item.attention_state === attentionState;
-      const matchesDocumentAttention = documentAttentionState === "All" || item.document_attention_state === documentAttentionState;
-      const matchesQuery =
-        !normalizedQuery ||
-        [
-          item.item_type,
-          item.item_label,
-          item.employee_code,
-          item.employee_name,
-          item.status,
-          item.status_label,
-          item.owner_value,
-          item.owner_label,
-          item.workflow_reference,
-          item.summary,
-          item.document_attention_summary,
-          item.attention_summary,
-          item.bulk_status_warning,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery);
-      return matchesType && matchesStatus && matchesOwner && matchesAttention && matchesDocumentAttention && matchesQuery;
-    });
-
-    return nextRows.sort((left, right) => {
-      if (sortBy === "employee") return left.employee_name.localeCompare(right.employee_name);
-      if (sortBy === "type") return left.item_type.localeCompare(right.item_type);
-      if (sortBy === "status") return left.status.localeCompare(right.status);
-      if (sortBy === "owner") return String(left.owner_label ?? "").localeCompare(String(right.owner_label ?? ""));
-      if (sortBy === "due_date") return String(left.next_due_on ?? left.primary_date ?? "9999-12-31").localeCompare(String(right.next_due_on ?? right.primary_date ?? "9999-12-31"));
-      return right.attention_rank - left.attention_rank;
-    });
-  }, [attentionState, documentAttentionState, itemType, items, owner, query, sortBy, status]);
+  const filteredRows=useMemo(()=>selectLifecycleReport(items,"lifecycle-queue",{q:query,item_type:itemType,status,owner,attention_state:attentionState,document_attention_state:documentAttentionState,sort:sortBy},asOf),[items,asOf,query,itemType,status,owner,attentionState,documentAttentionState,sortBy]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const exportHref = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams();params.set("as_of",asOf);
     if (query.trim()) params.set("q", query.trim());
     if (itemType !== "All") params.set("item_type", itemType);
     if (status !== "All") params.set("status", status);
@@ -110,8 +72,9 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
     if (documentAttentionState !== "All") params.set("document_attention_state", documentAttentionState);
     params.set("sort", sortBy);
     return `/api/hr-admin/reports/lifecycle-queue?${params.toString()}`;
-  }, [attentionState, documentAttentionState, itemType, owner, query, sortBy, status]);
+  }, [asOf,attentionState, documentAttentionState, itemType, owner, query, sortBy, status]);
   const manifestHref = `${exportHref}&format=manifest`;
+  useEffect(()=>{const url=new URL(exportHref,window.location.origin);url.pathname=window.location.pathname;url.searchParams.set('page',String(currentPage));window.history.replaceState(null,'',url);},[exportHref,currentPage]);
 
   function updateFilter(action: () => void) {
     action();
@@ -133,15 +96,10 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
     <section className="section section--tight" aria-label="Lifecycle queue report workspace">
       <div className="report-catalog-workspace lifecycle-queue-report" data-testid="lifecycle-queue-report">
         <div className="report-command-panel">
-          <div>
-            <span className="workspace-card__eyebrow">Lifecycle queue</span>
-            <h2>Workflow workload evidence</h2>
-            <p className="section-copy section-copy-soft">Review owner load, document blockers, lifecycle status, and due dates before exporting or printing the queue.</p>
-          </div>
           <div className="report-command-panel__actions">
             <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
             <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
-            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print current page</button>
           </div>
         </div>
 
@@ -149,12 +107,12 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
           <article>
             <span>Lifecycle records</span>
             <strong>{filteredRows.length}</strong>
-            <small>{items.length} total records</small>
+            <small>{items.length} collected records</small>
           </article>
           <article>
-            <span>High risk</span>
+            <span>High attention priority</span>
             <strong>{filteredRows.filter((item) => lifecycleRisk(item) === "High").length}</strong>
-            <small>Attention required</small>
+            <small>Includes readiness warnings</small>
           </article>
           <article>
             <span>Owner gaps</span>
@@ -231,7 +189,7 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Lifecycle queue report table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table payroll-register-table">
             <thead>
               <tr>
@@ -250,7 +208,7 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
                   <td>
                     <strong>{item.employee_name}</strong>
                     <span>{item.employee_code}</span>
-                    <code>{item.workflow_reference || "workflow.pending"}</code>
+                    {item.workflow_reference ? <code>{item.workflow_reference}</code> : <span>No workflow linked</span>}
                   </td>
                   <td>
                     <div className="payroll-register-stack">
@@ -259,10 +217,10 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
                       <span>{item.summary || "No summary"}</span>
                     </div>
                   </td>
-                  <td>
+                  <td className="lifecycle-report-owner">
                     <div className="payroll-register-stack">
                       <span>{item.owner_label || "Unassigned"}</span>
-                      <span>{item.owner_value || "No owner ref"}</span>
+                      {item.owner_value ? <span>{item.owner_value}</span> : null}
                     </div>
                   </td>
                   <td>
@@ -288,12 +246,12 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
                   </td>
                   <td>
                     <div className="report-row-actions">
-                      <Link className="button button--secondary" href={item.detail_href}>
+                      <a data-navigation-mode="document" className="button button--secondary" href={item.detail_href+(item.detail_href.includes("?")?"&":"?")+new URLSearchParams({returnTo:`/hr-admin/reports/lifecycle-queue?${searchParams.toString()}`})}>
                         Open
-                      </Link>
-                      <Link className="button button--ghost" href={`/hr-admin/lifecycle?q=${encodeURIComponent(item.employee_code)}`}>
+                      </a>
+                      <a data-navigation-mode="document" className="button button--ghost" href={`/hr-admin/lifecycle?q=${encodeURIComponent(item.employee_code)}`}>
                         Queue
-                      </Link>
+                      </a>
                     </div>
                   </td>
                 </tr>
@@ -307,7 +265,7 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Lifecycle queue pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

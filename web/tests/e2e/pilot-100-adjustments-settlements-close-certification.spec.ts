@@ -79,7 +79,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=actions&runId=${run.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Adjustments");
     await expect(page.getByRole("heading", { name: `${prefix} Adjustments Settlements Close Gate` })).toBeVisible();
-    const adjustmentPanel = page.getByLabel("Adjustment certification actions");
+    const adjustmentPanel = page.getByLabel("Adjustment actions");
     await expect(adjustmentPanel).toBeVisible();
     await expect(adjustmentPanel.getByLabel("Employee snapshot")).toHaveCount(1);
 
@@ -110,25 +110,25 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
       new RegExp(`/api/hr-admin/payroll-adjustments/${createdAdjustment.payload.id}/apply/?$`),
       "POST",
       async () => {
-        await page.getByLabel("Adjustment certification actions").getByRole("button", { name: "Apply selected" }).click();
+        await page.getByLabel("Adjustment actions").getByRole("button", { name: "Apply selected" }).click();
       },
     );
     expect(unapprovedApply.status).toBe(400);
     expect(unapprovedApply.payload.detail ?? "").toMatch(/approved/i);
-    await expect(page.getByLabel("Adjustment certification actions").locator(".form-status")).toContainText(/approved/i);
+    await expect(page.getByLabel("Adjustment actions").locator(".form-status")).toContainText(/approved/i);
 
     const duplicateCreate = await submitAndCapture<{ detail?: string }>(
       page,
       /\/api\/hr-admin\/payroll-adjustments\/?$/,
       "POST",
       async () => {
-        const refreshedPanel = page.getByLabel("Adjustment certification actions");
+        const refreshedPanel = page.getByLabel("Adjustment actions");
         await refreshedPanel.getByLabel("Adjustment source reference").fill(adjustmentSourceRef);
         await refreshedPanel.getByRole("button", { name: "Create adjustment" }).click();
       },
     );
     expect(duplicateCreate.status).toBe(400);
-    await expect(page.getByLabel("Adjustment certification actions").locator(".form-status")).toContainText(/Action failed|already exists|unique/i);
+    await expect(page.getByLabel("Adjustment actions").locator(".form-status")).toContainText(/Action failed|already exists|unique/i);
 
     for (const [action, expected] of [
       ["Submit selected", "submitted"],
@@ -140,7 +140,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
         new RegExp(`/api/hr-admin/payroll-adjustments/${createdAdjustment.payload.id}/${action.split(" ")[0].toLowerCase()}/?$`),
         "POST",
         async () => {
-          await page.getByLabel("Adjustment certification actions").getByRole("button", { name: action }).click();
+          await page.getByLabel("Adjustment actions").getByRole("button", { name: action }).click();
         },
       );
       expect(response.ok).toBeTruthy();
@@ -155,7 +155,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
 
     await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=actions&runId=${run.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Settlements");
-    const settlementPanel = page.getByLabel("Settlement certification actions");
+    const settlementPanel = page.getByLabel("Settlement actions");
     await expect(settlementPanel).toBeVisible();
     const settlementSourceRef = uniqueRef("settlement");
     await settlementPanel.getByLabel("Settlement source reference").fill(settlementSourceRef);
@@ -195,7 +195,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
         new RegExp(`/api/hr-admin/payroll-settlements/${createdSettlement.payload.id}/${action.split(" ")[0].toLowerCase()}/?$`),
         "POST",
         async () => {
-          await page.getByLabel("Settlement certification actions").getByRole("button", { name: action }).click();
+          await page.getByLabel("Settlement actions").getByRole("button", { name: action }).click();
         },
       );
       expect(response.ok).toBeTruthy();

@@ -46,8 +46,8 @@ export default async function HrAdminSaasSlaOperationsPage() {
   const targetEntries = Object.entries(data.incident_targets);
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live SLA operations" : "Demo SLA operations"}
         title="SaaS SLA Ops"
         description="Incident response, service impact, SLA breach posture, and escalation ownership."

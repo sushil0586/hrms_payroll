@@ -1,6 +1,10 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
-import { useEffect, useMemo, useState } from "react";
+
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { FieldErrors } from "@/lib/ui/validation";
@@ -201,20 +205,6 @@ function FieldError({ message }: { message?: string }) {
   return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
-function useEscapeClose(isOpen: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-}
 
 export function ProviderConnectionEditor({ connection, providerKinds, connectionStatuses }: Props) {
   const router = useRouter();
@@ -223,11 +213,7 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<ProviderConnectionField>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  useEscapeClose(isOpen, () => {
-    if (!isSaving) {
-      setIsOpen(false);
-    }
-  });
+
   const modalTitleId = useMemo(() => `provider-connection-editor-${connection.id}`, [connection.id]);
 
   function update<Key extends keyof FormValue>(key: Key, value: FormValue[Key]) {
@@ -306,29 +292,15 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
 
   return (
     <>
-      <button className="button button--primary" type="button" onClick={openEditor}>
+      <button className="button button--primary" type="button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openEditor(); }}>
         Configure provider
       </button>
       {isOpen ? (
-        <div className="modal-shell provider-connection-modal-shell" role="presentation">
-          <section
-            aria-modal="true"
-            aria-labelledby={modalTitleId}
-            className="modal provider-connection-modal"
-            role="dialog"
-          >
-            <div className="modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">Provider setup</span>
-                <h2 id={modalTitleId}>Configure provider connection</h2>
-                <p>Use secret references and provider refs only. Do not paste raw API keys, passwords, or certificates here.</p>
-              </div>
-              <button className="button button--ghost" type="button" onClick={() => setIsOpen(false)}>
-                Close
-              </button>
-            </div>
+        <HrAdminActionModal closeHref="/hr-admin/payroll-providers" labelledBy={modalTitleId} title="Configure provider connection" onClose={() => setIsOpen(false)} busy={isSaving} className="modal provider-connection-modal">
+<p>Use secret references and provider refs only. Do not paste raw API keys, passwords, or certificates here.</p>
 
-            <div className="provider-connection-form-grid">
+
+<div className="provider-connection-form-grid">
               <label className="form-field">
                 <span>Provider name</span>
                 <input aria-invalid={Boolean(fieldErrors.provider_name)} className="input-control" value={formValue.provider_name} onChange={(event) => update("provider_name", event.target.value)} />
@@ -425,20 +397,20 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
               </label>
             </div>
 
-            <div className="provider-connection-modal-footer">
+<div className="provider-connection-modal-footer">
               <div>
                 <strong>{connection.provider_name}</strong>
                 <span role={notice ? "alert" : undefined}>{notice || "Saving recomputes provider readiness immediately."}</span>
               </div>
-              <button className="button button--secondary" type="button" onClick={() => setIsOpen(false)} disabled={isSaving}>
+              <button className="button button--secondary" type="button" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} disabled={isSaving}>
                 Cancel
               </button>
               <button className="button button--primary" type="button" onClick={save} disabled={isSaving}>
                 {isSaving ? "Saving" : "Save provider"}
               </button>
             </div>
-          </section>
-        </div>
+
+</HrAdminActionModal>
       ) : null}
     </>
   );

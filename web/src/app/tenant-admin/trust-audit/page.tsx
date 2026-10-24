@@ -99,8 +99,8 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
   ].filter(Boolean);
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live tenant trust" : "Demo tenant trust"}
         title="Tenant Trust Audit"
         description="Customer-visible commercial, tenant-admin, and support-access evidence."

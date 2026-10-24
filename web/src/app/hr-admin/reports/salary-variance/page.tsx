@@ -13,8 +13,8 @@ export default async function SalaryVarianceReportPage() {
   const result = await getHrAdminPayrollReviewSetup();
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-review">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-review accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Salary Variance Report"
         description="Finance review of employee-level pay movement using configurable prior-period baselines, calculation-line evidence, and review drilldown."

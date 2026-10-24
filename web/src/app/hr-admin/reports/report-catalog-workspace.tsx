@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -121,7 +124,7 @@ export function ReportCatalogWorkspace({ reports }: { reports: ReportCatalogItem
           </span>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Report catalog table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table">
             <thead>
               <tr>
@@ -181,7 +184,7 @@ export function ReportCatalogWorkspace({ reports }: { reports: ReportCatalogItem
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Report catalog pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>

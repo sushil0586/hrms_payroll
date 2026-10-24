@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -372,7 +374,7 @@ function RuleTable({
         </Link>
       </div>
 
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Payroll rules table 1" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table payroll-rule-table">
           <thead>
             <tr>
@@ -414,7 +416,7 @@ function RuleTable({
             )}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       <PaginationControls
         ariaLabel="rules pagination"
         currentParams={currentParams}
@@ -686,8 +688,8 @@ export default async function HrAdminPayrollRulesPage({ searchParams }: PageProp
   const activeRules = setup.rules.filter((rule) => rule.active_version_count > 0).length;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-rules">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-rules accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 2A" : "Demo payroll phase 2A"}
         title="Payroll Rules"
         description="Versioned formula and rule definitions with safe expressions, dependencies, previews, and trace output."

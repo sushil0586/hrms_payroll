@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import { FormEvent, useCallback, useState } from "react";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
@@ -160,13 +163,13 @@ export function FinancialCalendarWorkbench({ initialData, canManage, canClose, c
 
       <section className="panel-card-soft" aria-labelledby="calendar-register-heading">
         <div className="tenant-console-panel__header"><div><span className="workspace-card__eyebrow">Persisted configuration</span><h2 id="calendar-register-heading">Calendar register</h2></div></div>
-        <div className="responsive-table-wrap"><table className="data-table" aria-label="Fiscal calendars"><thead><tr><th>Calendar</th><th>Scope</th><th>Boundary</th><th>Effective</th><th>Status</th></tr></thead><tbody>{data.calendars.map((item) => <tr key={item.id} data-testid={`fiscal-calendar-${item.id}`}><td><strong>{item.name}</strong><small>{item.code} v{item.version}</small></td><td>{item.legal_entity_name || "Tenant default"}</td><td>{item.start_day}/{item.start_month}</td><td>{item.effective_from}</td><td>{item.status}</td></tr>)}</tbody></table></div>
+        <WorkspaceTableScrollRegion label="Fiscal calendars scroll region" className="responsive-table-wrap workspace-table-region"><table className="data-table" aria-label="Fiscal calendars"><thead><tr><th>Calendar</th><th>Scope</th><th>Boundary</th><th>Effective</th><th>Status</th></tr></thead><tbody>{data.calendars.map((item) => <tr key={item.id} data-testid={`fiscal-calendar-${item.id}`}><td><strong>{item.name}</strong><small>{item.code} v{item.version}</small></td><td>{item.legal_entity_name || "Tenant default"}</td><td>{item.start_day}/{item.start_month}</td><td>{item.effective_from}</td><td>{item.status}</td></tr>)}</tbody></table></WorkspaceTableScrollRegion>
       </section>
 
       <section className="panel-card-soft" aria-labelledby="period-register-heading">
         <div className="tenant-console-panel__header"><div><span className="workspace-card__eyebrow">Lifecycle</span><h2 id="period-register-heading">Accounting period register</h2></div></div>
         <label className="form-field"><span>Transition reason</span><input className="input-control" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-        <div className="responsive-table-wrap"><table className="data-table" aria-label="Accounting periods"><thead><tr><th>Period</th><th>Dates</th><th>Status</th><th>Audit</th><th>Action</th></tr></thead><tbody>{data.accounting_periods.map((item) => <tr key={item.id} data-testid={`accounting-period-${item.id}`}><td><strong>{item.name}</strong><small>{item.code}</small></td><td>{item.start_date} to {item.end_date}</td><td><span className="readiness-badge">{item.status}</span></td><td>{item.status_events.length} event{item.status_events.length === 1 ? "" : "s"}</td><td>{item.status === "open" && canClose ? <AsyncActionButton className="button button--secondary button--compact" pending={pending === `close-${item.id}`} pendingLabel="Closing period" onClick={() => transition(item.id, "close", item.status_events.length)}>Close</AsyncActionButton> : item.status === "closed" && canReopen ? <AsyncActionButton className="button button--secondary button--compact" pending={pending === `reopen-${item.id}`} pendingLabel="Reopening period" onClick={() => transition(item.id, "reopen", item.status_events.length)}>Reopen</AsyncActionButton> : <span>Read only</span>}</td></tr>)}</tbody></table></div>
+        <WorkspaceTableScrollRegion label="Accounting periods scroll region" className="responsive-table-wrap workspace-table-region"><table className="data-table" aria-label="Accounting periods"><thead><tr><th>Period</th><th>Dates</th><th>Status</th><th>Audit</th><th>Action</th></tr></thead><tbody>{data.accounting_periods.map((item) => <tr key={item.id} data-testid={`accounting-period-${item.id}`}><td><strong>{item.name}</strong><small>{item.code}</small></td><td>{item.start_date} to {item.end_date}</td><td><span className="readiness-badge">{item.status}</span></td><td>{item.status_events.length} event{item.status_events.length === 1 ? "" : "s"}</td><td>{item.status === "open" && canClose ? <AsyncActionButton className="button button--secondary button--compact" pending={pending === `close-${item.id}`} pendingLabel="Closing period" onClick={() => transition(item.id, "close", item.status_events.length)}>Close</AsyncActionButton> : item.status === "closed" && canReopen ? <AsyncActionButton className="button button--secondary button--compact" pending={pending === `reopen-${item.id}`} pendingLabel="Reopening period" onClick={() => transition(item.id, "reopen", item.status_events.length)}>Reopen</AsyncActionButton> : <span>Read only</span>}</td></tr>)}</tbody></table></WorkspaceTableScrollRegion>
       </section>
     </div>
   );

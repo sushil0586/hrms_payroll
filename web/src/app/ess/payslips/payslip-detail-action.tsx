@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { useConfirmedPayslip } from "./payslip-read-state";
 
@@ -155,7 +157,7 @@ export function PayslipDetailAction({ payslip: initialPayslip, variant = "second
 
   return (
     <>
-      <button className={`button button--${variant}`} onClick={() => setIsOpen(true)} type="button">
+      <button className={`button button--${variant}`} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setIsOpen(true); }} type="button">
         Review payslip
       </button>
 

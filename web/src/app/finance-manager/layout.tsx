@@ -30,13 +30,14 @@ export default async function FinanceManagerLayout({ children }: { children: Rea
 
   return (
     <WorkspaceChrome
+      appearance="accerio"
       footerDescription="Payroll payout, statutory liabilities, provider evidence, and finance-close control in one workspace."
       navGroups={menuSource.navGroups}
       navItems={menuSource.navItems}
-      productLabel="Nexora"
+      productLabel="Accerio"
       quickLinks={menuSource.quickLinks}
       roleLabel="Payroll Finance"
-      searchHint="Search handoffs, bank advice, statutory filings, and audit evidence"
+      searchHint="Search pages and actions"
       userLabel={userLabel}
       workspaceLabel="Finance operations"
       workspaceTone="manager"

@@ -1,27 +1,27 @@
-import Link from "next/link";
+import { DocumentAccessNotice } from "@/app/hr-admin/documents/document-access-notice";
 
 import { documentCategoryToFormValue } from "@/app/hr-admin/document-categories/form-values";
 import { DocumentCategoryForm } from "@/app/hr-admin/document-categories/document-category-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminDocumentCategory, getHrAdminDocumentOptions } from "@/lib/api";
-import { requireSessionPermission } from "@/lib/workspace-access";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditDocumentCategoryPage({ params }: PageProps) {
   const { itemId } = await params;
-  await requireSessionPermission({
+  const sessionUser = await requireSessionPermission({
     permissionKeys: ["documents.manage"],
     fallbackPath: "/hr-admin/document-categories",
   });
+  if (!sessionHasPermission(sessionUser, "documents.view")) return <DocumentAccessNotice />;
   const [itemResult, optionsResult] = await Promise.all([getHrAdminDocumentCategory(itemId), getHrAdminDocumentOptions()]);
 
   return (
-    <main className="shell hr-document-workbench">
-      <PageIntro
-        actions={<Link className="button button--secondary" href="/hr-admin/document-categories">Back to document categories</Link>}
+    <main className="shell hr-document-workbench accerio-page document-operations document-setup-page">
+      <WorkspaceStandardHeader
+        actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/document-categories">Back to document categories</a>}
         description="Update behavior, validation, and upload expectations for this category."
-        eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
         title="Edit document category"
       />
       <DocumentCategoryForm initialValue={documentCategoryToFormValue(itemResult.data)} itemId={itemId} mode="edit" options={optionsResult.data} />

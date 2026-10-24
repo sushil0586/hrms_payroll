@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 
@@ -191,7 +193,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
         ) : null}
 
         <div className="employee-directory-layout">
-          <WorkspaceTableScrollRegion className="employee-directory-table-wrap" label="Leave policies table scroll">
+          <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Leave policies table scroll">
             <table aria-label="Leave policies" className="accerio-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
@@ -240,7 +242,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
                       Edit
                     </a>
                   ) : null}
-                  {canManagePolicies ? <button className="button button--ghost" onClick={() => openRemoveDialog(selectedDetail)} type="button">Remove</button> : null}
+                  {canManagePolicies ? <button className="button button--ghost" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openRemoveDialog(selectedDetail); }} type="button">Remove</button> : null}
                 </div>
               </div>
               <div className="record-card__eyebrow">

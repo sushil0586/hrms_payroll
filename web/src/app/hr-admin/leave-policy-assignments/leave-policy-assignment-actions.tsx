@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
 
@@ -78,7 +80,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
           {successMessage}
         </span>
       ) : null}
-      <button className="button button--ghost" onClick={() => setDialogOpen(true)} type="button">
+      <button className="button button--ghost" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setDialogOpen(true); }} type="button">
         Remove
       </button>
       {dialogOpen ? (

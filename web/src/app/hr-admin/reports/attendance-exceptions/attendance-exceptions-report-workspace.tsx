@@ -1,5 +1,7 @@
 "use client";
 
+import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
+
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
@@ -50,13 +52,7 @@ function formatDate(value: string | null | undefined) {
 }
 
 function formatDateTime(value: string | null | undefined) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return value ? formatWorkspaceDateTime(value, "Asia/Kolkata") : "Not set";
 }
 
 function slaRisk(status: string, age: number): AttendanceExceptionRow["slaRisk"] {

@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -240,7 +243,7 @@ export function SalaryVarianceReportWorkspace({
           <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Salary variance report table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table salary-variance-table">
             <thead>
               <tr>
@@ -295,7 +298,7 @@ export function SalaryVarianceReportWorkspace({
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Salary variance pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>

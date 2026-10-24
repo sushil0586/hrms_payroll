@@ -4,11 +4,14 @@ import path from 'node:path';
 import {readFileSync} from 'node:fs';
 import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona,type IsolatedQaWorkspace} from '../helpers/isolated-qa-workspace';
 const repo=path.resolve(__dirname,'../../..');
-const evidence=path.join(repo,'docs/qa/evidence/hr-admin-standardization/attendance-family');
+const fixtureRoot=path.join(repo,'docs/qa/evidence/hr-admin-standardization/attendance-family');
+const evidence=process.env.HRMS_MASTER_EVIDENCE_ROOT
+ ? path.resolve(repo,process.env.HRMS_MASTER_EVIDENCE_ROOT)
+ : fixtureRoot;
 let fixture:IsolatedQaWorkspace;
 let ids:Record<string,string>;
-const routes=JSON.parse(readFileSync(path.join(evidence,'routes.json'),'utf8')) as string[];
-test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repo,'.venv/bin/python'),[path.join(evidence,'seed.py'),fixture.manifestPath],{env:process.env,cwd:repo});const m=JSON.parse(readFileSync(fixture.manifestPath,'utf8'));ids={shifts:m.attendance.shift_id,'attendance-policies':m.attendance.policy_id,'attendance-records':m.a1.closed_id,'attendance-regularizations':m.fixtures.attendance_regularization_id,'holiday-calendars':m.family.calendar_id,'employee-shift-assignments':m.family.assignment_id,'attendance-policy-assignments':m.family.policy_assignment_id,'shift-roster-templates':m.family.roster_id};});
+const routes=JSON.parse(readFileSync(path.join(fixtureRoot,'routes.json'),'utf8')) as string[];
+test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repo,'.venv/bin/python'),[path.join(fixtureRoot,'seed.py'),fixture.manifestPath],{env:process.env,cwd:repo});const m=JSON.parse(readFileSync(fixture.manifestPath,'utf8'));ids={shifts:m.attendance.shift_id,'attendance-policies':m.attendance.policy_id,'attendance-records':m.a1.closed_id,'attendance-regularizations':m.fixtures.attendance_regularization_id,'holiday-calendars':m.family.calendar_id,'employee-shift-assignments':m.family.assignment_id,'attendance-policy-assignments':m.family.policy_assignment_id,'shift-roster-templates':m.family.roster_id};});
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(fixture)});
 test.beforeEach(async({page})=>{const p=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:p.username,password:p.password}})).status()).toBe(200)});
 function route(source:string){let url=source.replace('web/src/app','').replace('/page.tsx','');if(url.includes('[itemId]'))url=url.replace('[itemId]',ids[url.split('/')[2]]);return url;}
@@ -43,7 +46,7 @@ test('regularization pagination uses committed filters, history and validation',
  await ready(page,'/hr-admin/attendance-regularizations?page_size=10');const form=page.getByRole('form',{name:'Regularization filters'});
  await form.getByRole('combobox',{name:'Request status',exact:true}).selectOption('draft');await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page).toHaveURL(/page=2/);expect(new URL(page.url()).searchParams.get('status')).toBeNull();
  await form.getByRole('combobox',{name:'Request status',exact:true}).selectOption('draft');await Promise.all([page.waitForEvent('domcontentloaded'),form.getByRole('button',{name:'Apply filters'}).click()]);await expect(page).toHaveURL(/status=draft/);await expect(form.getByRole('combobox',{name:'Request status',exact:true})).toHaveValue('draft');
- await page.goBack();await expect(form.getByRole('combobox',{name:'Request status',exact:true})).toHaveValue('');
+ await page.goBack({waitUntil:'domcontentloaded'});await page.reload();await expect(form.getByRole('combobox',{name:'Request status',exact:true})).toHaveValue('');
  await form.getByText('More filters',{exact:true}).click();await form.getByLabel('From date',{exact:true}).fill('2032-03-20');await form.getByLabel('To date',{exact:true}).fill('2032-03-01');await form.getByRole('button',{name:'Apply filters'}).click();await expect(page.locator('main').getByRole('alert')).toContainText('From date');
 });
 test('register includes records beyond page 500 and matches audited export',async({page})=>{

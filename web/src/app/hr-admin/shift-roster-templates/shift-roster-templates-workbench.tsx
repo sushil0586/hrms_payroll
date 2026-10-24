@@ -1,4 +1,6 @@
 "use client";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+
 
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
@@ -207,10 +209,10 @@ export function ShiftRosterTemplatesWorkbench({
                       <td><WorkspaceStatusBadge tone={item.assignment_kind === "temporary_override" ? "info" : "neutral"}>{titleLabel(item.assignment_kind)}</WorkspaceStatusBadge><span>Assignment mode</span></td>
                       <td><strong>{titleLabel(item.config_snapshot?.rotation?.pattern_type ?? "fixed")}</strong><span>{rotationSummary(item, options.shifts)}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{titleLabel(item.status)}</WorkspaceStatusBadge><span>{item.status === "draft" ? "Preview first" : "Rollout ready"}</span></td>
-                      <td><button className="button button--secondary button--compact" onClick={(event) => {
-                        event.stopPropagation();
+                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                        triggerEvent.stopPropagation();
                         setSelectedItemId(item.id);
-                      }} type="button">Inspect</button></td>
+                       }} type="button">Inspect</button></td>
                     </tr>
                   );
                 })}
@@ -253,7 +255,7 @@ export function ShiftRosterTemplatesWorkbench({
                 <h2 className="section-heading-soft">Roster template detail</h2>
                 <p className="section-copy section-copy-soft">Focused pattern, status, and rollout context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={() => setSelectedItemId("")} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

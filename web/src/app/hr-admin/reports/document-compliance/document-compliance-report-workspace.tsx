@@ -1,9 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
+import { essDocumentDate } from "@/lib/ui/employee-document-format";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import type { HrAdminEmployeeDocument } from "@/lib/types";
 
@@ -17,14 +20,7 @@ function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort();
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
+const formatDate = essDocumentDate;
 
 function formatFileSize(fileSizeBytes: number) {
   if (fileSizeBytes <= 0) return "Not available";
@@ -45,14 +41,15 @@ function complianceRisk(item: HrAdminEmployeeDocument) {
   return "Low";
 }
 
-export function DocumentComplianceReportWorkspace({ documents }: { documents: HrAdminEmployeeDocument[] }) {
-  const [query, setQuery] = useState("");
-  const [verificationStatus, setVerificationStatus] = useState("All");
-  const [recordStatus, setRecordStatus] = useState("All");
-  const [category, setCategory] = useState("All");
-  const [expiryFocus, setExpiryFocus] = useState("All");
-  const [sortBy, setSortBy] = useState("risk");
-  const [page, setPage] = useState(1);
+export function DocumentComplianceReportWorkspace({ documents, initialFilters = {}, canExport, canReview, canDownload }: { documents: HrAdminEmployeeDocument[]; initialFilters?: Record<string,string>; canExport: boolean; canReview: boolean; canDownload: boolean }) {
+  const [query, setQuery] = useState(initialFilters.q || "");
+  const [verificationStatus, setVerificationStatus] = useState(initialFilters.verification_status || "All");
+  const [recordStatus, setRecordStatus] = useState(initialFilters.status || "All");
+  const [category, setCategory] = useState(initialFilters.category || "All");
+  const [expiryFocus, setExpiryFocus] = useState(initialFilters.expiry_focus || "All");
+  const [sortBy, setSortBy] = useState(initialFilters.sort || "risk");
+  const [page, setPage] = useState(Number.isSafeInteger(Number(initialFilters.page)) && Number(initialFilters.page)>0 ? Number(initialFilters.page) : 1);
+  const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   const verificationStatuses = useMemo(() => ["All", ...unique(documents.map((item) => item.verification_status))], [documents]);
   const recordStatuses = useMemo(() => ["All", ...unique(documents.map((item) => item.status))], [documents]);
@@ -115,6 +112,13 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
     params.set("sort", sortBy);
     return `/api/hr-admin/reports/document-compliance?${params.toString()}`;
   }, [category, expiryFocus, query, recordStatus, sortBy, verificationStatus]);
+  useEffect(() => {
+    if (!ready) return;
+    const url = new URL(exportHref, window.location.origin);
+    url.pathname = "/hr-admin/reports/document-compliance";
+    url.searchParams.set("page", String(currentPage));
+    window.history.replaceState(null, "", url);
+  }, [currentPage, exportHref, ready]);
   const manifestHref = `${exportHref}&format=manifest`;
 
   function updateFilter(action: () => void) {
@@ -133,7 +137,7 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
   }
 
   return (
-    <section className="section section--tight" aria-label="Document compliance report workspace">
+    <fieldset disabled={!ready} data-hydrated={ready} className="section section--tight document-report-ready" aria-label="Document compliance report workspace">
       <div className="report-catalog-workspace document-compliance-report" data-testid="document-compliance-report">
         <div className="report-command-panel">
           <div>
@@ -142,35 +146,19 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
             <p className="section-copy section-copy-soft">Review missing verification, expiry risk, and re-upload follow-up before exporting or printing the compliance view.</p>
           </div>
           <div className="report-command-panel__actions">
-            <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
-            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
+            {canExport ? <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton> : null}
+            {canExport ? <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton> : null}
             <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
           </div>
         </div>
 
-        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
-          <article>
-            <span>Documents</span>
-            <strong>{filteredRows.length}</strong>
-            <small>{documents.length} total records</small>
-          </article>
-          <article>
-            <span>Pending verification</span>
-            <strong>{filteredRows.filter((item) => item.verification_status === "pending").length}</strong>
-            <small>Needs reviewer action</small>
-          </article>
-          <article>
-            <span>Expiry risk</span>
-            <strong>{filteredRows.filter((item) => item.is_expired || item.is_expiring_soon).length}</strong>
-            <small>Expired or expiring</small>
-          </article>
-          <article>
-            <span>Re-upload requests</span>
-            <strong>{filteredRows.filter((item) => item.reupload_requested).length}</strong>
-            <small>Employee follow-up</small>
-          </article>
+        <div className="attendance-summary-strip" aria-label="Filtered document summary">
+          <span><strong>{filteredRows.length}</strong> matching of {documents.length} loaded records</span>
+          <span><strong>{filteredRows.filter(item=>item.verification_status==="pending").length}</strong> pending</span>
+          <span><strong>{filteredRows.filter(item=>item.is_expired || item.is_expiring_soon).length}</strong> expiry risk</span>
+          <span><strong>{filteredRows.filter(item=>item.reupload_requested).length}</strong> re-upload requested</span>
         </div>
-
+        <p className="section-copy">Filters apply immediately and update this URL. CSV and manifest include all matching rows, across all display pages. Reads are bounded to 10,000 records and are not a transactional snapshot. This is a document register, not an assessment of missing employee requirements.</p>
         <div className="report-filter-panel" aria-label="Document compliance filters">
           <div className="report-filter-panel__header">
             <div>
@@ -230,8 +218,8 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table payroll-register-table">
+        <WorkspaceTableScrollRegion label="Document compliance report table 1" className="report-catalog-table-wrap workspace-table-region">
+          <table className="report-catalog-table payroll-register-table" aria-label="Document compliance evidence">
             <thead>
               <tr>
                 <th scope="col">Employee</th>
@@ -288,13 +276,13 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
                   </td>
                   <td>
                     <div className="report-row-actions">
-                      <Link className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>
+                      {canReview ? <a data-navigation-mode="document" className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>
                         Review
-                      </Link>
-                      {item.artifact_id ? (
-                        <Link className="button button--ghost" href={`/api/hr-admin/employee-documents/${item.id}/download`} prefetch={false}>
+                      </a> : null}
+                      {item.artifact_id && canDownload ? (
+                        <a data-navigation-mode="document" className="button button--ghost" href={`/api/hr-admin/employee-documents/${item.id}/download`}>
                           Download
-                        </Link>
+                        </a>
                       ) : null}
                     </div>
                   </td>
@@ -309,14 +297,14 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
               ) : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Document compliance pagination">
-          <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+          <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage(Math.max(1, currentPage - 1))}>Previous</button>
           <span>Showing {filteredRows.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, filteredRows.length)} of {filteredRows.length}</span>
-          <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</button>
+          <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => setPage(Math.min(pageCount, currentPage + 1))}>Next</button>
         </div>
       </div>
-    </section>
+    </fieldset>
   );
 }

@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -311,7 +313,7 @@ function CalendarTable({
           New calendar
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Payroll setup table 1" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table">
           <thead>
             <tr>
@@ -341,7 +343,7 @@ function CalendarTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!calendars.length ? <EmptyState title="No calendars yet" detail="Create the first payroll calendar from Setup Actions." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -378,7 +380,7 @@ function PeriodTable({
           New period
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Payroll setup table 2" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table">
           <thead>
             <tr>
@@ -406,7 +408,7 @@ function PeriodTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!periods.length ? <EmptyState title="No periods yet" detail="Create a period after at least one payroll calendar exists." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -445,7 +447,7 @@ function PayGroupTable({
           New pay group
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Payroll setup table 3" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table">
           <thead>
             <tr>
@@ -475,7 +477,7 @@ function PayGroupTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!payGroups.length ? <EmptyState title="No pay groups yet" detail="Create pay groups after calendars and organization masters are ready." /> : null}
       <PaginationControls
         currentParams={currentParams}
@@ -514,7 +516,7 @@ function AssignmentTable({
           New assignment
         </Link>
       </div>
-      <div className="payroll-table-scroll">
+      <WorkspaceTableScrollRegion label="Payroll setup table 4" className="payroll-table-scroll workspace-table-region">
         <table className="payroll-readiness-table payroll-setup-table">
           <thead>
             <tr>
@@ -538,7 +540,7 @@ function AssignmentTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       {!assignments.length ? (
         <EmptyState
           title="No assignments in this view"
@@ -572,8 +574,8 @@ export default async function HrAdminPayrollSetupPage({ searchParams }: PageProp
     : setup.assignments;
 
   return (
-    <main className="shell shell--payroll-setup">
-      <PageIntro
+    <main className="shell shell--payroll-setup accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 1A" : "Demo payroll phase 1A"}
         title="Payroll Setup"
         description="Configurable payroll calendars, periods, pay groups, and employee assignment coverage."

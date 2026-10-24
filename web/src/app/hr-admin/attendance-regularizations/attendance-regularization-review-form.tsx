@@ -1,5 +1,7 @@
 "use client";
 
+import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
+
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -21,12 +23,7 @@ function getErrorMessage(payload: unknown) {
 }
 
 function formatDateTime(value: string | null, fallback: string) {
-  if (!value) return fallback;
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value));
+  return value ? formatWorkspaceDateTime(value, "Asia/Kolkata") : fallback;
 }
 
 function titleCase(value: string) {

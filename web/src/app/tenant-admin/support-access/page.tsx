@@ -42,8 +42,8 @@ export default async function TenantAdminSupportAccessPage() {
   ];
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live support access" : "Demo support access"}
         title="Support Access"
         description="Request, approve, start, end, reject, or revoke scoped support sessions."

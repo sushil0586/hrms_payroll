@@ -34,19 +34,28 @@ export function ProviderConnectionActivationAction({ connectionId }: Props) {
   async function activateConnection() {
     setIsActivating(true);
     setNotice("");
-    const response = await fetch(`/api/hr-admin/payroll-provider-connections/${connectionId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "active" }),
-    });
-    const result = await response.json().catch(() => ({}));
-    setIsActivating(false);
-    if (!response.ok) {
-      setNotice(apiErrorMessage(result, "Provider connection could not be activated."));
-      return;
+    try {
+      const response = await fetch(`/api/hr-admin/payroll-provider-connections/${connectionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "active" }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(apiErrorMessage(result, "Provider connection could not be activated."));
+        return;
+      }
+      if ((result as { id?: string; status?: string }).status !== "active") {
+        setNotice("Provider activation was not confirmed. Verify the connection before retrying.");
+        return;
+      }
+      setNotice("Provider connection activated.");
+      router.refresh();
+    } catch {
+      setNotice("Provider activation could not be confirmed. Verify the connection before retrying.");
+    } finally {
+      setIsActivating(false);
     }
-    setNotice("Provider connection activated.");
-    router.refresh();
   }
 
   return (

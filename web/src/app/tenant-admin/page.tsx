@@ -265,8 +265,8 @@ export default async function TenantAdminConsolePage() {
   }>;
 
   return (
-    <main className="shell shell--workspace tenant-enterprise-page">
-      <PageIntro
+    <main className="shell shell--workspace tenant-enterprise-page accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Tenant Admin"
         title="Account Control Center"
         description="Review account posture, open access work, setup progress, and tenant evidence from one control center."

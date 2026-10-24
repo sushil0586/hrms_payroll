@@ -7,13 +7,14 @@ type Props = {
   reset: () => void;
 };
 
-export default function TenantAdminError({ error, reset }: Props) {
+export default function TenantAdminError({ error }: Props) {
   return (
     <WorkspaceErrorState
+      appearance="accerio"
+      userFacing
       detail={error.message}
       eyebrow="Tenant admin load issue"
       onRetry={() => {
-        reset();
         window.location.reload();
       }}
       title="Tenant admin could not load the current workspace"

@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { OrganizationAccessNotice } from "@/app/hr-admin/organization/organization-access-notice";
+import { organizationReturnHref } from "@/app/hr-admin/organization/section-config";
 import { notFound } from "next/navigation";
 
 import { OrganizationForm } from "@/app/hr-admin/organization/organization-form";
@@ -7,52 +9,51 @@ import {
   organizationItemToFormValue,
   ORGANIZATION_SECTION_CONFIG,
 } from "@/app/hr-admin/organization/section-config";
-import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationFormOptions, getHrAdminOrganizationItem } from "@/lib/api";
 import type { HrAdminOrganizationItem } from "@/lib/types";
-import { requireSessionPermission } from "@/lib/workspace-access";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
   params: Promise<{
     section: string;
     itemId: string;
   }>;
 };
 
-export default async function HrAdminEditOrganizationItemPage({ params }: PageProps) {
+export default async function HrAdminEditOrganizationItemPage({ params, searchParams }: PageProps) {
   const { section, itemId } = await params;
   if (!isOrganizationSectionKey(section)) {
     notFound();
   }
-  await requireSessionPermission({
+  const user = await requireSessionPermission({
     permissionKeys: ["organization.manage"],
     fallbackPath: `/hr-admin/organization?section=${section}&itemId=${itemId}`,
   });
+  if (!sessionHasPermission(user, "organization.view")) return <OrganizationAccessNotice />;
+  const query = (await searchParams) ?? {};
+  const returnHref = organizationReturnHref(typeof query.returnTo === "string" ? query.returnTo : undefined, section);
+
 
   const [itemResult, optionsResult] = await Promise.all([
-    getHrAdminOrganizationItem(section, itemId),
-    getHrAdminOrganizationFormOptions(),
+    getHrAdminOrganizationItem(section, itemId).catch(()=>null),
+    getHrAdminOrganizationFormOptions().catch(()=>null),
   ]);
 
-  const item = itemResult.data as HrAdminOrganizationItem | undefined;
-  if (!item?.id) {
+  const item = itemResult?.data as HrAdminOrganizationItem | undefined;
+  if (itemResult?.state !== "live") return <OrganizationAccessNotice unavailable />;
+  if (!item?.id || item.id !== itemId) {
     notFound();
   }
 
+  if (optionsResult?.state !== "live") return <OrganizationAccessNotice unavailable />;
   const sectionMeta = ORGANIZATION_SECTION_CONFIG[section];
-  const state = itemResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell">
-      <PageIntro
-        eyebrow={state === "live" ? "Live edit mode" : "Demo edit mode"}
-        title={`Edit ${sectionMeta.singular.toLowerCase()}`}
-        description="Update the structural record without breaking employee mappings or policy dependencies."
-        actions={<Link className="button button--secondary" href={`/hr-admin/organization?section=${section}`}>Back to {sectionMeta.label.toLowerCase()}</Link>}
-        pills={["Structure maintenance", "Dependency-safe edits", "Catalog-linked workflow"]}
-      />
+    <main className="shell accerio-page">
+      <WorkspaceStandardHeader title={`Edit ${sectionMeta.singular.toLowerCase()}`} description="Maintain identity, mappings and active-state behavior." actions={<a data-navigation-mode="document" className="button button--secondary" href={returnHref}>Back to {sectionMeta.label.toLowerCase()}</a>} />
 
-      <OrganizationForm
+      <OrganizationForm returnHref={returnHref}
         currentItem={item}
         initialValue={organizationItemToFormValue(item)}
         itemId={item.id}

@@ -1,0 +1,2 @@
+import {defineConfig,devices} from '@playwright/test';
+export default defineConfig({testDir:'./tests/employee-makeover',testMatch:'phase4-baseline.spec.ts',workers:1,retries:0,timeout:180000,outputDir:'../docs/qa/evidence/employee-makeover-phase4-2026-10-22/results-baseline',reporter:[['list'],['json',{outputFile:'../docs/qa/evidence/employee-makeover-phase4-2026-10-22/results-baseline.json'}]],use:{...devices['Desktop Chrome'],baseURL:'http://127.0.0.1:3267',trace:'on'}});

@@ -19,7 +19,7 @@ test('search, committed history, refresh and empty reset',async({page})=>{
 test('combined department, status, manager and readiness filters',async({page})=>{
  await page.goto('/hr-admin/employees');await ready(page);const f=filters(page);
  await f.getByRole('combobox',{name:'Department',exact:true}).selectOption({label:'QA People'});await f.getByRole('combobox',{name:'Status',exact:true}).selectOption('active');
- await f.getByText('More filters',{exact:true}).click();await f.getByRole('combobox',{name:'Manager review',exact:true}).selectOption('managers');await f.getByRole('combobox',{name:'Readiness',exact:true}).selectOption('ready');await f.getByRole('button',{name:'Apply',exact:true}).click();
+ await f.getByRole('combobox',{name:'Manager review',exact:true}).selectOption('managers');await f.getByRole('combobox',{name:'Readiness',exact:true}).selectOption('ready');await f.getByRole('button',{name:'Apply',exact:true}).click();
  await expect(rows(page)).toHaveCount(1);await expect(rows(page)).toContainText('Manav');await expect(f.getByRole('combobox',{name:'Manager review',exact:true})).toHaveValue('managers');await expect(page.getByText('4 active filters',{exact:false})).toBeVisible();
  await f.getByRole('combobox',{name:'Status',exact:true}).selectOption('inactive');await f.getByRole('button',{name:'Apply',exact:true}).click();await expect(page.getByText('No employees in this view.',{exact:true})).toBeVisible();
 });
@@ -30,11 +30,11 @@ test('sorting, pagination and unapplied draft isolation',async({page})=>{
  await page.getByRole('form',{name:'Directory pagination'}).getByRole('combobox').selectOption('10');await page.getByRole('form',{name:'Directory pagination'}).getByRole('button',{name:'Apply',exact:true}).click();await expect(rows(page)).toHaveCount(6);await expect(page).toHaveURL(/sort=-name/);
  await page.goto('/hr-admin/employees?page=999&page_size=5');await expect(rows(page)).toHaveCount(1);
 });
-test('detail retry and selection clears with committed scope',async({page})=>{
+test('detail retry and selection clears with committed scope',async({page},info)=>{
  await page.goto('/hr-admin/employees');await ready(page);
  const target=fixture.manifest.credentials.employee.employee_id;let fail=true;
  await page.route(`**/api/hr-admin/employees/${target}`,route=>fail?route.fulfill({status:503,json:{detail:'Synthetic detail interruption'}}):route.continue());
- await page.locator(`tr[data-employee-id="${target}"] .employee-directory-table__identity`).click();await expect(page.locator('.employee-detail-drawer').getByRole('alert')).toContainText('Synthetic detail interruption');fail=false;
+ await page.locator(`tr[data-employee-id="${target}"] .employee-directory-table__identity`).click();await expect(page.locator('.employee-detail-drawer').getByRole('alert')).toContainText('Synthetic detail interruption');await page.screenshot({path:`${process.env.EMPLOYEE_EVIDENCE_DIR || '../docs/qa/evidence/hr-admin-employees'}/${info.project.name}-detail-error.png`});fail=false;
  await page.getByRole('button',{name:'Retry',exact:true}).click();await expect(page.locator('.employee-detail-drawer')).toContainText('Esha');
  await filters(page).getByLabel('Search',{exact:true}).fill(fixture.manifest.credentials.manager.employee_code);await filters(page).getByRole('button',{name:'Apply',exact:true}).click();await expect(rows(page)).toHaveCount(1);await expect(page.locator('.employee-detail-drawer')).toHaveCount(0);
 });
@@ -44,7 +44,7 @@ test('responsive table keyboard, menu and screenshots',async({page},info)=>{
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
   const region=page.getByRole('region',{name:'Employee directory, scroll for more columns'});await expect(region).toBeVisible();await region.focus();await expect(region).toBeFocused();
   if(width<600){for(const control of await filters(page).getByRole('combobox').all()) expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44 - 0.01);await region.press('ArrowRight');expect(await region.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);await region.press('ArrowLeft')}
-  await page.screenshot({path:`../docs/qa/evidence/hr-admin-employees/${info.project.name}-${width}.png`,fullPage:true});
+  await page.screenshot({path:`${process.env.EMPLOYEE_EVIDENCE_DIR || '../docs/qa/evidence/hr-admin-employees'}/${info.project.name}-${width}.png`,fullPage:true});
  }
 });
 test('create modal preserves keyboard close and return',async({page})=>{
@@ -63,7 +63,7 @@ test('automated accessibility of shared page patterns',async({page},info)=>{
 });
 test('neighboring page headers and shared shell remain compatible',async({page})=>{
  for(const path of ['/hr-admin/attendance-records','/hr-admin/leave-policies','/ess','/mss/approvals']){
-  await page.goto(path);await expect(page.locator('main h1').first()).toBeVisible();await expect(page.locator('.workspace-page-header')).toHaveCount(0);
-  if(path.startsWith('/hr-admin'))await expect(page.locator('.accerio-shell')).toBeVisible();else await expect(page.locator('.accerio-workspace')).toBeVisible();
+  await page.goto(path);await expect(page.locator('main h1').first()).toBeVisible();await expect(page.locator(path==='/ess'?'.workspace-standard-header':'.workspace-page-header')).toHaveCount(1);
+  await expect(page.locator('.accerio-shell')).toBeVisible();
  }
 });

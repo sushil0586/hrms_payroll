@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -5,6 +7,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReadiness } from "@/lib/api";
 import type { HrAdminPayrollReadinessItem } from "@/lib/types";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
+import { PayrollReadinessFilterForm } from "./payroll-readiness-filter-form";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -341,8 +344,8 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
   ];
 
   return (
-    <main className="shell shell--payroll-readiness hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--payroll-readiness hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={readinessResult.state === "live" ? "Live payroll phase 0" : "Demo payroll phase 0"}
         title="Payroll Readiness"
         description="Review payroll blockers, source setup, employee exceptions, and audit evidence before opening inputs."
@@ -524,22 +527,13 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
                   <span className="workspace-card__eyebrow">Employee table</span>
                   <h2>Payroll source review</h2>
                 </div>
-                <form className="payroll-filter-form" action="/hr-admin/payroll-readiness">
-                  <input type="hidden" name="tab" value="employees" />
-                  <input type="hidden" name="status" value={status} />
-                  <input type="hidden" name="page" value="1" />
-                  <input aria-label="Search" className="input-control" defaultValue={q} name="q" placeholder="Search employee, entity, cost center" />
-                  <input aria-label="Period start" className="input-control" defaultValue={readiness.period.start} name="period_start" type="date" />
-                  <input aria-label="Period end" className="input-control" defaultValue={readiness.period.end} name="period_end" type="date" />
-                  <select aria-label="Page size" className="input-control" defaultValue={String(readiness.page_size)} name="page_size">
-                    {[10, 20, 50, 100].map((size) => (
-                      <option key={size} value={size}>
-                        {size} / page
-                      </option>
-                    ))}
-                  </select>
-                  <button className="button button--primary" type="submit">Apply</button>
-                </form>
+                <PayrollReadinessFilterForm
+                  pageSize={readiness.page_size}
+                  periodEnd={readiness.period.end}
+                  periodStart={readiness.period.start}
+                  q={q}
+                  status={status}
+                />
               </div>
 
               <div className="status-tab-row" aria-label="Readiness status filters">
@@ -561,7 +555,7 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
                 ))}
               </div>
 
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll readiness table 1" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table">
                   <thead>
                     <tr>
@@ -593,7 +587,7 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
 
               {!readiness.items.length ? (
                 <div className="notice notice--compact">

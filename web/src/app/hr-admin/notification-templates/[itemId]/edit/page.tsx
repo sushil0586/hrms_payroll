@@ -16,8 +16,8 @@ export default async function HrAdminEditNotificationTemplatePage({ params }: Pa
   const state = itemResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Edit notification template"
         description="Update template content and channel configuration without dropping back to the older admin visual style."

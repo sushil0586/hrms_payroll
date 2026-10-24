@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -1012,7 +1015,7 @@ function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatu
         {message ? <div className="notice notice--success" role="status"><strong>Statutory setup update completed.</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
-          <div className="table-scroll">
+          <WorkspaceTableScrollRegion label="Payroll statutory crud table 1" className="table-scroll workspace-table-region">
             <table>
               <thead>
                 <tr>
@@ -1041,7 +1044,7 @@ function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatu
                 ))}
               </tbody>
             </table>
-          </div>
+          </WorkspaceTableScrollRegion>
         ) : null}
       </article>
     </section>

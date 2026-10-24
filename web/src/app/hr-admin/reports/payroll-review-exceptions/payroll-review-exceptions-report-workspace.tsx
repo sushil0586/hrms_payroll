@@ -1,5 +1,8 @@
 "use client";
 
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+
+
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -200,7 +203,7 @@ export function PayrollReviewExceptionsReportWorkspace({
           <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
-        <div className="report-catalog-table-wrap">
+        <WorkspaceTableScrollRegion label="Payroll review exceptions report table 1" className="report-catalog-table-wrap workspace-table-region">
           <table className="report-catalog-table payroll-register-table">
             <thead><tr><th scope="col">Exception</th><th scope="col">Employee</th><th scope="col">Run</th><th scope="col">Severity</th><th scope="col">Decision</th><th scope="col">Evidence</th><th scope="col">Actions</th></tr></thead>
             <tbody>
@@ -218,7 +221,7 @@ export function PayrollReviewExceptionsReportWorkspace({
               {visibleRows.length === 0 ? <tr><td colSpan={7}><div className="empty-state">No payroll review exception rows match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Payroll review exceptions pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>

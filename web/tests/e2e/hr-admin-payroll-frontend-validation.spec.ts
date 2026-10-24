@@ -448,7 +448,7 @@ test.describe("HR Admin payroll frontend validation", () => {
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Adjustments");
 
-    const actions = page.getByLabel("Adjustment certification actions");
+    const actions = page.getByLabel("Adjustment actions");
     await expect(actions).toBeVisible();
     await actions.getByLabel("Adjustment amount").fill("-1");
     await actions.getByLabel("Adjustment source reference").fill("");
@@ -471,7 +471,7 @@ test.describe("HR Admin payroll frontend validation", () => {
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Settlements");
 
-    const actions = page.getByLabel("Settlement certification actions");
+    const actions = page.getByLabel("Settlement actions");
     await expect(actions).toBeVisible();
     await actions.getByLabel("Settlement gross due").fill("-1");
     await actions.getByLabel("Settlement recovery").fill("-2");

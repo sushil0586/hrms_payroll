@@ -2,6 +2,8 @@
 
 21 October 2026. Apply this shared standard as each workspace is upgraded. This pass implements and tests it in the Leave family; it does not certify every unrelated HRMS form.
 
+Shared baseline: [cross-workspace UI/UX standard](hrms-ui-ux-standard.md). Apply and review each adoption with the [screen checklist](hrms-ui-ux-screen-adoption-checklist.md).
+
 ## Validation
 
 - Show required fields, accepted formats and existing policy requirements before submission. Client checks improve correction speed; authorized backend validation remains authoritative.

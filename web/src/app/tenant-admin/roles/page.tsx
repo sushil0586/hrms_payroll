@@ -20,8 +20,8 @@ export default async function TenantAdminRolesPage() {
   const assignedRoleCount = data.role_management.roles.filter((role) => role.active_membership_count > 0).length;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live role administration" : "Demo role administration"}
         title="Roles & Permissions"
         description="Create custom tenant roles, document permission intent, and control which roles are available for user assignment."

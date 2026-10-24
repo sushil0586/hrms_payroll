@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -20,6 +22,14 @@ type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
 type PageSize = 10 | 25 | 50;
+type ReviewTab = "overview" | "exceptions" | "actions" | "lines";
+
+const REVIEW_TABS: Array<{ id: ReviewTab; label: string; helper: string }> = [
+  { id: "overview", label: "Overview", helper: "Totals and lock posture" },
+  { id: "exceptions", label: "Exceptions", helper: "Evidence and decisions" },
+  { id: "actions", label: "Actions", helper: "Submit, approve and lock" },
+  { id: "lines", label: "Lines", helper: "Approved calculation evidence" },
+];
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
@@ -33,6 +43,12 @@ function parsePositiveInteger(value: SearchParamValue, fallback: number) {
 function normalizePageSize(value: SearchParamValue): PageSize {
   const parsed = parsePositiveInteger(value, 10);
   return parsed === 25 || parsed === 50 ? parsed : 10;
+}
+
+function normalizeReviewTab(value: SearchParamValue, selectedExceptionId?: string): ReviewTab {
+  const candidate = normalizeParam(value);
+  if (REVIEW_TABS.some((tab) => tab.id === candidate)) return candidate as ReviewTab;
+  return selectedExceptionId ? "exceptions" : "overview";
 }
 
 function paginate<T>(items: T[], page: number, pageSize: PageSize) {
@@ -300,6 +316,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
   const currentParams = (await searchParams) ?? {};
   const selectedReviewId = normalizeParam(currentParams.reviewId);
   const selectedExceptionId = normalizeParam(currentParams.exceptionId);
+  const activeTab = normalizeReviewTab(currentParams.tab, selectedExceptionId);
   const reviewPage = parsePositiveInteger(currentParams.reviewPage, 1);
   const reviewSize = normalizePageSize(currentParams.reviewSize);
   const exceptionPage = parsePositiveInteger(currentParams.exceptionPage, 1);
@@ -359,8 +376,8 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
   const canGenerateSelectedOutputs = Boolean(selectedReview && selectedReview.status === "locked");
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-review hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-review hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 3A" : "Demo payroll phase 3A"}
         title="Payroll Review"
         description="Review calculated payroll, resolve exceptions, capture approval decisions, and final-lock the run with immutable evidence."
@@ -423,6 +440,22 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
       </section>
 
       <section className="section section--tight">
+        <nav aria-label="Payroll review workspace sections" className="payroll-setup-tabs payroll-review-route-tabs">
+          {REVIEW_TABS.map((tab) => (
+            <Link
+              aria-current={activeTab === tab.id ? "page" : undefined}
+              className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              href={reviewHref(currentParams, { tab: tab.id, exceptionId: tab.id === "exceptions" ? selectedException?.id : undefined })}
+              key={tab.id}
+            >
+              <strong>{tab.label}</strong>
+              <span>{tab.helper}</span>
+            </Link>
+          ))}
+        </nav>
+      </section>
+
+      <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-review-workspace">
           <ReviewRail
             currentParams={currentParams}
@@ -480,7 +513,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
               </div>
             </div>
 
-            <PayrollCloseActionsPanel
+            {activeTab === "actions" ? <PayrollCloseActionsPanel
               eyebrow="Payroll operations"
               title="Review controls"
               description="Submit, approve, final-lock, and generate outputs through authenticated tenant action endpoints."
@@ -541,9 +574,9 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                       : `Review status is ${titleCase(selectedReview.status)}; final lock is required before output generation.`,
                 },
               ]}
-            />
+            /> : null}
 
-            <div className="payroll-setup-assignment-panel">
+            {activeTab === "exceptions" ? <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
                   <span className="workspace-card__eyebrow">Exception register</span>
@@ -551,7 +584,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                 </div>
                 <span className="payroll-setup-count">{visibleExceptions.length} items</span>
               </div>
-              <div className="payroll-table-scroll">
+              <WorkspaceTableScrollRegion label="Payroll review table 1" className="payroll-table-scroll workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-review-exception-table">
                   <thead>
                     <tr>
@@ -566,7 +599,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                     {pagedExceptions.items.map((item) => (
                       <tr className={selectedException?.id === item.id ? "is-selected" : ""} key={item.id}>
                         <td>
-                          <Link href={reviewHref(currentParams, { reviewId: item.review_id, exceptionId: item.id })}>
+                          <Link href={reviewHref(currentParams, { tab: "exceptions", reviewId: item.review_id, exceptionId: item.id })}>
                             <strong>{item.title}</strong>
                             <span>{titleCase(item.category)}</span>
                           </Link>
@@ -582,7 +615,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
               {pagedExceptions.totalPages > 1 ? (
                 <PaginationControls
                   ariaLabel="payroll review exception pagination"
@@ -594,18 +627,18 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   totalPages={pagedExceptions.totalPages}
                 />
               ) : null}
-            </div>
+            </div> : null}
 
-            <PayrollReviewExceptionActions
+            {activeTab === "exceptions" ? <PayrollReviewExceptionActions
               reviewId={selectedReview?.id ?? null}
               selectedException={selectedException}
               lines={visibleLines}
               severityOptions={setup.options.exception_severities}
               canManageExceptions={canReviewPayroll}
-            />
+            /> : null}
 
-            <ApprovalTimeline approvals={pagedApprovals.items} totalApprovalCount={visibleApprovals.length} />
-            {pagedApprovals.totalPages > 1 ? (
+            {activeTab === "actions" ? <ApprovalTimeline approvals={pagedApprovals.items} totalApprovalCount={visibleApprovals.length} /> : null}
+            {activeTab === "actions" && pagedApprovals.totalPages > 1 ? (
               <PaginationControls
                 ariaLabel="payroll review approval pagination"
                 currentParams={currentParams}
@@ -617,7 +650,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
               />
             ) : null}
 
-            <div className="payroll-setup-assignment-panel">
+            {activeTab === "lines" ? <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
                   <span className="workspace-card__eyebrow">Approved lines</span>
@@ -625,7 +658,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                 </div>
                 <span className="payroll-setup-count">{visibleLines.length} lines</span>
               </div>
-              <div className="payroll-table-scroll payroll-table-scroll--compact">
+              <WorkspaceTableScrollRegion label="Payroll review table 2" className="payroll-table-scroll payroll-table-scroll--compact workspace-table-region">
                 <table className="payroll-readiness-table payroll-setup-table payroll-review-line-table">
                   <thead>
                     <tr>
@@ -654,7 +687,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </WorkspaceTableScrollRegion>
               {pagedLines.totalPages > 1 ? (
                 <PaginationControls
                   ariaLabel="payroll review line pagination"
@@ -666,10 +699,10 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   totalPages={pagedLines.totalPages}
                 />
               ) : null}
-            </div>
+            </div> : null}
           </div>
 
-          <ExceptionDetail item={selectedException} />
+          {activeTab === "exceptions" ? <ExceptionDetail item={selectedException} /> : null}
         </div>
       </section>
     </main>

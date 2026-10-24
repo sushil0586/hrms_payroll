@@ -22,19 +22,28 @@ export function LaunchRehearsalActions() {
   async function runRehearsal() {
     setIsRunning(true);
     setNotice("");
-    const response = await fetch("/api/hr-admin/payroll-provider-launch-rehearsals/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const result = await response.json().catch(() => ({}));
-    setIsRunning(false);
-    if (!response.ok) {
-      setNotice(apiErrorMessage(result, "Launch rehearsal could not be recorded."));
-      return;
+    try {
+      const response = await fetch("/api/hr-admin/payroll-provider-launch-rehearsals/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(apiErrorMessage(result, "Launch rehearsal could not be recorded."));
+        return;
+      }
+      if (!(result as { launch_rehearsal_run?: { id?: string; status?: string } }).launch_rehearsal_run?.id) {
+        setNotice("The rehearsal outcome was not confirmed. Verify launch readiness before retrying.");
+        return;
+      }
+      setNotice("Launch rehearsal recorded.");
+      router.refresh();
+    } catch {
+      setNotice("The rehearsal outcome could not be confirmed. Verify launch readiness before retrying.");
+    } finally {
+      setIsRunning(false);
     }
-    setNotice("Launch rehearsal recorded.");
-    router.refresh();
   }
 
   return (

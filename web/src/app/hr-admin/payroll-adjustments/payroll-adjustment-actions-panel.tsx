@@ -41,6 +41,7 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
   const activeSnapshot = runSnapshots.find((snapshot) => snapshot.id === (selectedPostLockImpact?.snapshot_id ?? snapshotId)) ?? runSnapshots[0] ?? null;
   const [amount, setAmount] = useState("12500");
   const [sourceRef, setSourceRef] = useState(runPostLockImpacts[0]?.adjustment_source_ref ?? "pilot-adjustment-manual");
+  const [rejectionReason, setRejectionReason] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState("");
@@ -59,9 +60,16 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         setNotice({ tone: "error", message: payload.detail ?? "Action failed. Review the payload and current status." });
         return payload;
       }
+      if (!payload.id && !payload.status) {
+        setNotice({ tone: "error", message: "The adjustment action was not confirmed. Verify the current record before trying again." });
+        return payload;
+      }
       setNotice({ tone: "success", message: successMessage });
       router.refresh();
       return payload;
+    } catch {
+      setNotice({ tone: "error", message: "The adjustment action could not be confirmed. Your entered values are still available; verify the record before retrying." });
+      return undefined;
     } finally {
       setBusyAction("");
     }
@@ -115,24 +123,26 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
     }
   }
 
-  async function act(action: "submit" | "approve" | "apply") {
+  async function act(action: "submit" | "approve" | "reject" | "apply") {
     if (!selectedAdjustment) {
       setNotice({ tone: "error", message: "Select an adjustment before running a lifecycle action." });
       return;
     }
     await postJson(
       `/api/hr-admin/payroll-adjustments/${selectedAdjustment.id}/${action}`,
-      action === "approve" ? { approval_profile_ref: "tenant.payroll.adjustment.approval.pilot100.v1" } : {},
+      action === "approve"
+        ? { approval_profile_ref: "tenant.payroll.adjustment.approval.pilot100.v1" }
+        : action === "reject" ? { reason: rejectionReason } : {},
       `Adjustment ${action} completed.`,
     );
   }
 
   return (
-    <section className="payroll-setup-assignment-panel" aria-label="Adjustment certification actions">
+    <section className="payroll-setup-assignment-panel" aria-label="Adjustment actions">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
-          <span className="workspace-card__eyebrow">Certification actions</span>
-          <h2>Create and apply adjustment</h2>
+          <span className="workspace-card__eyebrow">Adjustment actions</span>
+          <h2>Create or advance an adjustment</h2>
         </div>
         <span className="payroll-setup-count">{runSnapshots.length} locked snapshots</span>
       </div>
@@ -185,16 +195,24 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         <button className="button button--primary" disabled={Boolean(busyAction) || !selectedRun || !activeSnapshot} onClick={createAdjustment} type="button">
           Create adjustment
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || !selectedAdjustment} onClick={() => act("submit")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "draft"} onClick={() => act("submit")} type="button">
           Submit selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || !selectedAdjustment} onClick={() => act("approve")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "submitted"} onClick={() => act("approve")} type="button">
           Approve selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || !selectedAdjustment} onClick={() => act("apply")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "submitted" || !rejectionReason.trim()} onClick={() => act("reject")} type="button">
+          Reject selected
+        </button>
+        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "approved"} onClick={() => act("apply")} type="button">
           Apply selected
         </button>
       </div>
+      <label className="form-field">
+        <span className="muted">Rejection reason</span>
+        <textarea aria-label="Adjustment rejection reason" onChange={(event) => setRejectionReason(event.target.value)} placeholder="Required only when rejecting" rows={2} value={rejectionReason} />
+      </label>
+      {selectedAdjustment ? <p className="section-copy section-copy-soft">Current state: {selectedAdjustment.status.replaceAll("_", " ")}. The next eligible transition is enabled.</p> : null}
       {notice ? (
         <p className={`form-status form-status--${notice.tone}`} role="alert">
           {notice.message}

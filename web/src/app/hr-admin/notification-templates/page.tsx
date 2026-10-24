@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -46,8 +48,8 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
   const seededInView = filteredTemplates.filter((item) => item.is_system_seeded).length;
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Notification templates"
         description="Manage channel-specific message templates for operational alerts and user updates without drifting away from the shared admin design system."
@@ -148,7 +150,7 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
             </span>
           </div>
           {filteredTemplates.length ? (
-            <div className="notification-table-scroll">
+            <WorkspaceTableScrollRegion label="Notification templates table 1" className="notification-table-scroll workspace-table-region">
               <table className="notification-catalog-table">
                 <thead>
                   <tr>
@@ -187,7 +189,7 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
                   ))}
                 </tbody>
               </table>
-            </div>
+            </WorkspaceTableScrollRegion>
           ) : null}
           {filteredTemplates.length === 0 ? (
             <div className="card panel panel-card-soft">

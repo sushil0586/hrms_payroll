@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { EmployeeImportPanel } from "./employee-import-panel";
 
-import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
-import { submitImportRequest } from "@/lib/ui/import-request";
+import { useMemo } from "react";
+
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeListItem } from "@/lib/types";
 
 type EmployeeManagerImportWorkbenchProps = {
@@ -130,7 +129,7 @@ function buildImportRow(
     errors.push("Reporting manager code is required.");
   }
   if (managerCode && !manager) {
-    errors.push("Reporting manager must match an active manager option.");
+    errors.push("Reporting manager must match one unambiguous active manager option; use the employee code.");
   }
   if (employee && manager && employee.id === manager.id) {
     errors.push("Employee cannot report to self.");
@@ -160,181 +159,20 @@ function buildImportRow(
 }
 
 export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeManagerImportWorkbenchProps) {
-  const [csvText, setCsvText] = useState(templateCsv());
-  const [rows, setRows] = useState<ImportRow[]>([]);
-  const [message, setMessage] = useState("");
-  const [isCommitting, setIsCommitting] = useState(false);
-  const employeesByCode = useMemo(
-    () => new Map(employees.map((employee) => [normalizeCode(employee.employee_code), employee])),
-    [employees],
-  );
-  const managersByCode = useMemo(
-    () => new Map(options.managers.map((manager) => [normalizeCode(manager.employee_code), manager])),
-    [options.managers],
-  );
-  const managersByName = useMemo(
-    () => new Map(options.managers.map((manager) => [normalizeCode(manager.name), manager])),
-    [options.managers],
-  );
-  const readyCount = rows.filter((row) => row.status === "ready").length;
-  const hasFailedRows = rows.some((row) => row.status === "failed");
-  const createdCount = rows.filter((row) => row.status === "created").length;
-
-  async function preview() {
-    const parsed = parseCsv(csvText);
-    if (parsed.error) {
-      setRows([]);
-      setMessage(parsed.error);
-      return;
-    }
-
-    const batchEmployees = new Set<string>();
-    const nextRows = parsed.rows.map((row, index) => buildImportRow(row, index + 1, employeesByCode, managersByCode, managersByName, batchEmployees));
-    setRows(nextRows);
-    setMessage("Preview ready. Commit ready manager mappings after checking blocked rows.");
-    await recordImportBatchAudit({
-      import_type: "reporting_manager_mappings",
-      status: "previewed",
-      file_name: "employee-manager-import.csv",
-      source_hash: await sha256Hex(csvText),
-      row_count: nextRows.length,
-      ready_count: nextRows.filter((row) => row.status === "ready").length,
-      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
-      rollback_supported: false,
-      evidence_snapshot: { headers, ui: "employee-manager-import-workbench" },
-      row_errors: nextRows.filter((row) => row.status === "blocked").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
-    });
-  }
-
-  async function commitReadyRows() {
-    if (isCommitting) return;
-    setIsCommitting(true);
-    const nextRows = [...rows];
-
-    for (let index = 0; index < nextRows.length; index += 1) {
-      const row = nextRows[index];
-      if (row.status !== "ready" || !row.employeeId) {
-        continue;
-      }
-
-      const response = await submitImportRequest(`/api/hr-admin/employees/${row.employeeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reporting_manager_id: row.reportingManagerId }),
-      });
-      const payload = response.payload;
-      nextRows[index] = {
-        ...row,
-        status: response.ok ? "created" : "failed",
-        message: response.ok ? "Manager mapping updated." : payload.detail || Object.values(payload).flat().join(" ") || "Update failed.",
-      };
-      setRows([...nextRows]);
-    }
-
-    setIsCommitting(false);
-    setMessage(nextRows.some((row) => row.status === "failed")
-      ? "Some manager rows failed. Review the row messages, then preview the preserved CSV again."
-      : "Commit complete. Refresh the directory or workforce report to verify manager coverage.");
-    await recordImportBatchAudit({
-      import_type: "reporting_manager_mappings",
-      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
-      file_name: "employee-manager-import.csv",
-      source_hash: await sha256Hex(csvText),
-      row_count: nextRows.length,
-      ready_count: nextRows.filter((row) => row.status === "ready").length,
-      created_count: nextRows.filter((row) => row.status === "created").length,
-      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
-      failed_count: nextRows.filter((row) => row.status === "failed").length,
-      rollback_supported: false,
-      evidence_snapshot: { headers, ui: "employee-manager-import-workbench" },
-      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
-    });
-  }
-
-  return (
-    <section className="section" data-testid="employee-manager-import-workbench">
-      <article className="panel-card-soft organization-import-workbench">
-        <div className="queue-toolbar__header">
-          <div>
-            <h2 className="section-heading-soft">Reporting manager import</h2>
-            <p className="section-copy section-copy-soft">Map reporting lines by employee code and manager code, then commit only validated rows.</p>
-          </div>
-          <div className="queue-toolbar__meta">
-            <span className="queue-summary-chip"><strong>{readyCount}</strong> ready</span>
-            <span className="queue-summary-chip"><strong>{createdCount}</strong> updated</span>
-          </div>
-        </div>
-
-        <div className="organization-import-grid">
-          <label className="form-field">
-            <span className="text-label-premium">Manager CSV data</span>
-            <textarea className="input-control organization-import-textarea" value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-          </label>
-          <div className="organization-import-actions">
-            <button className="button button--secondary" type="button" onClick={() => setCsvText(sampleCsv(employees, String(Date.now()).slice(-5)))}>
-              Load sample template
-            </button>
-            <button className="button button--secondary" type="button" onClick={() => navigator.clipboard.writeText(templateCsv())}>
-              Copy template
-            </button>
-            <a className="button button--secondary" download="employee-manager-import-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(templateCsv())}`}>
-              Download template
-            </a>
-            <label className="button button--secondary">
-              <span>Upload CSV</span>
-              <input
-                className="sr-only"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) {
-                    return;
-                  }
-                  file.text().then(setCsvText);
-                }}
-              />
-            </label>
-            <button className="button button--primary" type="button" onClick={preview}>
-              Preview manager import
-            </button>
-            <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount} pending={isCommitting} pendingLabel="Committing manager rows" onClick={commitReadyRows}>Commit ready manager rows</AsyncActionButton>
-          </div>
-        </div>
-
-        {message ? <div className={`notice${hasFailedRows ? "" : " notice--success"}`} role={hasFailedRows ? "alert" : "status"}><strong>{hasFailedRows ? "Manager import needs attention." : "Manager import update completed."}</strong><span>{message}</span></div> : null}
-
-        {rows.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Row</th>
-                  <th>Employee</th>
-                  <th>Manager</th>
-                  <th>Effective Date</th>
-                  <th>Reason</th>
-                  <th>Status</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={`${row.index}-${row.source.employee_code}-${row.source.reporting_manager_code}`}>
-                    <td>{row.index}</td>
-                    <td>{row.source.employee_code || "Missing employee"}</td>
-                    <td>{row.source.reporting_manager_code || "Missing manager"}</td>
-                    <td>{row.source.effective_date || "Not supplied"}</td>
-                    <td>{row.source.reason || "Missing reason"}</td>
-                    <td><span className="readiness-badge">{row.status}</span></td>
-                    <td>{row.message || "Valid for import"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </article>
-    </section>
-  );
+  const employeesByCode=useMemo(() => new Map(employees.map(employee => [normalizeCode(employee.employee_code),employee])),[employees]);
+  const managersByCode=useMemo(() => new Map(options.managers.map(manager => [normalizeCode(manager.employee_code),manager])),[options.managers]);
+  const managersByName=useMemo(() => new Map(options.managers.filter(manager => options.managers.filter(item => normalizeCode(item.name) === normalizeCode(manager.name)).length === 1).map(manager => [normalizeCode(manager.name),manager])),[options.managers]);
+  return <EmployeeImportPanel<ImportRow>
+    testId="employee-manager-import-workbench" title="Reporting manager import" description="Update reporting lines for existing employees."
+    impact="Manager changes apply immediately. The CSV date and reason are checked in this preview but are not submitted as effective-dated changes or saved audit context by this workflow."
+    guidance="Employee code, manager code or unique manager name, and reason are required. Use existing employee codes. Date is optional; use YYYY-MM-DD. The date and reason remain preview-only in this workflow."
+    template={templateCsv()} sample={() => sampleCsv(employees,String(Date.now()).slice(-5))}
+    importType="reporting_manager_mappings" filename="employee-manager-import.csv"
+    columns={[{key:"employee_code",label:"Employee"},{key:"reporting_manager_code",label:"Manager"},{key:"effective_date",label:"CSV date (preview only)"},{key:"reason",label:"CSV reason (preview only)"}]}
+    prepare={text => {
+      const parsed=parseCsv(text);const batch=new Set<string>();
+      return {error:parsed.error,rows:parsed.rows.map((row,index) => buildImportRow(row,index+1,employeesByCode,managersByCode,managersByName,batch))};
+    }}
+    request={row => ({url:`/api/hr-admin/employees/${row.employeeId}`,method:"PATCH",body:{reporting_manager_id:row.reportingManagerId}})}
+  />;
 }

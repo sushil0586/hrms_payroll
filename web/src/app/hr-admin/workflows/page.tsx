@@ -53,8 +53,8 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
   const timelineEvents = tracesResult.data.items.reduce((sum, item) => sum + item.timeline_event_count, 0);
 
   return (
-    <main className="shell shell--workspace workflow-workbench">
-      <PageIntro
+    <main className="shell shell--workspace workflow-workbench accerio-page">
+      <PageIntro appearance="accerio"
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/workflow-templates">Open workflow templates</Link>

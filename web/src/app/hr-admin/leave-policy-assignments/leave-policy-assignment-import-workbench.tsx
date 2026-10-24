@@ -324,7 +324,7 @@ export function LeavePolicyAssignmentImportWorkbench({ employees, leavePolicies,
         {message ? <div className={`notice${hasFailedRows || lookupFailed || parseFailed ? " notice--error" : " notice--success"}`} role={hasFailedRows || lookupFailed || parseFailed ? "alert" : "status"}><strong>{hasFailedRows || lookupFailed || parseFailed ? "Assignment import needs attention." : "Assignment import status."}</strong><span>{message}</span></div> : null}
         {auditError ? <div className="notice notice--warning" role="alert">{auditError}</div> : null}
         {rows.length ? (
-          <WorkspaceTableScrollRegion className="employee-directory-table-wrap" label="Leave assignment import table scroll">
+          <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Leave assignment import table scroll">
             <table aria-label="Leave assignment import results" className="workspace-data-table accerio-data-table workspace-table">
               <thead><tr><th scope="col">Row</th><th scope="col">Employee</th><th scope="col">Policy</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Message</th></tr></thead>
               <tbody>{rows.map((row) => (

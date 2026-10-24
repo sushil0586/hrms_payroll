@@ -1,11 +1,13 @@
-import Link from "next/link";
+import {LifecycleQueueFocus} from "@/app/hr-admin/lifecycle/lifecycle-queue-focus";
+
 
 import { createEmptyOnboardingValue, onboardingToFormValue } from "@/app/hr-admin/onboardings/form-values";
 import { OnboardingForm } from "@/app/hr-admin/onboardings/onboarding-form";
 import { OnboardingQueue } from "@/app/hr-admin/onboardings/onboarding-queue";
-import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminLifecycleOptions, getHrAdminOnboardings, getHrAdminWorkflowTemplates } from "@/lib/api";
+import { LifecycleEditorDialog } from "@/app/hr-admin/lifecycle/lifecycle-form-state";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
+import { LifecycleUnavailable } from "@/app/hr-admin/lifecycle/lifecycle-unavailable";
+import { getHrAdminOnboarding, getHrAdminLifecycleOptions, getHrAdminOnboardings, getHrAdminWorkflowTemplates } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -18,8 +20,12 @@ function normalizeParam(value: SearchParamValue) {
 
 export default async function HrAdminOnboardingsPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
-  const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
+  const recordLoaded=normalizeParam(currentParams.recordLoaded)??"";
+  const receipt=recordLoaded?await getHrAdminOnboarding(recordLoaded).catch(()=>null):null;
+  const requestedPage=Number(normalizeParam(currentParams.page)??"1");
+  const page=Number.isSafeInteger(requestedPage)&&requestedPage>0?requestedPage:1;
+  const requestedSize=Number(normalizeParam(currentParams.page_size)??"25");
+  const pageSize=[10,25,50,100].includes(requestedSize)?requestedSize:25;
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
   const owner = normalizeParam(currentParams.owner) ?? "";
@@ -33,40 +39,39 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
       q,
       status: status || undefined,
       owner: owner || undefined,
-    }),
-    getHrAdminLifecycleOptions(),
-    getHrAdminWorkflowTemplates(),
+    }).catch(()=>null),
+    getHrAdminLifecycleOptions().catch(()=>null),
+    getHrAdminWorkflowTemplates().catch(()=>null),
   ]);
+  if(result?.state!=="live" || optionsResult?.state!=="live" || templatesResult?.state!=="live")return <LifecycleUnavailable/>;
   const documentBlockedCount = result.data.items.filter((item) => item.missing_required_document_count > 0).length;
   const futureDueDocumentCount = result.data.items.reduce((total, item) => total + item.future_due_document_count, 0);
   const modalCloseHref = `/hr-admin/onboardings${buildQueryString({ q, status, owner, page, page_size: pageSize })}`;
-  const editItem = editOnboarding ? result.data.items.find((item) => item.id === editOnboarding) : undefined;
+  const selectedResult = editOnboarding ? await getHrAdminOnboarding(editOnboarding).catch(()=>null) : null;
+  const editItem = selectedResult?.state === "live" && selectedResult.data.id === editOnboarding ? selectedResult.data : undefined;
   const isCreateModalOpen = onboardingModal === "create";
 
+  if(result?.state!=="live" || optionsResult?.state!=="live" || templatesResult?.state!=="live")return <LifecycleUnavailable/>;
   return (
-    <main className="shell hr-lifecycle-workbench">
-      <PageIntro
-        eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
+    <main className="shell hr-lifecycle-workbench accerio-page lifecycle-phase3">
+      <LifecycleQueueFocus/>
+      <WorkspaceStandardHeader
         title="Onboarding operations"
         description="Track joiners, checklist completion, documents, and owner load."
         actions={
           <>
-            <Link className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}onboardingModal=create`}>Create onboarding</Link>
-            <Link className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</Link>
+            <a data-lifecycle-trigger="create-onboarding" data-navigation-mode="document" className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}onboardingModal=create`}>Create onboarding</a>
+            <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</a>
           </>
         }
-        pills={[
-          "Checklist-aware completion rules",
-          "Bulk owner and status actions",
-          "URL-driven queue state",
-        ]}
       />
       <section className="attendance-summary-strip" aria-label="Onboarding summary">
-        <span><strong>{result.data.total_count}</strong> records</span>
+        <span><strong>{result.data.total_count}</strong> matching records</span>
         <span><strong>{result.data.items.length}</strong> on page</span>
-        <span><strong>{documentBlockedCount}</strong> doc blockers</span>
-        <span><strong>{futureDueDocumentCount}</strong> future due docs</span>
+        <span><strong>{documentBlockedCount}</strong> on-page doc blockers</span>
+        <span><strong>{futureDueDocumentCount}</strong> on-page future due docs</span>
       </section>
+      {recordLoaded?<div className="notice" role="status">{receipt?.state==="live"&&receipt.data.id===recordLoaded?<>Current record loaded: {receipt.data.employee_name}. Review its current state in the record editor.</>:<>Requested record could not be confirmed. Reload the queue before relying on this result.</>}</div>:null}
       <OnboardingQueue
         items={result.data.items}
         state={result.state}
@@ -82,7 +87,7 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
         }}
       />
       {isCreateModalOpen ? (
-        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="onboarding-create-title" title="Create onboarding" eyebrow="Lifecycle record">
+        <LifecycleEditorDialog closeHref={modalCloseHref} labelledBy="onboarding-create-title" title="Create onboarding">
           <OnboardingForm
             compact
             cancelHref={modalCloseHref}
@@ -92,10 +97,11 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
             mode="create"
             options={optionsResult.data}
           />
-        </HrAdminActionModal>
+        </LifecycleEditorDialog>
       ) : null}
+      {editOnboarding && !editItem ? <div className="notice" role="status">Selected record unavailable. No other record has been opened. <a data-navigation-mode="document" href={modalCloseHref}>Return to queue</a></div> : null}
       {editItem ? (
-        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="onboarding-edit-title" title={`Edit onboarding: ${editItem.employee_name}`} eyebrow="Lifecycle record">
+        <LifecycleEditorDialog closeHref={modalCloseHref} labelledBy="onboarding-edit-title" title={`Edit onboarding: ${editItem.employee_name}`}>
           <OnboardingForm
             compact
             cancelHref={modalCloseHref}
@@ -107,7 +113,7 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
             mode="edit"
             options={optionsResult.data}
           />
-        </HrAdminActionModal>
+        </LifecycleEditorDialog>
       ) : null}
     </main>
   );

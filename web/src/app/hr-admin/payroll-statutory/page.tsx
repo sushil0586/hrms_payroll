@@ -1,3 +1,5 @@
+
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import type { ReactNode } from "react";
 import Link from "next/link";
 
@@ -660,7 +662,7 @@ function DeclarationTable({
         <span className="payroll-setup-count">{declarations.length} declarations</span>
       </div>
 
-      <div className="payroll-table-scroll payroll-table-scroll--compact payroll-statutory-table-shell">
+      <WorkspaceTableScrollRegion label="Payroll statutory table 1" className="payroll-table-scroll payroll-table-scroll--compact payroll-statutory-table-shell workspace-table-region">
         <table className="payroll-readiness-table payroll-statutory-table payroll-setup-table">
           <thead>
             <tr>
@@ -700,7 +702,7 @@ function DeclarationTable({
             )}
           </tbody>
         </table>
-      </div>
+      </WorkspaceTableScrollRegion>
       <PaginationControls
         ariaLabel="statutory declaration pagination"
         currentParams={currentParams}
@@ -812,8 +814,8 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
   const activePack = setup.packs.find((item) => item.status === "active") ?? setup.packs[0] ?? null;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll phase 5I" : "Demo payroll phase 5I"}
         title="Payroll Statutory"
         description="Review statutory packs, employee tax profiles, declaration proofs, and source-controlled verification state before payroll calculation consumes them."

@@ -16,8 +16,8 @@ export default async function HrAdminEditNotificationEventPage({ params }: PageP
   const state = itemResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell notification-shell">
-      <PageIntro
+    <main className="shell notification-shell accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Edit notification event"
         description="Update routing, audience, and template selection for this trigger without leaving the shared admin workflow language."

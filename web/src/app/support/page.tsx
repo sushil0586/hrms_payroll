@@ -45,8 +45,8 @@ function statusBadgeClass(status: string) {
 
 function SupportSessionDeniedPage({ tenantCode, scopeRef, sessionRef }: { tenantCode: string; scopeRef: string; sessionRef: string }) {
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow="Live support session"
         title="Support Console"
         description="Scoped tenant posture for approved, time-boxed support sessions."
@@ -127,8 +127,8 @@ export default async function SupportConsolePage({ searchParams }: PageProps) {
   const grant = data.support_session.grant;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
+    <main className="shell shell--workspace accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live support session" : "Demo support session"}
         title="Support Console"
         description="Scoped tenant posture for approved, time-boxed support sessions."

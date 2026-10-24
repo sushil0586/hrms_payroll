@@ -35,8 +35,8 @@ export default async function HrAdminPolicyAssignmentsPage() {
   ];
 
   return (
-    <main className="shell shell--time-leave hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={state === "live" ? "Live assignment mode" : "Demo assignment mode"}
         title="Policy assignments"
         description="Apply leave and attendance policies by branch, department, grade, employment type, or employee scope."

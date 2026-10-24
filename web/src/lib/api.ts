@@ -1074,6 +1074,7 @@ export async function getHrAdminLifecycleOptions() {
 }
 
 export async function getHrAdminLifecycleQueue(params?: {
+  record?: string;
   page?: number;
   page_size?: number;
   q?: string;

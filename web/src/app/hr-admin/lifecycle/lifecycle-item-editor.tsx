@@ -13,11 +13,18 @@ type Props = {
   onChange: (items: HrAdminLifecycleWorkItem[]) => void;
 };
 
-function ownerSelectOptions(items: HrAdminLifecycleOwnerOption[]) {
+function ownerSelectionValue(items: HrAdminLifecycleOwnerOption[], rawValue: string = "") {
+  if (!rawValue || items.some(item => item.value === rawValue)) return rawValue;
+  const identifier = rawValue.replace(/^identifier:/i, "").toLowerCase();
+  return items.find(item => item.value.toLowerCase() === `identifier:${identifier}`)?.value ?? rawValue;
+}
+
+function ownerSelectOptions(items: HrAdminLifecycleOwnerOption[], rawValue: string = "") {
   return [
     <option key="blank" value="">
       Select an owner
     </option>,
+    ...(rawValue && !items.some(item => item.value === ownerSelectionValue(items, rawValue)) ? [<option key="current-owner" value={rawValue}>Current owner: {rawValue}</option>] : []),
     ...items.map((item) => (
       <option key={item.value} value={item.value}>
         {item.label}
@@ -153,14 +160,14 @@ export function LifecycleItemEditor({
                 </label>
                 <label className="form-field">
                   <span className="muted">Owner</span>
-                  <select className="input-control" value={item.owner} onChange={(e) => updateItem(index, { owner: e.target.value })}>
-                    {ownerSelectOptions(ownerOptions)}
+                  <select aria-label="Owner" className="input-control" value={ownerSelectionValue(ownerOptions, item.owner)} onChange={(e) => updateItem(index, { owner: e.target.value })}>
+                    {ownerSelectOptions(ownerOptions, item.owner)}
                   </select>
                 </label>
                 <label className="form-field">
                   <span className="muted">Escalation owner</span>
-                  <select className="input-control" value={item.escalation_owner} onChange={(e) => updateItem(index, { escalation_owner: e.target.value })}>
-                    {ownerSelectOptions(ownerOptions)}
+                  <select aria-label="Escalation owner" className="input-control" value={ownerSelectionValue(ownerOptions, item.escalation_owner)} onChange={(e) => updateItem(index, { escalation_owner: e.target.value })}>
+                    {ownerSelectOptions(ownerOptions, item.escalation_owner)}
                   </select>
                 </label>
                 <label className="form-field">

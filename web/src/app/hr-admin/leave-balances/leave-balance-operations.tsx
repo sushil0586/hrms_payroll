@@ -403,7 +403,7 @@ function LeaveBalanceImportWorkbench({
         ) : null}
         {message ? <div className={`notice${hasBlockedRows ? " notice--error" : ""}`} role={hasBlockedRows ? "alert" : "status"}><strong>{hasBlockedRows ? "Import needs attention." : "Leave import status."}</strong><span>{message}</span></div> : null}
         {rows.length ? (
-          <WorkspaceTableScrollRegion className="employee-directory-table-wrap" label="Leave balance import table scroll">
+          <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Leave balance import table scroll">
             <table aria-label="Leave balance import results" className="workspace-data-table accerio-data-table workspace-table">
               <thead>
                 <tr>
@@ -692,7 +692,7 @@ export function LeaveBalanceOperations({
         </div>
         <div className={`attendance-review-workbench${selectedBalance ? " attendance-review-workbench--with-detail" : ""}`}>
           <section className="panel-card-soft attendance-directory-panel">
-            <WorkspaceTableScrollRegion label="Balance ledger table scroll" className="attendance-directory-table-wrap">
+            <WorkspaceTableScrollRegion label="Balance ledger table scroll" className="attendance-directory-table-wrap workspace-table-region">
               <table aria-label="Balance ledger" className="workspace-table attendance-directory-table accerio-data-table">
                 <thead>
                   <tr>
@@ -798,7 +798,7 @@ export function LeaveBalanceOperations({
         </div>
         <div className={`attendance-review-workbench${selectedTransaction ? " attendance-review-workbench--with-detail" : ""}`}>
           <section className="panel-card-soft attendance-directory-panel">
-            <WorkspaceTableScrollRegion label="Balance transactions table scroll" className="attendance-directory-table-wrap">
+            <WorkspaceTableScrollRegion label="Balance transactions table scroll" className="attendance-directory-table-wrap workspace-table-region">
               <table aria-label="Balance transactions" className="workspace-table attendance-directory-table accerio-data-table">
                 <thead>
                   <tr>

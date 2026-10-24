@@ -1,3 +1,4 @@
+import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 import type {
   HrAdminEnumOption,
   HrAdminNotification,
@@ -40,12 +41,7 @@ function getNotificationActivityAt(item: HrAdminNotification) {
 }
 
 export function formatNotificationDateTime(value: string | null | undefined) {
-  if (!value) return "Not available";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value));
+  return formatWorkspaceDateTime(value, "Asia/Kolkata");
 }
 
 export function buildNotificationChannelSummaries(args: {

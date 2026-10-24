@@ -15,8 +15,8 @@ export default async function LwfReadinessReportPage() {
   ]);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory">
-      <PageIntro
+    <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={statutoryResult.state === "live" && handoffResult.state === "live" ? "Live compliance readiness" : "Demo compliance readiness"}
         title="LWF Readiness"
         description="Control-center view for Labour Welfare Fund setup, employee state coverage, employer registration, filing calendar, deduction artifacts, source hash evidence, and provider filing gates."

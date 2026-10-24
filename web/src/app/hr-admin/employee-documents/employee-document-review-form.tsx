@@ -1,15 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
-import { FormSection } from "@/components/patterns/form-section";
-import { WorkspaceFormFooter, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
-import type {
-  HrAdminDocumentOptions,
-  HrAdminEmployeeDocument,
-  HrAdminEmployeeDocumentWriteInput,
-} from "@/lib/types";
+import { useEffect, useRef, useState } from "react";
+import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import type { HrAdminDocumentOptions, HrAdminEmployeeDocument, HrAdminEmployeeDocumentWriteInput } from "@/lib/types";
 
 type Props = {
   document: HrAdminEmployeeDocument;
@@ -19,237 +13,120 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  canDownload?: boolean;
+  onStateChange?: (state: { busy: boolean; dirty: boolean }) => void;
 };
+function humanize(value: string) { return value.replaceAll("_", " "); }
+function tone(status: string) { return status === "verified" ? "success" : status === "pending" ? "warning" : status === "rejected" || status === "expired" ? "danger" : "neutral"; }
+function snapshot(form: HTMLFormElement) { return JSON.stringify(Array.from(new FormData(form).entries()).sort(([a], [b]) => a.localeCompare(b))); }
 
-function getErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to update employee document.";
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) return String(value[0]);
-  }
-  return String((payload as Record<string, unknown>).detail || "Unable to update employee document.");
-}
-
-function formatFileSize(fileSizeBytes: number) {
-  if (fileSizeBytes <= 0) {
-    return "Not available";
-  }
-  if (fileSizeBytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(fileSizeBytes / 1024))} KB`;
-  }
-  return `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function humanizeStatus(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function verificationTone(status: string) {
-  if (status === "verified") return "success";
-  if (status === "rejected" || status === "expired") return "danger";
-  if (status === "pending") return "warning";
-  return "neutral";
-}
-
-function decisionEffect(status: string, reuploadRequested: boolean) {
-  if (status === "verified") {
-    return "The employee will see this document as verified. Payroll and compliance reports can treat it as accepted evidence.";
-  }
-  if (status === "rejected" || reuploadRequested) {
-    return "The employee will see this as returned for correction and must upload a replacement before the requirement is clean.";
-  }
-  if (status === "expired") {
-    return "The employee will see this as expired and must upload a renewed document.";
-  }
-  return "The document remains in the HR verification queue until a reviewer records a final outcome.";
-}
-
-export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId, cancelHref, successHref, compact = false }: Props) {
+export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId, cancelHref = "/hr-admin/employee-documents", successHref = "/hr-admin/employee-documents?review_saved=1", compact = false, canDownload = false, onStateChange }: Props) {
   const router = useRouter();
+  const form = useRef<HTMLFormElement>(null);
+  const original = useRef("");
+  const submitting = useRef(false);
+  const leaving = useRef(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
-  const [verificationStatus, setVerificationStatus] = useState(initialValue.verification_status);
-  const [reuploadRequested, setReuploadRequested] = useState(initialValue.reupload_requested);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
-
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [verification, setVerification] = useState(initialValue.verification_status);
+  const [reupload, setReupload] = useState(initialValue.reupload_requested);
+  const metadata = useRef<HTMLDetailsElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { const id = window.setTimeout(() => setReady(true), 0); return () => window.clearTimeout(id); }, []);
+  useEffect(() => { if (ready && form.current) { original.current = snapshot(form.current); if (compact) form.current.querySelector<HTMLSelectElement>('#review-verification_status')?.focus(); } }, [ready, compact]);
+  useEffect(() => { if (Object.keys(fieldErrors).some(key => ["title", "status", "document_number", "issued_on", "expires_on"].includes(key)) && metadata.current) metadata.current.open = true; }, [fieldErrors]);
+  useEffect(() => { onStateChange?.({ busy, dirty }); }, [busy, dirty, onStateChange]);
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => setIsHydrated(true), 0);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const nextValue: HrAdminEmployeeDocumentWriteInput = {
-      title: String(formData.get("title") ?? ""),
-      status: String(formData.get("status") ?? initialValue.status),
-      verification_status: String(formData.get("verification_status") ?? initialValue.verification_status),
-      document_number: String(formData.get("document_number") ?? ""),
-      issued_on: String(formData.get("issued_on") ?? "") || null,
-      expires_on: String(formData.get("expires_on") ?? "") || null,
-      reupload_requested: String(formData.get("reupload_requested") ?? "false") === "true",
-      rejection_reason: String(formData.get("rejection_reason") ?? ""),
+    if (!dirty) return;
+    const guard = (event: BeforeUnloadEvent) => { if (!leaving.current) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [dirty]);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  useEffect(() => {
+    if (!dirty && !busy) return;
+    const guardLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin || destination.pathname.startsWith("/api/") || (destination.pathname === window.location.pathname && destination.search === window.location.search)) return;
+      if (submitting.current || (dirty && !window.confirm("Discard unsaved changes?"))) { event.preventDefault(); event.stopImmediatePropagation(); }
+      else { leaving.current = true; window.setTimeout(() => { leaving.current = false; }, 0); }
     };
-    setError("");
-    setIsSubmitting(true);
+    window.document.addEventListener("click", guardLink, true);
+    return () => window.document.removeEventListener("click", guardLink, true);
+  }, [dirty, busy]);
+
+  function cancel() {
+    if (submitting.current || (dirty && !window.confirm("Discard unsaved changes?"))) return;
+    router.push(cancelHref);
+  }
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting.current) return;
+    const data = new FormData(event.currentTarget);
+    const body = { title: String(data.get("title") ?? ""), status: String(data.get("status") ?? ""), verification_status: String(data.get("verification_status") ?? ""), document_number: String(data.get("document_number") ?? ""), issued_on: String(data.get("issued_on") ?? "") || null, expires_on: String(data.get("expires_on") ?? "") || null, reupload_requested: data.get("reupload_requested") === "true", rejection_reason: String(data.get("rejection_reason") ?? "") };
+    setError(""); setFieldErrors({}); submitting.current = true; setBusy(true); onStateChange?.({ busy: true, dirty });
     let response: Response;
-    try {
-      response = await fetch(`/api/hr-admin/employee-documents/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextValue),
-      });
-    } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
-      setIsSubmitting(false);
-      return;
-    }
-    const payload = await response.json().catch(() => ({}));
+    try { response = await fetch(`/api/hr-admin/employee-documents/${itemId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+    catch { setError("The review outcome could not be confirmed. Check the queue before trying again."); submitting.current = false; setBusy(false); return; }
+    const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      setError(getErrorMessage(payload));
-      setIsSubmitting(false);
-      return;
+      const errors: Record<string, string> = {};
+      if (payload && typeof payload === "object") for (const [key, value] of Object.entries(payload)) if (Array.isArray(value)) errors[key] = value.map(String).join(" ");
+      setFieldErrors(errors); setError(response.status >= 500 ? "The review outcome could not be confirmed. Check the queue before trying again." : payload?.detail || "Review was not saved. Check the highlighted fields and try again."); submitting.current = false; setBusy(false); return;
     }
-    router.push(successHref ?? "/hr-admin/employee-documents?review_saved=1");
-    router.refresh();
+    setDirty(false); onStateChange?.({ busy: true, dirty: false });
+    // A fresh document navigation avoids competing push/refresh updates retaining the saved dialog.
+    leaving.current = true;
+    window.location.assign(new URL(successHref, window.location.origin));
   }
-
-  function handleCancel() {
-    if (cancelHref) {
-      router.push(cancelHref);
-      return;
-    }
-    router.back();
+  function revealFocusedControl(event: React.FocusEvent<HTMLFormElement>) {
+    const target = event.target;
+    if (!target.matches("input, select, textarea, summary")) return;
+    const box = target.getBoundingClientRect();
+    const footerTop = form.current?.querySelector("footer")?.getBoundingClientRect().top ?? window.innerHeight;
+    const headerBottom = form.current?.closest('[role="dialog"]')?.querySelector("header")?.getBoundingClientRect().bottom ?? 0;
+    if (box.bottom > Math.min(footerTop, window.innerHeight) - 8 || box.top < headerBottom + 8) target.scrollIntoView({ block: "center" });
   }
-
-  return (
-    <form
-      className={`section form-layout-modern document-child-form${compact ? " document-child-form--modal" : ""}`}
-      data-hydrated={isHydrated ? "true" : "false"}
-      onSubmit={handleSubmit}
-    >
-      <section className="form-shell-card">
-        <div className="form-shell-card__intro">
-          <h2>Document review and verification</h2>
-          <p className="section-copy">Verify the file, update metadata, and capture the review note.</p>
+  function invalid(name: string) { return { "aria-invalid": Boolean(fieldErrors[name]), "aria-describedby": fieldErrors[name] ? `review-error-${name}` : undefined }; }
+  function fieldError(name: string) { return fieldErrors[name] ? <span className="field-error-text" id={`review-error-${name}`}>{fieldErrors[name]}</span> : null; }
+  return <form ref={form} className={`document-review-form${compact ? " document-review-form--modal" : ""}`} data-hydrated={ready ? "true" : "false"} onSubmit={submit} onFocusCapture={revealFocusedControl} onChange={() => { if (form.current) setDirty(snapshot(form.current) !== original.current); }}>
+    <section className="document-review-context" aria-label="Evidence to review">
+      <div><strong>{document.employee_name} · {document.employee_code}</strong><p>{document.category_name} · {document.file_name}</p></div>
+      <WorkspaceStatusBadge tone={tone(document.verification_status)}>{humanize(document.verification_status)}</WorkspaceStatusBadge>
+      <p>{document.review_status_label} · {document.expires_on ? `Expires ${document.expires_on}` : "No expiry recorded"}</p>
+      {canDownload && document.artifact_id ? <a className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${itemId}/download`}>Download current file</a> : <p className="muted">{document.artifact_id ? "Downloading requires document export access." : "No stored file is linked to this record."}</p>}
+    </section>
+    {error ? <div className="notice notice--error" role="alert" ref={errorRef} tabIndex={-1}><strong>Review not confirmed</strong><span>{error}</span></div> : null}
+    <fieldset disabled={busy || !ready} className="document-review-fields">
+      <legend>Review decision</legend>
+      <div className="form-grid">
+        <div className="form-field"><label htmlFor="review-verification_status">Verification status</label><select className="input-control" id="review-verification_status" name="verification_status" value={verification} onChange={e => setVerification(e.target.value)} {...invalid("verification_status")}>{options.verification_statuses.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>{fieldError("verification_status")}</div>
+        <div className="form-field"><label htmlFor="review-reupload_requested">Re-upload requested</label><select className="input-control" id="review-reupload_requested" name="reupload_requested" value={String(reupload)} onChange={e => setReupload(e.target.value === "true")} {...invalid("reupload_requested")}><option value="false">No</option><option value="true">Yes</option></select>{fieldError("reupload_requested")}</div>
+        <div className="form-field form-field--full"><label htmlFor="review-rejection_reason">Rejection reason or review note</label><textarea className="input-control" id="review-rejection_reason" name="rejection_reason" rows={3} defaultValue={initialValue.rejection_reason} {...invalid("rejection_reason")} />{fieldError("rejection_reason")}</div>
+      </div>
+      <p className="document-decision-effect" role="status">{verification === "verified" ? "Verified clears the rejection reason and any re-upload request. Review notes are recorded only when verification status changes." : verification === "rejected" || reupload ? "The employee will see the document returned for correction." : verification === "expired" ? "The employee will see the document as expired." : "The document remains pending HR review."}</p>
+      <details className="document-review-metadata" ref={metadata}>
+        <summary tabIndex={0}>Document metadata</summary>
+        <div className="form-grid">
+          <div className="form-field"><label htmlFor="review-title">Title</label><input className="input-control" id="review-title" name="title" defaultValue={initialValue.title} {...invalid("title")} />{fieldError("title")}</div>
+          <div className="form-field"><label htmlFor="review-status">Record status</label><select className="input-control" id="review-status" name="status" defaultValue={initialValue.status} {...invalid("status")}>{options.employee_document_statuses.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>{fieldError("status")}</div>
+          <div className="form-field"><label htmlFor="review-document_number">Document number</label><input className="input-control" id="review-document_number" name="document_number" defaultValue={initialValue.document_number} {...invalid("document_number")} />{fieldError("document_number")}</div>
+          <div className="form-field"><label htmlFor="review-issued_on">Issued on</label><input className="input-control" type="date" id="review-issued_on" name="issued_on" defaultValue={initialValue.issued_on ?? ""} {...invalid("issued_on")} />{fieldError("issued_on")}</div>
+          <div className="form-field"><label htmlFor="review-expires_on">Expires on</label><input className="input-control" type="date" id="review-expires_on" name="expires_on" defaultValue={initialValue.expires_on ?? ""} {...invalid("expires_on")} />{fieldError("expires_on")}</div>
         </div>
-
-        <FormSection description="Review the submission context before changing its status or verification state." title="Document context">
-          <article className="record-card document-record-card">
-            <div className="record-card__header">
-              <div className="record-card__title-block">
-                <h3>{document.title}</h3>
-                <p>{document.employee_name} ({document.employee_code}) • {document.category_name}</p>
-              </div>
-              <div className="record-card__actions">
-                <WorkspaceStatusBadge tone={verificationTone(document.verification_status)}>{humanizeStatus(document.verification_status)}</WorkspaceStatusBadge>
-                <WorkspaceStatusBadge tone="neutral">{humanizeStatus(document.status)}</WorkspaceStatusBadge>
-              </div>
-            </div>
-            <div className="document-review-state">
-              <div>
-                <span className="document-review-state__label">Employee-facing status</span>
-                <strong>{document.review_status_label}</strong>
-              </div>
-              <span>Owner: {document.review_owner_label}</span>
-            </div>
-            <div className="record-card__details document-detail-grid">
-              <div><span className="record-card__label">File</span><strong>{document.file_name}</strong></div>
-              <div><span className="record-card__label">Stored artifact</span><strong>{document.artifact_id || "Not linked"}</strong></div>
-              <div><span className="record-card__label">Version</span><strong>v{document.version_number}</strong></div>
-              <div><span className="record-card__label">Uploaded by</span><strong>{document.uploaded_by_identifier || "Unknown"}</strong></div>
-              <div><span className="record-card__label">Review owner</span><strong>{document.review_owner_label}</strong></div>
-              <div><span className="record-card__label">Review status</span><strong>{document.review_status_label}</strong></div>
-              <div><span className="record-card__label">Issued on</span><strong>{document.issued_on || "Not set"}</strong></div>
-              <div><span className="record-card__label">Expires on</span><strong>{document.expires_on || "No expiry"}</strong></div>
-              <div><span className="record-card__label">Mime type</span><strong>{document.mime_type || "Unknown"}</strong></div>
-              <div><span className="record-card__label">File size</span><strong>{formatFileSize(document.file_size_bytes)}</strong></div>
-              <div><span className="record-card__label">Re-upload</span><strong>{document.reupload_requested ? "Requested" : "Not requested"}</strong></div>
-            </div>
-            {document.artifact_id ? (
-              <div className="form-shell-card__actions form-shell-card__actions--start document-download-action">
-                <a className="button button--ghost" href={`/api/hr-admin/employee-documents/${itemId}/download`}>Download current file</a>
-              </div>
-            ) : null}
-          </article>
-        </FormSection>
-
-        <FormSection description="Adjust the review outcome and document metadata in one structured panel." title="Review details">
-          <div className="form-grid">
-            <label className="form-field"><span className="muted">Title</span><input className="input-control" name="title" defaultValue={initialValue.title} /></label>
-            <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue={initialValue.status}>{options.employee_document_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="form-field"><span className="muted">Verification status</span><select className="input-control" name="verification_status" onChange={(event) => setVerificationStatus(event.target.value)} value={verificationStatus}>{options.verification_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="form-field"><span className="muted">Document number</span><input className="input-control" name="document_number" defaultValue={initialValue.document_number} /></label>
-            <label className="form-field"><span className="muted">Issued on</span><input className="input-control" name="issued_on" type="date" defaultValue={initialValue.issued_on ?? ""} /></label>
-            <label className="form-field"><span className="muted">Expires on</span><input className="input-control" name="expires_on" type="date" defaultValue={initialValue.expires_on ?? ""} /></label>
-            <label className="form-field"><span className="muted">Re-upload requested</span><select className="input-control" name="reupload_requested" onChange={(event) => setReuploadRequested(event.target.value === "true")} value={String(reuploadRequested)}><option value="false">No</option><option value="true">Yes</option></select></label>
-            <label className="form-field form-field--full"><span className="muted">Rejection reason or review note</span><textarea className="input-control" name="rejection_reason" rows={4} defaultValue={initialValue.rejection_reason} /></label>
-          </div>
-          <div className="document-decision-effect">
-            <strong>Decision effect</strong>
-            <span>{decisionEffect(verificationStatus, reuploadRequested)}</span>
-          </div>
-        </FormSection>
-
-        <FormSection description="Version lineage is preserved when a document is replaced after rejection or re-upload requests." title="Version history">
-          <div className="queue-list">
-            {document.version_history.map((entry) => (
-              <article className="record-card document-record-card" key={entry.id}>
-                <div className="record-card__header">
-                  <div className="record-card__title-block">
-                    <h3>Version {entry.version_number}</h3>
-                    <p>{entry.file_name}</p>
-                  </div>
-                  <div className="record-card__actions">
-                    <WorkspaceStatusBadge tone={verificationTone(entry.verification_status)}>{humanizeStatus(entry.verification_status)}</WorkspaceStatusBadge>
-                    <WorkspaceStatusBadge tone="neutral">{humanizeStatus(entry.status)}</WorkspaceStatusBadge>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </FormSection>
-
-        <FormSection description="Each verification decision stays attached to the document for operational traceability." title="Review history">
-          <div className="queue-list">
-            {document.review_history.length ? document.review_history.map((entry) => (
-              <article className="record-card document-record-card" key={entry.id}>
-                <div className="detail-grid document-detail-grid">
-                  <div className="detail-row"><span className="detail-label">Change</span><span className="detail-value">{entry.previous_status || "new"} to {entry.new_status}</span></div>
-                  <div className="detail-row"><span className="detail-label">Actor</span><span className="detail-value">{entry.actor_identifier || "Unknown"}</span></div>
-                  <div className="detail-row"><span className="detail-label">At</span><span className="detail-value">{entry.created_at}</span></div>
-                  <div className="detail-row"><span className="detail-label">Comment</span><span className="detail-value">{entry.comment || "No comment"}</span></div>
-                </div>
-              </article>
-            )) : (
-              <div className="notice">
-                <strong>No review history yet.</strong>
-                <span className="muted">The first verification action will appear here.</span>
-              </div>
-            )}
-          </div>
-        </FormSection>
-
-        {error ? (
-          <div className="notice notice--error" role="alert">
-            <strong>Save failed.</strong>
-            <span className="muted">{error}</span>
-          </div>
-        ) : null}
-
-        <WorkspaceFormFooter note="Saving returns you to the employee document queue.">
-          <button className="button button--secondary" onClick={handleCancel} type="button">
-            Cancel
-          </button>
-          <button className="button button--primary" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Saving..." : "Save review"}
-          </button>
-        </WorkspaceFormFooter>
-      </section>
-    </form>
-  );
+      </details>
+    </fieldset>
+    <details className="document-review-history"><summary tabIndex={0}>File details and history</summary>
+      <p>{document.mime_type || "Unknown file type"} · {document.file_size_bytes ? `${document.file_size_bytes} bytes` : "Size not recorded"} · Uploaded by {document.uploaded_by_identifier || "Unknown"}</p>
+      <h3>Version history</h3>{document.version_history.length ? <ul>{document.version_history.map(v => <li key={v.id}>Version {v.version_number} · {v.file_name} · {humanize(v.verification_status)}</li>)}</ul> : <p>No version history recorded.</p>}
+      <h3>Review history</h3>{document.review_history.length ? <ul>{document.review_history.map(h => <li key={h.id}>{h.previous_status || "new"} → {h.new_status} · {h.actor_identifier || "Unknown"} · {h.created_at}<p>{h.comment || "No comment"}</p></li>)}</ul> : <p>No review history yet.</p>}
+    </details>
+    <footer className="document-review-footer"><span className="muted">Saving returns to the document queue.</span><button className="button button--secondary" type="button" disabled={busy} onClick={cancel}>Cancel</button><button className="button button--primary" type="submit" disabled={busy || !ready}>{busy ? "Saving review…" : "Save review"}</button></footer>
+  </form>;
 }

@@ -12,8 +12,8 @@ export default async function PayrollAdjustmentsReportPage() {
   const result = await getHrAdminPayrollAdjustmentSetup({ include_all_runs: true, adjustment_page_size: 100, snapshot_page_size: 100, post_lock_page_size: 100 });
 
   return (
-    <main className="shell hr-admin-compact-ui">
-      <PageIntro
+    <main className="shell hr-admin-compact-ui accerio-page">
+      <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Adjustments Report"
         description="One-time payroll inputs by employee, run, kind, direction, status, approval state, amount risk, and source hash evidence."
