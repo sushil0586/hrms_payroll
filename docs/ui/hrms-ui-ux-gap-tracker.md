@@ -99,13 +99,13 @@ Recommended slices: Users/Roles → Setup/Settings/Plan → Financial Calendars 
 
 ### G08
 
-Implementation checkpoint: Platform/Finance explicitly adopt the shared Accerio shell, branding and truthful navigation search. Source adoption and current browser evidence are recorded separately from the historical finding below.
+Closure checkpoint: [Platform Admin Phase 6](hrms-platform-admin-phase6-joined-closure.md) accepts all ten Platform routes on one immutable build with 12/12 three-engine scenarios, three persisted lead-to-governance journeys, 60 responsive captures, 30 zero-violation axe reports, 38 backend regressions and verified disposable-environment teardown. Platform navigation, search wording, content hierarchy, tenant context, authorization and joined lifecycle are closed within the documented scope. Finance Manager remains the next bounded one-route family.
 
-**P1 shared discovery; P2 implementation — Platform Admin and Finance Manager shell adoption.**
+**P1 — Finance Manager shell and payroll-handoff closure.**
 
-Confirmed source difference: both [Platform layout](../../web/src/app/platform-admin/layout.tsx) and [Finance layout](../../web/src/app/finance-manager/layout.tsx) call `WorkspaceChrome` without `appearance="accerio"`; the [component default](../../web/src/components/shell/workspace-chrome.tsx) is `standard`. Platform header search copy also implies tenants/leads/templates/status search, while the shared search contract is navigation/shortcuts. No new live render defect is claimed.
+Historical source finding: Platform and Finance originally called `WorkspaceChrome` without explicit Accerio appearance, and Platform search wording overstated the navigation shortcut contract. Platform has since adopted the explicit shared appearance and truthful search contract and is covered by the family closure above. Finance shell adoption exists in source, but its one-route content and workflow closure remains pending.
 
-Next action: review permitted navigation, truthful search naming, legacy content dependencies and affected financial/operator workflows. Implement shell convergence as a bounded slice with representative populated routes before broader content rollout. Do not globally change the component default to migrate every consumer implicitly. Exit: actual desktop/mobile navigation, active ancestry, identity/search/logout, keyboard and affected page regression. Financial handoff and platform tenant/support authority remain unchanged.
+Next action: reconcile the Finance Manager route's permitted navigation, payroll handoff decisions, close-state dependencies, download/export behavior and denied states. Reuse the accepted shared shell and compact content contract. Exit: populated, empty, error and permission-restricted desktop/mobile behavior with keyboard, selected accessibility and backend authorization evidence. Financial handoff and payroll-close authority remain unchanged.
 
 ### G09
 

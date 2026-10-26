@@ -1561,7 +1561,7 @@ def _tenant_admin_membership_role_change_summary(previous_membership: dict, memb
     }
 
 
-def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict) -> dict:
+def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     name = payload["name"].strip()
     code = _normalize_tenant_admin_role_code(name, payload.get("code", ""))
     permission_keys = payload.get("permission_keys", [])
@@ -1589,10 +1589,13 @@ def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict) ->
             "change_summary": _tenant_admin_role_change_summary(None, role_payload),
         },
     )
-    return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
+    result = {"role": role_payload}
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
-def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload: dict) -> dict:
+def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     role = Role.objects.filter(tenant=tenant, id=role_id).prefetch_related("permissions").first()
     if not role:
         raise ValueError("Role not found.")
@@ -1635,10 +1638,13 @@ def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload:
             "change_summary": _tenant_admin_role_change_summary(previous_role_payload, role_payload),
         },
     )
-    return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
+    result = {"role": role_payload}
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
-def update_tenant_admin_role_status(tenant, role_id, *, actor_identifier: str, payload: dict) -> dict:
+def update_tenant_admin_role_status(tenant, role_id, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     role = Role.objects.filter(tenant=tenant, id=role_id).prefetch_related("permissions").first()
     if not role:
         raise ValueError("Role not found.")
@@ -1671,7 +1677,10 @@ def update_tenant_admin_role_status(tenant, role_id, *, actor_identifier: str, p
             "change_summary": _tenant_admin_role_change_summary(previous_role_payload, role_payload),
         },
     )
-    return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
+    result = {"role": role_payload}
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
 def _ensure_tenant_admin_subscription_allows_activation(tenant, control: dict) -> None:
@@ -1920,7 +1929,7 @@ def _ensure_workspace_employee_context(membership: TenantMembership, role_codes:
     return employee
 
 
-def invite_tenant_admin_membership(tenant, *, actor_identifier: str, payload: dict) -> dict:
+def invite_tenant_admin_membership(tenant, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     role_ids = _role_ids_for_tenant(tenant, payload.get("role_ids", []))
     if not role_ids:
         raise ValueError("Select at least one tenant role for the invited member.")
@@ -1993,15 +2002,17 @@ def invite_tenant_admin_membership(tenant, *, actor_identifier: str, payload: di
             "change_summary": _tenant_admin_membership_role_change_summary({"roles": []}, membership_payload),
         },
     )
-    return {
+    result = {
         "membership": membership_payload,
         "generated_password": generated_password,
         "password_was_set": bool(password),
-        "console": get_tenant_admin_console_payload(tenant),
     }
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
-def update_tenant_admin_membership(tenant, membership_id, *, actor_identifier: str, payload: dict) -> dict:
+def update_tenant_admin_membership(tenant, membership_id, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     membership = (
         TenantMembership.objects.filter(tenant=tenant, id=membership_id)
         .select_related("user")
@@ -2068,12 +2079,14 @@ def update_tenant_admin_membership(tenant, membership_id, *, actor_identifier: s
             ),
         },
     )
-    return {
+    result = {
         "membership": next_membership_payload,
         "generated_password": "",
         "password_was_set": False,
-        "console": get_tenant_admin_console_payload(tenant),
     }
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
 TENANT_ADMIN_CHANGE_REQUEST_SOURCE_REF = "saas.tenant_admin.change_request.v1"
@@ -2207,7 +2220,7 @@ def _validate_tenant_change_request_payload(tenant, *, request_type: str, target
                 raise ValueError("Requested subscription plan is not configured in the SaaS commercial profile.")
 
 
-def create_tenant_admin_change_request(tenant, *, actor_identifier: str, payload: dict) -> dict:
+def create_tenant_admin_change_request(tenant, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     request_type = payload["request_type"]
     target_ref = payload.get("target_ref", "").strip()
     requested_payload = payload.get("requested_payload", {})
@@ -2240,10 +2253,13 @@ def create_tenant_admin_change_request(tenant, *, actor_identifier: str, payload
         source_ref=TENANT_ADMIN_CHANGE_REQUEST_SOURCE_REF,
         event_snapshot={"change_request": _tenant_change_request_payload(item)},
     )
-    return {"change_request": _tenant_change_request_payload(item), "console": get_tenant_admin_console_payload(tenant)}
+    result = {"change_request": _tenant_change_request_payload(item)}
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
-def update_tenant_admin_change_request(tenant, item_id, *, actor_identifier: str, payload: dict) -> dict:
+def update_tenant_admin_change_request(tenant, item_id, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     item = SaasTenantChangeRequest.objects.filter(tenant=tenant, id=item_id).first()
     if not item:
         raise ValueError("Tenant change request not found.")
@@ -2317,7 +2333,10 @@ def update_tenant_admin_change_request(tenant, item_id, *, actor_identifier: str
             "action": action,
         },
     )
-    return {"change_request": refreshed_payload, "console": get_tenant_admin_console_payload(tenant)}
+    result = {"change_request": refreshed_payload}
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
 SUPPORT_ACCESS_GRANT_SOURCE_REF = "saas.support_access.grant.v1"
@@ -2419,7 +2438,7 @@ def _validate_support_access_request(tenant, *, scope_refs: list[str], requested
     return config
 
 
-def create_support_access_grant(tenant, *, actor_identifier: str, payload: dict) -> dict:
+def create_support_access_grant(tenant, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     scope_refs = [str(item) for item in payload.get("scope_refs", [])]
     requested_duration_minutes = int(payload.get("requested_duration_minutes") or 60)
     config = _validate_support_access_request(
@@ -2461,10 +2480,13 @@ def create_support_access_grant(tenant, *, actor_identifier: str, payload: dict)
         source_ref=SUPPORT_ACCESS_GRANT_SOURCE_REF,
         event_snapshot={"support_access_grant": _support_access_grant_payload(item)},
     )
-    return {"support_access_grant": _support_access_grant_payload(item), "console": get_tenant_admin_console_payload(tenant)}
+    result = {"support_access_grant": _support_access_grant_payload(item)}
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
-def update_support_access_grant(tenant, item_id, *, actor_identifier: str, payload: dict) -> dict:
+def update_support_access_grant(tenant, item_id, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     item = SaasSupportAccessGrant.objects.select_for_update().filter(tenant=tenant, id=item_id).first()
     if not item:
         raise ValueError("Support access grant not found.")
@@ -2558,7 +2580,10 @@ def update_support_access_grant(tenant, item_id, *, actor_identifier: str, paylo
             "action": action,
         },
     )
-    return {"support_access_grant": refreshed_payload, "console": get_tenant_admin_console_payload(tenant)}
+    result = {"support_access_grant": refreshed_payload}
+    if include_console:
+        result["console"] = get_tenant_admin_console_payload(tenant)
+    return result
 
 
 def _support_access_actor_identifier(user: User) -> str:

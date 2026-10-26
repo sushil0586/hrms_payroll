@@ -1047,7 +1047,7 @@ def test_tenant_admin_can_invite_and_manage_membership_with_audit(api_client: AP
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     invite_response = api_client.post(
-        "/api/v1/tenant-admin/memberships/",
+        "/api/v1/tenant-admin/memberships/?compact=1",
         {
             "username": "finance.viewer",
             "email": "finance.viewer@example.com",
@@ -1061,6 +1061,7 @@ def test_tenant_admin_can_invite_and_manage_membership_with_audit(api_client: AP
 
     assert invite_response.status_code == 201, invite_response.json()
     invited_payload = invite_response.json()
+    assert "console" not in invited_payload
     membership_id = invited_payload["membership"]["id"]
     assert invited_payload["membership"]["membership_status"] == MembershipStatus.INVITED
     assert invited_payload["generated_password"]
@@ -1111,7 +1112,7 @@ def test_tenant_admin_can_create_update_and_deactivate_custom_roles(api_client: 
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     create_response = api_client.post(
-        "/api/v1/tenant-admin/roles/",
+        "/api/v1/tenant-admin/roles/?compact=1",
         {
             "name": "Leave Approver",
             "code": "leave-approver",
@@ -1122,6 +1123,7 @@ def test_tenant_admin_can_create_update_and_deactivate_custom_roles(api_client: 
     )
 
     assert create_response.status_code == 201, create_response.json()
+    assert "console" not in create_response.json()
     created = create_response.json()["role"]
     assert created["code"] == "leave-approver"
     assert created["is_system_role"] is False
@@ -2407,6 +2409,36 @@ def test_tenant_admin_can_submit_and_approve_change_request_with_audit(api_clien
 
 
 @pytest.mark.django_db
+def test_tenant_admin_change_request_compact_mutations_omit_console(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/change-requests/?compact=1",
+        {
+            "request_type": SaasTenantChangeRequestType.PLAN_CHANGE,
+            "title": "Compact plan review",
+            "requested_payload": {"subscription_plan": "enterprise"},
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 201, create_response.json()
+    assert create_response.json()["change_request"]["status"] == SaasTenantChangeRequestStatus.SUBMITTED
+    assert "console" not in create_response.json()
+
+    cancel_response = api_client.patch(
+        f"/api/v1/tenant-admin/change-requests/{create_response.json()['change_request']['id']}/?compact=1",
+        {"action": "cancel"},
+        format="json",
+    )
+
+    assert cancel_response.status_code == 200, cancel_response.json()
+    assert cancel_response.json()["change_request"]["status"] == SaasTenantChangeRequestStatus.CANCELED
+    assert "console" not in cancel_response.json()
+
+
+@pytest.mark.django_db
 def test_tenant_admin_change_request_rejects_unconfigured_payload_fields(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -2506,6 +2538,27 @@ def test_tenant_admin_can_control_support_access_grant_lifecycle(api_client: API
     assert ended["ended_by_identifier"] == "nisha.rao"
     assert len(ended["action_history"]) == 4
     assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_session_ended").exists()
+
+    compact_create = api_client.post(
+        "/api/v1/tenant-admin/support-access-grants/?compact=1",
+        {
+            "support_agent_identifier": "support.compact@example.com",
+            "reason": "Verify compact governed support mutation responses.",
+            "scope_refs": ["read_only_account"],
+            "requested_duration_minutes": 15,
+        },
+        format="json",
+    )
+    assert compact_create.status_code == 201, compact_create.json()
+    assert "console" not in compact_create.json()
+    compact_approve = api_client.patch(
+        f"/api/v1/tenant-admin/support-access-grants/{compact_create.json()['support_access_grant']['id']}/?compact=1",
+        {"action": "approve", "decision_note": "Approved compact response verification."},
+        format="json",
+    )
+    assert compact_approve.status_code == 200, compact_approve.json()
+    assert compact_approve.json()["support_access_grant"]["status"] == SaasSupportAccessGrantStatus.APPROVED
+    assert "console" not in compact_approve.json()
 
 
 @pytest.mark.django_db(transaction=True)

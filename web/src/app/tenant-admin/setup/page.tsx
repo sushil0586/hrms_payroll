@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
 import { requireSessionPermission } from "@/lib/workspace-access";
@@ -94,6 +93,9 @@ export default async function TenantSetupGuidePage() {
   const readyAreas = setupAreas.filter((area) => area.status === "ready").length;
   const blockedAreas = setupAreas.filter((area) => area.status === "blocked").length;
   const warningAreas = setupAreas.filter((area) => area.status === "warning").length;
+  const nextArea = setupAreas.find((area) => area.status === "blocked")
+    ?? setupAreas.find((area) => area.status === "warning")
+    ?? setupAreas[setupAreas.length - 1];
 
   return (
     <main className="shell shell--workspace accerio-page">
@@ -103,8 +105,8 @@ export default async function TenantSetupGuidePage() {
         description="A first-run control page for completing tenant launch readiness before payroll operations begin."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/organization">
-              Start master setup
+            <Link className="button button--primary" href={nextArea.href}>
+              {nextArea.status === "ready" ? "Review launch readiness" : `Continue: ${nextArea.title}`}
             </Link>
             <Link className="button button--secondary" href="/tenant-admin">
               Back to console
@@ -116,12 +118,11 @@ export default async function TenantSetupGuidePage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Ready areas" value={readyAreas} trend={`${setupAreas.length} total`} />
-          <MetricTile label="Warnings" value={warningAreas} trend="Monitor before launch" />
-          <MetricTile label="Blocked" value={blockedAreas} trend="Needs action" />
-          <MetricTile label="Members" value={data.summary.active_membership_count} trend={`${data.summary.role_count} roles`} />
-          <MetricTile label="Configs" value={data.configuration_health.published_count} trend={`${data.configuration_health.draft_count} drafts`} />
+        <div aria-label="Tenant setup progress summary" className="tenant-access-summary-strip" role="group">
+          <article><span>Ready areas</span><strong>{readyAreas}/{setupAreas.length}</strong><small>Launch foundations</small></article>
+          <article><span>Needs review</span><strong>{warningAreas}</strong><small>Warnings to confirm</small></article>
+          <article><span>Blocked</span><strong>{blockedAreas}</strong><small>Dependencies unresolved</small></article>
+          <article><span>Next action</span><strong>{nextArea.step}</strong><small>{nextArea.title}</small></article>
         </div>
       </section>
 

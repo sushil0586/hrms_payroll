@@ -52,14 +52,19 @@ export function NotificationReadToggle({ endpoint, isRead, onSaved }: Props) {
       return;
     }
     const saved = await response.json().catch(() => null);
-    if (!saved || typeof saved !== "object" || !("read_at" in saved)) {
-      setError("The server response could not be confirmed. Refresh the inbox before retrying.");
+    const savedReadAt = saved && typeof saved === "object" && "read_at" in saved
+      ? (saved as { read_at: unknown }).read_at
+      : undefined;
+    if (savedReadAt !== null && typeof savedReadAt !== "string") {
+      const message = "The server response could not be confirmed. Refresh the inbox before retrying.";
+      setError(message);
+      setToast({ title: "Action not confirmed.", message, tone: "error" });
       inFlight.current = false;
       setIsSubmitting(false);
       return;
     }
-    setToast({ title: "Action saved.", message: saved.read_at ? "Notification marked read." : "Notification marked unread.", tone: "success" });
-    onSaved?.(saved.read_at ?? null);
+    setToast({ title: "Action saved.", message: savedReadAt ? "Notification marked read." : "Notification marked unread.", tone: "success" });
+    onSaved?.(savedReadAt);
     inFlight.current = false;
     setIsSubmitting(false);
     if (!onSaved) refresh();

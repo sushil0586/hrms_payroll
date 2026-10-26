@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
   const body = await request.json().catch(() => ({}));
-  const upstream = await fetch(`${API_BASE_URL}/tenant-admin/change-requests/`, {
+  const upstream = await fetch(`${API_BASE_URL}/tenant-admin/change-requests/?compact=1`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

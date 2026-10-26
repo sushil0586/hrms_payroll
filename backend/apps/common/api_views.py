@@ -2923,6 +2923,22 @@ def save_hr_admin_workflow_assignment(actor, validated_data, *, item=None):
     if item.template_id is None:
         raise serializers.ValidationError({"template_id": "This field is required."})
 
+    duplicate_assignment = WorkflowTemplateAssignment.objects.filter(
+        tenant=tenant,
+        template_id=item.template_id,
+        legal_entity_id=item.legal_entity_id,
+        branch_id=item.branch_id,
+        department_id=item.department_id,
+        business_unit_id=item.business_unit_id,
+        grade_id=item.grade_id,
+    )
+    if item.pk:
+        duplicate_assignment = duplicate_assignment.exclude(pk=item.pk)
+    if duplicate_assignment.exists():
+        raise serializers.ValidationError({
+            "non_field_errors": ["An assignment already exists for this template and exact organization scope. Edit its priority or state instead."],
+        })
+
     item.save()
     return item
 
@@ -6102,13 +6118,18 @@ def save_hr_admin_notification_event(actor, validated_data, *, item=None):
         if duplicate.exists():
             raise serializers.ValidationError({"code": "A notification event with this code already exists."})
 
+    template = item.template if item.template_id else None
     if "template_id" in validated_data:
         template = NotificationTemplate.objects.filter(tenant=tenant, id=validated_data["template_id"]).first() if validated_data["template_id"] else None
         if validated_data["template_id"] and not template:
             raise serializers.ValidationError({"template_id": "Invalid selection."})
-        if template and effective_channel and template.channel != effective_channel:
-            raise serializers.ValidationError({"template_id": "Template channel must match the event delivery channel."})
         item.template = template
+
+    if template and effective_channel and template.channel != effective_channel:
+        raise serializers.ValidationError({"template_id": "Template channel must match the event delivery channel."})
+    effective_is_active = validated_data.get("is_active", item.is_active)
+    if template and effective_is_active and template.status != NotificationTemplateStatus.ACTIVE:
+        raise serializers.ValidationError({"template_id": "An active notification event requires an active template."})
 
     if "role_id" in validated_data:
         role = Role.objects.filter(tenant=tenant, id=validated_data["role_id"], is_active=True).first() if validated_data["role_id"] else None
@@ -6631,6 +6652,22 @@ def filter_user_notification_queryset(queryset, request):
 
 
 def build_hr_admin_notification_channel_configuration_payload(item: NotificationChannelConfiguration) -> dict:
+    sensitive_fragments = ("password", "secret", "token", "api_key", "apikey", "private_key", "credential")
+
+    def redact_sensitive_values(candidate):
+        if isinstance(candidate, dict):
+            return {
+                key: (
+                    "[managed in deployment secrets]"
+                    if any(fragment in str(key).lower().replace("-", "_") for fragment in sensitive_fragments)
+                    else redact_sensitive_values(value)
+                )
+                for key, value in candidate.items()
+            }
+        if isinstance(candidate, list):
+            return [redact_sensitive_values(value) for value in candidate]
+        return candidate
+
     return {
         "id": item.id,
         "channel": item.channel,
@@ -6638,7 +6675,7 @@ def build_hr_admin_notification_channel_configuration_payload(item: Notification
         "backend_key": item.backend_key,
         "sender_identifier": item.sender_identifier,
         "sender_address": item.sender_address,
-        "provider_config": item.provider_config,
+        "provider_config": redact_sensitive_values(item.provider_config),
         "delivery_policy": item.delivery_policy,
     }
 
@@ -8179,6 +8216,7 @@ class TenantAdminMembershipListCreateView(TenantAdminContextMixin, APIView):
                     tenant,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -8200,6 +8238,7 @@ class TenantAdminMembershipDetailView(TenantAdminContextMixin, APIView):
                     membership_id,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -8220,6 +8259,7 @@ class TenantAdminRoleListCreateView(TenantAdminContextMixin, APIView):
                     tenant,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -8247,6 +8287,7 @@ class TenantAdminRoleDetailView(TenantAdminContextMixin, APIView):
                     role_id,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -8267,6 +8308,7 @@ class TenantAdminChangeRequestListCreateView(TenantAdminContextMixin, APIView):
                     tenant,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -8288,6 +8330,7 @@ class TenantAdminChangeRequestDetailView(TenantAdminContextMixin, APIView):
                     item_id,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -8308,6 +8351,7 @@ class TenantAdminSupportAccessGrantListCreateView(TenantAdminContextMixin, APIVi
                     tenant,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -8329,6 +8373,7 @@ class TenantAdminSupportAccessGrantDetailView(TenantAdminContextMixin, APIView):
                     item_id,
                     actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
                     payload=serializer.validated_data,
+                    include_console=request.query_params.get("compact") != "1",
                 )
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -18209,7 +18254,20 @@ class HrAdminShiftRosterRolloutListView(HrAdminContextMixin, APIView):
         return response.Response(paginated)
 
 
-class HrAdminWorkflowOptionsView(HrAdminContextMixin, APIView):
+class HrAdminWorkflowConfigurationContextMixin(HrAdminContextMixin):
+    workflow_admin_role_codes = ("hr-admin", "tenant-admin")
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        membership = self.get_membership()
+        if not membership or not membership.membership_roles.filter(
+            role__code__in=self.workflow_admin_role_codes,
+            role__is_active=True,
+        ).exists():
+            raise exceptions.PermissionDenied("You do not have access to workflow configuration.")
+
+
+class HrAdminWorkflowOptionsView(HrAdminWorkflowConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -18240,7 +18298,7 @@ class HrAdminWorkflowOptionsView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminWorkflowOptionsSerializer(payload).data)
 
 
-class HrAdminWorkflowTraceListView(HrAdminContextMixin, APIView):
+class HrAdminWorkflowTraceListView(HrAdminWorkflowConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -18295,7 +18353,7 @@ class HrAdminWorkflowTraceListView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminWorkflowTraceListSerializer(payload).data)
 
 
-class HrAdminWorkflowTraceDetailView(HrAdminContextMixin, APIView):
+class HrAdminWorkflowTraceDetailView(HrAdminWorkflowConfigurationContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -18311,7 +18369,7 @@ class HrAdminWorkflowTraceDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminWorkflowTraceSerializer(build_hr_admin_workflow_trace_payload(item)).data)
 
 
-class HrAdminWorkflowTemplateListCreateView(HrAdminContextMixin, APIView):
+class HrAdminWorkflowTemplateListCreateView(HrAdminWorkflowConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -18331,7 +18389,7 @@ class HrAdminWorkflowTemplateListCreateView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminWorkflowTemplateSerializer(build_hr_admin_workflow_template_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
-class HrAdminWorkflowTemplateDetailView(HrAdminContextMixin, APIView):
+class HrAdminWorkflowTemplateDetailView(HrAdminWorkflowConfigurationContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -18355,7 +18413,7 @@ class HrAdminWorkflowTemplateDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminWorkflowTemplateSerializer(build_hr_admin_workflow_template_payload(item)).data)
 
 
-class HrAdminWorkflowTemplateAssignmentListCreateView(HrAdminContextMixin, APIView):
+class HrAdminWorkflowTemplateAssignmentListCreateView(HrAdminWorkflowConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -18377,7 +18435,7 @@ class HrAdminWorkflowTemplateAssignmentListCreateView(HrAdminContextMixin, APIVi
         return response.Response(HrAdminWorkflowTemplateAssignmentSerializer(build_hr_admin_workflow_assignment_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
-class HrAdminWorkflowTemplateAssignmentDetailView(HrAdminContextMixin, APIView):
+class HrAdminWorkflowTemplateAssignmentDetailView(HrAdminWorkflowConfigurationContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -19431,7 +19489,33 @@ class HrAdminExitDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminExitSerializer(build_hr_admin_exit_payload(item)).data)
 
 
-class HrAdminNotificationOptionsView(HrAdminContextMixin, APIView):
+class HrAdminNotificationConfigurationContextMixin(HrAdminContextMixin):
+    notification_admin_role_codes = ("hr-admin", "tenant-admin")
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        membership = self.get_membership()
+        if not membership or not membership.membership_roles.filter(
+            role__code__in=self.notification_admin_role_codes,
+            role__is_active=True,
+        ).exists():
+            raise exceptions.PermissionDenied("You do not have access to notification configuration.")
+
+
+class HrAdminNotificationOperationsContextMixin(HrAdminContextMixin):
+    notification_operations_role_codes = ("hr-admin", "tenant-admin")
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        membership = self.get_membership()
+        if not membership or not membership.membership_roles.filter(
+            role__code__in=self.notification_operations_role_codes,
+            role__is_active=True,
+        ).exists():
+            raise exceptions.PermissionDenied("You do not have access to notification operations.")
+
+
+class HrAdminNotificationOptionsView(HrAdminNotificationConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -19871,7 +19955,7 @@ class HrAdminNotificationOptionsView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationOptionsSerializer(payload).data)
 
 
-class HrAdminNotificationChannelConfigurationListCreateView(HrAdminContextMixin, APIView):
+class HrAdminNotificationChannelConfigurationListCreateView(HrAdminNotificationConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -19898,7 +19982,7 @@ class HrAdminNotificationChannelConfigurationListCreateView(HrAdminContextMixin,
         )
 
 
-class HrAdminNotificationChannelConfigurationDetailView(HrAdminContextMixin, APIView):
+class HrAdminNotificationChannelConfigurationDetailView(HrAdminNotificationConfigurationContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -19929,7 +20013,7 @@ class HrAdminNotificationChannelConfigurationDetailView(HrAdminContextMixin, API
         )
 
 
-class HrAdminNotificationTemplateListCreateView(HrAdminContextMixin, APIView):
+class HrAdminNotificationTemplateListCreateView(HrAdminNotificationConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -19948,7 +20032,7 @@ class HrAdminNotificationTemplateListCreateView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationTemplateSerializer(build_hr_admin_notification_template_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
-class HrAdminNotificationTemplateDetailView(HrAdminContextMixin, APIView):
+class HrAdminNotificationTemplateDetailView(HrAdminNotificationConfigurationContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -19971,7 +20055,7 @@ class HrAdminNotificationTemplateDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationTemplateSerializer(build_hr_admin_notification_template_payload(item)).data)
 
 
-class HrAdminNotificationTemplatePreviewView(HrAdminContextMixin, APIView):
+class HrAdminNotificationTemplatePreviewView(HrAdminNotificationConfigurationContextMixin, APIView):
     def post(self, request):
         employee = self.get_employee()
         if not employee:
@@ -19997,7 +20081,7 @@ class HrAdminNotificationTemplatePreviewView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationPreviewResponseSerializer({"preview": preview, "test_notification": None}).data)
 
 
-class HrAdminNotificationTemplateTestSendView(HrAdminContextMixin, APIView):
+class HrAdminNotificationTemplateTestSendView(HrAdminNotificationConfigurationContextMixin, APIView):
     def post(self, request):
         employee = self.get_employee()
         if not employee:
@@ -20037,7 +20121,7 @@ class HrAdminNotificationTemplateTestSendView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationPreviewResponseSerializer({"preview": preview, "test_notification": build_hr_admin_notification_payload(notification)}).data)
 
 
-class HrAdminNotificationEventDefinitionListCreateView(HrAdminContextMixin, APIView):
+class HrAdminNotificationEventDefinitionListCreateView(HrAdminNotificationConfigurationContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -20057,7 +20141,7 @@ class HrAdminNotificationEventDefinitionListCreateView(HrAdminContextMixin, APIV
         return response.Response(HrAdminNotificationEventDefinitionSerializer(build_hr_admin_notification_event_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
-class HrAdminNotificationEventPreviewView(HrAdminContextMixin, APIView):
+class HrAdminNotificationEventPreviewView(HrAdminNotificationConfigurationContextMixin, APIView):
     def post(self, request):
         employee = self.get_employee()
         if not employee:
@@ -20072,7 +20156,7 @@ class HrAdminNotificationEventPreviewView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationPreviewResponseSerializer({"preview": preview, "test_notification": None}).data)
 
 
-class HrAdminNotificationEventTestSendView(HrAdminContextMixin, APIView):
+class HrAdminNotificationEventTestSendView(HrAdminNotificationConfigurationContextMixin, APIView):
     def post(self, request):
         employee = self.get_employee()
         if not employee:
@@ -20098,7 +20182,7 @@ class HrAdminNotificationEventTestSendView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationPreviewResponseSerializer({"preview": preview, "test_notification": build_hr_admin_notification_payload(notification)}).data)
 
 
-class HrAdminNotificationEventDefinitionDetailView(HrAdminContextMixin, APIView):
+class HrAdminNotificationEventDefinitionDetailView(HrAdminNotificationConfigurationContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -20122,7 +20206,7 @@ class HrAdminNotificationEventDefinitionDetailView(HrAdminContextMixin, APIView)
         return response.Response(HrAdminNotificationEventDefinitionSerializer(build_hr_admin_notification_event_payload(item)).data)
 
 
-class HrAdminNotificationDiagnosticsView(HrAdminContextMixin, APIView):
+class HrAdminNotificationDiagnosticsView(HrAdminNotificationOperationsContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -20303,7 +20387,7 @@ class HrAdminNotificationDiagnosticsView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationDiagnosticsSerializer(payload).data)
 
 
-class HrAdminNotificationListView(HrAdminContextMixin, APIView):
+class HrAdminNotificationListView(HrAdminNotificationOperationsContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -20377,7 +20461,7 @@ class HrAdminNotificationListView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationListSerializer(payload).data)
 
 
-class HrAdminNotificationDetailView(HrAdminContextMixin, APIView):
+class HrAdminNotificationDetailView(HrAdminNotificationOperationsContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -20401,7 +20485,7 @@ class HrAdminNotificationDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationSerializer(build_hr_admin_notification_payload(item)).data)
 
 
-class HrAdminNotificationRetryView(HrAdminContextMixin, APIView):
+class HrAdminNotificationRetryView(HrAdminNotificationOperationsContextMixin, APIView):
     def post(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -20423,7 +20507,7 @@ class HrAdminNotificationRetryView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminNotificationSerializer(build_hr_admin_notification_payload(item)).data)
 
 
-class HrAdminNotificationBulkRetryView(HrAdminContextMixin, APIView):
+class HrAdminNotificationBulkRetryView(HrAdminNotificationOperationsContextMixin, APIView):
     def post(self, request):
         employee = self.get_employee()
         if not employee:

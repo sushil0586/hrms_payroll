@@ -76,6 +76,7 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
         </div>
       </section>
       <NotificationQueue
+        key={JSON.stringify({ q, status, channel, priority, audienceType, moduleFilter, subjectType, retryState, page, pageSize })}
         items={result.data.items}
         notificationStatusOptions={optionsResult.data.notification_statuses}
         notificationChannelOptions={optionsResult.data.notification_channels}

@@ -5,6 +5,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -14,6 +15,7 @@ import type { HrAdminNotification } from "@/lib/types";
 type Props = {
   endpoint: string;
   item: HrAdminNotification;
+  closeHref: string;
   sourceHref: string;
   variant?: "primary" | "secondary" | "ghost";
 };
@@ -45,15 +47,17 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 
-export function UserNotificationDetailAction({ endpoint, item, sourceHref, variant = "secondary" }: Props) {
+export function UserNotificationDetailAction({ closeHref, endpoint, item, sourceHref, variant = "secondary" }: Props) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [readAt, setReadAt] = useState(item.read_at);
 
 
   const title = item.title || item.event_definition_name || "Notification";
   const attempts = `${item.attempt_count}/${item.max_attempts}`;
   const modal = isOpen && typeof document !== "undefined"
     ? createPortal(
-        <HrAdminActionModal closeHref="/mss/notifications" labelledBy="workspace-user-notification-detail-action" title={`Notification detail for ${title}`} onClose={() => setIsOpen(false)} busy={false} className="modal user-notification-modal">
+        <HrAdminActionModal closeHref={closeHref} labelledBy="workspace-user-notification-detail-action" title={`Notification detail for ${title}`} onClose={() => { setIsOpen(false); router.refresh(); }} busy={false} className="modal user-notification-modal">
 <p className="section-copy section-copy-soft">
                   {titleCase(item.channel)} / {titleCase(item.priority)} / {titleCase(item.status)}
                 </p>
@@ -76,7 +80,7 @@ export function UserNotificationDetailAction({ endpoint, item, sourceHref, varia
               </div>
 
               <div className="user-notification-modal-actions">
-                <NotificationReadToggle endpoint={endpoint} isRead={Boolean(item.read_at)} />
+                <NotificationReadToggle endpoint={endpoint} isRead={Boolean(readAt)} onSaved={setReadAt} />
                 {sourceHref ? (
                   <Link className="button button--primary" href={sourceHref}>
                     Open source
@@ -101,7 +105,7 @@ export function UserNotificationDetailAction({ endpoint, item, sourceHref, varia
                     <DetailRow label="Scheduled" value={formatDateTime(item.scheduled_for)} />
                     <DetailRow label="Sent" value={formatDateTime(item.sent_at)} />
                     <DetailRow label="Delivered" value={formatDateTime(item.delivered_at)} />
-                    <DetailRow label="Read" value={formatDateTime(item.read_at)} />
+                    <DetailRow label="Read" value={formatDateTime(readAt)} />
                   </div>
                 </section>
 

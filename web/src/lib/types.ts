@@ -3144,17 +3144,17 @@ export type TenantAdminMembershipMutationResult = {
   membership: TenantAdminConsole["membership_management"]["recent_memberships"][number];
   generated_password: string;
   password_was_set: boolean;
-  console: TenantAdminConsole;
+  console?: TenantAdminConsole;
 };
 
 export type TenantAdminChangeRequestMutationResult = {
   change_request: TenantAdminConsole["change_request_management"]["recent_requests"][number];
-  console: TenantAdminConsole;
+  console?: TenantAdminConsole;
 };
 
 export type TenantAdminSupportAccessGrantMutationResult = {
   support_access_grant: TenantAdminConsole["support_access_management"]["recent_grants"][number];
-  console: TenantAdminConsole;
+  console?: TenantAdminConsole;
 };
 
 export type SupportSessionTenantConsole = {

@@ -1,12 +1,13 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { useCorrectedWorkspaceQueryPage, useWorkspaceQueryFilter, useWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 
 
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { HrAdminPayrollFinanceHandoff, HrAdminPayrollOutputArtifact, HrAdminPayrollProviderDelivery } from "@/lib/types";
 
@@ -64,12 +65,12 @@ export function BankAdviceReportWorkspace({
   deliveries: HrAdminPayrollProviderDelivery[];
   handoffs: HrAdminPayrollFinanceHandoff[];
 }) {
-  const [query, setQuery] = useState("");
-  const [handoffStatus, setHandoffStatus] = useState("All");
-  const [deliveryStatus, setDeliveryStatus] = useState("All");
-  const [providerRef, setProviderRef] = useState("All");
-  const [sortBy, setSortBy] = useState("amount_desc");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [handoffStatus, setHandoffStatus] = useWorkspaceQueryFilter("handoff_status", "All");
+  const [deliveryStatus, setDeliveryStatus] = useWorkspaceQueryFilter("delivery_status", "All");
+  const [providerRef, setProviderRef] = useWorkspaceQueryFilter("provider_ref", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sort", "amount_desc");
+  const [page, setPage] = useWorkspaceQueryPage();
 
   const rows = useMemo<BankAdviceRow[]>(() => {
     const handoffByBatchId = new Map(handoffs.map((handoff) => [handoff.output_batch_id, handoff]));
@@ -122,7 +123,7 @@ export function BankAdviceReportWorkspace({
   }, [deliveryStatus, handoffStatus, providerRef, query, rows, sortBy]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const totalAmount = filteredRows.reduce((sum, row) => sum + Number(artifactAmount(row.artifact) ?? 0), 0);

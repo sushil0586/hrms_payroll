@@ -54,7 +54,7 @@ function riskLabel(value: string) {
 
 export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: boolean; data: TenantAdminConsole }) {
   const router = useRouter();
-  const roles = data.role_management.roles;
+  const [roles, setRoles] = useState<RoleItem[]>(data.role_management.roles);
   const permissionCatalog = data.role_management.permission_catalog.filter((item) => item.tenant_assignable);
   const permissionLabelByKey = useMemo(() => new Map(permissionCatalog.map((item) => [item.key, item.label])), [permissionCatalog]);
   const permissionByKey = useMemo(() => new Map(permissionCatalog.map((item) => [item.key, item])), [permissionCatalog]);
@@ -125,6 +125,13 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
     () => permissionCatalog.filter((permission) => !permission.is_available).length,
     [permissionCatalog]
   );
+
+  function upsertRole(role: RoleItem) {
+    setRoles((current) => {
+      const exists = current.some((item) => item.id === role.id);
+      return exists ? current.map((item) => (item.id === role.id ? role : item)) : [role, ...current];
+    });
+  }
 
   function togglePermissionKey(permissionKey: string) {
     const permission = permissionByKey.get(permissionKey);
@@ -227,17 +234,18 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const result = await response.json().catch(() => ({}));
+      const result = await response.json().catch(() => ({})) as { role?: RoleItem; detail?: string };
       if (!response.ok) {
         setFormError(apiErrorMessage(result, "Role could not be saved."));
         return;
       }
       setNoticeTone("success");
       setNotice(dialogMode === "edit" ? "Role updated successfully." : "Role created successfully.");
+      if (result.role) upsertRole(result.role);
       closeDialog();
       router.refresh();
     } catch {
-      setFormError("Unable to reach the server. Your role changes were preserved; try again.");
+      setFormError("The role-save outcome is unconfirmed. Your changes were preserved; check the role list or audit before retrying.");
     } finally {
       setBusyRef("");
     }
@@ -259,7 +267,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-      const result = await response.json().catch(() => ({}));
+      const result = await response.json().catch(() => ({})) as { role?: RoleItem; detail?: string };
       if (!response.ok) {
         setNoticeTone("error");
         setNotice(apiErrorMessage(result, "Role status could not be changed."));
@@ -267,10 +275,11 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       }
       setNoticeTone("success");
       setNotice(action === "activate" ? "Role activated successfully." : "Role deactivated successfully.");
+      if (result.role) upsertRole(result.role);
       router.refresh();
     } catch {
       setNoticeTone("error");
-      setNotice("Unable to reach the server. The role was not changed; try again.");
+      setNotice("The role-status outcome is unconfirmed. Check the role list or audit before retrying.");
     } finally {
       setBusyRef("");
     }
@@ -395,7 +404,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
               Plan locked
             </span>
           </div>
-          <div className="tenant-permission-overview__groups">
+          <div className="tenant-permission-overview__groups" role="region" aria-label="Assignable permission modules" tabIndex={0}>
             {permissionOverviewGroups.map((group) => (
               <section className="tenant-permission-overview__group" key={group.module}>
                 <div>

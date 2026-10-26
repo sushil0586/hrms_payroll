@@ -904,6 +904,17 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
     title: string;
     tone: "neutral" | "success" | "warning";
   }>;
+  const nextLaunchStep = hasSafeApplyEvidence
+    ? handoffCompleted
+      ? { title: "Verify launch evidence", detail: "Safe setup and customer handoff are recorded. Run drift and final certification checks." }
+      : { title: "Complete customer handoff", detail: "Safe setup is applied. Record the customer briefing and ownership handoff." }
+    : localMissingLabels.length
+      ? { title: "Complete required inputs", detail: `${localMissingLabels.slice(0, 3).join(", ")}${localMissingLabels.length > 3 ? ` and ${localMissingLabels.length - 3} more` : ""}.` }
+      : !currentPreview
+        ? { title: "Preview launch plan", detail: "Create fresh evidence for the selected blueprint, tenant plan, and current inputs." }
+        : currentPreview.can_apply
+          ? { title: "Apply certified safe setup", detail: `${currentPreview.safe_apply_modules.length} certified module${currentPreview.safe_apply_modules.length === 1 ? " is" : "s are"} ready to apply.` }
+          : { title: "Resolve preview blockers", detail: applyDisabledReason };
 
   return (
     <>
@@ -914,6 +925,18 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
           </div>
         </section>
       ) : null}
+
+      <section className="section platform-phase3-summary" data-testid="platform-launch-summary">
+        <div aria-label="Launch blueprint summary" className="tenant-access-summary-strip" role="group">
+          <article><span>Tenant</span><strong>{selectedTenant.code}</strong><small>{titleCase(selectedTenant.subscription_plan)} plan</small></article>
+          <article><span>Blueprint</span><strong>{selectedBlueprint ? selectedBlueprint.version : "Required"}</strong><small>{selectedBlueprint?.label || "Select a compatible template"}</small></article>
+          <article><span>Preview</span><strong>{currentPreview ? (currentPreview.can_apply ? "Fresh" : "Blocked") : "Required"}</strong><small>{currentPreview ? `${currentPreview.safe_apply_modules.length} safe modules` : "Run after input changes"}</small></article>
+          <article><span>Safe setup</span><strong>{hasSafeApplyEvidence ? "Applied" : "Pending"}</strong><small>{handoffCompleted ? "Customer handoff complete" : "Handoff pending"}</small></article>
+        </div>
+        <div className="platform-next-action" role="status">
+          <div><span className="eyebrow">Next required action</span><strong>{nextLaunchStep.title}</strong><span>{nextLaunchStep.detail}</span></div>
+        </div>
+      </section>
 
       <section className="section">
         <article className="record-card platform-launch-workflow-card">

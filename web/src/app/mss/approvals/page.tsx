@@ -487,8 +487,9 @@ function DecisionHistorySection({
           </div>
           <div className="mss-history-panel__actions">
             {canApproveLeave ? (
-              <Link
+              <a
                 className="button button--secondary"
+                data-navigation-mode="document"
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "leave",
                   leavePage: "1",
@@ -496,11 +497,12 @@ function DecisionHistorySection({
                 })}
               >
                 Leave queue
-              </Link>
+              </a>
             ) : null}
             {canReviewAttendance ? (
-              <Link
+              <a
                 className="button button--secondary"
+                data-navigation-mode="document"
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "attendance",
                   regPage: "1",
@@ -508,7 +510,7 @@ function DecisionHistorySection({
                 })}
               >
                 Attendance queue
-              </Link>
+              </a>
             ) : null}
           </div>
         </div>
@@ -572,8 +574,8 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
     history: {
       eyebrow: "Manager audit",
       title: "Decision history",
-      description: "Review completed manager decisions separately from pending queues.",
-      nextAction: "Use this read-only view after pending work has been decided.",
+      description: "Completed-decision history is not available in this workspace.",
+      nextAction: "Use Leave or Attendance for pending work, or contact HR for a completed decision record.",
     },
   }[queue];
 
@@ -593,8 +595,9 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
 
       <section className="workspace-standard-panel workspace-queue-context" aria-label="Approval views and guidance">
             <nav className="tabbar" aria-label="Approval views">
-              <Link
+              <a
                 aria-current={queue === "leave" ? "page" : undefined} className={`tab ${queue === "leave" ? "tab--active" : ""}`}
+                data-navigation-mode="document"
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "leave",
                   regId: undefined,
@@ -603,9 +606,10 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
               >
                 <span>Leave</span>
                 <span>{summary.pending_leave_approvals_count}</span>
-              </Link>
-              <Link
+              </a>
+              <a
                 aria-current={queue === "attendance" ? "page" : undefined} className={`tab ${queue === "attendance" ? "tab--active" : ""}`}
+                data-navigation-mode="document"
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "attendance",
                   leaveId: undefined,
@@ -614,9 +618,10 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
               >
                 <span>Attendance</span>
                 <span>{summary.pending_attendance_regularizations_count}</span>
-              </Link>
-              <Link
+              </a>
+              <a
                 aria-current={queue === "history" ? "page" : undefined} className={`tab ${queue === "history" ? "tab--active" : ""}`}
+                data-navigation-mode="document"
                 href={buildHref("/mss/approvals", currentParams, {
                   queue: "history",
                   leaveId: undefined,
@@ -625,7 +630,7 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
               >
                 <span>History</span>
                 <span>Audit</span>
-              </Link>
+              </a>
             </nav>
         <div className="workspace-queue-context__copy"><h2>{queueMeta.title}</h2><p>{queueMeta.description}</p><p className="muted">{queueMeta.nextAction}</p></div>
       </section>

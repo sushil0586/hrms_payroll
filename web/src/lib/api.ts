@@ -166,8 +166,19 @@ async function getAccessToken() {
   return cookieStore.get("hrms_access_token")?.value || BEARER_TOKEN;
 }
 
-function buildApiError(path: string, detail: string) {
-  return new Error(`[api] ${path}: ${detail}`);
+class ApiRequestError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
+function buildApiError(path: string, detail: string, status?: number) {
+  return new ApiRequestError(`[api] ${path}: ${detail}`, status);
+}
+
+export function isApiNotFoundError(error: unknown) {
+  return error instanceof ApiRequestError && error.status === 404;
 }
 
 async function apiGet<T>(path: string, timeoutMs?: number): Promise<{ data: T; state: ApiState }> {
@@ -198,7 +209,7 @@ async function apiGet<T>(path: string, timeoutMs?: number): Promise<{ data: T; s
     }
 
     if (!result.ok) {
-      throw buildApiError(path, `Live API request failed with status ${result.status}.`);
+      throw buildApiError(path, `Live API request failed with status ${result.status}.`, result.status);
     }
 
     return { data: (await result.json()) as T, state: "live" };

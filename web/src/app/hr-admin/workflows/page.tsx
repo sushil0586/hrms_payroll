@@ -71,12 +71,12 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
 
       <section className="section">
         <div className="attendance-summary-strip payroll-run-summary-strip workflow-metric-grid">
-          <span><strong>{templatesResult.data.length}</strong> Templates</span>
-          <span><strong>{assignmentsResult.data.length}</strong> Assignments</span>
-          <span><strong>{templatesResult.data.reduce((sum, item) => sum + item.steps.length, 0)}</strong> Approval steps</span>
-          <span><strong>{activeTraces}</strong> Open traces</span>
-          <span><strong>{overdueSteps}</strong> Overdue steps</span>
-          <span><strong>{timelineEvents}</strong> Timeline events</span>
+          <span><strong>{templatesResult.data.length}</strong> Loaded templates</span>
+          <span><strong>{assignmentsResult.data.length}</strong> Loaded assignments</span>
+          <span><strong>{templatesResult.data.reduce((sum, item) => sum + item.steps.length, 0)}</strong> Loaded template steps</span>
+          <span><strong>{activeTraces}</strong> Open on this page</span>
+          <span><strong>{overdueSteps}</strong> Overdue on this page</span>
+          <span><strong>{timelineEvents}</strong> Events on this page</span>
         </div>
       </section>
 
@@ -85,8 +85,8 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
           <WorkspaceCard
             description="Design approval chains with escalation timing, actor rules, and module-specific triggers."
             details={[
-              { label: "Templates", value: templatesResult.data.length },
-              { label: "Steps", value: templatesResult.data.reduce((sum, item) => sum + item.steps.length, 0) },
+              { label: "Loaded templates", value: templatesResult.data.length },
+              { label: "Loaded steps", value: templatesResult.data.reduce((sum, item) => sum + item.steps.length, 0) },
             ]}
             cta="Manage templates"
             eyebrow="Approval blueprints"
@@ -96,7 +96,7 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
           <WorkspaceCard
             description="Roll templates out by legal entity, branch, department, business unit, or grade."
             details={[
-              { label: "Assignments", value: assignmentsResult.data.length },
+              { label: "Loaded assignments", value: assignmentsResult.data.length },
               { label: "Live mode", value: state },
             ]}
             cta="Manage assignments"
@@ -107,11 +107,11 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
         </div>
       </section>
 
-      <section className="section queue-layout workflow-trace-layout">
+      <section className="section queue-layout workflow-trace-layout" aria-labelledby="workflow-timeline-heading">
         <section className="card panel queue-toolbar panel-card-soft workflow-filter-panel">
           <div className="queue-toolbar__header">
             <div>
-              <h2 className="section-heading-soft">Workflow timeline</h2>
+              <h2 className="section-heading-soft" id="workflow-timeline-heading">Workflow timeline</h2>
               <p className="section-copy section-copy-soft">
                 Trace approval subjects, current owners, due steps, and recent actions across HR modules.
               </p>
@@ -126,7 +126,7 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
           <form className="queue-toolbar__grid" method="get">
             <label className="form-field">
               <span className="muted">Search</span>
-              <input className="input-control" defaultValue={q} name="q" placeholder="Employee, subject, actor, or trigger" />
+              <input className="input-control" defaultValue={q} name="q" placeholder="Employee, subject, actor, or trigger" type="search" />
             </label>
             <label className="form-field">
               <span className="muted">Module</span>
@@ -214,8 +214,9 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
             </article>
           ))}
           {tracesResult.data.items.length === 0 ? (
-            <section className="card panel panel-card-soft">
-              <span className="muted">No workflow traces match the current filters.</span>
+            <section className="card panel panel-card-soft workflow-empty-state">
+              <div><span className="eyebrow">No matching traces</span><h2 className="section-heading-soft">No workflow traces match the current filters.</h2><p className="section-copy section-copy-soft">Clear filters or broaden the search to review the runtime timeline.</p></div>
+              <Link className="button button--secondary" href="/hr-admin/workflows">Clear filters</Link>
             </section>
           ) : null}
         </div>

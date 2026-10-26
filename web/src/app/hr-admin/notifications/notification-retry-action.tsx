@@ -49,7 +49,14 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
       setIsSubmitting(false);
       return;
     }
-    const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => null);
+    if (payload === null) {
+      const message = "The notification service returned an unreadable response. Delivery outcome is unknown; refresh before retrying.";
+      setError(message);
+      setToast({ title: "Retry outcome unknown.", message, tone: "error" });
+      setIsSubmitting(false);
+      return;
+    }
     if (!response.ok) {
       const message = getErrorMessage(payload);
       setError(message);
@@ -57,7 +64,8 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
       setIsSubmitting(false);
       return;
     }
-    const message = "Notification delivery retried.";
+    const currentStatus = typeof (payload as { status?: unknown }).status === "string" ? (payload as { status: string }).status : "unknown";
+    const message = `Retry request completed. Current status: ${currentStatus}. Review the delivery log for provider evidence.`;
     setSuccessMessage(message);
     setToast({ title: "Action saved.", message, tone: "success" });
     setIsSubmitting(false);

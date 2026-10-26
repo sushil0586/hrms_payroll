@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { NotificationPreviewPanel } from "@/app/hr-admin/notifications/notification-preview-panel";
@@ -44,6 +43,14 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<NotificationTemplateField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const isDirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
+
+  useEffect(() => {
+    function warnBeforeUnload(event: BeforeUnloadEvent) { if (isDirty && !isSubmitting) event.preventDefault(); }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDirty, isSubmitting]);
   const channelHints = useMemo(
     () => Object.fromEntries(options.notification_catalog_authoring.template_channel_hints.map((item) => [item.channel, item])),
     [options.notification_catalog_authoring.template_channel_hints],
@@ -115,19 +122,30 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
       setFieldErrors(nextErrors);
       setError("Review the highlighted notification template fields and try again.");
       setIsSubmitting(false);
+      const firstField = Object.keys(nextErrors).find((field) => nextErrors[field as NotificationTemplateField]);
+      if (firstField) requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>(`[data-template-field="${firstField}"]`)?.focus());
       return;
     }
 
-    const response = await fetch(
-      mode === "create" ? "/api/hr-admin/notification-templates" : `/api/hr-admin/notification-templates/${itemId}`,
-      {
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/notification-templates" : `/api/hr-admin/notification-templates/${itemId}`, {
         method: mode === "create" ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formValue, metadata_template: metadataTemplate }),
-      },
-    );
+      });
+    } catch {
+      setError("The notification template could not be saved because the service did not respond. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
 
-    const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => null);
+    if (payload === null) {
+      setError("The notification service returned an unreadable response. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
@@ -139,7 +157,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
   }
 
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting} className="section form-layout-modern" noValidate onSubmit={handleSubmit} ref={formRef}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -163,12 +181,12 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Code</span>
-                <input aria-invalid={Boolean(fieldErrors.code)} className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.code)} className="input-control" data-template-field="code" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
                 {fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}
               </label>
               <label className="form-field">
                 <span className="muted">Name</span>
-                <input aria-invalid={Boolean(fieldErrors.name)} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.name)} className="input-control" data-template-field="name" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
                 {fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}
               </label>
               <label className="form-field">
@@ -248,6 +266,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
                 <textarea
                   aria-invalid={Boolean(fieldErrors.body_template)}
                   className="input-control"
+                  data-template-field="body_template"
                   placeholder={channelHint?.body_placeholder}
                   rows={6}
                   value={formValue.body_template}
@@ -275,6 +294,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
                 <textarea
                   aria-invalid={Boolean(fieldErrors.metadata_template)}
                   className="input-control"
+                  data-template-field="metadata_template"
                   rows={5}
                   value={formValue.metadata_template}
                   onChange={(e) => update("metadata_template", e.target.value)}
@@ -310,7 +330,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? "Create template" : "Save changes"}
             </button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button className="button button--secondary" onClick={() => { if (!isDirty || window.confirm("Discard unsaved notification template changes?")) router.back(); }} type="button">
               Cancel
             </button>
           </div>

@@ -73,8 +73,13 @@ export default async function NotificationsPage({
       subject_type: subject,
     });
   const data = result.data;
-  const href = (p: number) =>
-    `/ess/notifications?${new URLSearchParams({ page: String(p), page_size: String(pageSize), q, status, channel, priority, subject_type: subject })}`;
+  const href = (p: number) => {
+    const scoped = new URLSearchParams({ page: String(p), page_size: String(pageSize) });
+    Object.entries({ q, status, channel, priority, subject_type: subject }).forEach(([key, value]) => {
+      if (value) scoped.set(key, value);
+    });
+    return `/ess/notifications?${scoped}`;
+  };
   return (
     <main className="shell shell--workspace ess-compact accerio-page">
       <WorkspaceStandardHeader
@@ -204,6 +209,8 @@ export default async function NotificationsPage({
           </Link>
         </form>
         <EmployeeNotificationInbox
+          closeHref={href(data.page)}
+          emptyMessage={q || status || channel || priority || subject ? "No notifications match your filters." : "No notifications yet."}
           key={JSON.stringify(data)}
           items={data.items}
         />

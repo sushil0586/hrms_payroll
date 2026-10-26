@@ -1,6 +1,6 @@
 # Payroll — screen and contract inventory
 
-Prepared: 23 October 2026; updated 24 October 2026. Status: source inventory, [Phase 1 rendered baseline](hrms-payroll-phase1-design-baseline.md), [Phase 2 configuration makeover](hrms-payroll-phase2-configuration-makeover.md) and [Phase 3 readiness, inputs and calculation](hrms-payroll-phase3-processing-makeover.md) are complete. Implementation follows the [seven-phase makeover plan](hrms-payroll-makeover-plan.md).
+Prepared: 23 October 2026; updated 24 October 2026. Status: Phases 1–6 are complete within their linked records. [Phase 7 joined closure](hrms-payroll-phase7-joined-closure.md) is in progress under the [seven-phase makeover plan](hrms-payroll-makeover-plan.md).
 
 ## Scope rule
 

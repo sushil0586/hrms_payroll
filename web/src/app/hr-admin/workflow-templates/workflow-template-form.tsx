@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createEmptyWorkflowStep } from "@/app/hr-admin/workflow-templates/form-values";
 import { FormSection } from "@/components/patterns/form-section";
@@ -115,6 +115,17 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<WorkflowTemplateField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const isDirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
+
+  useEffect(() => {
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      if (!isDirty || isSubmitting) return;
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDirty, isSubmitting]);
 
   const isLifecycleTemplate = formValue.module === "lifecycle";
   const lifecyclePreset = isLifecycleTemplate ? getLifecycleTriggerPreset(options, formValue.trigger_key) : null;
@@ -177,6 +188,23 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
     }));
   }
 
+  function moveStep(index: number, direction: -1 | 1) {
+    setFormValue((current) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= current.steps.length) return current;
+      const steps = [...current.steps];
+      [steps[index], steps[targetIndex]] = [steps[targetIndex], steps[index]];
+      return { ...current, steps: steps.map((step, stepIndex) => ({ ...step, step_order: stepIndex + 1 })) };
+    });
+    setFieldErrors({});
+  }
+
+  function focusField(field: WorkflowTemplateField) {
+    requestAnimationFrame(() => {
+      formRef.current?.querySelector<HTMLElement>(`[data-workflow-field="${field}"]`)?.focus();
+    });
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
@@ -204,6 +232,8 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
       setFieldErrors(nextErrors);
       setError("Review the highlighted workflow template fields and try again.");
       setIsSubmitting(false);
+      const firstInvalidField = Object.keys(nextErrors).find((field) => nextErrors[field as WorkflowTemplateField]);
+      if (firstInvalidField) focusField(firstInvalidField as WorkflowTemplateField);
       return;
     }
 
@@ -217,12 +247,24 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
       })),
     };
 
-    const response = await fetch(mode === "create" ? "/api/hr-admin/workflow-templates" : `/api/hr-admin/workflow-templates/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const responsePayload = await response.json().catch(() => ({}));
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/workflow-templates" : `/api/hr-admin/workflow-templates/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setError("The workflow template could not be saved because the service did not respond. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
+    const responsePayload = await response.json().catch(() => null);
+    if (responsePayload === null) {
+      setError("The workflow service returned an unreadable response. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
     if (!response.ok) {
       setError(getErrorMessage(responsePayload));
       setIsSubmitting(false);
@@ -234,7 +276,7 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
   }
 
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting} className="section form-layout-modern" noValidate onSubmit={handleSubmit} ref={formRef}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2 className="section-heading-soft">{mode === "create" ? "Workflow template" : "Edit workflow"}</h2>
@@ -245,8 +287,8 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
 
         <FormSection description="Set template identity, module target, and effective dates." title="Template setup">
           <div className="form-grid">
-            <label className="form-field"><span className="muted">Code</span><input aria-invalid={Boolean(fieldErrors.code)} className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />{fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}</label>
-            <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.name)} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}</label>
+            <label className="form-field"><span className="muted">Code</span><input aria-invalid={Boolean(fieldErrors.code)} className="input-control" data-workflow-field="code" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />{fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}</label>
+            <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.name)} className="input-control" data-workflow-field="name" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}</label>
             <label className="form-field">
               <span className="muted">Module</span>
               <select className="input-control" value={formValue.module} onChange={(e) => update("module", e.target.value)}>
@@ -255,7 +297,7 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
             </label>
             <label className="form-field">
               <span className="muted">Trigger key</span>
-              <input aria-invalid={Boolean(fieldErrors.trigger_key)} className="input-control" required value={formValue.trigger_key} onChange={(e) => update("trigger_key", e.target.value)} />
+              <input aria-invalid={Boolean(fieldErrors.trigger_key)} className="input-control" data-workflow-field="trigger_key" required value={formValue.trigger_key} onChange={(e) => update("trigger_key", e.target.value)} />
               {fieldErrors.trigger_key ? <span className="field-error-text">{fieldErrors.trigger_key}</span> : null}
             </label>
             <label className="form-field">
@@ -264,11 +306,11 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
                 {options.workflow_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
-            <label className="form-field"><span className="muted">Version</span><input aria-invalid={Boolean(fieldErrors.version)} className="input-control" min={1} type="number" value={formValue.version} onChange={(e) => update("version", Number(e.target.value) || 1)} />{fieldErrors.version ? <span className="field-error-text">{fieldErrors.version}</span> : null}</label>
+            <label className="form-field"><span className="muted">Version</span><input aria-invalid={Boolean(fieldErrors.version)} className="input-control" data-workflow-field="version" min={1} type="number" value={formValue.version} onChange={(e) => update("version", Number(e.target.value) || 1)} />{fieldErrors.version ? <span className="field-error-text">{fieldErrors.version}</span> : null}</label>
             <label className="form-field"><span className="muted">Effective from</span><input className="input-control" type="date" value={formValue.effective_from ?? ""} onChange={(e) => update("effective_from", e.target.value || null)} /></label>
-            <label className="form-field"><span className="muted">Effective to</span><input aria-invalid={Boolean(fieldErrors.effective_to)} className="input-control" type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} />{fieldErrors.effective_to ? <span className="field-error-text">{fieldErrors.effective_to}</span> : null}</label>
+            <label className="form-field"><span className="muted">Effective to</span><input aria-invalid={Boolean(fieldErrors.effective_to)} className="input-control" data-workflow-field="effective_to" type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} />{fieldErrors.effective_to ? <span className="field-error-text">{fieldErrors.effective_to}</span> : null}</label>
             <label className="form-field form-field--full"><span className="muted">Description</span><textarea className="input-control" rows={3} value={formValue.description} onChange={(e) => update("description", e.target.value)} /></label>
-            <label className="form-field form-field--full"><span className="muted">Condition snapshot JSON</span><textarea aria-invalid={Boolean(fieldErrors.condition_snapshot)} className="input-control" rows={5} value={formValue.condition_snapshot} onChange={(e) => update("condition_snapshot", e.target.value)} />{fieldErrors.condition_snapshot ? <span className="field-error-text">{fieldErrors.condition_snapshot}</span> : null}</label>
+            <label className="form-field form-field--full"><span className="muted">Condition snapshot JSON</span><textarea aria-invalid={Boolean(fieldErrors.condition_snapshot)} className="input-control" data-workflow-field="condition_snapshot" rows={5} value={formValue.condition_snapshot} onChange={(e) => update("condition_snapshot", e.target.value)} />{fieldErrors.condition_snapshot ? <span className="field-error-text">{fieldErrors.condition_snapshot}</span> : null}</label>
           </div>
 
           {isLifecycleTemplate && lifecyclePreset ? (
@@ -320,15 +362,17 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
                     </div>
                     <div className="record-card__actions">
                       <span className="record-chip">{step.actor_type}</span>
+                      <button aria-label={`Move step ${index + 1} up`} className="button button--ghost" disabled={index === 0} onClick={() => moveStep(index, -1)} type="button">Move up</button>
+                      <button aria-label={`Move step ${index + 1} down`} className="button button--ghost" disabled={index === formValue.steps.length - 1} onClick={() => moveStep(index, 1)} type="button">Move down</button>
                       {formValue.steps.length > 1 ? (
-                        <button className="button button--secondary" onClick={() => removeStep(index)} type="button">
+                        <button aria-label={`Remove step ${index + 1}`} className="button button--secondary" onClick={() => removeStep(index)} type="button">
                           Remove
                         </button>
                       ) : null}
                     </div>
                   </div>
                   <div className="form-grid">
-                    <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors[`steps.${index}.name`])} className="input-control" required value={step.name} onChange={(e) => updateStep(index, { name: e.target.value })} />{fieldErrors[`steps.${index}.name`] ? <span className="field-error-text">{fieldErrors[`steps.${index}.name`]}</span> : null}</label>
+                    <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors[`steps.${index}.name`])} className="input-control" data-workflow-field={`steps.${index}.name`} required value={step.name} onChange={(e) => updateStep(index, { name: e.target.value })} />{fieldErrors[`steps.${index}.name`] ? <span className="field-error-text">{fieldErrors[`steps.${index}.name`]}</span> : null}</label>
                     <label className="form-field"><span className="muted">Mode</span><select className="input-control" value={step.mode} onChange={(e) => updateStep(index, { mode: e.target.value })}>{options.workflow_step_modes.filter((option) => option.value === "sequential" || option.value === step.mode).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                     <label className="form-field"><span className="muted">Actor type</span><select className="input-control" value={step.actor_type} onChange={(e) => updateStep(index, { actor_type: e.target.value })}>{options.workflow_actor_types.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                     <label className="form-field"><span className="muted">Role</span><select className="input-control" value={step.role_id ?? ""} onChange={(e) => updateStep(index, { role_id: e.target.value || null })}>{selectOptions(options.roles)}</select></label>
@@ -510,7 +554,7 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
           <button className="button button--primary" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Saving..." : mode === "create" ? "Create workflow template" : "Save changes"}
           </button>
-          <button className="button button--secondary" onClick={() => router.back()} type="button">
+          <button className="button button--secondary" onClick={() => { if (!isDirty || window.confirm("Discard unsaved workflow template changes?")) router.back(); }} type="button">
             Cancel
           </button>
         </div>

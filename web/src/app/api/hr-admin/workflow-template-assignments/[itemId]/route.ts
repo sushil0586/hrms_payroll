@@ -22,6 +22,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     body: JSON.stringify(body),
     cache: "no-store",
   });
-  const payload = await upstreamResponse.json().catch(() => ({}));
+  const payload = await upstreamResponse.json().catch(() => null);
+  if (payload === null) {
+    return NextResponse.json({ detail: "The workflow service returned an unreadable response." }, { status: 502 });
+  }
   return NextResponse.json(payload, { status: upstreamResponse.status });
 }

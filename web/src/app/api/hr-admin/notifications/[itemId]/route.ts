@@ -14,7 +14,8 @@ export async function GET(request: NextRequest, { params }: Props) {
     headers: { Authorization: `Token ${permission.token}` },
     cache: "no-store",
   });
-  const payload = await upstream.json().catch(() => ({}));
+  const payload = await upstream.json().catch(() => null);
+  if (payload === null) return NextResponse.json({ detail: "Notification service returned an unreadable response." }, { status: 502 });
   return NextResponse.json(payload, { status: upstream.status });
 }
 
@@ -25,6 +26,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const { itemId } = await params;
   const body = await request.json();
   const upstream = await fetch(`${API_BASE_URL}/hr-admin/notifications/${itemId}/`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Token ${permission.token}` }, body: JSON.stringify(body), cache: "no-store" });
-  const payload = await upstream.json().catch(() => ({}));
+  const payload = await upstream.json().catch(() => null);
+  if (payload === null) return NextResponse.json({ detail: "Notification service returned an unreadable response." }, { status: 502 });
   return NextResponse.json(payload, { status: upstream.status });
 }

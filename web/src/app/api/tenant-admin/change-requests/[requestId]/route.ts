@@ -14,7 +14,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   }
   const { requestId } = await params;
   const body = await request.json().catch(() => ({}));
-  const upstream = await fetch(`${API_BASE_URL}/tenant-admin/change-requests/${requestId}/`, {
+  const upstream = await fetch(`${API_BASE_URL}/tenant-admin/change-requests/${requestId}/?compact=1`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",

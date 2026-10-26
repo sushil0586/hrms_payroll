@@ -1,12 +1,13 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { useCorrectedWorkspaceQueryPage, useWorkspaceQueryFilter, useWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 
 
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun } from "@/lib/types";
 
@@ -80,14 +81,14 @@ export function PayrollInputExceptionsReportWorkspace({
   runs: HrAdminPayrollRun[];
   snapshots: HrAdminPayrollInputSnapshotListItem[];
 }) {
-  const [query, setQuery] = useState("");
-  const [runId, setRunId] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [payGroup, setPayGroup] = useState("All");
-  const [lockState, setLockState] = useState("All");
-  const [issueType, setIssueType] = useState("All");
-  const [sortBy, setSortBy] = useState("risk");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [runId, setRunId] = useWorkspaceQueryFilter("payroll_run_id", "All");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "All");
+  const [payGroup, setPayGroup] = useWorkspaceQueryFilter("pay_group", "All");
+  const [lockState, setLockState] = useWorkspaceQueryFilter("lock_state", "All");
+  const [issueType, setIssueType] = useWorkspaceQueryFilter("issue_type", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sort", "risk");
+  const [page, setPage] = useWorkspaceQueryPage();
 
   const runsById = useMemo(() => new Map(runs.map((run) => [run.id, run])), [runs]);
   const rows = useMemo(() => snapshots.map((snapshot) => toReportRow(snapshot, runsById)), [runsById, snapshots]);
@@ -141,7 +142,7 @@ export function PayrollInputExceptionsReportWorkspace({
   }, [issueType, lockState, payGroup, query, rows, runId, sortBy, status]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const exportHref = useMemo(() => {

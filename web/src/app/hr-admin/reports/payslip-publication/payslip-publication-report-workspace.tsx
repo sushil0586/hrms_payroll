@@ -1,12 +1,13 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { useCorrectedWorkspaceQueryPage, useWorkspaceQueryFilter, useWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 
 
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch, HrAdminPayrollRun } from "@/lib/types";
 
@@ -64,14 +65,14 @@ export function PayslipPublicationReportWorkspace({
   outputBatches: HrAdminPayrollOutputBatch[];
   artifacts: HrAdminPayrollOutputArtifact[];
 }) {
-  const [query, setQuery] = useState("");
-  const [runId, setRunId] = useState("All");
-  const [state, setState] = useState("All");
-  const [risk, setRisk] = useState("All");
-  const [artifactStatus, setArtifactStatus] = useState("All");
-  const [acknowledgement, setAcknowledgement] = useState("All");
-  const [sortBy, setSortBy] = useState("risk");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [runId, setRunId] = useWorkspaceQueryFilter("payroll_run_id", "All");
+  const [state, setState] = useWorkspaceQueryFilter("state", "All");
+  const [risk, setRisk] = useWorkspaceQueryFilter("risk", "All");
+  const [artifactStatus, setArtifactStatus] = useWorkspaceQueryFilter("artifact_status", "All");
+  const [acknowledgement, setAcknowledgement] = useWorkspaceQueryFilter("acknowledgement", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sort", "risk");
+  const [page, setPage] = useWorkspaceQueryPage();
 
   const rows = useMemo<PayslipPublicationRow[]>(() => {
     const batchById = new Map(outputBatches.map((batch) => [batch.id, batch]));
@@ -142,7 +143,7 @@ export function PayslipPublicationReportWorkspace({
   }, [acknowledgement, artifactStatus, query, risk, rows, runId, sortBy, state]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const exportHref = useMemo(() => {

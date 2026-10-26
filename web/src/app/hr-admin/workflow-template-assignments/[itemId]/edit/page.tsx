@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { workflowTemplateAssignmentToFormValue } from "@/app/hr-admin/workflow-template-assignments/form-values";
 import { WorkflowTemplateAssignmentForm } from "@/app/hr-admin/workflow-template-assignments/workflow-template-assignment-form";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminWorkflowOptions, getHrAdminWorkflowTemplateAssignment } from "@/lib/api";
+import { getHrAdminWorkflowOptions, getHrAdminWorkflowTemplateAssignment, isApiNotFoundError } from "@/lib/api";
 
 type PageProps = {
   params: Promise<{ itemId: string }>;
@@ -11,7 +12,14 @@ type PageProps = {
 
 export default async function HrAdminEditWorkflowTemplateAssignmentPage({ params }: PageProps) {
   const { itemId } = await params;
-  const [itemResult, optionsResult] = await Promise.all([getHrAdminWorkflowTemplateAssignment(itemId), getHrAdminWorkflowOptions()]);
+  let itemResult;
+  let optionsResult;
+  try {
+    [itemResult, optionsResult] = await Promise.all([getHrAdminWorkflowTemplateAssignment(itemId), getHrAdminWorkflowOptions()]);
+  } catch (error) {
+    if (isApiNotFoundError(error)) notFound();
+    throw error;
+  }
 
   return (
     <main className="shell shell--workspace workflow-workbench accerio-page">

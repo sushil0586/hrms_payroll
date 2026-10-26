@@ -1,0 +1,28 @@
+{
+  "prepared": "2026-10-24",
+  "route_pattern_count": 20,
+  "hr_admin_route_pattern_count": 18,
+  "consumer_route_pattern_count": 2,
+  "routes": [
+    { "id": "WN-W01", "route": "/hr-admin/workflows", "kind": "control-center", "phase": 2, "owner": "workflow" },
+    { "id": "WN-W02", "route": "/hr-admin/workflow-templates", "kind": "catalog", "phase": 2, "owner": "workflow" },
+    { "id": "WN-W03", "route": "/hr-admin/workflow-templates/new", "kind": "create-form", "phase": 2, "owner": "workflow" },
+    { "id": "WN-W04", "route": "/hr-admin/workflow-templates/[itemId]/edit", "kind": "edit-form", "phase": 2, "owner": "workflow" },
+    { "id": "WN-W05", "route": "/hr-admin/workflow-template-assignments", "kind": "catalog", "phase": 2, "owner": "workflow" },
+    { "id": "WN-W06", "route": "/hr-admin/workflow-template-assignments/new", "kind": "create-form", "phase": 2, "owner": "workflow" },
+    { "id": "WN-W07", "route": "/hr-admin/workflow-template-assignments/[itemId]/edit", "kind": "edit-form", "phase": 2, "owner": "workflow" },
+    { "id": "WN-N01", "route": "/hr-admin/notifications-admin", "kind": "control-center", "phase": 3, "owner": "notification" },
+    { "id": "WN-N02", "route": "/hr-admin/notification-delivery", "kind": "configuration", "phase": 3, "owner": "notification" },
+    { "id": "WN-N03", "route": "/hr-admin/notification-templates", "kind": "catalog", "phase": 3, "owner": "notification" },
+    { "id": "WN-N04", "route": "/hr-admin/notification-templates/new", "kind": "create-form", "phase": 3, "owner": "notification" },
+    { "id": "WN-N05", "route": "/hr-admin/notification-templates/[itemId]/edit", "kind": "edit-form", "phase": 3, "owner": "notification" },
+    { "id": "WN-N06", "route": "/hr-admin/notification-events", "kind": "catalog", "phase": 3, "owner": "notification" },
+    { "id": "WN-N07", "route": "/hr-admin/notification-events/new", "kind": "create-form", "phase": 3, "owner": "notification" },
+    { "id": "WN-N08", "route": "/hr-admin/notification-events/[itemId]/edit", "kind": "edit-form", "phase": 3, "owner": "notification" },
+    { "id": "WN-N09", "route": "/hr-admin/notifications", "kind": "operational-queue", "phase": 4, "owner": "notification" },
+    { "id": "WN-N10", "route": "/hr-admin/notifications/[itemId]/review", "kind": "review", "phase": 4, "owner": "notification" },
+    { "id": "WN-N11", "route": "/hr-admin/notification-diagnostics", "kind": "diagnostics", "phase": 4, "owner": "notification" },
+    { "id": "WN-C01", "route": "/ess/notifications", "kind": "employee-inbox", "phase": 5, "owner": "consumer" },
+    { "id": "WN-C02", "route": "/mss/notifications", "kind": "manager-inbox", "phase": 5, "owner": "consumer" }
+  ]
+}

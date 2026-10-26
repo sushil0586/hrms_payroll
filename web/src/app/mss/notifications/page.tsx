@@ -13,17 +13,30 @@ function normalizeParam(value: SearchParamValue) {
 }
 
 export default async function MssNotificationsPage({ searchParams }: PageProps) {
-  const currentParams = (await searchParams) ?? {};
-  const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "10") || 10, 1), 100);
-  const result = await getMssNotifications({
-    page,
-    page_size: pageSize,
-    q: normalizeParam(currentParams.q) ?? "",
-    status: normalizeParam(currentParams.status) ?? "",
-    channel: normalizeParam(currentParams.channel) ?? "",
-    priority: normalizeParam(currentParams.priority) ?? "",
-    subject_type: normalizeParam(currentParams.subject_type) ?? "",
+  const rawParams = (await searchParams) ?? {};
+  const rawPage = Number(normalizeParam(rawParams.page));
+  const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+  const requestedSize = Number(normalizeParam(rawParams.page_size));
+  const pageSize = [10, 25, 50].includes(requestedSize) ? requestedSize : 10;
+  const option = (key: string, allowed: string[]) => {
+    const value = normalizeParam(rawParams[key]) ?? "";
+    return allowed.includes(value) ? value : "";
+  };
+  const q = normalizeParam(rawParams.q) ?? "";
+  const status = option("status", ["pending", "sent", "delivered", "read", "failed"]);
+  const channel = option("channel", ["in_app", "email", "sms", "push", "whatsapp"]);
+  const priority = option("priority", ["low", "normal", "high", "critical"]);
+  const subjectType = option("subject_type", ["leave_request", "attendance_regularization", "employee_document", "employee_onboarding", "payroll_payslip"]);
+  const query = { page, page_size: pageSize, q, status, channel, priority, subject_type: subjectType };
+  let result = await getMssNotifications(query);
+  const lastPage = Math.max(1, Math.ceil(result.data.total_count / result.data.page_size));
+  if (page > lastPage) result = await getMssNotifications({ ...query, page: lastPage });
+  const currentParams: Record<string, string> = {
+    page: String(result.data.page),
+    page_size: String(pageSize),
+  };
+  Object.entries({ q, status, channel, priority, subject_type: subjectType }).forEach(([key, value]) => {
+    if (value) currentParams[key] = value;
   });
 
   return (
@@ -32,9 +45,6 @@ export default async function MssNotificationsPage({ searchParams }: PageProps) 
         <>
           <Link className="button button--primary" href="/mss/approvals">
             Approvals
-          </Link>
-          <Link className="button button--secondary" href="/mss/approvals?queue=history">
-            Decision history
           </Link>
           <Link className="button button--ghost" href="/ess/notifications">
             ESS inbox

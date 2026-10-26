@@ -148,7 +148,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         scope_refs: selectedScopes,
         requested_duration_minutes: duration,
       }),
-    }, "Unable to reach the support-access service. Check your connection and retry.");
+    }, "The support-access response was interrupted, so the request outcome is unconfirmed. Keep these values and refresh the grant register before deciding whether to submit again.");
     const result = response.payload;
     setBusyRef("");
     if (!response.ok) {
@@ -181,7 +181,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         decision_note: decisionNotes[grantId] ?? "",
         session_ref: sessionRefs[grantId] ?? "",
       }),
-    }, "Unable to reach the support-access service. Check your connection and retry.");
+    }, "The support-access response was interrupted, so the action outcome is unconfirmed. Keep the decision details and refresh the grant register before deciding whether to act again.");
     const result = response.payload;
     setBusyRef("");
     if (!response.ok) {

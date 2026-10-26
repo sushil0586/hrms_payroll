@@ -25,6 +25,8 @@ export type IsolatedQaWorkspace = {
       leave_request_id: string;
       payroll_run_id: string;
       platform_onboarding_id: string;
+      manager_notification_id: string;
+      employee_notification_id: string;
     };
     platform_admin: { username: string; platform_only: boolean };
     checks: Record<string, boolean>;
@@ -65,7 +67,7 @@ export async function cleanupIsolatedQaWorkspace(workspace: IsolatedQaWorkspace 
   }
 }
 
-export function workspacePersona(workspace: IsolatedQaWorkspace, role: "hr_admin" | "hr_checker" | "manager" | "employee" | "tenant_admin"): Persona {
+export function workspacePersona(workspace: IsolatedQaWorkspace, role: "hr_admin" | "hr_checker" | "manager" | "manager_b" | "employee" | "tenant_admin"): Persona {
   return { username: workspace.manifest.credentials[role].username, password: "Password@123" };
 }
 

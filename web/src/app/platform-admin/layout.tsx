@@ -38,6 +38,7 @@ const PLATFORM_ADMIN_LABELS: Record<string, { label: string; shortLabel: string;
   "/platform-admin/policy-packs": { label: "Setup Templates", shortLabel: "ST", blurb: "Baseline setup" },
   "/platform-admin/permissions": { label: "Permissions", shortLabel: "PM", blurb: "RBAC catalog" },
   "/platform-admin/audit-logs": { label: "Audit Logs", shortLabel: "AU", blurb: "Action evidence" },
+  "/platform-admin/data-governance": { label: "Data Governance", shortLabel: "DG", blurb: "Retention and erasure" },
 };
 
 function normalizePlatformMenuSource(menuSource: WorkspaceMenuSource): WorkspaceMenuSource {

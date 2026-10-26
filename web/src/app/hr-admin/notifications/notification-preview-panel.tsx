@@ -83,7 +83,11 @@ export function NotificationPreviewPanel({
       setError("Unable to reach the server. Check your connection and try again.");
       return;
     }
-    const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => null);
+    if (payload === null) {
+      setError("The notification service returned an unreadable response. No preview or test-send result was accepted.");
+      return;
+    }
     if (!response.ok) {
       setError(getErrorMessage(payload));
       return;
@@ -147,7 +151,7 @@ export function NotificationPreviewPanel({
             </label>
           </div>
           {error ? (
-            <div className="notice notice--spaced">
+            <div className="notice notice--error notice--spaced" role="alert">
               <strong>Preview failed.</strong>
               <span className="muted">{error}</span>
             </div>
@@ -213,7 +217,7 @@ export function NotificationPreviewPanel({
 
             {result.test_notification ? (
               <div className="notice notice--spaced">
-                <strong>Test notification created.</strong>
+                <strong>Test notification created; delivery is not yet confirmed.</strong>
                 <span className="muted">
                   Status: {result.test_notification.status}.{" "}
                   <Link href={`/hr-admin/notifications/${result.test_notification.id}/review`}>Open review</Link>

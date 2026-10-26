@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminTrustAuditReview } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -121,11 +120,11 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Visible events" value={data.summary.visible_event_count} trend={`${data.summary.total_event_count} matching`} />
-          <MetricTile label="Event types" value={data.summary.event_type_count} trend={`${data.summary.configured_group_count} groups`} />
-          <MetricTile label="Sources" value={data.summary.source_ref_count} trend={data.profile_source} />
-          <MetricTile label="Support sessions" value={data.summary.support_session_count} trend={data.filters.support_session_ref || "All sessions"} />
+        <div aria-label="Trust audit summary" className="tenant-access-summary-strip" role="group">
+          <article><span>Visible events</span><strong>{data.summary.visible_event_count}</strong><small>{data.summary.total_event_count} match the committed scope</small></article>
+          <article><span>Event types</span><strong>{data.summary.event_type_count}</strong><small>{data.summary.configured_group_count} evidence groups</small></article>
+          <article><span>Sources</span><strong>{data.summary.source_ref_count}</strong><small>{data.profile_source}</small></article>
+          <article><span>Support sessions</span><strong>{data.summary.support_session_count}</strong><small>{data.filters.support_session_ref || "All sessions"}</small></article>
         </div>
       </section>
 

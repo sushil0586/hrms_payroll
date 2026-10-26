@@ -1433,7 +1433,7 @@ textarea.input-control:disabled {
 .muted.text-label,
 .detail-label {
   font-family: var(--font-sans);
-  color: #738099;
+  color: #64748b;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -2353,7 +2353,7 @@ select.input-control {
   padding: 4px 9px;
   font-size: 10px;
   letter-spacing: 0.08em;
-  opacity: 0.82;
+  opacity: 1;
 }
 
 .page-intro--compact {
@@ -2674,6 +2674,9 @@ select.input-control {
 .mss-action-list {
   display: grid;
   gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .mss-action-row {
@@ -2754,6 +2757,14 @@ select.input-control {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mss-dashboard-card--personal {
+  grid-column: 1 / -1;
+}
+
+.mss-dashboard-card--personal .mss-personal-links {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .mss-approval-focus {
@@ -3008,6 +3019,10 @@ select.input-control {
 
   .mss-selected-review-band .button {
     width: 100%;
+  }
+
+  .mss-dashboard-card--personal .mss-personal-links {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .mss-approval-modal-summary {
@@ -6043,7 +6058,7 @@ select.input-control {
 
 .record-chip--accent {
   background: rgba(108, 92, 255, 0.12);
-  color: var(--color-accent-primary);
+  color: #5145cd;
   border-color: rgba(108, 92, 255, 0.18);
 }
 
@@ -6767,7 +6782,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 
 .workspace-table__row small {
   min-width: 0;
-  color: #738099;
+  color: #64748b;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.35;
@@ -9309,6 +9324,15 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
     justify-content: flex-start;
   }
 
+  .user-notification-filters .queue-toolbar__header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .user-notification-filters .queue-toolbar__meta {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
   .ess-payslip-action-band__actions,
   .ess-payslip-modal-actions,
   .user-notification-action-band__actions,
@@ -9369,7 +9393,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
   border-radius: 999px;
   border: 1px solid var(--line);
   background: rgba(248, 249, 255, 0.9);
-  color: var(--muted);
+  color: #626984;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -10208,6 +10232,10 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
   letter-spacing: 0;
 }
 
+.workflow-workbench .record-card__label {
+  color: #596579;
+}
+
 .workflow-metric-grid {
   grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
   gap: 12px;
@@ -10508,7 +10536,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 }
 
 .payroll-cycle-step em {
-  color: #718096;
+  color: #526174;
   font-size: 11px;
   font-style: normal;
   line-height: 1.35;
@@ -12943,7 +12971,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 
 .platform-permission-filters {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(180px, 220px) minmax(150px, 190px) auto;
+  grid-template-columns: minmax(240px, 1fr) repeat(3, minmax(145px, 190px)) auto;
   gap: 12px;
   align-items: end;
   padding: 16px;
@@ -12951,6 +12979,38 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.platform-permission-filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: baseline;
+  margin-top: 10px;
+  padding: 0 2px;
+  color: #526174;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.platform-permission-filter-summary strong {
+  color: #111827;
+}
+
+.platform-permission-filter-summary small {
+  flex-basis: 100%;
+}
+
+.tenant-modal.hr-admin-action-modal .hr-admin-action-modal__body {
+  max-height: calc(min(88vh, 760px) - 64px);
+}
+
+.tenant-modal.hr-admin-action-modal {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.tenant-modal.hr-admin-action-modal .hr-admin-action-modal__footer .tenant-modal__actions {
+  width: 100%;
 }
 
 .platform-permission-filters__actions,
@@ -14089,6 +14149,53 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
   background: #ffffff;
 }
 
+.platform-admin-shell .platform-phase2-summary .tenant-access-summary-strip {
+  border-radius: 8px;
+  border-color: rgba(203, 213, 225, 0.82);
+  box-shadow: 0 16px 38px -36px rgba(15, 23, 42, 0.22);
+}
+
+.platform-audit-filters {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(12rem, 0.5fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.platform-audit-filters .button-row {
+  justify-content: flex-end;
+}
+
+.tenant-next-action-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 14px 16px;
+}
+
+.tenant-next-action-card .workspace-card__eyebrow { color: #525a75; }
+.tenant-next-action-card .tenant-section-copy { color: #526075; }
+.tenant-next-action-card h2 { margin: 3px 0 0; }
+
+@media (max-width: 760px) {
+  .platform-audit-filters { grid-template-columns: 1fr; }
+  .platform-audit-filters .button-row { justify-content: stretch; }
+  .platform-audit-filters .button-row > * { flex: 1 1 auto; }
+  .tenant-next-action-card { align-items: stretch; flex-direction: column; }
+}
+
+.platform-admin-shell .platform-local-filter-note {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .platform-admin-shell .employee-master-layout,
 .platform-admin-shell .support-session-grid {
   gap: 16px;
@@ -14096,6 +14203,11 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 
 .platform-admin-shell .employee-directory-item {
   border-radius: 8px;
+}
+
+.platform-admin-shell .employee-directory-item__meta,
+.platform-admin-shell .employee-directory-item__meta span {
+  color: #5f667a;
 }
 
 @media (max-width: 1280px) {
@@ -15156,11 +15268,15 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 }
 
 .tenant-setup-area p,
-.tenant-setup-area span {
+.tenant-setup-area__evidence {
   color: #64748b;
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.tenant-setup-sidecar__hero span {
+  color: #475569;
 }
 
 .workspace-tone--tenant {
@@ -17048,6 +17164,9 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 
 .notification-queue-card {
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 12px;
 }
 
@@ -17071,7 +17190,10 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 
 .notification-queue-card__main h3,
 .notification-queue-card__main p {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .notification-queue-card__main h3 {
@@ -17416,7 +17538,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
   --notification-title: #111827;
   --notification-copy: #475569;
   --notification-muted: #64748b;
-  --notification-faint: #7c879d;
+  --notification-faint: #596579;
   color: var(--notification-title);
   font-size: var(--type-size-base);
   letter-spacing: var(--type-tracking-normal);
@@ -17814,7 +17936,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 
 .form-field > .muted:first-child,
 .form-field > span:first-child {
-  color: #738099;
+  color: #64748b;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -19756,7 +19878,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 
 .readiness-badge--blocked {
   background: #fef2f2;
-  color: #dc2626;
+  color: #b91c1c;
 }
 
 .payroll-source-grid,
@@ -19939,7 +20061,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 }
 
 .payroll-setup-tab span {
-  color: #64748b;
+  color: #526174;
   min-width: 0;
   font-size: 11px;
   line-height: 1.35;
@@ -20120,7 +20242,7 @@ a.payroll-setup-mini-card {
 .payroll-setup-mini-card span,
 .payroll-setup-period span,
 .payroll-setup-count {
-  color: #64748b;
+  color: #526174;
   font-size: 11.5px;
   line-height: 1.4;
 }
@@ -23716,6 +23838,19 @@ a.payroll-setup-mini-card {
   line-height: 1.4;
 }
 
+.payroll-provider-lane-step .readiness-badge--warning {
+  color: #9a3412;
+}
+
+.shell--payroll-providers .readiness-badge--sandbox_ready {
+  background: #eff6ff;
+  color: #334155;
+}
+
+.shell--payroll-providers .workspace-card__eyebrow {
+  color: #566176;
+}
+
 .payroll-provider-lane-blockers {
   display: grid;
   gap: 8px;
@@ -24489,6 +24624,18 @@ a.payroll-setup-mini-card {
   overflow-wrap: anywhere;
 }
 
+.tenant-console-row > .readiness-badge--ready {
+  color: #047857;
+}
+
+.tenant-console-row > .readiness-badge--warning {
+  color: #9a3412;
+}
+
+.tenant-console-row > .readiness-badge--blocked {
+  color: #b91c1c;
+}
+
 .tenant-console-empty {
   margin: 0;
 }
@@ -24573,6 +24720,97 @@ a.payroll-setup-mini-card {
   gap: 14px;
 }
 
+.tenant-access-summary-strip {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.94);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.tenant-access-summary-strip article {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  border-right: 1px solid rgba(226, 232, 240, 0.94);
+  padding: 9px 12px;
+}
+
+.tenant-access-summary-strip article:last-child {
+  border-right: 0;
+}
+
+.tenant-access-summary-strip span,
+.tenant-access-summary-strip small {
+  color: #526174;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.tenant-access-summary-strip span {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tenant-access-summary-strip strong {
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.platform-phase3-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.platform-next-action {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(99, 102, 241, 0.24);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.92), rgba(255, 255, 255, 0.96));
+  padding: 11px 12px;
+}
+
+.platform-next-action > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.platform-next-action strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.platform-next-action span:not(.eyebrow) {
+  color: #526174;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .platform-next-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .platform-next-action .button {
+    width: 100%;
+  }
+}
+
 .tenant-role-design-guide {
   display: grid;
   min-width: 0;
@@ -24621,6 +24859,36 @@ a.payroll-setup-mini-card {
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 16px;
   align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .tenant-role-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .tenant-access-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tenant-access-summary-strip article:nth-child(2) {
+    border-right: 0;
+  }
+
+  .tenant-access-summary-strip article:nth-child(-n + 2) {
+    border-bottom: 1px solid rgba(226, 232, 240, 0.94);
+  }
+
+  .tenant-role-row__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tenant-role-row__actions .button {
+    flex: 1 1 120px;
+    width: auto;
+  }
 }
 
 .tenant-role-row {
@@ -25124,12 +25392,12 @@ a.payroll-setup-mini-card {
   padding: 6px 8px;
 }
 
-.tenant-security-state--ready {
+.tenant-membership-row .tenant-security-state--ready {
   background: rgba(220, 252, 231, 0.9);
   color: #166534;
 }
 
-.tenant-security-state--attention {
+.tenant-membership-row .tenant-security-state--attention {
   background: rgba(255, 247, 237, 0.95);
   color: #9a3412;
 }
@@ -25365,6 +25633,22 @@ a.payroll-setup-mini-card {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.3;
+}
+
+.tenant-permission-overview__group .tenant-permission-risk--low {
+  color: #166534;
+}
+
+.tenant-permission-overview__group .tenant-permission-risk--medium {
+  color: #075985;
+}
+
+.tenant-permission-overview__group .tenant-permission-risk--high {
+  color: #92400e;
+}
+
+.tenant-permission-overview__group .tenant-permission-risk--critical {
+  color: #991b1b;
 }
 
 .tenant-permission-overview__group ul {

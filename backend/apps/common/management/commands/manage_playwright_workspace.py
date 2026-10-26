@@ -81,9 +81,14 @@ from apps.organizations.models import (
 )
 from apps.notifications.models import Notification, NotificationAudienceType, NotificationChannel, NotificationPriority, NotificationStatus
 from apps.payroll.models import (
+    AccountingPeriod,
+    AccountingPeriodStatusEvent,
     EmployeeSalaryAssignment,
     EmployeeStatutoryDeclaration,
     EmployeeStatutoryProfile,
+    FiscalCalendar,
+    FiscalYear,
+    FiscalYearStatusEvent,
     PayrollArtifactAccessEvent,
     PayrollArtifactSignedAccessGrant,
     PayrollAdjustment,
@@ -223,6 +228,7 @@ class Command(BaseCommand):
         self._create_document_fixture(tenant, people["employee"])
         self._create_payroll(tenant, people["employee"], org, marker)
         self._create_leave_and_attendance(tenant, people["employee"], org, marker)
+        self._create_employee_notification(tenant, people["employee"])
         self._create_manager_notification(tenant, people["manager"])
         return tenant
 
@@ -238,6 +244,7 @@ class Command(BaseCommand):
         self._create_document_fixture(tenant, people["employee"])
         self._create_payroll(tenant, people["employee"], org, marker)
         self._create_leave_and_attendance(tenant, people["employee"], org, marker)
+        self._create_employee_notification(tenant, people["employee"])
         self._create_manager_notification(tenant, people["manager"])
         return tenant
 
@@ -336,6 +343,25 @@ class Command(BaseCommand):
             priority=NotificationPriority.HIGH,
             delivered_at=timezone.now(),
             payload={"href": "/mss/approvals?queue=leave", "owner": "playwright"},
+        )
+
+    def _create_employee_notification(self, tenant: Tenant, employee: Employee) -> None:
+        leave_request = tenant.leave_requests.get(status=LeaveRequestStatus.PENDING)
+        Notification.objects.create(
+            tenant=tenant,
+            channel=NotificationChannel.IN_APP,
+            audience_type=NotificationAudienceType.EMPLOYEE,
+            subject_type="leave_request",
+            subject_identifier=str(leave_request.id),
+            recipient_membership=employee.membership,
+            recipient_identifier=employee.employee_code,
+            title="Leave request received",
+            subject="Your leave request is pending review",
+            body="A deterministic QA leave request is available in the employee inbox.",
+            status=NotificationStatus.DELIVERED,
+            priority=NotificationPriority.NORMAL,
+            delivered_at=timezone.now(),
+            payload={"leave_request_id": str(leave_request.id), "owner": "playwright"},
         )
 
     def _create_payroll(self, tenant: Tenant, employee: Employee, org: dict, marker: dict) -> None:
@@ -594,6 +620,8 @@ class Command(BaseCommand):
                 "attendance_regularization_id": str(tenant.attendance_regularizations.get(status=RegularizationStatus.PENDING).id),
                 "payroll_run_id": str(tenant.payroll_runs.get(code="qa-inputs-locked").id),
                 "platform_onboarding_id": str(tenant.onboarding_record.id),
+                "manager_notification_id": str(tenant.notifications.get(subject_identifier="qa-manager-approval").id),
+                "employee_notification_id": str(tenant.notifications.get(title="Leave request received").id),
             },
             "checks": checks,
             "platform_admin": {"username": platform_admin.username, "platform_only": not platform_admin.tenant_memberships.exists()},
@@ -644,6 +672,11 @@ class Command(BaseCommand):
             PayrollSettlementLine.objects.filter(tenant=tenant).delete()
             PayrollSettlement.objects.filter(tenant=tenant).delete()
             PayrollAdjustment.objects.filter(tenant=tenant).delete()
+            AccountingPeriodStatusEvent.objects.filter(tenant=tenant).delete()
+            FiscalYearStatusEvent.objects.filter(tenant=tenant).delete()
+            AccountingPeriod.objects.filter(tenant=tenant).delete()
+            FiscalYear.objects.filter(tenant=tenant).delete()
+            FiscalCalendar.objects.filter(tenant=tenant).delete()
             PayrollInputSnapshot.objects.filter(tenant=tenant).delete()
             AttendancePeriodCloseEvent.objects.filter(tenant=tenant).delete()
             AttendancePeriodClose.objects.filter(tenant=tenant).delete()

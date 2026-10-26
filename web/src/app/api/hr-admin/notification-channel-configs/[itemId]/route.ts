@@ -16,6 +16,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     body: JSON.stringify(body),
     cache: "no-store",
   });
-  const payload = await upstream.json().catch(() => ({}));
+  const payload = await upstream.json().catch(() => null);
+  if (payload === null) return NextResponse.json({ detail: "The notification service returned an unreadable response." }, { status: 502 });
   return NextResponse.json(payload, { status: upstream.status });
 }

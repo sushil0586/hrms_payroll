@@ -213,21 +213,31 @@ export function NotificationDeliveryManager({ options }: Props) {
       return;
     }
 
-    const response = await fetch(`/api/hr-admin/notification-channel-configs/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        channel: currentValue.channel,
-        is_enabled: currentValue.is_enabled,
-        backend_key: currentValue.backend_key,
-        sender_identifier: currentValue.sender_identifier,
-        sender_address: currentValue.sender_address,
-        provider_config: providerConfig,
-        delivery_policy: deliveryPolicy,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/notification-channel-configs/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: currentValue.channel,
+          is_enabled: currentValue.is_enabled,
+          backend_key: currentValue.backend_key,
+          sender_identifier: currentValue.sender_identifier,
+          sender_address: currentValue.sender_address,
+          provider_config: providerConfig,
+          delivery_policy: deliveryPolicy,
+        }),
+      });
+    } catch {
+      setSaveStates((current) => ({ ...current, [item.id]: { error: "The delivery service did not respond. Your changes are retained; try again.", success: "", isSubmitting: false } }));
+      return;
+    }
 
-    const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => null);
+    if (payload === null) {
+      setSaveStates((current) => ({ ...current, [item.id]: { error: "The delivery service returned an unreadable response. Your changes are retained; try again.", success: "", isSubmitting: false } }));
+      return;
+    }
     if (!response.ok) {
       setSaveStates((current) => ({
         ...current,
@@ -278,7 +288,7 @@ export function NotificationDeliveryManager({ options }: Props) {
         }));
 
         return (
-          <section className="form-shell-card" key={item.id}>
+          <section className="form-shell-card" data-channel-config={item.channel} key={item.id}>
             <div className="form-shell-card__header">
               <div>
                 <h2>{channelLabels[item.channel] ?? formatLabel(item.channel)}</h2>
@@ -450,13 +460,13 @@ export function NotificationDeliveryManager({ options }: Props) {
             </div>
 
             {state.error ? (
-              <div className="notice notice--spaced">
+              <div className="notice notice--error notice--spaced" role="alert">
                 <strong>Save failed.</strong>
                 <span className="muted">{state.error}</span>
               </div>
             ) : null}
             {state.success ? (
-              <div className="notice notice--spaced">
+              <div className="notice notice--spaced" role="status">
                 <strong>Saved.</strong>
                 <span className="muted">{state.success}</span>
               </div>
@@ -464,7 +474,7 @@ export function NotificationDeliveryManager({ options }: Props) {
 
             <div className="form-shell-card__actions form-shell-card__actions--start">
               <span className="muted">Channel config stays tenant-scoped and feeds the notification queue processor.</span>
-              <button className="button button--primary" disabled={state.isSubmitting} onClick={() => save(item)} type="button">
+              <button aria-label={`Save ${channelLabels[item.channel] ?? formatLabel(item.channel)} delivery settings`} className="button button--primary" disabled={state.isSubmitting} onClick={() => save(item)} type="button">
                 {state.isSubmitting ? "Saving..." : "Save delivery settings"}
               </button>
             </div>

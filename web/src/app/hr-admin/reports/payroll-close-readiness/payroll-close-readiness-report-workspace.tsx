@@ -1,12 +1,13 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { useCorrectedWorkspaceQueryPage, useWorkspaceQueryFilter, useWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 
 
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type {
   HrAdminPayrollAdjustment,
@@ -103,14 +104,14 @@ export function PayrollCloseReadinessReportWorkspace({
   outputBatches: HrAdminPayrollOutputBatch[];
   artifacts: HrAdminPayrollOutputArtifact[];
 }) {
-  const [query, setQuery] = useState("");
-  const [runId, setRunId] = useState("All");
-  const [state, setState] = useState("All");
-  const [risk, setRisk] = useState("All");
-  const [category, setCategory] = useState("All");
-  const [outputStatus, setOutputStatus] = useState("All");
-  const [sortBy, setSortBy] = useState("risk");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [runId, setRunId] = useWorkspaceQueryFilter("payroll_run_id", "All");
+  const [state, setState] = useWorkspaceQueryFilter("state", "All");
+  const [risk, setRisk] = useWorkspaceQueryFilter("risk", "All");
+  const [category, setCategory] = useWorkspaceQueryFilter("category", "All");
+  const [outputStatus, setOutputStatus] = useWorkspaceQueryFilter("output_status", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sort", "risk");
+  const [page, setPage] = useWorkspaceQueryPage();
 
   const rows = useMemo<CloseRow[]>(() => {
     return runs.map((run) => {
@@ -197,7 +198,7 @@ export function PayrollCloseReadinessReportWorkspace({
   }, [category, outputStatus, query, risk, rows, runId, sortBy, state]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const exportHref = useMemo(() => {

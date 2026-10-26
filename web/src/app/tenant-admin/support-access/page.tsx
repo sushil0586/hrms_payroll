@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -62,11 +61,11 @@ export default async function TenantAdminSupportAccessPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Active or pending" value={activeGrants.length} trend="Support grants" />
-          <MetricTile label="Grant rows" value={data.support_access_management.recent_grants.length} trend="Recent support access" />
-          <MetricTile label="Scopes" value={data.support_access_management.scope_options.length} trend="Assignable support scopes" />
-          <MetricTile label="Max duration" value={`${data.support_access_management.max_duration_minutes}m`} trend={data.support_access_management.enabled ? "Enabled" : "Disabled"} />
+        <div aria-label="Support access summary" className="tenant-access-summary-strip" role="group">
+          <article><span>Active or pending</span><strong>{activeGrants.length}</strong><small>Requested, approved, or active</small></article>
+          <article><span>Grant history</span><strong>{data.support_access_management.recent_grants.length}</strong><small>Recent governed grants</small></article>
+          <article><span>Allowed scopes</span><strong>{data.support_access_management.scope_options.length}</strong><small>Choose the minimum required</small></article>
+          <article><span>Maximum duration</span><strong>{data.support_access_management.max_duration_minutes}m</strong><small>{data.support_access_management.enabled ? "Requests enabled" : "Requests disabled"}</small></article>
         </div>
       </section>
 

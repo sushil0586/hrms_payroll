@@ -1,12 +1,13 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { useCorrectedWorkspaceQueryPage, useWorkspaceQueryFilter, useWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 
 
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type {
   HrAdminPayrollProviderCallbackEvent,
@@ -123,12 +124,12 @@ export function ProviderFilingReceiptsReportWorkspace({
   providerJobs: HrAdminPayrollProviderJob[];
   retryEvents: HrAdminPayrollProviderRetryEvent[];
 }) {
-  const [query, setQuery] = useState("");
-  const [deliveryStatus, setDeliveryStatus] = useState("All");
-  const [providerStatus, setProviderStatus] = useState("All");
-  const [provider, setProvider] = useState("All");
-  const [sortBy, setSortBy] = useState("submitted");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [deliveryStatus, setDeliveryStatus] = useWorkspaceQueryFilter("delivery_status", "All");
+  const [providerStatus, setProviderStatus] = useWorkspaceQueryFilter("provider_status", "All");
+  const [provider, setProvider] = useWorkspaceQueryFilter("provider", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sort", "submitted");
+  const [page, setPage] = useWorkspaceQueryPage();
 
   const rows = useMemo(() => buildRows({ callbackEvents, deliveries, providerJobs, retryEvents }), [callbackEvents, deliveries, providerJobs, retryEvents]);
   const deliveryStatuses = useMemo(() => ["All", ...unique(rows.map((row) => row.deliveryStatus))], [rows]);
@@ -168,7 +169,7 @@ export function ProviderFilingReceiptsReportWorkspace({
   }, [deliveryStatus, provider, providerStatus, query, rows, sortBy]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const exportHref = useMemo(() => {

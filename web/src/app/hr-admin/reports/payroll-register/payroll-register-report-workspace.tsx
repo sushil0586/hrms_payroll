@@ -4,7 +4,8 @@ import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-tabl
 
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch } from "@/lib/types";
@@ -15,6 +16,8 @@ type PayrollRegisterRow = {
 };
 
 const PAGE_SIZE = 6;
+const DEFAULT_SORT = "published_at_desc";
+const SORT_OPTIONS = [DEFAULT_SORT, "run_name", "net_pay_desc", "net_pay_asc"] as const;
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -48,6 +51,35 @@ function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort();
 }
 
+function optionValue(value: string | null, options: string[]) {
+  return value && options.includes(value) ? value : "All";
+}
+
+function sortValue(value: string | null) {
+  return value && SORT_OPTIONS.some((option) => option === value) ? value : DEFAULT_SORT;
+}
+
+function pageValue(value: string | null) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function screenParams({ artifactStatus, batchStatus, page, query, sortBy }: {
+  artifactStatus: string;
+  batchStatus: string;
+  page: number;
+  query: string;
+  sortBy: string;
+}) {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("q", query.trim());
+  if (batchStatus !== "All") params.set("batch_status", batchStatus);
+  if (artifactStatus !== "All") params.set("artifact_status", artifactStatus);
+  if (sortBy !== DEFAULT_SORT) params.set("sort", sortBy);
+  if (page > 1) params.set("page", String(page));
+  return params;
+}
+
 export function PayrollRegisterReportWorkspace({
   artifacts,
   batches,
@@ -55,11 +87,10 @@ export function PayrollRegisterReportWorkspace({
   artifacts: HrAdminPayrollOutputArtifact[];
   batches: HrAdminPayrollOutputBatch[];
 }) {
-  const [query, setQuery] = useState("");
-  const [batchStatus, setBatchStatus] = useState("All");
-  const [artifactStatus, setArtifactStatus] = useState("All");
-  const [sortBy, setSortBy] = useState("published_at_desc");
-  const [page, setPage] = useState(1);
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
 
   const rows = useMemo<PayrollRegisterRow[]>(() => {
     const batchById = new Map(batches.map((batch) => [batch.id, batch]));
@@ -73,12 +104,32 @@ export function PayrollRegisterReportWorkspace({
 
   const batchStatuses = useMemo(() => ["All", ...unique(batches.map((batch) => batch.status))], [batches]);
   const artifactStatuses = useMemo(() => ["All", ...unique(rows.map((row) => row.artifact.status))], [rows]);
+  const committedQuery = searchParams.get("q")?.trim() ?? "";
+  const committedBatchStatus = optionValue(searchParams.get("batch_status"), batchStatuses);
+  const committedArtifactStatus = optionValue(searchParams.get("artifact_status"), artifactStatuses);
+  const committedSortBy = sortValue(searchParams.get("sort"));
+  const requestedPage = pageValue(searchParams.get("page"));
+  const [draft, setDraft] = useState({
+    key: searchKey,
+    query: committedQuery,
+    batchStatus: committedBatchStatus,
+    artifactStatus: committedArtifactStatus,
+    sortBy: committedSortBy,
+  });
+  const activeDraft = draft.key === searchKey
+    ? draft
+    : { key: searchKey, query: committedQuery, batchStatus: committedBatchStatus, artifactStatus: committedArtifactStatus, sortBy: committedSortBy };
+  const { query, batchStatus, artifactStatus, sortBy } = activeDraft;
+
+  function updateDraft(next: Partial<Omit<typeof activeDraft, "key">>) {
+    setDraft({ ...activeDraft, ...next, key: searchKey });
+  }
 
   const filteredRows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = committedQuery.toLowerCase();
     const nextRows = rows.filter(({ artifact, batch }) => {
-      const matchesBatchStatus = batchStatus === "All" || batch?.status === batchStatus;
-      const matchesArtifactStatus = artifactStatus === "All" || artifact.status === artifactStatus;
+      const matchesBatchStatus = committedBatchStatus === "All" || batch?.status === committedBatchStatus;
+      const matchesArtifactStatus = committedArtifactStatus === "All" || artifact.status === committedArtifactStatus;
       const matchesQuery =
         !normalizedQuery ||
         [
@@ -97,21 +148,17 @@ export function PayrollRegisterReportWorkspace({
     });
 
     return nextRows.sort((left, right) => {
-      if (sortBy === "net_pay_desc") {
-        return Number(right.artifact.totals_snapshot.net_pay ?? 0) - Number(left.artifact.totals_snapshot.net_pay ?? 0);
-      }
-      if (sortBy === "net_pay_asc") {
-        return Number(left.artifact.totals_snapshot.net_pay ?? 0) - Number(right.artifact.totals_snapshot.net_pay ?? 0);
-      }
-      if (sortBy === "run_name") {
-        return String(left.batch?.payroll_run_name ?? "").localeCompare(String(right.batch?.payroll_run_name ?? ""));
-      }
-      return String(right.artifact.published_at ?? right.artifact.created_at).localeCompare(String(left.artifact.published_at ?? left.artifact.created_at));
+      let result = 0;
+      if (committedSortBy === "net_pay_desc") result = Number(right.artifact.totals_snapshot.net_pay ?? 0) - Number(left.artifact.totals_snapshot.net_pay ?? 0);
+      if (committedSortBy === "net_pay_asc") result = Number(left.artifact.totals_snapshot.net_pay ?? 0) - Number(right.artifact.totals_snapshot.net_pay ?? 0);
+      if (committedSortBy === "run_name") result = String(left.batch?.payroll_run_name ?? "").localeCompare(String(right.batch?.payroll_run_name ?? ""));
+      if (committedSortBy === DEFAULT_SORT) result = String(right.artifact.published_at ?? right.artifact.created_at).localeCompare(String(left.artifact.published_at ?? left.artifact.created_at));
+      return result || left.artifact.id.localeCompare(right.artifact.id);
     });
-  }, [artifactStatus, batchStatus, query, rows, sortBy]);
+  }, [committedArtifactStatus, committedBatchStatus, committedQuery, committedSortBy, rows]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = Math.min(requestedPage, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const totalNetPay = filteredRows.reduce((sum, row) => sum + Number(row.artifact.totals_snapshot.net_pay ?? 0), 0);
@@ -119,25 +166,41 @@ export function PayrollRegisterReportWorkspace({
   const totalDeductions = filteredRows.reduce((sum, row) => sum + Number(row.artifact.totals_snapshot.employee_deductions ?? 0), 0);
   const exportHref = useMemo(() => {
     const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
-    if (batchStatus !== "All") params.set("batch_status", batchStatus);
-    if (artifactStatus !== "All") params.set("artifact_status", artifactStatus);
-    params.set("sort", sortBy);
+    if (committedQuery) params.set("q", committedQuery);
+    if (committedBatchStatus !== "All") params.set("batch_status", committedBatchStatus);
+    if (committedArtifactStatus !== "All") params.set("artifact_status", committedArtifactStatus);
+    params.set("sort", committedSortBy);
     return `/api/hr-admin/reports/payroll-register?${params.toString()}`;
-  }, [artifactStatus, batchStatus, query, sortBy]);
+  }, [committedArtifactStatus, committedBatchStatus, committedQuery, committedSortBy]);
   const manifestHref = `${exportHref}&format=manifest`;
 
-  function updateFilter(action: () => void) {
-    action();
-    setPage(1);
+  const committedScreenParams = screenParams({ artifactStatus: committedArtifactStatus, batchStatus: committedBatchStatus, page: currentPage, query: committedQuery, sortBy: committedSortBy });
+  const returnTo = `${pathname}${committedScreenParams.size ? `?${committedScreenParams.toString()}` : ""}`;
+
+  useEffect(() => {
+    const params = screenParams({ artifactStatus: committedArtifactStatus, batchStatus: committedBatchStatus, page: currentPage, query: committedQuery, sortBy: committedSortBy });
+    if (searchKey === params.toString()) return;
+    router.replace(`${pathname}${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
+  }, [committedArtifactStatus, committedBatchStatus, committedQuery, committedSortBy, currentPage, pathname, router, searchKey]);
+
+  function applyFilters(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const params = screenParams({ artifactStatus, batchStatus, page: 1, query, sortBy });
+    router.push(`${pathname}${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
   }
 
   function clearFilters() {
-    setQuery("");
-    setBatchStatus("All");
-    setArtifactStatus("All");
-    setSortBy("published_at_desc");
-    setPage(1);
+    router.push(pathname, { scroll: false });
+  }
+
+  function changePage(nextPage: number) {
+    const params = screenParams({ artifactStatus: committedArtifactStatus, batchStatus: committedBatchStatus, page: nextPage, query: committedQuery, sortBy: committedSortBy });
+    router.push(`${pathname}${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
+  }
+
+  function outputHref(artifact: HrAdminPayrollOutputArtifact) {
+    const params = new URLSearchParams({ tab: "detail", batchId: artifact.output_batch_id, artifactId: artifact.id, returnTo });
+    return `/hr-admin/payroll-outputs?${params.toString()}`;
   }
 
   return (
@@ -179,13 +242,16 @@ export function PayrollRegisterReportWorkspace({
           </article>
         </div>
 
-        <div className="report-filter-panel" aria-label="Payroll register filters">
+        <form className="report-filter-panel" aria-label="Payroll register filters" onSubmit={applyFilters}>
           <div className="report-filter-panel__header">
             <div>
               <strong>Filter payroll register</strong>
               <span>Search payroll output by run, file, profile, hash, status, or value sort.</span>
             </div>
-            <button className="button button--ghost" type="button" onClick={clearFilters}>Clear filters</button>
+            <div className="report-command-panel__actions">
+              <button className="button button--ghost" type="button" onClick={clearFilters}>Clear filters</button>
+              <button className="button button--primary" type="submit">Apply filters</button>
+            </div>
           </div>
           <div className="report-filter-grid report-filter-grid--payroll">
           <label className="report-filter-field">
@@ -194,13 +260,13 @@ export function PayrollRegisterReportWorkspace({
               className="input-control"
               type="search"
               value={query}
-              onChange={(event) => updateFilter(() => setQuery(event.target.value))}
+              onChange={(event) => updateDraft({ query: event.target.value })}
               placeholder="Search run, file, profile, hash"
             />
           </label>
           <label className="report-filter-field">
             Batch status
-            <select className="input-control" value={batchStatus} onChange={(event) => updateFilter(() => setBatchStatus(event.target.value))}>
+            <select className="input-control" value={batchStatus} onChange={(event) => updateDraft({ batchStatus: event.target.value })}>
               {batchStatuses.map((item) => (
                 <option key={item} value={item}>
                   {item === "All" ? item : titleCase(item)}
@@ -210,7 +276,7 @@ export function PayrollRegisterReportWorkspace({
           </label>
           <label className="report-filter-field">
             Artifact status
-            <select className="input-control" value={artifactStatus} onChange={(event) => updateFilter(() => setArtifactStatus(event.target.value))}>
+            <select className="input-control" value={artifactStatus} onChange={(event) => updateDraft({ artifactStatus: event.target.value })}>
               {artifactStatuses.map((item) => (
                 <option key={item} value={item}>
                   {item === "All" ? item : titleCase(item)}
@@ -220,7 +286,7 @@ export function PayrollRegisterReportWorkspace({
           </label>
           <label className="report-filter-field">
             Sort
-            <select className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
+            <select className="input-control" value={sortBy} onChange={(event) => updateDraft({ sortBy: event.target.value })}>
               <option value="published_at_desc">Published newest</option>
               <option value="run_name">Run name</option>
               <option value="net_pay_desc">Net pay high to low</option>
@@ -228,7 +294,7 @@ export function PayrollRegisterReportWorkspace({
             </select>
           </label>
           </div>
-        </div>
+        </form>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip">
@@ -282,7 +348,7 @@ export function PayrollRegisterReportWorkspace({
                   </td>
                   <td>
                     <div className="report-row-actions">
-                      <Link className="button button--secondary" href={`/hr-admin/payroll-outputs?batchId=${artifact.output_batch_id}&artifactId=${artifact.id}`}>
+                      <Link className="button button--secondary" href={outputHref(artifact)}>
                         Open
                       </Link>
                       {artifact.is_downloadable ? (
@@ -306,13 +372,13 @@ export function PayrollRegisterReportWorkspace({
         </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" aria-label="Payroll register pagination">
-          <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+          <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => changePage(currentPage - 1)}>
             Previous
           </button>
           <span>
             Showing {filteredRows.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, filteredRows.length)} of {filteredRows.length}
           </span>
-          <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>
+          <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => changePage(currentPage + 1)}>
             Next
           </button>
         </div>

@@ -1,10 +1,11 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { useCorrectedWorkspaceQueryPage, useWorkspaceQueryFilter, useWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type {
@@ -158,10 +159,10 @@ export function EsicContributionReadinessWorkspace({
   deliveries: HrAdminPayrollFinanceHandoffSetupResponse["deliveries"];
   statutory: HrAdminPayrollStatutorySetupResponse;
 }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All");
-  const [area, setArea] = useState("All");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "All");
+  const [area, setArea] = useWorkspaceQueryFilter("area", "All");
+  const [page, setPage] = useWorkspaceQueryPage();
 
   const rows = useMemo(() => buildRows({ artifacts, deliveries, statutory }), [artifacts, deliveries, statutory]);
   const areas = useMemo(() => ["All", ...Array.from(new Set(rows.map((row) => row.area))).sort()], [rows]);
@@ -176,7 +177,7 @@ export function EsicContributionReadinessWorkspace({
   }, [area, query, rows, status]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const readyCount = rows.filter((row) => row.status === "Ready").length;

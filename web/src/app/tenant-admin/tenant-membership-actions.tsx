@@ -250,7 +250,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       closeInviteDialog();
       router.refresh();
     } catch {
-      setFormError("Unable to reach the server. Your invite details were preserved; try again.");
+      setFormError("The invite outcome is unconfirmed. Your details were preserved; check the directory or audit before retrying.");
     } finally {
       setBusyRef("");
     }
@@ -299,7 +299,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       closeConfirmation();
       router.refresh();
     } catch {
-      setFormError("Unable to reach the server. Your changes were preserved; try again.");
+      setFormError("The access-change outcome is unconfirmed. Your changes were preserved; check the member or audit before retrying.");
     } finally {
       setBusyRef("");
     }

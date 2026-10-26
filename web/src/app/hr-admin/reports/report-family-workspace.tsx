@@ -3,7 +3,8 @@
 import Link from "next/link";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo, useState } from "react";
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { useMemo } from "react";
 
 import type { ReportCatalogItem } from "@/lib/report-catalog";
 
@@ -31,9 +32,9 @@ function manifestHref(exportRoute: string) {
 }
 
 export function ReportFamilyWorkspace({ reports, groups, exportHref = "/hr-admin/reports/export-audits" }: Props) {
-  const [activeGroup, setActiveGroup] = useState(groups[0]?.key ?? "all");
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [activeGroup, setActiveGroup] = useWorkspaceQueryFilter("group", groups[0]?.key ?? "all");
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [statusFilter, setStatusFilter] = useWorkspaceQueryFilter("status", "All");
   const selectedGroup = groups.find((group) => group.key === activeGroup) ?? groups[0];
   const visibleReports = useMemo(() => {
     if (!selectedGroup) return reports;

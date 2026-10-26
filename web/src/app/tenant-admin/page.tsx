@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
 import { requireSessionPermission, sessionHasAnyPermission } from "@/lib/workspace-access";
@@ -292,23 +291,29 @@ export default async function TenantAdminConsolePage() {
         }
       />
 
-      <section className="section tenant-enterprise-kpis" id="dashboard">
-        <div className="tenant-status-card">
-          <span className="tenant-status-card__icon" aria-hidden="true">▦</span>
-          <div>
-            <span className="metric-tile__label">Tenant Status</span>
-            <strong>{data.tenant.name}</strong>
-            <small>{data.tenant.code} · {data.tenant.country_code} · {data.tenant.timezone}</small>
-          </div>
-          <span className={statusBadgeClass(data.tenant.status)}>{titleCase(data.tenant.status)}</span>
+      <section className="section" id="dashboard">
+        <div aria-label="Tenant account summary" className="tenant-access-summary-strip" role="group">
+          <article>
+            <span>Tenant status</span>
+            <strong>{titleCase(data.tenant.status)}</strong>
+            <small>{data.tenant.name} · {data.tenant.code}</small>
+          </article>
+          <article>
+            <span>Configuration setup</span>
+            <strong>{setupCompletion}%</strong>
+            <small>{setupDoneCount} of {setupSteps.length} required steps</small>
+          </article>
+          <article>
+            <span>Active users</span>
+            <strong>{data.summary.active_membership_count}</strong>
+            <small>{data.summary.role_count} roles configured</small>
+          </article>
+          <article>
+            <span>Plan and billing</span>
+            <strong>{titleCase(commercial.plan.plan_ref)}</strong>
+            <small>{data.seat_usage.limit_value ? `${data.seat_usage.current_value} of ${data.seat_usage.limit_value} users` : "Unlimited users"}</small>
+          </article>
         </div>
-        <MetricTile label="Configuration Setup" value={`${setupCompletion}%`} trend={`${setupDoneCount} of ${setupSteps.length} required steps complete`} />
-        <MetricTile label="Active Users" value={data.summary.active_membership_count} trend={`${data.summary.role_count} roles configured`} />
-        <MetricTile
-          label="Plan & Billing"
-          value={titleCase(commercial.plan.plan_ref)}
-          trend={data.seat_usage.limit_value ? `${data.seat_usage.current_value} of ${data.seat_usage.limit_value} users` : "Unlimited users"}
-        />
       </section>
 
       <section className="section tenant-control-center tenant-control-center--dashboard" data-testid="tenant-admin-control-center">

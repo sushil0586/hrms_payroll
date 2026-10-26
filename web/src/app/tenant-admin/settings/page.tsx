@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -51,11 +50,11 @@ export default async function TenantAdminSettingsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Tenant status" value={titleCase(data.tenant.status)} trend={titleCase(data.tenant.onboarding_status)} />
-          <MetricTile label="Plan" value={titleCase(commercial.plan.plan_ref)} trend={commercial.subscription.status} />
-          <MetricTile label="Configs" value={data.configuration_health.published_count} trend={`${data.configuration_health.draft_count} drafts`} />
-          <MetricTile label="Governance" value={titleCase(data.summary.status)} trend={`${data.summary.blocked_check_count} blockers`} />
+        <div aria-label="Tenant settings summary" className="tenant-access-summary-strip" role="group">
+          <article><span>Tenant status</span><strong>{titleCase(data.tenant.status)}</strong><small>{titleCase(data.tenant.onboarding_status)}</small></article>
+          <article><span>Current plan</span><strong>{titleCase(commercial.plan.plan_ref)}</strong><small>{titleCase(commercial.subscription.status)}</small></article>
+          <article><span>Published</span><strong>{data.configuration_health.published_count}</strong><small>{data.configuration_health.draft_count} drafts excluded</small></article>
+          <article><span>Governance</span><strong>{titleCase(data.summary.status)}</strong><small>{data.summary.blocked_check_count} blockers</small></article>
         </div>
       </section>
 
@@ -152,7 +151,7 @@ export default async function TenantAdminSettingsPage() {
             <div>
               <span className="workspace-card__eyebrow">Configuration health</span>
               <h2>Published setup</h2>
-              <p className="tenant-console-empty">Recently published tenant configuration records that support account readiness.</p>
+              <p className="tenant-console-empty">Published records are the current operational configuration. Drafts remain excluded until their governed publication completes.</p>
             </div>
             <span className="record-chip">{data.configuration_health.tenant_configuration_count} configs</span>
           </div>

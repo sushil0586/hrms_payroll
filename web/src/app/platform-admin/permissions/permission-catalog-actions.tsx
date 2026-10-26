@@ -5,10 +5,10 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { PlatformPermissionCatalogItem } from "@/lib/types";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 function titleCase(value: string) {
   return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -54,7 +54,6 @@ function buildFormState(permission: PlatformPermissionCatalogItem): FormState {
 }
 
 export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const labelRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<PlatformPermissionCatalogItem | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -123,7 +122,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
       });
     } catch {
       setBusy(false);
-      setFormError("Unable to reach the server. Check your connection and try again.");
+      setFormError("The response was interrupted. Check this permission after reconnecting before retrying; your entered metadata remains here.");
       return;
     }
     const payload = await response.json().catch(() => ({}));
@@ -134,7 +133,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
     }
     setNotice(`${editing.key} updated.`);
     closeDialog();
-    refresh();
+    window.location.reload();
   }
 
   return (
@@ -144,8 +143,31 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
       </button>
       {notice ? <span className="muted">{notice}</span> : null}
 
-      {editing && form ? (
-        <HrAdminActionModal closeHref="/platform-admin/permissions" labelledBy="workspace-permission-catalog-actions" title="Edit platform permission" onClose={closeDialog} busy={busy || isRefreshing} className="tenant-modal">
+      {editing && form && typeof document !== "undefined" ? createPortal((
+        <HrAdminActionModal
+          closeHref="/platform-admin/permissions"
+          labelledBy="workspace-permission-catalog-actions"
+          title="Edit platform permission"
+          onClose={closeDialog}
+          busy={busy}
+          className="tenant-modal"
+          footer={
+            <div className="tenant-modal__actions">
+              <button className="button button--secondary" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} type="button">
+                Cancel
+              </button>
+              <AsyncActionButton
+                className="button button--primary"
+                onClick={savePermission}
+                pending={busy}
+                pendingLabel="Saving permission"
+                type="button"
+              >
+                Save permission
+              </AsyncActionButton>
+            </div>
+          }
+        >
 
 
 
@@ -228,26 +250,11 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
             </div>
 
 <div className="tenant-modal__validation" id="permission-dialog-validation" role={formError ? "alert" : "status"}>
-              {formError || "Save updates the DB catalog row and leaves runtime enforcement unchanged."}
-            </div>
-
-<div className="tenant-modal__actions">
-              <button className="button button--secondary" onClick={() => window.dispatchEvent(new Event("hr-admin-modal:request-close"))} type="button">
-                Cancel
-              </button>
-              <AsyncActionButton
-                className="button button--primary"
-                onClick={savePermission}
-                pending={busy || isRefreshing}
-                pendingLabel={isRefreshing ? "Refreshing permission catalog" : "Saving permission"}
-                type="button"
-              >
-                Save permission
-              </AsyncActionButton>
+              {formError || "Save updates catalog metadata. The immutable key and deployed runtime enforcement contract remain unchanged."}
             </div>
 
 </HrAdminActionModal>
-      ) : null}
+      ), document.body) : null}
     </>
   );
 }

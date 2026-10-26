@@ -12,7 +12,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ r
   }
   const { roleId } = await context.params;
   const body = await request.json().catch(() => ({}));
-  const upstream = await fetch(`${API_BASE_URL}/tenant-admin/roles/${roleId}/`, {
+  const upstream = await fetch(`${API_BASE_URL}/tenant-admin/roles/${roleId}/?compact=1`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",

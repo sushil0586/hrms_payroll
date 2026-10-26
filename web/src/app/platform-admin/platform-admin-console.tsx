@@ -9,7 +9,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type {
@@ -29,6 +28,8 @@ import { PlatformLaunchWorkspace } from "./platform-launch-workspace";
 type Props = {
   initialPanel: PlatformPanel;
   initialMessage?: string;
+  initialEventQuery?: string;
+  initialEventType?: string;
   leads: PlatformPublicLead[];
   tenants: PlatformTenantListItem[];
   selectedTenant: PlatformTenantListItem | null;
@@ -551,7 +552,7 @@ function leadDomainSuggestion(lead: PlatformPublicLead) {
   return "";
 }
 
-export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads, tenants, selectedTenant, onboarding, policyPacks, summary }: Props) {
+export function PlatformAdminConsole({ initialPanel, initialMessage = "", initialEventQuery = "", initialEventType = "all", leads, tenants, selectedTenant, onboarding, policyPacks, summary }: Props) {
   const router = useRouter();
   const createTenantFirstFieldRef = useRef<HTMLInputElement>(null);
   const addContactFirstFieldRef = useRef<HTMLInputElement>(null);
@@ -564,7 +565,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
   const [leadStatusFilter, setLeadStatusFilter] = useState("active");
   const [tenantQuery, setTenantQuery] = useState("");
   const [policyPackQuery, setPolicyPackQuery] = useState("");
-  const [eventQuery, setEventQuery] = useState("");
+  const [eventQuery, setEventQuery] = useState(initialEventQuery);
   const [tenantStatusFilter, setTenantStatusFilter] = useState("all");
   const [tenantPlanFilter, setTenantPlanFilter] = useState("all");
   const [policyPackStatusFilter, setPolicyPackStatusFilter] = useState("all");
@@ -575,7 +576,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
   const [policyPackPreview, setPolicyPackPreview] = useState<PlatformPolicyPackAdoptionPreview | null>(null);
   const [policyPackAdoptionResult, setPolicyPackAdoptionResult] = useState<PlatformPolicyPackAdoptionResult | null>(null);
   const [policyPackUpgradeCompare, setPolicyPackUpgradeCompare] = useState<PlatformPolicyPackUpgradeCompare | null>(null);
-  const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [eventTypeFilter, setEventTypeFilter] = useState(initialEventType);
   const [editingContactId, setEditingContactId] = useState("");
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
@@ -613,6 +614,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
   const hasBaseline = Boolean(onboarding?.baseline_published_at);
   const canMarkHandoff = Boolean(selectedTenant && hasBaseline && hasUsablePrimaryAdmin);
   const canActivateTenant = Boolean(selectedTenant && onboarding?.handoff_completed_at && hasUsablePrimaryAdmin);
+  const provisionedContactCount = onboarding?.admin_contacts.filter((contact) => Boolean(contact.membership_id)).length ?? 0;
   const publishedPacks = useMemo(() => policyPacks.filter((pack) => pack.status === "published"), [policyPacks]);
   const draftPacks = useMemo(() => policyPacks.filter((pack) => pack.status === "draft"), [policyPacks]);
   const selectedPolicyPack = policyPacks.find((pack) => pack.id === selectedPolicyPackId) ?? publishedPacks[0] ?? policyPacks[0] ?? null;
@@ -640,6 +642,19 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
   );
   const canApplyPreviewedTemplate = Boolean(canAdoptBaseline && previewMatchesSelection && policyPackPreview?.can_apply);
   const canApplyComparedUpgrade = Boolean(canAdoptBaseline && upgradeCompareMatchesSelection && policyPackUpgradeCompare?.can_upgrade);
+  const selectedTemplateNextAction = !policyPacks.length
+    ? { title: "Create the first setup template", detail: "Define a draft template before tenant setup can be standardized.", label: "Create below" }
+    : selectedPolicyPackIsDraft && !selectedPolicyPackItems.length
+      ? { title: "Add the first setup item", detail: `${selectedPolicyPack?.name ?? "The selected draft"} has no governed setup content yet.`, label: "Add item below" }
+      : selectedPolicyPackIsDraft
+        ? { title: "Review and publish the draft", detail: `${selectedPolicyPack?.name ?? "The selected template"} has ${selectedPolicyPackItems.length} ordered item${selectedPolicyPackItems.length === 1 ? "" : "s"}.`, label: "Publish from register" }
+        : !policyPackPreview && !policyPackAdoptionResult
+          ? { title: "Preview tenant impact", detail: `Review what ${selectedPolicyPack?.name ?? "the selected template"} will create for ${selectedTenant?.name ?? "the selected tenant"}.`, label: "Preview below" }
+          : policyPackPreview && !policyPackPreview.can_apply
+            ? { title: "Resolve preview blockers", detail: "Review conflicts and blocked dependencies before applying this template.", label: "Review impact" }
+            : policyPackAdoptionResult
+              ? { title: "Review adoption evidence", detail: "The confirmed result records created, updated, skipped, and failed items.", label: "Review result" }
+              : { title: "Apply the previewed template", detail: "The current preview is ready and matches the selected tenant and template version.", label: "Apply below" };
   const guidedChecklist = selectedTenant && onboarding ? [
     {
       status: "done" as const,
@@ -689,6 +704,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       actionLabel: selectedTenant.status === "active" ? "View active tenant" : "Open launch checklist",
     },
   ] : [];
+  const nextGuidedStep = guidedChecklist.find((step) => step.status !== "done") ?? guidedChecklist.at(-1) ?? null;
   const events = onboarding?.recent_events ?? [];
   const normalizedLeadQuery = leadQuery.trim().toLowerCase();
   const normalizedTenantQuery = tenantQuery.trim().toLowerCase();
@@ -756,7 +772,20 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
   const activeLeads = leads.filter((lead) => ["new", "reviewing", "qualified"].includes(lead.status));
   const newLeads = leads.filter((lead) => lead.status === "new");
   const qualifiedLeads = leads.filter((lead) => lead.status === "qualified");
-  const eventTypes = Array.from(new Set(events.map((event) => event.event_type))).sort();
+  const convertedLeads = leads.filter((lead) => lead.status === "converted");
+  const eventTypes = Array.from(new Set([
+    ...events.map((event) => event.event_type),
+    ...(initialEventType !== "all" ? [initialEventType] : []),
+  ])).sort();
+  const auditActorCount = new Set(events.map((event) => event.actor_identifier || "system")).size;
+  const latestAuditEvent = events[0] ?? null;
+  const auditNextAction = !selectedTenant
+    ? { title: "Select a tenant", detail: "Choose a tenant before reviewing its platform evidence.", label: "Open tenant register" }
+    : !events.length
+      ? { title: "Complete a governed tenant action", detail: "This tenant has no onboarding evidence yet. Complete setup, access, or readiness work to create an audit trail.", label: "Open tenant setup" }
+      : !filteredEvents.length
+        ? { title: "Broaden the evidence scope", detail: "The selected search and event type have no matches in this tenant's recent evidence.", label: "Reset filters" }
+        : { title: "Review the latest evidence", detail: `${titleCase(latestAuditEvent?.event_type ?? "event")} was recorded ${formatDateTime(latestAuditEvent?.created_at ?? null)}.`, label: "Review below" };
   const staleOnboardingTenants = initialPanel === "tenants"
     ? tenants.filter((tenant) => !["active", "handoff_ready"].includes(tenant.onboarding_status)).slice(0, 5)
     : summary.stale_onboarding_tenants;
@@ -872,7 +901,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setShowCreateTenantModal(false);
       router.push(buildPanelHref("onboarding", payload.id, "tenant-created"));
     } catch (nextError) {
-      setError(actionErrorMessage(nextError, "Tenant creation failed. Check your connection and try again."));
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the tenant register before retrying; your entered values remain in this dialog."));
     }
   }
 
@@ -931,7 +960,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         router.push(buildPanelHref("admins", payload.tenant.id));
       }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Lead conversion failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the tenant register and this lead before retrying; your entered values remain here."));
     }
   }
 
@@ -970,7 +999,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         "Tenant updated.",
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Tenant update failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the tenant record before retrying; your entered values remain here."));
     }
   }
 
@@ -1045,7 +1074,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setShowAddContactModal(false);
       form.reset();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Admin contact creation failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the admin contact list before retrying; your entered values remain in this dialog."));
     }
   }
 
@@ -1080,7 +1109,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       );
       setEditingContactId("");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Admin contact update failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check this contact before retrying; your entered values remain here."));
     }
   }
 
@@ -1117,7 +1146,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         setGeneratedPassword(payload.generated_password);
       }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Admin provisioning failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the contact access status before retrying. A confirmed response is required before any generated password can be shown."));
     }
   }
 
@@ -1155,7 +1184,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       );
       form.reset();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Policy pack creation failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the template register before retrying; the form values remain available."));
     }
   }
 
@@ -1196,7 +1225,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       form.reset();
       setPolicyPackItemType("leave_type");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Setup template item creation failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the selected draft before retrying; the item values remain available."));
     }
   }
 
@@ -1232,7 +1261,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setSelectedPolicyPackId(packId);
       setEditingPolicyPackItemId("");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Setup template item update failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the selected draft item before retrying."));
     }
   }
 
@@ -1249,7 +1278,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         setEditingPolicyPackItemId("");
       }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Setup template item delete failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check whether the draft item still exists before retrying."));
     }
   }
 
@@ -1272,7 +1301,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         "Policy pack published.",
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Policy pack publish failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the template status before retrying publish."));
     }
   }
 
@@ -1300,7 +1329,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setSelectedPolicyPackId(payload.id);
       setEditingPolicyPackItemId("");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Setup template version creation failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the template lineage for a new draft version before retrying."));
     }
   }
 
@@ -1334,7 +1363,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setPolicyPackUpgradeCompare(null);
     } catch (nextError) {
       setPolicyPackPreview(null);
-      setError(nextError instanceof Error ? nextError.message : "Setup template preview failed.");
+      setError(actionErrorMessage(nextError, "The impact preview could not be confirmed. No template was applied; run preview again when the connection is stable."));
     }
   }
 
@@ -1355,7 +1384,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setPolicyPackAdoptionResult(null);
     } catch (nextError) {
       setPolicyPackUpgradeCompare(null);
-      setError(nextError instanceof Error ? nextError.message : "Setup template comparison failed.");
+      setError(actionErrorMessage(nextError, "The version comparison could not be confirmed. No upgrade was applied."));
     }
   }
 
@@ -1378,7 +1407,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setPolicyPackUpgradeCompare(null);
       setPolicyPackAdoptionResult(payload);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Setup template upgrade failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check the tenant adoption evidence and runtime records before retrying the upgrade."));
     }
   }
 
@@ -1407,7 +1436,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
       setPolicyPackAdoptionResult(payload);
       setPolicyPackUpgradeCompare(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Policy pack adoption failed.");
+      setError(actionErrorMessage(nextError, "The response was interrupted. Check tenant adoption evidence and runtime records before retrying apply."));
     }
   }
 
@@ -1487,17 +1516,56 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         </div>
       ) : null}
 
-      {initialPanel === "control" ? (
-        <section className="section platform-control-metrics">
-          <div className="metric-grid-modern">
-            <MetricTile label="Open control actions" value={tabCounts.control} trend="Leads and tenant gates" />
-            <MetricTile label="Tenants" value={summary.counts.tenants} trend="Platform catalog" />
-            <MetricTile label="Active tenants" value={tenantCounts.active} trend="Activated" />
-            <MetricTile label="Onboarding" value={tenantCounts.onboarding} trend="Not yet active" />
-            <MetricTile label="Public leads" value={summary.counts.active_leads} trend={`${summary.counts.new_leads} new`} />
-            <MetricTile label="Published packs" value={tenantCounts.publishedPacks} trend={`${summary.counts.policy_packs} total packs`} />
+      {["control", "leads", "tenants"].includes(initialPanel) ? (
+        <section className="section platform-phase2-summary">
+          <div
+            aria-label={initialPanel === "control" ? "Platform operations summary" : initialPanel === "leads" ? "Lead queue summary" : "Tenant register summary"}
+            className="tenant-access-summary-strip"
+            role="group"
+          >
+            {initialPanel === "control" ? (
+              <>
+                <article><span>Open actions</span><strong>{tabCounts.control}</strong><small>Lead and tenant gates</small></article>
+                <article><span>Active tenants</span><strong>{tenantCounts.active}</strong><small>{summary.counts.tenants} total tenants</small></article>
+                <article><span>Onboarding</span><strong>{tenantCounts.onboarding}</strong><small>Not active yet</small></article>
+                <article><span>Active leads</span><strong>{summary.counts.active_leads}</strong><small>{summary.counts.new_leads} new requests</small></article>
+              </>
+            ) : initialPanel === "leads" ? (
+              <>
+                <article><span>Active</span><strong>{activeLeads.length}</strong><small>Current review queue</small></article>
+                <article><span>New</span><strong>{newLeads.length}</strong><small>Awaiting first review</small></article>
+                <article><span>Qualified</span><strong>{qualifiedLeads.length}</strong><small>Ready for approval</small></article>
+                <article><span>Converted</span><strong>{convertedLeads.length}</strong><small>Tenant evidence recorded</small></article>
+              </>
+            ) : (
+              <>
+                <article><span>Total tenants</span><strong>{summary.counts.tenants}</strong><small>Customer register</small></article>
+                <article><span>Active</span><strong>{tenantCounts.active}</strong><small>Customer access enabled</small></article>
+                <article><span>Onboarding</span><strong>{tenantCounts.onboarding}</strong><small>Lifecycle work remains</small></article>
+                <article><span>Sandbox</span><strong>{tenantCounts.sandbox}</strong><small>Trial or test posture</small></article>
+              </>
+            )}
           </div>
         </section>
+      ) : null}
+
+      {initialPanel === "events" ? (
+        <>
+          <section className="section platform-phase2-summary">
+            <div aria-label="Audit evidence summary" className="tenant-access-summary-strip" role="group">
+              <article><span>Selected tenant</span><strong>{selectedTenant?.code ?? "None"}</strong><small>{selectedTenant?.name ?? "Choose a tenant"}</small></article>
+              <article><span>Recent events</span><strong>{events.length}</strong><small>Loaded tenant evidence</small></article>
+              <article><span>Event types</span><strong>{eventTypes.length}</strong><small>Distinct recorded actions</small></article>
+              <article><span>Actors</span><strong>{auditActorCount}</strong><small>People and system actors</small></article>
+            </div>
+          </section>
+          <section className="section">
+            <div className="tenant-next-action-card">
+              <div><span className="workspace-card__eyebrow">Next required action</span><h2>{auditNextAction.title}</h2><p className="tenant-section-copy">{auditNextAction.detail}</p></div>
+              {!selectedTenant ? <Link className="button button--primary" href="/platform-admin/tenants">{auditNextAction.label}</Link> : !events.length ? <Link className="button button--primary" href={buildPanelHref("onboarding", selectedTenant.id)}>{auditNextAction.label}</Link> : !filteredEvents.length ? <button className="button button--secondary" type="button" onClick={() => { setEventQuery(""); setEventTypeFilter("all"); setEventPage(1); router.replace(buildPanelHref("events", selectedTenant.id)); }}>{auditNextAction.label}</button> : <span className="record-chip record-chip--accent">{auditNextAction.label}</span>}
+            </div>
+          </section>
+        </>
       ) : null}
 
       {(message || error || generatedPassword) ? (
@@ -1514,24 +1582,26 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         </section>
       ) : null}
 
-      <section className="section">
-        <div className="tabbar" role="tablist" aria-label="Platform admin sections">
-          {platformTabs.map((item) => (
-            <Link
-              aria-selected={initialPanel === item.panel}
-              className={`tab ${initialPanel === item.panel ? "tab--active" : ""}`}
-              href={buildPanelHref(item.panel, selectedTenant?.id)}
-              key={item.panel}
-              role="tab"
-            >
-              {item.label}
-              <span>{tabCounts[item.countKey]}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {["audit", "governance", "permissions"].includes(initialPanel) ? (
+        <section className="section">
+          <div className="tabbar" role="tablist" aria-label="Platform admin sections">
+            {platformTabs.map((item) => (
+              <Link
+                aria-selected={initialPanel === item.panel}
+                className={`tab ${initialPanel === item.panel ? "tab--active" : ""}`}
+                href={buildPanelHref(item.panel, selectedTenant?.id)}
+                key={item.panel}
+                role="tab"
+              >
+                {item.label}
+                <span>{tabCounts[item.countKey]}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="section">
+      {["audit", "governance", "permissions"].includes(initialPanel) ? <section className="section">
         <div className="platform-panel-guide" data-testid="platform-admin-panel-guide">
           <div>
             <span className="eyebrow">Selected workspace</span>
@@ -1544,7 +1614,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
             ))}
           </ol>
         </div>
-      </section>
+      </section> : null}
 
       {initialPanel === "control" ? (
       <>
@@ -1750,6 +1820,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
             total={leads.length}
             visible={filteredLeads.length}
           />
+          <p className="platform-local-filter-note">These controls narrow the loaded queue immediately. They reset when you leave or reload this page.</p>
           <div className="tenant-support-access-list">
             {leadPageData.items.map((lead) => (
               <div className="tenant-support-access-row tenant-support-access-row--stacked platform-lead-card" key={lead.id}>
@@ -1918,6 +1989,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
             total={tenants.length}
             visible={filteredTenants.length}
           />
+          <p className="platform-local-filter-note">These controls narrow the loaded tenant register immediately. They reset when you leave or reload this page.</p>
           <div className="employee-directory-list">
             {tenantPageData.items.map((tenant) => (
               <div className={`employee-directory-item${selectedTenant?.id === tenant.id ? " employee-directory-item--active" : ""}`} key={tenant.id}>
@@ -1939,8 +2011,8 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
             ))}
             {!filteredTenants.length ? (
               <div className="notice">
-                <strong>No tenants yet.</strong>
-                <span className="muted">Create a tenant or clear the search.</span>
+                <strong>{tenants.length ? "No tenants match this view." : "No tenants yet."}</strong>
+                <span className="muted">{tenants.length ? "Reset the filters to return to the complete register." : "Create the first tenant when the customer context is ready."}</span>
               </div>
             ) : null}
           </div>
@@ -1989,6 +2061,23 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
         <>
           {initialPanel === "launch" ? (
             <PlatformLaunchWorkspace onboarding={onboarding} selectedTenant={selectedTenant} />
+          ) : null}
+
+          {initialPanel === "onboarding" ? (
+          <section className="section platform-phase3-summary" data-testid="platform-onboarding-summary">
+            <div aria-label="Launch readiness summary" className="tenant-access-summary-strip" role="group">
+              <article><span>Tenant</span><strong>{selectedTenant.code}</strong><small>{titleCase(selectedTenant.status)}</small></article>
+              <article><span>Initial setup</span><strong>{hasBaseline ? "Confirmed" : "Required"}</strong><small>{hasBaseline ? formatDateTime(onboarding.baseline_published_at) : "Apply a published template"}</small></article>
+              <article><span>Admin access</span><strong>{hasUsablePrimaryAdmin ? "Ready" : "Required"}</strong><small>{primaryContact?.email || "Primary contact missing"}</small></article>
+              <article><span>Handoff</span><strong>{onboarding.handoff_completed_at ? "Complete" : "Pending"}</strong><small>{selectedTenant.status === "active" ? "Tenant active" : "Activation gated"}</small></article>
+            </div>
+            {nextGuidedStep ? (
+              <div className="platform-next-action" role="status">
+                <div><span className="eyebrow">Next required action</span><strong>{nextGuidedStep.title}</strong><span>{nextGuidedStep.detail}</span></div>
+                <Link className="button button--primary" href={nextGuidedStep.actionHref}>{nextGuidedStep.actionLabel}</Link>
+              </div>
+            ) : null}
+          </section>
           ) : null}
 
           {initialPanel === "onboarding" ? (
@@ -2214,6 +2303,31 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
           ) : null}
 
           {initialPanel === "admins" ? (
+          <section className="section platform-phase3-summary" data-testid="platform-admin-access-summary">
+            <div aria-label="Admin access summary" className="tenant-access-summary-strip" role="group">
+              <article><span>Tenant</span><strong>{selectedTenant.code}</strong><small>{titleCase(selectedTenant.subscription_plan)}</small></article>
+              <article><span>Contacts</span><strong>{onboarding.admin_contacts.length}</strong><small>{primaryContact ? "Primary contact assigned" : "Primary contact required"}</small></article>
+              <article><span>Logins</span><strong>{provisionedContactCount}</strong><small>{provisionableContacts.length} ready to provision</small></article>
+              <article><span>Primary access</span><strong>{hasUsablePrimaryAdmin ? "Usable" : "Required"}</strong><small>{hasUsablePrimaryAdmin ? "Readiness gate passed" : "Handoff remains gated"}</small></article>
+            </div>
+            <div className="platform-next-action" role="status">
+              <div>
+                <span className="eyebrow">Next required action</span>
+                <strong>{hasUsablePrimaryAdmin ? "Review tenant readiness" : primaryContact ? "Create primary admin login" : "Add primary admin contact"}</strong>
+                <span>{hasUsablePrimaryAdmin ? "Primary access is usable. Continue the governed readiness workflow." : primaryAdminAccessDetail}</span>
+              </div>
+              {hasUsablePrimaryAdmin ? (
+                <Link className="button button--primary" href={buildPanelHref("onboarding", selectedTenant.id)}>Open readiness</Link>
+              ) : (
+                <button className="button button--primary" type="button" onClick={(triggerEvent) => { if (!primaryContact) { focusActionTrigger(triggerEvent); setShowAddContactModal(true); } else { document.querySelector<HTMLElement>("[name='contact_id']")?.focus(); } }}>
+                  {primaryContact ? "Create login access" : "Add contact"}
+                </button>
+              )}
+            </div>
+          </section>
+          ) : null}
+
+          {initialPanel === "admins" ? (
           <section className="section support-session-grid platform-admin-users-grid" data-testid="platform-admin-admins-panel">
             <article className="record-card">
               <div className="record-card__title-wrap">
@@ -2310,7 +2424,22 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
           ) : null}
 
           {initialPanel === "policy-packs" ? (
-          <section className="section support-session-grid platform-setup-workspace" data-testid="platform-admin-policy-packs-panel">
+          <section className="section platform-phase3-summary" data-testid="platform-policy-pack-summary">
+            <div aria-label="Setup template summary" className="tenant-access-summary-strip" role="group">
+              <article><span>Templates</span><strong>{policyPacks.length}</strong><small>Platform-owned versions</small></article>
+              <article><span>Drafts</span><strong>{draftPacks.length}</strong><small>Editable before publish</small></article>
+              <article><span>Published</span><strong>{publishedPacks.length}</strong><small>Available for adoption</small></article>
+              <article><span>Selected tenant</span><strong>{selectedTenant.code}</strong><small>{selectedPolicyPack ? `${selectedPolicyPack.name} · ${titleCase(selectedPolicyPack.status)}` : "Choose a template"}</small></article>
+            </div>
+            <div className="platform-next-action" role="status">
+              <div><span className="eyebrow">Next required action</span><strong>{selectedTemplateNextAction.title}</strong><span>{selectedTemplateNextAction.detail}</span></div>
+              <a className="button button--primary" href="#platform-template-workspace">{selectedTemplateNextAction.label}</a>
+            </div>
+          </section>
+          ) : null}
+
+          {initialPanel === "policy-packs" ? (
+          <section className="section support-session-grid platform-setup-workspace" data-testid="platform-admin-policy-packs-panel" id="platform-template-workspace">
             <article className="record-card platform-setup-list-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
@@ -2681,38 +2810,23 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
                 </div>
                 <p className="section-copy">Latest platform-side evidence for the selected tenant.</p>
               </div>
-              <label className="queue-toolbar__search">
-                <span>Search</span>
-                <input
-                  className="input-control"
-                  name="event_search"
-                  onChange={(event) => {
-                    setEventQuery(event.target.value);
-                    setEventPage(1);
-                  }}
-                  placeholder="Event, actor, summary"
-                  value={eventQuery}
-                />
-              </label>
-              <div className="platform-list-filters" aria-label="Event filters">
-                <label className="form-field">
-                  <span className="muted">Event type</span>
-                  <select
-                    className="input-control"
-                    name="event_type_filter"
-                    onChange={(event) => {
-                      setEventTypeFilter(event.target.value);
-                      setEventPage(1);
-                    }}
-                    value={eventTypeFilter}
-                  >
-                    <option value="all">All event types</option>
-                    {eventTypes.map((eventType) => (
-                      <option key={eventType} value={eventType}>{titleCase(eventType)}</option>
-                    ))}
-                  </select>
+              <form className="platform-audit-filters" method="get">
+                {selectedTenant ? <input name="tenantId" type="hidden" value={selectedTenant.id} /> : null}
+                <label className="queue-toolbar__search">
+                  <span>Search</span>
+                  <input className="input-control" name="q" onChange={(event) => { setEventQuery(event.target.value); setEventPage(1); }} placeholder="Event, actor, summary" value={eventQuery} />
                 </label>
-              </div>
+                <div className="platform-list-filters" aria-label="Event filters">
+                  <label className="form-field">
+                    <span className="muted">Event type</span>
+                    <select className="input-control" name="eventType" onChange={(event) => { setEventTypeFilter(event.target.value); setEventPage(1); }} value={eventTypeFilter}>
+                      <option value="all">All event types</option>
+                      {eventTypes.map((eventType) => <option key={eventType} value={eventType}>{titleCase(eventType)}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="button-row"><button className="button button--primary" type="submit">Apply evidence scope</button><Link className="button button--secondary" href={buildPanelHref("events", selectedTenant?.id)}>Reset</Link></div>
+              </form>
               <FilterSummary
                 activeFilters={eventActiveFilters}
                 label="audit events"
@@ -2720,6 +2834,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", leads,
                   setEventQuery("");
                   setEventTypeFilter("all");
                   setEventPage(1);
+                  router.replace(buildPanelHref("events", selectedTenant?.id));
                 }}
                 total={events.length}
                 visible={filteredEvents.length}

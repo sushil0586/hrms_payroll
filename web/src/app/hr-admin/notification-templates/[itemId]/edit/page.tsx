@@ -1,18 +1,26 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { notificationTemplateToFormValue } from "@/app/hr-admin/notification-templates/form-values";
 import { NotificationTemplateForm } from "@/app/hr-admin/notification-templates/notification-template-form";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminNotificationOptions, getHrAdminNotificationTemplate } from "@/lib/api";
+import { getHrAdminNotificationOptions, getHrAdminNotificationTemplate, isApiNotFoundError } from "@/lib/api";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditNotificationTemplatePage({ params }: PageProps) {
   const { itemId } = await params;
-  const [itemResult, optionsResult] = await Promise.all([
-    getHrAdminNotificationTemplate(itemId),
-    getHrAdminNotificationOptions(),
-  ]);
+  let itemResult;
+  let optionsResult;
+  try {
+    [itemResult, optionsResult] = await Promise.all([
+      getHrAdminNotificationTemplate(itemId),
+      getHrAdminNotificationOptions(),
+    ]);
+  } catch (error) {
+    if (isApiNotFoundError(error)) notFound();
+    throw error;
+  }
   const state = itemResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (

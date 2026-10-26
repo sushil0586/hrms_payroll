@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -46,11 +45,11 @@ export default async function TenantAdminUsersPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Active members" value={data.summary.active_membership_count} trend={`${data.summary.role_count} roles`} />
-          <MetricTile label="Seat usage" value={`${data.seat_usage.current_value}/${data.seat_usage.limit_value || "unlimited"}`} trend={titleCase(data.seat_usage.status)} />
-          <MetricTile label="Members" value={data.membership_management.total_membership_count ?? data.membership_management.recent_memberships.length} trend="Searchable directory" />
-          <MetricTile label="Available roles" value={data.membership_management.role_options.length} trend="Assignable roles" />
+        <div className="tenant-access-summary-strip" role="group" aria-label="Tenant user access summary">
+          <article><span>Active members</span><strong>{data.summary.active_membership_count}</strong><small>{data.summary.role_count} roles</small></article>
+          <article><span>Seat usage</span><strong>{data.seat_usage.current_value}/{data.seat_usage.limit_value || "unlimited"}</strong><small>{titleCase(data.seat_usage.status)}</small></article>
+          <article><span>Members</span><strong>{data.membership_management.total_membership_count ?? data.membership_management.recent_memberships.length}</strong><small>Searchable directory</small></article>
+          <article><span>Available roles</span><strong>{data.membership_management.role_options.length}</strong><small>Assignable roles</small></article>
         </div>
       </section>
 

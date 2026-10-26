@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -40,11 +39,11 @@ export default async function TenantAdminRolesPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Total roles" value={data.role_management.roles.length} trend="System and custom" />
-          <MetricTile label="Custom roles" value={customRoleCount} trend="Tenant-owned" />
-          <MetricTile label="Assigned roles" value={assignedRoleCount} trend="Active member coverage" />
-          <MetricTile label="Inactive roles" value={inactiveRoleCount} trend="Hidden from assignment" />
+        <div className="tenant-access-summary-strip" role="group" aria-label="Tenant role access summary">
+          <article><span>Total roles</span><strong>{data.role_management.roles.length}</strong><small>System and custom</small></article>
+          <article><span>Custom roles</span><strong>{customRoleCount}</strong><small>Tenant-owned</small></article>
+          <article><span>Assigned roles</span><strong>{assignedRoleCount}</strong><small>Active member coverage</small></article>
+          <article><span>Inactive roles</span><strong>{inactiveRoleCount}</strong><small>Hidden from assignment</small></article>
         </div>
       </section>
 

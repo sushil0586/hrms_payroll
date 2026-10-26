@@ -13,6 +13,7 @@ type Props = {
   item: HrAdminNotification;
   notificationStatusOptions: HrAdminEnumOption[];
   notificationPriorityOptions: HrAdminEnumOption[];
+  returnHref?: string;
 };
 
 type ReadState = "keep" | "mark_read" | "mark_unread";
@@ -29,6 +30,7 @@ export function NotificationInlineReview({
   item,
   notificationStatusOptions,
   notificationPriorityOptions,
+  returnHref = "/hr-admin/notifications",
 }: Props) {
   const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [status, setStatus] = useState(item.status);
@@ -68,7 +70,14 @@ export function NotificationInlineReview({
       setIsSubmitting(false);
       return;
     }
-    const result = await response.json().catch(() => ({}));
+    const result = await response.json().catch(() => null);
+    if (result === null) {
+      const message = "The notification service returned an unreadable response. Your review choices are retained; try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
+      setIsSubmitting(false);
+      return;
+    }
     if (!response.ok) {
       const message = getErrorMessage(result);
       setError(message);
@@ -100,7 +109,7 @@ export function NotificationInlineReview({
             Adjust delivery status and urgency in place, or open the full review page for payload details.
           </p>
         </div>
-        <Link className="button button--secondary" href={`/hr-admin/notifications/${item.id}/review`}>
+        <Link className="button button--secondary" href={`/hr-admin/notifications/${item.id}/review?return_to=${encodeURIComponent(returnHref)}`}>
           Full review
         </Link>
       </div>

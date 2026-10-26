@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminOptionItem, HrAdminWorkflowOptions, HrAdminWorkflowTemplateAssignmentWriteInput } from "@/lib/types";
@@ -69,6 +69,17 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<AssignmentField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const isDirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
+
+  useEffect(() => {
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      if (!isDirty || isSubmitting) return;
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDirty, isSubmitting]);
   const filteredBranches = filteredByLegalEntity(options.branches, formValue.legal_entity_id);
   const filteredDepartments = filteredByBusinessUnit(options.departments, formValue.business_unit_id);
   const branchWarning =
@@ -127,14 +138,30 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
       setFieldErrors(nextErrors);
       setError("Review the highlighted workflow assignment fields and try again.");
       setIsSubmitting(false);
+      const firstInvalidField = Object.keys(nextErrors).find((field) => nextErrors[field as AssignmentField]);
+      if (firstInvalidField) {
+        requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>(`[data-assignment-field="${firstInvalidField}"]`)?.focus());
+      }
       return;
     }
-    const response = await fetch(mode === "create" ? "/api/hr-admin/workflow-template-assignments" : `/api/hr-admin/workflow-template-assignments/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
-    const payload = await response.json().catch(() => ({}));
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/workflow-template-assignments" : `/api/hr-admin/workflow-template-assignments/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("The workflow assignment could not be saved because the service did not respond. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
+    const payload = await response.json().catch(() => null);
+    if (payload === null) {
+      setError("The workflow service returned an unreadable response. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
     if (!response.ok) {
       setFieldErrors(getServerFieldErrors(payload));
       setError(getErrorMessage(payload));
@@ -146,7 +173,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
   }
 
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting} className="section form-layout-modern" noValidate onSubmit={handleSubmit} ref={formRef}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2 className="section-heading-soft">{mode === "create" ? "Workflow assignment" : "Edit assignment"}</h2>
@@ -157,13 +184,13 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
 
         <FormSection description="Select the template and define where it should apply." title="Assignment scope">
           <div className="form-grid">
-            <label className="form-field"><span className="muted">Workflow template</span><select aria-invalid={Boolean(fieldErrors.template_id)} className="input-control" value={formValue.template_id ?? ""} onChange={(e) => update("template_id", e.target.value || null)}>{selectOptions(options.templates)}</select>{fieldErrors.template_id ? <span className="field-error-text">{fieldErrors.template_id}</span> : null}</label>
+            <label className="form-field"><span className="muted">Workflow template</span><select aria-invalid={Boolean(fieldErrors.template_id)} className="input-control" data-assignment-field="template_id" value={formValue.template_id ?? ""} onChange={(e) => update("template_id", e.target.value || null)}>{selectOptions(options.templates)}</select>{fieldErrors.template_id ? <span className="field-error-text">{fieldErrors.template_id}</span> : null}</label>
             <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>Branch scope narrows to the selected legal entity.</FieldHint></label>
             <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={Boolean(branchWarning)} value={formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{branchWarning ?? "Branch scope is optional unless the workflow should apply only to a branch."}</FieldHint></label>
             <label className="form-field"><span className="muted">Department</span><select className="input-control" disabled={Boolean(departmentWarning)} value={formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(filteredDepartments)}</select><FieldHint tone={departmentWarning ? "warning" : "default"}>{departmentWarning ?? "Department scope narrows to the selected business unit."}</FieldHint></label>
             <label className="form-field"><span className="muted">Business unit</span><select className="input-control" value={formValue.business_unit_id ?? ""} onChange={(e) => update("business_unit_id", e.target.value || null)}>{selectOptions(options.business_units)}</select><FieldHint>Department options narrow to the selected business unit.</FieldHint></label>
             <label className="form-field"><span className="muted">Grade</span><select className="input-control" value={formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
-            <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" min={0} type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value) || 0)} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
+            <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" data-assignment-field="priority" min={0} type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value) || 0)} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
           </div>
         </FormSection>
 
@@ -187,7 +214,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
           <button className="button button--primary" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}
           </button>
-          <button className="button button--secondary" onClick={() => router.back()} type="button">
+          <button className="button button--secondary" onClick={() => { if (!isDirty || window.confirm("Discard unsaved workflow assignment changes?")) router.back(); }} type="button">
             Cancel
           </button>
         </div>

@@ -775,7 +775,7 @@ class TenantAdminMembershipMutationResultSerializer(serializers.Serializer):
     membership = serializers.JSONField()
     generated_password = serializers.CharField(required=False, allow_blank=True)
     password_was_set = serializers.BooleanField()
-    console = serializers.JSONField()
+    console = serializers.JSONField(required=False)
 
 
 class TenantAdminRoleWriteSerializer(serializers.Serializer):
@@ -818,7 +818,7 @@ class TenantAdminRoleActionSerializer(serializers.Serializer):
 
 class TenantAdminRoleMutationResultSerializer(serializers.Serializer):
     role = serializers.JSONField()
-    console = serializers.JSONField()
+    console = serializers.JSONField(required=False)
 
 
 class TenantAdminChangeRequestCreateSerializer(serializers.Serializer):
@@ -850,7 +850,7 @@ class TenantAdminChangeRequestActionSerializer(serializers.Serializer):
 
 class TenantAdminChangeRequestMutationResultSerializer(serializers.Serializer):
     change_request = serializers.JSONField()
-    console = serializers.JSONField()
+    console = serializers.JSONField(required=False)
 
 
 class TenantAdminSupportAccessGrantCreateSerializer(serializers.Serializer):
@@ -886,7 +886,7 @@ class TenantAdminSupportAccessGrantActionSerializer(serializers.Serializer):
 
 class TenantAdminSupportAccessGrantMutationResultSerializer(serializers.Serializer):
     support_access_grant = serializers.JSONField()
-    console = serializers.JSONField()
+    console = serializers.JSONField(required=False)
 
 
 class TenantAdminTrustAuditReviewSerializer(serializers.Serializer):
@@ -5686,6 +5686,32 @@ class HrAdminNotificationChannelConfigurationWriteSerializer(serializers.Seriali
     sender_address = serializers.CharField(max_length=255, required=False, allow_blank=True)
     provider_config = serializers.JSONField(required=False)
     delivery_policy = serializers.JSONField(required=False)
+
+    def validate_provider_config(self, value):
+        sensitive_fragments = ("password", "secret", "token", "api_key", "apikey", "private_key", "credential")
+
+        def find_sensitive_key(candidate, path="provider_config"):
+            if isinstance(candidate, dict):
+                for key, child in candidate.items():
+                    normalized_key = str(key).lower().replace("-", "_")
+                    if any(fragment in normalized_key for fragment in sensitive_fragments):
+                        return f"{path}.{key}"
+                    found = find_sensitive_key(child, f"{path}.{key}")
+                    if found:
+                        return found
+            elif isinstance(candidate, list):
+                for index, child in enumerate(candidate):
+                    found = find_sensitive_key(child, f"{path}[{index}]")
+                    if found:
+                        return found
+            return None
+
+        sensitive_path = find_sensitive_key(value)
+        if sensitive_path:
+            raise serializers.ValidationError(
+                f"Do not store credentials in channel settings ({sensitive_path}). Configure provider secrets in deployment environment variables."
+            )
+        return value
 
 
 class HrAdminNotificationListSerializer(serializers.Serializer):

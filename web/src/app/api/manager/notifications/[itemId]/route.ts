@@ -13,13 +13,18 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
   const { itemId } = await params;
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ detail: "A valid JSON request body is required." }, { status: 400 });
+  }
   const upstream = await fetch(`${API_BASE_URL}/manager/notifications/${itemId}/`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
     body: JSON.stringify(body),
     cache: "no-store",
-  });
-  const payload = await upstream.json().catch(() => ({}));
+  }).catch(() => null);
+  if (!upstream) return NextResponse.json({ detail: "Notification service is unavailable." }, { status: 502 });
+  const payload = await upstream.json().catch(() => null);
+  if (payload === null) return NextResponse.json({ detail: "Notification service returned an unreadable response." }, { status: 502 });
   return NextResponse.json(payload, { status: upstream.status });
 }

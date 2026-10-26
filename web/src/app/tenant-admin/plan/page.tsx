@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -70,11 +69,11 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Plan" value={titleCase(commercial.plan.plan_ref)} trend={commercial.plan.edition} />
-          <MetricTile label="Subscription" value={titleCase(commercial.subscription.status)} trend={commercial.subscription.billing_provider_ref || "Provider pending"} />
-          <MetricTile label="Seat usage" value={`${data.seat_usage.current_value}/${data.seat_usage.limit_value || "unlimited"}`} trend={titleCase(data.seat_usage.status)} />
-          <MetricTile label="Requests" value={data.change_request_management.recent_requests.length} trend="Recent changes" />
+        <div aria-label="Tenant commercial summary" className="tenant-access-summary-strip" role="group">
+          <article><span>Current plan</span><strong>{titleCase(commercial.plan.plan_ref)}</strong><small>{commercial.plan.edition}</small></article>
+          <article><span>Subscription</span><strong>{titleCase(commercial.subscription.status)}</strong><small>{commercial.subscription.billing_provider_ref || "Provider pending"}</small></article>
+          <article><span>Seat usage</span><strong>{data.seat_usage.current_value}/{data.seat_usage.limit_value || "∞"}</strong><small>{titleCase(data.seat_usage.status)}</small></article>
+          <article><span>Recent requests</span><strong>{data.change_request_management.recent_requests.length}</strong><small>Governed changes</small></article>
         </div>
       </section>
 
@@ -107,7 +106,7 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
             <div>
               <span className="workspace-card__eyebrow">Commercial profile</span>
               <h2>Current subscription</h2>
-              <p className="tenant-console-empty">Read-only source of truth for subscription, billing provider, and plan identity.</p>
+              <p className="tenant-console-empty">Read-only source of truth for active entitlements, billing provider, and plan identity. Submit a change request below to propose an update.</p>
             </div>
             <span className="record-chip">{titleCase(commercial.subscription.status)}</span>
           </div>

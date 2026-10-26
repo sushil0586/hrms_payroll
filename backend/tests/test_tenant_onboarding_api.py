@@ -13,7 +13,7 @@ from apps.platform_policies.models import (
     PlatformPolicyPackStatus,
     TenantPolicyPackItemLink,
 )
-from apps.tenants.models import Tenant, TenantOnboardingStatus, TenantStatus
+from apps.tenants.models import Tenant, TenantDomain, TenantOnboardingStatus, TenantStatus
 from apps.tenant_onboarding.models import PublicTenantLead, PublicLeadStatus
 
 
@@ -227,12 +227,53 @@ def test_authenticated_menu_catalog_prefers_synced_db_rows(api_client: APIClient
     assert response.status_code == 200, response.json()
     payload = response.json()
     role_item = next(item for item in payload if item["href"] == "/tenant-admin/roles")
+    governance_item = next(item for item in payload if item["href"] == "/tenant-admin/data-governance")
     assert role_item["label"] == "Role designer"
     assert role_item["catalog_source"] == "database"
     assert role_item["permission_keys"] == ["tenant.roles.view", "tenant.roles.manage"]
+    assert governance_item["label"] == "Data Governance"
+    assert governance_item["permission_keys"] == ["tenant.retention.view"]
     assert all(item["workspace"] == "tenant-admin" for item in payload)
     synced_workspaces = set(MenuCatalogEntry.objects.values_list("workspace", flat=True))
     assert {"platform-admin", "tenant-admin", "hr-admin", "ess", "mss", "finance-manager"}.issubset(synced_workspaces)
+
+
+@pytest.mark.django_db
+def test_tenant_admin_synced_menu_uses_certified_workspace_vocabulary(api_client: APIClient, platform_staff_user: User):
+    call_command("sync_menu_catalog")
+    api_client.force_authenticate(user=platform_staff_user)
+
+    response = api_client.get("/api/v1/auth/menu-catalog/?workspace=tenant-admin")
+
+    assert response.status_code == 200, response.json()
+    labels = {item["href"]: item["label"] for item in response.json() if item["kind"] == "sidebar"}
+    assert labels["/tenant-admin/roles"] == "Roles & Permissions"
+    assert labels["/tenant-admin/plan"] == "Plan & Billing"
+    assert labels["/tenant-admin/trust-audit"] == "Audit Trail"
+
+
+@pytest.mark.django_db
+def test_platform_admin_synced_menu_contains_complete_route_family(api_client: APIClient, platform_staff_user: User):
+    call_command("sync_menu_catalog")
+    api_client.force_authenticate(user=platform_staff_user)
+
+    response = api_client.get("/api/v1/auth/menu-catalog/?workspace=platform-admin")
+
+    assert response.status_code == 200, response.json()
+    sidebar = [item for item in response.json() if item["kind"] == "sidebar"]
+    assert [item["href"] for item in sidebar] == [
+        "/platform-admin",
+        "/platform-admin/leads",
+        "/platform-admin/tenants",
+        "/platform-admin/launch",
+        "/platform-admin/onboarding",
+        "/platform-admin/admins",
+        "/platform-admin/policy-packs",
+        "/platform-admin/permissions",
+        "/platform-admin/audit-logs",
+        "/platform-admin/data-governance",
+    ]
+    assert sidebar[-1]["label"] == "Data Governance"
 
 
 @pytest.mark.django_db
@@ -304,6 +345,55 @@ def test_platform_staff_can_create_tenant_and_seed_onboarding(api_client: APICli
     checklist_codes = list(tenant.onboarding_record.checklist_items.filter(status="completed").values_list("code", flat=True))
     assert "tenant_created" in checklist_codes
     assert "domain_mapped" in checklist_codes
+
+
+@pytest.mark.django_db
+def test_platform_tenant_create_rejects_duplicate_code_and_domain_without_partial_records(
+    api_client: APIClient,
+    platform_staff_user: User,
+):
+    owner = Tenant.objects.create(code="domain-owner", name="Domain Owner")
+    TenantDomain.objects.create(tenant=owner, domain="owned.example.test", is_primary=True)
+    api_client.force_authenticate(user=platform_staff_user)
+
+    duplicate_code = api_client.post(
+        "/api/v1/platform/tenants/",
+        {"code": owner.code, "name": "Duplicate Code"},
+        format="json",
+    )
+    duplicate_domain = api_client.post(
+        "/api/v1/platform/tenants/",
+        {"code": "new-domain-claim", "name": "Domain Claim", "primary_domain": "OWNED.EXAMPLE.TEST"},
+        format="json",
+    )
+
+    assert duplicate_code.status_code == 400
+    assert duplicate_domain.status_code == 400, duplicate_domain.json()
+    assert "already mapped" in str(duplicate_domain.json())
+    assert not Tenant.objects.filter(code="new-domain-claim").exists()
+    assert TenantDomain.objects.get(domain="owned.example.test").tenant_id == owner.id
+
+
+@pytest.mark.django_db
+def test_platform_tenant_update_cannot_take_another_tenants_domain(
+    api_client: APIClient,
+    platform_staff_user: User,
+):
+    owner = Tenant.objects.create(code="domain-update-owner", name="Domain Update Owner")
+    target = Tenant.objects.create(code="domain-update-target", name="Domain Update Target")
+    TenantDomain.objects.create(tenant=owner, domain="protected.example.test", is_primary=True)
+    api_client.force_authenticate(user=platform_staff_user)
+
+    response = api_client.patch(
+        f"/api/v1/platform/tenants/{target.id}/",
+        {"primary_domain": "PROTECTED.EXAMPLE.TEST"},
+        format="json",
+    )
+
+    assert response.status_code == 400, response.json()
+    assert "already mapped" in str(response.json())
+    assert TenantDomain.objects.get(domain="protected.example.test").tenant_id == owner.id
+    assert not target.domains.exists()
 
 
 @pytest.mark.django_db

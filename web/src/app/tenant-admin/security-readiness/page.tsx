@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getTenantAdminEnterpriseSecurityReadiness } from "@/lib/api";
 import type { TenantAdminEnterpriseSecurityReadiness } from "@/lib/types";
 import { requireSessionPermission } from "@/lib/workspace-access";
@@ -88,7 +88,7 @@ function GroupPanel({
           <h2>{title}</h2>
           <p className="tenant-section-copy">Review the active controls and evidence that keep this domain launch-ready.</p>
         </div>
-        <span className="record-chip">{status}</span>
+        <WorkspaceStatusBadge tone={status === "Ready" ? "success" : status === "Warning" ? "warning" : "danger"}>{status}</WorkspaceStatusBadge>
       </div>
       {children}
       <div className="tenant-security-domain-summary">
@@ -121,8 +121,9 @@ function GroupPanel({
               <strong>{formatValue(check.value)}</strong>
             </div>
             <div className="tenant-console-row__meta">
-              <span className="record-chip">{statusLabel(check.status)}</span>
+              <WorkspaceStatusBadge tone={check.status === "ready" ? "success" : check.status === "warning" ? "warning" : "danger"}>{statusLabel(check.status)}</WorkspaceStatusBadge>
               <span>{titleCase(check.owner_role_ref)}</span>
+              {!check.passed ? <Link className="button button--secondary button--compact" href={check.action_href}>{check.action_label}</Link> : null}
             </div>
           </div>
         ))}
@@ -162,11 +163,11 @@ export default async function TenantAdminSecurityReadinessPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Readiness" value={statusLabel(data.summary.status)} trend={`${data.summary.passed_check_count}/${data.summary.check_count} checks`} />
-          <MetricTile label="Blockers" value={data.summary.blocker_count} trend={`${data.summary.launch_blocker_refs.length} launch refs`} />
-          <MetricTile label="Warnings" value={data.summary.warning_count} trend={data.security_profile_ref} />
-          <MetricTile label="Tenant" value={data.tenant.subscription_plan} trend={data.tenant.timezone} />
+        <div aria-label="Security readiness summary" className="tenant-access-summary-strip" role="group">
+          <article><span>Readiness</span><strong>{statusLabel(data.summary.status)}</strong><small>{data.summary.passed_check_count}/{data.summary.check_count} controls ready</small></article>
+          <article><span>Blockers</span><strong>{data.summary.blocker_count}</strong><small>Must resolve before launch</small></article>
+          <article><span>Warnings</span><strong>{data.summary.warning_count}</strong><small>Review before launch</small></article>
+          <article><span>Evidence profile</span><strong>{data.profile_source}</strong><small>{data.tenant.subscription_plan} · {data.tenant.timezone}</small></article>
         </div>
       </section>
 

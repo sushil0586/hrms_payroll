@@ -58,6 +58,8 @@ function buildHref(
   return queryString ? `${basePath}?${queryString}` : basePath;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return "Not available";
@@ -74,21 +76,21 @@ function formatDateTime(value: string | null | undefined) {
 function resolveSourceHref(item: HrAdminNotification, workspace: "ess" | "mss") {
   const leaveId = item.subject_identifier || String(item.payload?.leave_request_id || "");
   const regularizationId = item.subject_identifier || String(item.payload?.attendance_regularization_id || "");
-  if (item.subject_type === "leave_request") {
+  if (item.subject_type === "leave_request" && UUID_PATTERN.test(leaveId)) {
     return workspace === "mss"
       ? `/mss/approvals?queue=leave&leaveId=${encodeURIComponent(leaveId)}`
-      : `/ess?leaveId=${encodeURIComponent(leaveId)}`;
+      : `/ess/leave?requestId=${encodeURIComponent(leaveId)}`;
   }
-  if (item.subject_type === "attendance_regularization") {
+  if (item.subject_type === "attendance_regularization" && UUID_PATTERN.test(regularizationId)) {
     return workspace === "mss"
       ? `/mss/approvals?queue=attendance&regId=${encodeURIComponent(regularizationId)}`
-      : `/ess?regId=${encodeURIComponent(regularizationId)}`;
+      : `/ess/attendance?regId=${encodeURIComponent(regularizationId)}`;
   }
   if (item.subject_type === "employee_document") {
-    return workspace === "mss" ? "/hr-admin/employee-documents" : "/ess/documents";
+    return workspace === "ess" ? "/ess/documents" : "";
   }
   if (item.subject_type === "payroll_payslip") {
-    return workspace === "mss" ? "/hr-admin/payroll-outputs" : "/ess/payslips";
+    return workspace === "ess" ? "/ess/payslips" : "";
   }
   return "";
 }
@@ -116,6 +118,7 @@ export function UserNotificationCenter({
   workspacePill,
   filterTitle = "Inbox filters",
   filterDescription = "Search your messages, then open one item to review source context and read state.",
+  actionEyebrow,
   actionTitle = "Review messages that need action",
   actionDescription = "Keep this page focused on finding alerts. Open a notification only when you need the full message, delivery trail, or source workflow.",
   listTitle = "Inbox list",
@@ -132,6 +135,8 @@ export function UserNotificationCenter({
   const unreadOnPage = data.items.filter((item) => !item.read_at).length;
   const highPriorityOnPage = data.items.filter((item) => item.priority === "high" || item.priority === "critical").length;
   const failedOnPage = data.items.filter((item) => item.status === "failed").length;
+  const closeHref = buildHref(basePath, currentParams, {});
+  const hasActiveFilters = Boolean(q || status || channel || priority || subjectType);
 
   return (
     <main className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace} accerio-page`}>
@@ -201,6 +206,7 @@ export function UserNotificationCenter({
                 <span className="muted">Priority</span>
                 <select className="input-control" defaultValue={priority} name="priority">
                   <option value="">All priorities</option>
+                  <option value="low">Low</option>
                   <option value="normal">Normal</option>
                   <option value="high">High</option>
                   <option value="critical">Critical</option>
@@ -252,6 +258,7 @@ export function UserNotificationCenter({
               </div>
             </div>
             <div className="user-notification-inline-guidance" aria-label="Notification review guidance">
+              {actionEyebrow ? <span className="eyebrow">{actionEyebrow}</span> : null}
               <strong>{actionTitle}</strong>
               <span>{actionDescription}</span>
               <Link className="button button--ghost" href={crossWorkspaceHref}>
@@ -287,7 +294,7 @@ export function UserNotificationCenter({
                         <td><span className="workspace-table__secondary">{formatDateTime(item.created_at)}</span></td>
                         <td>
                           <div className="table-actions">
-                            <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${item.id}`} item={item} sourceHref={resolveSourceHref(item, workspace)} />
+                            <UserNotificationDetailAction closeHref={closeHref} endpoint={`${apiEndpointBase}/${item.id}`} item={item} sourceHref={resolveSourceHref(item, workspace)} />
                           </div>
                         </td>
                       </tr>
@@ -296,11 +303,9 @@ export function UserNotificationCenter({
                 </table>
               ) : (
                 <div className="notice user-notification-empty">
-                  <strong>No notifications match the current filters.</strong>
-                  <span className="muted">Clear filters or widen the search to review the full inbox.</span>
-                  <Link className="button button--secondary" href={basePath}>
-                    Clear filters
-                  </Link>
+                  <strong>{hasActiveFilters ? "No notifications match the current filters." : "No notifications yet."}</strong>
+                  <span className="muted">{hasActiveFilters ? "Clear filters or widen the search to review the full inbox." : "New team alerts will appear here when a workflow needs attention."}</span>
+                  {hasActiveFilters ? <Link className="button button--secondary" href={basePath}>Clear filters</Link> : null}
                 </div>
               )}
             </WorkspaceTableScrollRegion>

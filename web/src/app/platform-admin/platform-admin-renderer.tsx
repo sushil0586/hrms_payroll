@@ -1,6 +1,7 @@
 import { getPlatformPolicyPacks, getPlatformPublicLeads, getPlatformSummary, getPlatformTenant, getPlatformTenantOnboarding, getPlatformTenants } from "@/lib/api";
 import { DEMO_DATA_ENABLED } from "@/lib/runtime-flags";
 import type { PlatformPolicyPackListItem, PlatformPublicLead, PlatformSummary, PlatformTenantListItem, PlatformTenantOnboarding } from "@/lib/types";
+import { redirect } from "next/navigation";
 
 import { PlatformAdminConsole } from "./platform-admin-console";
 
@@ -13,7 +14,7 @@ export function normalizeParam(value: SearchParamValue) {
 
 function resolveSelectedTenantId(params: Record<string, SearchParamValue>, tenants: PlatformTenantListItem[]) {
   const requested = normalizeParam(params.tenantId);
-  if (requested) {
+  if (requested && tenants.some((tenant) => tenant.id === requested)) {
     return requested;
   }
   return tenants[0]?.id ?? "";
@@ -163,7 +164,7 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
   const summary = summaryResult.data?.counts ? summaryResult.data : fallbackSummary();
   const requestedTenantId = normalizeParam(params.tenantId);
   const shouldLoadLeads = panel === "leads";
-  const shouldLoadTenants = panel === "tenants";
+  const shouldLoadTenants = panel === "tenants" || panel === "events";
   const shouldLoadPolicyPacks = panel === "policy-packs" || panel === "onboarding";
   const needsSelectedTenant = ["launch", "onboarding", "admins", "policy-packs", "events"].includes(panel);
 
@@ -180,6 +181,15 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
   const safeTenants = tenants.length ? tenants : selectedTenantSeed.length ? selectedTenantSeed : DEMO_DATA_ENABLED ? [demoTenant] : [];
   const safePolicyPacks = policyPacks.length ? policyPacks : DEMO_DATA_ENABLED ? [demoPolicyPack] : [];
   const selectedTenantId = resolveSelectedTenantId(params, [...safeTenants, ...selectedTenantSeed]);
+  if (panel === "events" && requestedTenantId && selectedTenantId && requestedTenantId !== selectedTenantId) {
+    const query = new URLSearchParams();
+    query.set("tenantId", selectedTenantId);
+    const search = normalizeParam(params.q);
+    const eventType = normalizeParam(params.eventType);
+    if (search) query.set("q", search);
+    if (eventType) query.set("eventType", eventType);
+    redirect(`/platform-admin/audit-logs?${query.toString()}`);
+  }
   const shouldLoadSelectedTenant = Boolean(selectedTenantId && (needsSelectedTenant || requestedTenantId));
   const [selectedTenantResult, onboardingResult] = await Promise.all([
     shouldLoadSelectedTenant ? getPlatformTenant(selectedTenantId) : Promise.resolve(null),
@@ -190,6 +200,8 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
     <PlatformAdminConsole
       initialPanel={panel}
       initialMessage={normalizeParam(params.feedback) === "tenant-created" ? "Tenant created." : ""}
+      initialEventQuery={normalizeParam(params.q) ?? ""}
+      initialEventType={normalizeParam(params.eventType) ?? "all"}
       leads={safeLeads}
       onboarding={(onboardingResult?.data && "tenant_id" in onboardingResult.data ? onboardingResult.data : DEMO_DATA_ENABLED ? fallbackOnboarding() : null)}
       policyPacks={safePolicyPacks}

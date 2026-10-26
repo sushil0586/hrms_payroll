@@ -108,7 +108,7 @@ function expectNoSensitiveData(value: unknown) {
 
 async function openEventEvidence(page: Page, eventType: string) {
   const eventsCard = card(page, "Onboarding events");
-  await namedControl(eventsCard, "event_search").fill(eventType);
+  await namedControl(eventsCard, "q").fill(eventType);
   const row = eventsCard.locator(".tenant-support-access-row").filter({ hasText: titleCase(eventType) }).first();
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: new RegExp(`View evidence for ${titleCase(eventType)}`) }).click();

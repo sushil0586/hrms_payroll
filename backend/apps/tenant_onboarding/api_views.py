@@ -1800,6 +1800,12 @@ class PlatformTenantListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        if Tenant.objects.filter(code__iexact=data["code"]).exists():
+            raise exceptions.ValidationError({"code": "A tenant with this code already exists."})
+        primary_domain = data.get("primary_domain")
+        if primary_domain and TenantDomain.objects.filter(domain__iexact=primary_domain).exists():
+            raise exceptions.ValidationError({"primary_domain": "This domain is already mapped to a tenant."})
+
         tenant = Tenant.objects.create(
             code=data["code"],
             name=data["name"],
@@ -1816,7 +1822,6 @@ class PlatformTenantListCreateView(APIView):
             onboarding_started_at=timezone.now(),
             prepared_by_identifier=_actor_identifier(request),
         )
-        primary_domain = data.get("primary_domain")
         if primary_domain:
             TenantDomain.objects.create(
                 tenant=tenant,
@@ -1927,6 +1932,9 @@ class PlatformTenantDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        if "code" in data and Tenant.objects.filter(code__iexact=data["code"]).exclude(pk=tenant.pk).exists():
+            raise exceptions.ValidationError({"code": "A tenant with this code already exists."})
+
         simple_fields = [
             "code",
             "name",
@@ -1950,6 +1958,8 @@ class PlatformTenantDetailView(APIView):
 
         if "primary_domain" in data:
             domain = data.get("primary_domain", "")
+            if domain and TenantDomain.objects.filter(domain__iexact=domain).exclude(tenant=tenant).exists():
+                raise exceptions.ValidationError({"primary_domain": "This domain is already mapped to a tenant."})
             current_primary = tenant.domains.filter(is_primary=True).first()
             if current_primary and current_primary.domain != domain:
                 current_primary.is_primary = False

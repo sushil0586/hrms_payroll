@@ -86,7 +86,18 @@ export function NotificationQueue({
   const actionableSelectedIds = selectedIds.filter((itemId) => actionableItems.some((item) => item.id === itemId));
   const allSelected = actionableItems.length > 0 && actionableSelectedIds.length === actionableItems.length;
   const selectedActionableCount = actionableSelectedIds.length;
-
+  const committedQueueHref = `${pathname}${buildQueryString({
+    q: currentFilters.q || undefined,
+    status: currentFilters.status || undefined,
+    channel: currentFilters.channel || undefined,
+    priority: currentFilters.priority || undefined,
+    retry_state: currentFilters.retry_state || undefined,
+    audience_type: currentFilters.audience_type || undefined,
+    module: currentFilters.module || undefined,
+    subject_type: currentFilters.subject_type || undefined,
+    page: currentFilters.page,
+    page_size: currentFilters.page_size,
+  })}`;
   function toggleOne(itemId: string) {
     setSelectedIds((current) => (current.includes(itemId) ? current.filter((value) => value !== itemId) : [...current, itemId]));
   }
@@ -130,7 +141,14 @@ export function NotificationQueue({
       setIsSubmittingBulk(false);
       return;
     }
-    const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => null);
+    if (payload === null) {
+      const message = "The notification service returned an unreadable response. Selection is retained; try again.";
+      setError(message);
+      setToast({ title: "Bulk retry failed.", message, tone: "error" });
+      setIsSubmittingBulk(false);
+      return;
+    }
     if (!response.ok) {
       const detail =
         payload && typeof payload === "object" && "detail" in payload ? String((payload as Record<string, unknown>).detail) : "Unable to retry selected notifications.";
@@ -141,9 +159,9 @@ export function NotificationQueue({
     }
     setSelectedIds([]);
     setIsSubmittingBulk(false);
-    const retryCount = Number((payload as { retry_count?: unknown }).retry_count ?? actionableSelectedIds.length);
-    const skippedCount = Number((payload as { skipped_count?: unknown }).skipped_count ?? 0);
-    const message = `${retryCount} notification(s) queued for retry${skippedCount ? `, ${skippedCount} skipped` : ""}.`;
+    const retryCount = Number((payload as { updated_count?: unknown }).updated_count ?? 0);
+    const skippedCount = Math.max(actionableSelectedIds.length - retryCount, 0);
+    const message = `Retry processed for ${retryCount} notification(s)${skippedCount ? `; ${skippedCount} skipped or capped` : ""}. Check refreshed delivery status and attempts for the outcome.`;
     setToast({ title: "Action saved.", message, tone: "success" });
     refresh();
   }
@@ -174,7 +192,7 @@ export function NotificationQueue({
           </div>
         </div>
 
-        <div className="queue-toolbar__grid">
+        <form className="queue-toolbar__grid" onSubmit={(event) => { event.preventDefault(); goToPage(1); }}>
           <label className="form-field">
             <span className="muted">Search</span>
             <input
@@ -271,7 +289,8 @@ export function NotificationQueue({
               ))}
             </select>
           </label>
-        </div>
+          <button hidden type="submit">Apply filters</button>
+        </form>
 
         <div className="queue-toolbar__actions">
           <AsyncActionButton className="button button--secondary" disabled={selectedActionableCount === 0} pending={isSubmittingBulk || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification queue" : "Retrying selected notifications"} onClick={handleBulkRetry} type="button">{`Retry selected (${selectedActionableCount || 0})`}</AsyncActionButton>
@@ -357,7 +376,7 @@ export function NotificationQueue({
                   {item.subject_type === "employee_document" ? <span className="record-chip record-chip--accent">Document</span> : null}
                 </div>
                 <div className="notification-row-actions">
-                  <Link className="button button--secondary" href={`/hr-admin/notifications/${item.id}/review`}>
+                  <Link className="button button--secondary" href={`/hr-admin/notifications/${item.id}/review?return_to=${encodeURIComponent(committedQueueHref)}`}>
                     Review
                   </Link>
                 </div>
@@ -407,6 +426,7 @@ export function NotificationQueue({
                   item={item}
                   notificationPriorityOptions={notificationPriorityOptions}
                   notificationStatusOptions={notificationStatusOptions}
+                  returnHref={committedQueueHref}
                 />
               </details>
             </article>

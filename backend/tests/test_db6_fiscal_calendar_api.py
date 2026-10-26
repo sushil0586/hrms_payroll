@@ -38,6 +38,13 @@ def test_browser_fiscal_api_persists_scoped_calendars_years_periods_and_audit():
         "is_default": True, "effective_from": "2026-04-01",
     }, format="json")
     assert tenant_calendar.status_code == 201, tenant_calendar.data
+    duplicate_version = client.post("/api/v1/tenant-admin/financial-calendars/calendars/", {
+        "code": "india-apr", "name": "Conflicting India Calendar", "start_month": 4, "start_day": 1,
+        "timezone": "Asia/Kolkata", "country_code": "IN", "version": 1, "status": "active",
+        "is_default": False, "effective_from": "2026-04-01",
+    }, format="json")
+    assert duplicate_version.status_code == 400
+    assert "version" in str(duplicate_version.data).lower()
     entity_calendar = client.post("/api/v1/tenant-admin/financial-calendars/calendars/", {
         "legal_entity_id": str(entity.id), "code": "us-calendar", "name": "US Calendar",
         "start_month": 1, "start_day": 1, "timezone": "America/New_York", "country_code": "US",

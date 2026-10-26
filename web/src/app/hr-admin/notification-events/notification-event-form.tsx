@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { NotificationPreviewPanel } from "@/app/hr-admin/notifications/notification-preview-panel";
@@ -57,6 +56,13 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<NotificationEventField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const isDirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
+  useEffect(() => {
+    function warnBeforeUnload(event: BeforeUnloadEvent) { if (isDirty && !isSubmitting) event.preventDefault(); }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDirty, isSubmitting]);
   const moduleHints = useMemo(
     () => Object.fromEntries(options.notification_catalog_authoring.event_module_hints.map((item) => [item.module, item])),
     [options.notification_catalog_authoring.event_module_hints],
@@ -148,19 +154,30 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
       setFieldErrors(nextErrors);
       setError("Review the highlighted notification event fields and try again.");
       setIsSubmitting(false);
+      const firstField = Object.keys(nextErrors).find((field) => nextErrors[field as NotificationEventField]);
+      if (firstField) requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>(`[data-event-field="${firstField}"]`)?.focus());
       return;
     }
 
-    const response = await fetch(
-      mode === "create" ? "/api/hr-admin/notification-events" : `/api/hr-admin/notification-events/${itemId}`,
-      {
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/notification-events" : `/api/hr-admin/notification-events/${itemId}`, {
         method: mode === "create" ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formValue, recipient_snapshot: recipientSnapshot }),
-      },
-    );
+      });
+    } catch {
+      setError("The notification event could not be saved because the service did not respond. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
 
-    const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => null);
+    if (payload === null) {
+      setError("The notification service returned an unreadable response. Your input is retained; try again.");
+      setIsSubmitting(false);
+      return;
+    }
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
@@ -172,7 +189,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
   }
 
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting} className="section form-layout-modern" noValidate onSubmit={handleSubmit} ref={formRef}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -196,12 +213,12 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Code</span>
-                <input aria-invalid={Boolean(fieldErrors.code)} className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.code)} className="input-control" data-event-field="code" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
                 {fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}
               </label>
               <label className="form-field">
                 <span className="muted">Name</span>
-                <input aria-invalid={Boolean(fieldErrors.name)} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.name)} className="input-control" data-event-field="name" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
                 {fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}
               </label>
               <label className="form-field">
@@ -223,7 +240,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
               </label>
               <label className="form-field">
                 <span className="muted">Trigger key</span>
-                <input aria-invalid={Boolean(fieldErrors.trigger_key)} className="input-control" required value={formValue.trigger_key} onChange={(e) => update("trigger_key", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.trigger_key)} className="input-control" data-event-field="trigger_key" required value={formValue.trigger_key} onChange={(e) => update("trigger_key", e.target.value)} />
                 {fieldErrors.trigger_key ? <span className="field-error-text">{fieldErrors.trigger_key}</span> : null}
               </label>
             </div>
@@ -298,6 +315,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
                 <span className="muted">Delay minutes</span>
                 <input
                   className="input-control"
+                  data-event-field="delivery_delay_minutes"
                   aria-invalid={Boolean(fieldErrors.delivery_delay_minutes)}
                   min={0}
                   type="number"
@@ -368,6 +386,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
                 <textarea
                   aria-invalid={Boolean(fieldErrors.recipient_snapshot)}
                   className="input-control"
+                  data-event-field="recipient_snapshot"
                   rows={5}
                   value={formValue.recipient_snapshot}
                   onChange={(e) => update("recipient_snapshot", e.target.value)}
@@ -404,7 +423,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? "Create notification event" : "Save changes"}
             </button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button className="button button--secondary" onClick={() => { if (!isDirty || window.confirm("Discard unsaved notification event changes?")) router.back(); }} type="button">
               Cancel
             </button>
           </div>

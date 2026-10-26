@@ -1,6 +1,6 @@
 # Payroll UI/UX makeover plan
 
-Prepared: 23 October 2026; updated 24 October 2026. Status: [Phase 1 baseline complete](hrms-payroll-phase1-design-baseline.md), [Phase 2 configuration complete](hrms-payroll-phase2-configuration-makeover.md), [Phase 3 readiness, inputs and calculation complete](hrms-payroll-phase3-processing-makeover.md), [Phase 4 review, adjustments and settlements complete](hrms-payroll-phase4-review-adjustments-settlements.md), and [Phase 5 outputs, finance and providers complete](hrms-payroll-phase5-outputs-finance-providers.md). [Phase 6 payroll reports](hrms-payroll-phase6-reports.md) is in progress. Scope is defined by the [35-route inventory](hrms-payroll-makeover-inventory.md).
+Prepared: 23 October 2026; updated 24 October 2026. Status: Phases 1–6 are complete within their linked records; [Phase 7 joined closure](hrms-payroll-phase7-joined-closure.md) is in progress. Scope is defined by the [35-route inventory](hrms-payroll-makeover-inventory.md).
 
 ## Purpose
 
@@ -15,10 +15,10 @@ Use the [shared UI/UX standard](hrms-ui-ux-standard.md), [HR Admin experience st
 | 1 — Inventory and rendered baseline | All 35 routes, dialogs, tabs, filters, APIs, permissions and downstream handoffs | **Complete:** machine inventory and contract map; 108/108 current-build executions, 315 captures and six inspected samples. Read-only baseline; no destructive business transitions. |
 | 2 — Configuration | Payroll setup, salary setup, statutory setup and payroll rules | **Complete:** shared active-task composition, compact mobile task strips, statutory value containment, 15/15 three-engine responsive checks and 15/15 real Chromium workflow checks on source-matched build `XWGfNDvxUPV0vUHgMpkDV`. |
 | 3 — Readiness, inputs and calculation | Time-to-payroll, readiness, input snapshots/import/reconciliation/lock and draft calculation/jobs | **Complete:** core UI and URL-state behavior; 12/12 three-engine responsive, 6/6 established workflow, 4/4 owned transition and 4/4 backend recovery checks passed on build `FOIH5wLjJByqRfBa0TOL_`. |
-| 4 — Review, adjustments and settlements | Review/exceptions/close actions, adjustments and settlements | **In progress:** URL-backed review tasks, eligible-only adjustment/settlement transitions, rejection rationale and uncertain-response handling implemented; responsive and owned lifecycle certification pending. |
-| 5 — Outputs, finance and providers | Outputs/publication/access, finance handoff and provider connections/delivery/mapping/certification/rehearsal | Reconciliation before publication, secure artifact access, explicit delivery/acknowledgement states, safe retries and complete provider evidence without exposing secrets. |
-| 6 — Reports | Payroll hub and all 20 specialized payroll/finance/statutory/provider reports | Every option and meaningful filter intersection, stable sort/paging, complete bounded collection, copied URL/history, drill-down return scope and screen/CSV/manifest/print parity. |
-| 7 — Joined closure | All completed slices and affected ESS, Finance Manager, Tenant Admin and shared consumers | One source-matched build, three-engine regression, representative visual review, accessibility checks, domain/backend selections, finding disposition and exact synthetic-data/infrastructure cleanup. |
+| 4 — Review, adjustments and settlements | Review/exceptions/close actions, adjustments and settlements | **Complete:** 40 browser and nine backend checks on source-matched build `LWrD60xgJT0BX5W88c-zd`. |
+| 5 — Outputs, finance and providers | Outputs/publication/access, finance handoff and provider connections/delivery/mapping/certification/rehearsal | **Complete:** 44 browser and 13 backend checks on source-matched build `RSHtwr8Ki1VkBzsmEbxC9`. |
+| 6 — Reports | Payroll hub and all 20 specialized payroll/finance/statutory/provider reports | **Complete:** URL-state rollout and 123/123 three-engine shell/history checks passed with zero residual tenants. |
+| 7 — Joined closure | All completed slices and affected ESS, Finance Manager, Tenant Admin and shared consumers | **Complete:** [35-route closure ledger and joined execution matrix](hrms-payroll-phase7-joined-closure.md) accepted with 129/129 fresh checks. |
 
 Each phase is independently reviewable. A phase closes only when implementation, real workflow checks, negative cases, final renders and evidence are complete. Presentation-only adoption does not close a workflow phase.
 

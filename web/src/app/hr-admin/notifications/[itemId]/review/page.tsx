@@ -1,15 +1,27 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { NotificationRetryAction } from "@/app/hr-admin/notifications/notification-retry-action";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminNotification } from "@/lib/api";
+import { getHrAdminNotification, isApiNotFoundError } from "@/lib/api";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
 
-type PageProps = { params: Promise<{ itemId: string }> };
+type PageProps = { params: Promise<{ itemId: string }>; searchParams?: Promise<{ return_to?: string | string[] }> };
 
-export default async function HrAdminNotificationReviewPage({ params }: PageProps) {
+export default async function HrAdminNotificationReviewPage({ params, searchParams }: PageProps) {
   const { itemId } = await params;
-  const result = await getHrAdminNotification(itemId);
+  const requestedReturn = await searchParams;
+  const rawReturn = Array.isArray(requestedReturn?.return_to) ? requestedReturn?.return_to[0] : requestedReturn?.return_to;
+  const returnHref = rawReturn === "/hr-admin/notifications" || rawReturn?.startsWith("/hr-admin/notifications?")
+    ? rawReturn
+    : "/hr-admin/notifications";
+  let result;
+  try {
+    result = await getHrAdminNotification(itemId);
+  } catch (error) {
+    if (isApiNotFoundError(error)) notFound();
+    throw error;
+  }
   const item = result.data;
   const latestLog = [...item.delivery_logs].sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
   const latestFailureLog = [...item.delivery_logs]
@@ -19,7 +31,7 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
   return (
     <main className="shell notification-shell accerio-page">
       <PageIntro appearance="accerio"
-        actions={<Link className="button button--secondary" href="/hr-admin/notifications">Back to queue</Link>}
+        actions={<Link className="button button--secondary" href={returnHref}>Back to queue</Link>}
         description="Inspect one notification payload and its current state."
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
         pills={[item.status, item.channel, item.priority]}

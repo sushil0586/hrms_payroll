@@ -6,6 +6,7 @@ export async function POST(request: NextRequest) {
   if (!token) return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   const body = await request.json();
   const upstream = await fetch(`${API_BASE_URL}/hr-admin/notification-events/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Token ${token}` }, body: JSON.stringify(body), cache: "no-store" });
-  const payload = await upstream.json().catch(() => ({}));
+  const payload = await upstream.json().catch(() => null);
+  if (payload === null) return NextResponse.json({ detail: "The notification service returned an unreadable response." }, { status: 502 });
   return NextResponse.json(payload, { status: upstream.status });
 }

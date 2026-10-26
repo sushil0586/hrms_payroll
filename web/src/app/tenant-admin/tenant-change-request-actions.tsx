@@ -164,7 +164,7 @@ export function TenantChangeRequestActions({
         description: description.trim(),
         requested_payload: validation.payload,
       }),
-    }, "Unable to reach the change-request service. Check your connection and retry.");
+    }, "The service response was interrupted, so the request outcome is unconfirmed. Refresh the queue before deciding whether to submit again.");
     const result = response.payload;
     setBusyRef("");
     if (!response.ok) {
@@ -193,7 +193,7 @@ export function TenantChangeRequestActions({
         action,
         decision_note: decisionNotes[requestId] ?? "",
       }),
-    }, "Unable to reach the change-request service. Check your connection and retry.");
+    }, "The service response was interrupted, so the action outcome is unconfirmed. Refresh the queue before deciding whether to try again.");
     const result = response.payload;
     setBusyRef("");
     if (!response.ok) {

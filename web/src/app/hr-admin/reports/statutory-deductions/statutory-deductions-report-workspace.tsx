@@ -1,10 +1,11 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { useCorrectedWorkspaceQueryPage, useWorkspaceQueryFilter, useWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type {
   HrAdminPayrollOutputArtifact,
@@ -129,11 +130,11 @@ export function StatutoryDeductionsReportWorkspace({
   registrations: HrAdminPayrollStatutoryEmployerRegistration[];
   filings: HrAdminPayrollStatutoryFilingCalendar[];
 }) {
-  const [query, setQuery] = useState("");
-  const [statutoryType, setStatutoryType] = useState("All");
-  const [provider, setProvider] = useState("All");
-  const [sortBy, setSortBy] = useState("amount_desc");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [statutoryType, setStatutoryType] = useWorkspaceQueryFilter("statutory_type", "All");
+  const [provider, setProvider] = useWorkspaceQueryFilter("provider", "All");
+  const [sortBy, setSortBy] = useWorkspaceQueryFilter("sort", "amount_desc");
+  const [page, setPage] = useWorkspaceQueryPage();
 
   const rows = useMemo(() => buildRows({ artifacts, components, filings, registrations }), [artifacts, components, filings, registrations]);
   const statutoryTypes = useMemo(() => ["All", ...unique(rows.map((row) => row.statutoryType))], [rows]);
@@ -173,7 +174,7 @@ export function StatutoryDeductionsReportWorkspace({
   }, [provider, query, rows, sortBy, statutoryType]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const totalAmount = filteredRows.reduce((sum, row) => sum + row.amount, 0);

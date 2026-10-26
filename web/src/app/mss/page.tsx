@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getMssApprovalInbox } from "@/lib/api";
@@ -48,22 +47,6 @@ function buildManagerActions(
       href: "/mss/approvals?queue=attendance",
       action: "Review attendance",
       status: actionStatus(summary.pending_attendance_regularizations_count),
-    },
-    {
-      label: "Today exceptions",
-      value: summary.attendance_exceptions_today,
-      detail: "Same-day attendance signals. The attendance queue shows correction requests.",
-      href: "/mss/approvals?queue=attendance",
-      action: "Open attendance queue",
-      status: actionStatus(summary.attendance_exceptions_today),
-    },
-    {
-      label: "Team on leave",
-      value: summary.employees_on_leave_today,
-      detail: "People away today. The leave queue shows requests awaiting a decision.",
-      href: "/mss/approvals?queue=leave",
-      action: "Open leave queue",
-      status: "ready" as const,
     },
   ];
   return actions.filter((item) => {
@@ -150,6 +133,7 @@ export default async function MssControlCenterPage() {
           <span><strong>{totalPending}</strong> pending decisions</span>
           {canApproveLeave ? <span><strong>{summary.pending_leave_approvals_count}</strong> leave approvals</span> : null}
           {canReviewAttendance ? <span><strong>{summary.pending_attendance_regularizations_count}</strong> attendance fixes</span> : null}
+          {canReviewAttendance ? <span><strong>{summary.attendance_exceptions_today}</strong> attendance signals today</span> : null}
           <span><strong>{summary.employees_on_leave_today}</strong> on leave today</span>
         </div>
       </section>
@@ -175,74 +159,33 @@ export default async function MssControlCenterPage() {
             </div>
             <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
           </div>
-          <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Manager actions table">
+          <div className="workspace-table-region" role="region" aria-label="Manager actions">
             {actions.length ? (
-              <table className="workspace-table attendance-directory-table mss-action-table" aria-label="Manager actions">
-                <thead>
-                  <tr>
-                    <th>State</th>
-                    <th>Action</th>
-                    <th>Count</th>
-                    <th>Open</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {actions.map((item) => (
-                    <tr key={item.label}>
-                      <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{statusLabel[item.status]}</WorkspaceStatusBadge></td>
-                      <td className="workspace-table__primary-cell">
-                        <div>
-                          <strong>{item.label}</strong>
-                          <span>{item.detail}</span>
-                        </div>
-                      </td>
-                      <td><span className="record-chip">{item.value}</span></td>
-                      <td>
-                        <Link className={item.status === "warning" ? "button button--primary" : "button button--secondary"} href={item.href}>
-                          {item.action}
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ul className="mss-action-list" aria-label="Approval queues">
+                {actions.map((item) => (
+                  <li className="mss-action-row" key={item.label}>
+                    <WorkspaceStatusBadge tone={statusTone(item.status)}>{statusLabel[item.status]}</WorkspaceStatusBadge>
+                    <div className="mss-action-row__body">
+                      <strong>{item.label}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                    <span className="record-chip" aria-label={`${item.value} pending`}>{item.value}</span>
+                    <Link className={item.status === "warning" ? "button button--primary" : "button button--secondary"} href={item.href}>
+                      {item.action}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <div className="notice notice--compact">
                 <strong>No manager approval queues are enabled.</strong>
                 <span className="muted">Use ESS for personal employee tasks or ask HR to confirm manager permissions.</span>
               </div>
             )}
-          </WorkspaceTableScrollRegion>
-        </article>
-
-        <article className="panel-card-soft mss-dashboard-card">
-          <div className="mss-dashboard-card__header">
-            <div>
-              <span className="workspace-card__eyebrow">Team snapshot</span>
-              <h2>Coverage context</h2>
-            </div>
-          </div>
-          <div className="mss-context-grid">
-            <div className="mss-context-tile">
-              <span>Leave queue rows</span>
-              <strong>{canApproveLeave ? result.pendingLeave.total_count : "Hidden"}</strong>
-            </div>
-            <div className="mss-context-tile">
-              <span>Attendance queue rows</span>
-              <strong>{canReviewAttendance ? result.pendingRegularizations.total_count : "Hidden"}</strong>
-            </div>
-            <div className="mss-context-tile">
-              <span>Exceptions today</span>
-              <strong>{canReviewAttendance ? summary.attendance_exceptions_today : "Hidden"}</strong>
-            </div>
-            <div className="mss-context-tile">
-              <span>On leave today</span>
-              <strong>{summary.employees_on_leave_today}</strong>
-            </div>
           </div>
         </article>
 
-        <article className="panel-card-soft mss-dashboard-card">
+        <article className="panel-card-soft mss-dashboard-card mss-dashboard-card--personal">
           <div className="mss-dashboard-card__header">
             <div>
               <span className="workspace-card__eyebrow">Personal workspace</span>

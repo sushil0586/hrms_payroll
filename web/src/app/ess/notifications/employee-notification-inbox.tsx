@@ -32,8 +32,12 @@ function utcTimestamp(value: string | null) {
 }
 
 export function EmployeeNotificationInbox({
+  closeHref,
+  emptyMessage,
   items,
 }: {
+  closeHref: string;
+  emptyMessage: string;
   items: HrAdminNotification[];
 }) {
   const [records, setRecords] = useState(items);
@@ -98,14 +102,14 @@ export function EmployeeNotificationInbox({
           </tbody>
         </WorkspaceDataTable>
       ) : (
-        <p role="status">No notifications match your filters.</p>
+        <p role="status">{emptyMessage}</p>
       )}
       {item ? (
         <HrAdminActionModal
           className="accerio-dialog"
           labelledBy="employee-notification-title"
           title={item.title || item.subject || "Notification"}
-          closeHref="/ess/notifications"
+          closeHref={closeHref}
           onClose={() => setSelected(null)}
           footer={
             <>
