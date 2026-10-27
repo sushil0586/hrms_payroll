@@ -180,6 +180,17 @@ class EmployeeProfileSerializer(serializers.Serializer):
     reporting_manager = serializers.CharField(allow_null=True)
 
 
+class EmployeeProfileUpdateSerializer(serializers.Serializer):
+    preferred_name = serializers.CharField(max_length=120, allow_blank=True, required=False)
+    personal_email = serializers.EmailField(allow_blank=True, required=False)
+    phone_number = serializers.CharField(max_length=40, allow_blank=True, required=False)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError({"detail": "Provide at least one permitted profile field."})
+        return attrs
+
+
 class HrAdminEmployeeListItemSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     employee_code = serializers.CharField()

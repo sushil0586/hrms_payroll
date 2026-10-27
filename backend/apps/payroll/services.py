@@ -4725,6 +4725,7 @@ def submit_payroll_run_review(review: PayrollRunReview, *, submitted_by=None) ->
     return _sync_review_snapshots(review)
 
 
+@transaction.atomic
 def approve_payroll_run_review(
     review: PayrollRunReview,
     *,
@@ -4734,8 +4735,11 @@ def approve_payroll_run_review(
 ) -> PayrollRunApproval:
     """Approve a submitted payroll review."""
 
+    review = PayrollRunReview.objects.select_for_update().select_related("payroll_run").get(pk=review.pk)
     if review.status != PayrollReviewStatus.READY_FOR_APPROVAL:
         raise PayrollReviewError("Payroll review must be ready for approval before approval.")
+    if approved_by and review.submitted_by_id == approved_by.id:
+        raise PayrollReviewError("Payroll review submitter cannot approve the same review.")
     summary = _exception_summary(review)
     if summary["open_blocker_count"]:
         raise PayrollReviewError("Cannot approve payroll review while blocker exceptions are open.")
@@ -4758,6 +4762,7 @@ def approve_payroll_run_review(
     return approval
 
 
+@transaction.atomic
 def reject_payroll_run_review(
     review: PayrollRunReview,
     *,
@@ -4767,8 +4772,11 @@ def reject_payroll_run_review(
 ) -> PayrollRunApproval:
     """Reject a submitted payroll review and return it to exception handling."""
 
+    review = PayrollRunReview.objects.select_for_update().select_related("payroll_run").get(pk=review.pk)
     if review.status != PayrollReviewStatus.READY_FOR_APPROVAL:
         raise PayrollReviewError("Payroll review must be ready for approval before rejection.")
+    if rejected_by and review.submitted_by_id == rejected_by.id:
+        raise PayrollReviewError("Payroll review submitter cannot reject the same review.")
     approval = PayrollRunApproval.objects.create(
         tenant=review.tenant,
         review=review,

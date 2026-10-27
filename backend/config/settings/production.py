@@ -11,7 +11,9 @@ SECURE_HSTS_SECONDS = env_int("DJANGO_SECURE_HSTS_SECONDS", 31536000)  # noqa: F
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", True)  # noqa: F405
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", True)  # noqa: F405
 
-HRMS_ENVIRONMENT = "production"
+HRMS_ENVIRONMENT = os.getenv("HRMS_ENVIRONMENT", "production")  # noqa: F405
+if HRMS_ENVIRONMENT == "staging":
+    EMAIL_BACKEND = "apps.common.email_backends.StagingRecipientAllowlistEmailBackend"
 PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFICATION_MODE = "strict"
 
 REST_FRAMEWORK = {  # noqa: F405

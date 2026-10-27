@@ -205,9 +205,14 @@ test.describe("ESS-3 production leave", () => {
     await expect(page.getByRole("dialog")).toContainText("0.50");
     const download = page.getByRole("dialog").getByRole("link", { name: /ess3-evidence.txt/ });
     await expect(download).toBeVisible();
-    const artifact = await page.request.get((await download.getAttribute("href"))!);
-    expect(artifact.status()).toBe(200);
-    expect((await artifact.body()).toString()).toBe("Synthetic ESS3 evidence only");
+    const href = await download.getAttribute("href");
+    expect(href).toBeTruthy();
+    const artifact = await page.evaluate(async (url) => {
+      const response = await fetch(url, { credentials: "same-origin" });
+      return { body: await response.text(), status: response.status };
+    }, href!);
+    expect(artifact.status).toBe(200);
+    expect(artifact.body).toBe("Synthetic ESS3 evidence only");
   });
   test("withdrawal updates real request and history", async ({ page }) => {
     expect(submittedId).toBeTruthy();

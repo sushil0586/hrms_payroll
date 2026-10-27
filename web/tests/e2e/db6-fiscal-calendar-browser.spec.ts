@@ -48,10 +48,16 @@ test.describe("DB-6.3 financial calendar browser certification", () => {
     const periodRow = page.getByRole("table", { name: "Accounting periods" }).getByRole("row", { name: /April 2026/ });
     await expect(periodRow).toContainText("open");
     await periodRow.getByRole("button", { name: "Close" }).click();
+    const closeDialog = page.getByRole("dialog", { name: "Close accounting period" });
+    await closeDialog.getByLabel("Reason").fill("DB-6.3 controlled month-end close");
+    await closeDialog.getByRole("button", { name: "Confirm close" }).click();
     await expect(page.locator(".notice").filter({ hasText: "Accounting period closed with an audit event." })).toBeVisible();
     await expect(periodRow).toContainText("closed");
     await expect(periodRow).toContainText("1 event");
     await periodRow.getByRole("button", { name: "Reopen" }).click();
+    const reopenDialog = page.getByRole("dialog", { name: "Reopen accounting period" });
+    await reopenDialog.getByLabel("Reason").fill("DB-6.3 authorized correction window");
+    await reopenDialog.getByRole("button", { name: "Confirm reopen" }).click();
     await expect(page.locator(".notice").filter({ hasText: "Accounting period reopened with an audit event." })).toBeVisible();
     await expect(periodRow).toContainText("open");
     await expect(periodRow).toContainText("2 events");

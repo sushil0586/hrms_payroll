@@ -129,7 +129,16 @@ def _assert_postgresql_read_only_role() -> str:
     return current_user
 
 
+def _assert_staging_fingerprint(manifest: RunManifest) -> None:
+    if getattr(settings, "HRMS_ENVIRONMENT", "") != "staging":
+        return
+    configured_fingerprint = getattr(settings, "HRMS_STAGING_ENVIRONMENT_FINGERPRINT", "")
+    if not configured_fingerprint or configured_fingerprint != manifest.environment_fingerprint:
+        raise CommandError("Staging evidence environment fingerprint is missing or mismatched.")
+
+
 def collect_onboarding_evidence(manifest: RunManifest) -> dict:
+    _assert_staging_fingerprint(manifest)
     tenant_resource = _single_owned(manifest, "tenant")
     with transaction.atomic():
         role = _assert_postgresql_read_only_role()

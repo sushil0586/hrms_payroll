@@ -52,7 +52,7 @@ No dummy production credentials or weakened preflight values are acceptable. Syn
 - Staging Compose resolves with the checked-in example contract.
 - Example staging validator correctly fails placeholders and missing external controls; it did not expose secrets.
 - Backup, restore and rehearsal shell syntax passed.
-- Frozen mapping validation: 136 unique IDs, 15 batches, all `Not Run`.
+- Frozen mapping validation: 136 unique IDs, 14 execution batches plus Batch 0 preflight, all `Not Run`.
 - Payroll repair: Playwright discovery, TypeScript, and focused ESLint passed; no payroll mutation executed.
 
 ## Status

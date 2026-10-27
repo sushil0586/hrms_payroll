@@ -39,7 +39,7 @@ Additional non-mutating validation passed:
 - `docs/qa/hrms-staging-certification-dashboard.md`
 - Four STG-0A artifacts created by this phase
 
-The register still expands to exactly 136 unique IDs in 15 batches, all `Not Run`.
+The register still expands to exactly 136 unique IDs in 14 execution batches plus Batch 0 preflight, all `Not Run`.
 
 ## Safety Review
 

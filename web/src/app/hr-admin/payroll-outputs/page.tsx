@@ -134,8 +134,9 @@ function BatchRail({
       </div>
       <div className="payroll-setup-card-list">
         {batches.map((batch) => (
-          <Link
+          <a
             className={`payroll-setup-mini-card payroll-output-card ${selectedBatch?.id === batch.id ? "is-selected" : ""}`}
+            data-navigation-mode="document"
             href={buildHref("/hr-admin/payroll-outputs", currentParams, {
               artifactId: undefined,
               artifactPage: "1",
@@ -154,7 +155,7 @@ function BatchRail({
             </div>
             <code>{batch.output_profile_ref}</code>
             {selectedBatch?.id === batch.id ? <span className="payroll-rule-selected-marker">Selected batch</span> : null}
-          </Link>
+          </a>
         ))}
         {batches.length === 0 ? (
           <div className="empty-state">No output batches are available yet. Generate outputs from a locked payroll review to populate this rail.</div>
@@ -457,15 +458,16 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
       <section className="section section--tight">
         <nav className="payroll-setup-tabs" aria-label="Payroll output sections">
           {OUTPUT_TABS.map((tab) => (
-            <Link
+            <a
               aria-current={activeTab === tab.id ? "page" : undefined}
               className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              data-navigation-mode="document"
               href={buildHref("/hr-admin/payroll-outputs", currentParams, { tab: tab.id })}
               key={tab.id}
             >
               <strong>{tab.label}</strong>
               <span>{tab.helper}</span>
-            </Link>
+            </a>
           ))}
         </nav>
       </section>

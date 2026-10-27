@@ -248,7 +248,8 @@ test("direct browser APIs reject privileged reads foreign records and closed mut
   const profile = await (await page.request.get(`${backend}/me/profile/?employee_id=${manager}`, { headers })).json(); expect(profile.id).toBe(workspace.manifest.credentials.employee.employee_id); expect(profile.account_number).toBeUndefined(); expect(profile.pan_number).toBeUndefined();
   const closedMonth = await (await page.request.get(`${backend}/me/attendance-records/?month=2029-02`, { headers })).json();
   const attempt = await page.request.post(`${backend}/me/attendance-regularizations/`, { headers, data: { attendance_record_id: closedMonth.days[0].id, requested_status: "present", reason: "ESS6 closed-period rejection" } }); expect(attempt.status()).toBe(400);
-  expect((await page.request.patch(`${backend}/me/profile/`, { headers, data: { first_name: "Forbidden" } })).status()).toBe(405);
+  const selfUpdate = await page.request.patch(`${backend}/me/profile/`, { headers, data: { preferred_name: "ESS Scoped Update" } }); expect(selfUpdate.status()).toBe(200);
+  expect((await page.request.patch(`${backend}/me/profile/`, { headers, data: { first_name: "Forbidden" } })).status()).toBe(400);
   django(`from tests.ess2_browser_fixture import verify; verify("${closed.close_id}","${closed.hash}")`);
 });
 

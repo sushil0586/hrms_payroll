@@ -218,7 +218,7 @@ test.describe("ESS-4 production documents and payroll", () => {
     await dialog.getByLabel("Expires on", { exact: true }).fill("2035-12-31");
     fault = { path: "/api/v1/me/employee-documents/", status: 503 };
     await dialog.getByRole("button", { name: "Submit for review", exact: true }).click();
-    await expect(dialog.getByRole("alert")).toContainText("Synthetic ESS-4 read failure");
+    await expect(dialog.getByRole("alert")).toContainText("Upload outcome could not be confirmed. Check document history before retrying; your draft is retained.");
     await expect(dialog.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("QA Fresh Employee Evidence");
     fault = undefined;
     uploadPosts = 0;

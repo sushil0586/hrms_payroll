@@ -250,6 +250,14 @@ class Command(BaseCommand):
 
     def _create_org(self, tenant: Tenant) -> dict:
         legal_entity = LegalEntity.objects.create(tenant=tenant, code="qa-entity", name="QA Entity", registered_name="QA Entity Pvt Ltd", timezone=tenant.timezone)
+        LegalEntity.objects.create(
+            tenant=tenant,
+            code="db6-us",
+            name="DB6 US Entity",
+            registered_name="DB6 US Entity Inc",
+            country_code="US",
+            timezone="America/New_York",
+        )
         location = Location.objects.create(tenant=tenant, code="qa-location", name="QA Location", city="Pune", state="Maharashtra")
         branch = Branch.objects.create(tenant=tenant, code="qa-branch", name="QA Branch", legal_entity=legal_entity, location=location)
         business_unit = BusinessUnit.objects.create(tenant=tenant, code="qa-business", name="QA Business")
@@ -295,6 +303,13 @@ class Command(BaseCommand):
                         role=role,
                         permission_key=permission["key"],
                         defaults={"description": "Playwright workspace default permission."},
+                    )
+            if key == "tenant_admin":
+                for permission_key in ("finance.periods.close", "finance.periods.reopen"):
+                    RolePermission.objects.get_or_create(
+                        role=role,
+                        permission_key=permission_key,
+                        defaults={"description": "Playwright fiscal lifecycle certification permission."},
                     )
             employee = Employee.objects.create(
                 tenant=tenant,
@@ -672,15 +687,15 @@ class Command(BaseCommand):
             PayrollSettlementLine.objects.filter(tenant=tenant).delete()
             PayrollSettlement.objects.filter(tenant=tenant).delete()
             PayrollAdjustment.objects.filter(tenant=tenant).delete()
+            PayrollInputSnapshot.objects.filter(tenant=tenant).delete()
+            AttendancePeriodCloseEvent.objects.filter(tenant=tenant).delete()
+            AttendancePeriodClose.objects.filter(tenant=tenant).delete()
+            PayrollRun.objects.filter(tenant=tenant).delete()
             AccountingPeriodStatusEvent.objects.filter(tenant=tenant).delete()
             FiscalYearStatusEvent.objects.filter(tenant=tenant).delete()
             AccountingPeriod.objects.filter(tenant=tenant).delete()
             FiscalYear.objects.filter(tenant=tenant).delete()
             FiscalCalendar.objects.filter(tenant=tenant).delete()
-            PayrollInputSnapshot.objects.filter(tenant=tenant).delete()
-            AttendancePeriodCloseEvent.objects.filter(tenant=tenant).delete()
-            AttendancePeriodClose.objects.filter(tenant=tenant).delete()
-            PayrollRun.objects.filter(tenant=tenant).delete()
             EmployeeSalaryAssignment.objects.filter(tenant=tenant).delete()
             PayrollStatutoryFilingCalendar.objects.filter(tenant=tenant).delete()
             PayrollStatutoryEmployerRegistration.objects.filter(tenant=tenant).delete()

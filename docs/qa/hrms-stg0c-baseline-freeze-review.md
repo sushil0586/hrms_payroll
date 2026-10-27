@@ -52,7 +52,7 @@ git commit -m "docs(qa): freeze HRMS staging readiness baseline"
 ## Review Results
 
 - All 15 intended files exist.
-- Frozen register expands to exactly 136 unique IDs across 15 batches.
+- Frozen register expands to exactly 136 unique IDs across 14 execution batches plus Batch 0 preflight.
 - All execution statuses remain `Not Run`.
 - No environment file, key, credential, session token, private employee document or payroll artifact is included.
 - Secret-pattern and diff-hygiene checks passed.

@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.api_views import HrAdminContextMixin, TenantAdminContextMixin
+from apps.common.selectors import record_saas_commercial_audit_event
 from apps.leave_management.models import (
     LeavePolicy,
     LeavePolicyPeriod,
@@ -141,6 +142,23 @@ class LeavePolicyPeriodListCreateBase(LeaveYearApiBase):
                     policy_snapshot={"policy_id": str(policy.id), "policy_code": policy.code, "policy_name": policy.name,
                                      "annual_entitlement": str(policy.annual_entitlement), "max_carry_forward": str(policy.max_carry_forward),
                                      "config_snapshot": policy.config_snapshot},
+                )
+                record_saas_commercial_audit_event(
+                    tenant,
+                    event_type="leave_policy_period_created",
+                    actor_identifier=getattr(request.user, "username", ""),
+                    source_ref="hrms.leave_year.configuration.audit.v1",
+                    event_snapshot={
+                        "action": "created",
+                        "leave_policy_period_id": str(item.id),
+                        "leave_policy_id": str(policy.id),
+                        "legal_entity_id": str(entity.id) if entity else None,
+                        "code": item.code,
+                        "start_date": item.start_date.isoformat(),
+                        "end_date": item.end_date.isoformat(),
+                        "status": item.status,
+                        "permission": "leave.periods.manage",
+                    },
                 )
         except IntegrityError as exc:
             return Response({"detail": "This leave-year period overlaps or duplicates an existing policy scope."}, status=409)

@@ -6,7 +6,7 @@ import { gotoAuthenticated, requestWithBrowserSession } from "../helpers/staging
 function field(scope: Page | Locator, label: string) {
   return scope
     .locator("label.form-field")
-    .filter({ has: scope.locator("span", { hasText: new RegExp(`^${label}$`) }) })
+    .filter({ has: scope.locator("span", { hasText: new RegExp(`^${label}(?: \\(required\\))?$`) }) })
     .locator("input, select, textarea")
     .first();
 }
@@ -44,7 +44,9 @@ test("DB6-06-001/002/006 browser lifecycle preserves history and archives safely
   await gotoAuthenticated(page, "/hr-admin/employees/new");
   const employeeOptionsResponse = await requestWithBrowserSession(page, "/api/hr-admin/employees/options");
   expect(employeeOptionsResponse.status).toBe(200);
-  const employeeOptions = JSON.parse(employeeOptionsResponse.body) as { business_units: Array<{ id: string }> };
+  const employeeOptions = JSON.parse(employeeOptionsResponse.body) as {
+    business_units: Array<{ id: string }>;
+  };
   expect(employeeOptions.business_units[0]?.id).toBeTruthy();
   const departmentFixture = await requestWithBrowserSession(page, "/api/hr-admin/organization/departments", {
     method: "POST",
@@ -68,12 +70,15 @@ test("DB6-06-001/002/006 browser lifecycle preserves history and archives safely
   await field(page, "Date of birth").fill("1994-01-01");
   await field(page, "Date of joining").fill("2026-01-01");
   await next(page);
-  await firstValue(field(page, "Legal entity"));
   await firstValue(field(page, "Branch"));
+  const businessUnit = field(page, "Business unit");
+  if (!(await businessUnit.inputValue())) await firstValue(businessUnit);
   await optionContaining(field(page, "Department"), "QA People");
   await firstValue(field(page, "Cost center"));
   await firstValue(field(page, "Designation"));
   await firstValue(field(page, "Employment type"));
+  const grade = field(page, "Grade");
+  if (!(await grade.inputValue())) await firstValue(grade);
   await optionContaining(field(page, "Reporting manager"), "QA-TA-001");
   await next(page);
   const createResponsePromise = page.waitForResponse((response) =>
@@ -93,7 +98,7 @@ test("DB6-06-001/002/006 browser lifecycle preserves history and archives safely
   await expect(page.getByText(employeeCode).first()).toBeVisible();
 
   await gotoAuthenticated(page, "/hr-admin/movements/new");
-  await optionContaining(field(page, "Employee"), employeeCode);
+  await optionContaining(field(page, "Employee"), "QA-MGR-001");
   await field(page, "Movement type").selectOption("transfer");
   await field(page, "Status").selectOption("completed");
   await field(page, "Effective date").fill("2026-10-10");
@@ -102,15 +107,19 @@ test("DB6-06-001/002/006 browser lifecycle preserves history and archives safely
   await optionContaining(field(page, "From department"), "QA People");
   await optionContaining(field(page, "To department"), targetDepartmentName);
   await optionContaining(field(page, "From manager"), "QA-TA-001");
-  await optionContaining(field(page, "To manager"), "QA-MGR-001");
+  await optionContaining(field(page, "Destination manager / owner"), "QA-MGR-002");
   await field(page, "Current snapshot JSON").fill(JSON.stringify({ source: "db6-browser" }));
   const movementResponsePromise = page.waitForResponse((response) =>
     response.url().includes("/api/hr-admin/movements") && response.request().method() === "POST",
   );
   await page.getByRole("button", { name: "Create movement" }).click();
-  expect((await movementResponsePromise).status()).toBe(201);
+  const movementResponse = await movementResponsePromise;
+  expect(movementResponse.status()).toBe(201);
+  await page.waitForURL((url) => url.pathname === "/hr-admin/movements");
 
-  await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}`);
+  const movementEmployeeId = process.env.STG136_BATCH12_MOVEMENT_EMPLOYEE_ID;
+  expect(movementEmployeeId).toBeTruthy();
+  await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${movementEmployeeId}`);
   await expectPageReady(page, "Employees");
   await expect(page.locator(".detail-row").filter({ hasText: "Department" })).toContainText(targetDepartmentName);
   await expect(page.locator(".detail-row").filter({ hasText: "Reporting Manager" })).not.toContainText("Tanvi Admin");

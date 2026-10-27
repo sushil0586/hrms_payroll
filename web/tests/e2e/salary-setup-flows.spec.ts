@@ -459,6 +459,137 @@ test.describe("HR admin salary setup flows", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("STG-E2E-0805 through 0809 preserve salary history and reject invalid references", async ({ page }) => {
+    test.setTimeout(120_000);
+    const suffix = String(Date.now()).slice(-8);
+    const employeeCode = `SALHIST-${suffix}`;
+
+    await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
+    await expectPageReady(page, "Salary Setup");
+    const employeeResponse = await page.request.post("/api/hr-admin/employees", {
+      data: {
+        employee_code: employeeCode,
+        first_name: "Salary",
+        middle_name: "",
+        last_name: "History",
+        preferred_name: "Salary History",
+        work_email: `salary.history.${suffix}@example.test`,
+        personal_email: "",
+        phone_number: "+91 90000 00805",
+        employment_status: "active",
+        date_of_birth: null,
+        date_of_joining: "2026-01-01",
+        probation_end_date: null,
+        confirmation_date: null,
+        legal_entity_id: null,
+        branch_id: null,
+        location_id: null,
+        department_id: null,
+        business_unit_id: null,
+        cost_center_id: null,
+        designation_id: null,
+        grade_id: null,
+        employment_type_id: null,
+        reporting_manager_id: null,
+      },
+    });
+    expect(employeeResponse.status()).toBe(201);
+    const employee = await employeeResponse.json() as { id: string };
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expectPageReady(page, "Salary Setup");
+    const structureForm = page.getByTestId("salary-structure-form");
+    const versionForm = page.getByTestId("salary-version-form");
+    const assignmentForm = page.getByTestId("salary-assignment-form");
+
+    await openSalaryActionTab(page, /Structures/);
+    const structure = await submitAndCapture<{ id: string }>(page, "salary-structures", "POST", async () => {
+      await field(structureForm, "Code").fill(`SAL_HIST_${suffix}`);
+      await field(structureForm, "Name").fill(`Salary History ${suffix}`);
+      await field(structureForm, "Currency code").fill("INR");
+      await field(structureForm, "Status").selectOption("active");
+      await field(structureForm, "Description").fill("Effective-dated Batch 8 salary history fixture.");
+      await field(structureForm, "Config profile reference").fill(`salary.history.structure.${suffix}`);
+      await structureForm.getByRole("button", { name: "Create structure" }).click();
+    });
+
+    await openSalaryActionTab(page, /Versions/);
+    const currentVersion = await submitAndCapture<{ id: string }>(page, "salary-structure-versions", "POST", async () => {
+      await field(versionForm, "Structure").selectOption(structure.id);
+      await field(versionForm, "Version").fill("1");
+      await field(versionForm, "Effective from").fill("2026-01-01");
+      await field(versionForm, "Effective to").fill("2026-12-31");
+      await field(versionForm, "Annual CTC").fill("600000");
+      await field(versionForm, "Currency code").fill("INR");
+      await field(versionForm, "Status").selectOption("active");
+      await field(versionForm, "Config profile reference").fill(`salary.history.current.${suffix}`);
+      await versionForm.getByRole("button", { name: "Create version" }).click();
+    });
+    await versionForm.getByRole("button", { name: "New" }).click();
+    const futureVersion = await submitAndCapture<{ id: string }>(page, "salary-structure-versions", "POST", async () => {
+      await field(versionForm, "Structure").selectOption(structure.id);
+      await field(versionForm, "Version").fill("2");
+      await field(versionForm, "Effective from").fill("2027-01-01");
+      await field(versionForm, "Effective to").fill("");
+      await field(versionForm, "Annual CTC").fill("720000");
+      await field(versionForm, "Currency code").fill("INR");
+      await field(versionForm, "Status").selectOption("active");
+      await field(versionForm, "Config profile reference").fill(`salary.history.future.${suffix}`);
+      await versionForm.getByRole("button", { name: "Create version" }).click();
+    });
+
+    await openSalaryActionTab(page, /Assignments/);
+    const createAssignment = async (versionId: string, from: string, to: string, reason: string) => {
+      await assignmentForm.getByRole("button", { name: "New" }).click();
+      return submitAndCapture<{ id: string }>(page, "employee-salary-assignments", "POST", async () => {
+        await field(assignmentForm, "Employee").selectOption(employee.id);
+        await field(assignmentForm, "Structure version").selectOption(versionId);
+        await field(assignmentForm, "Effective from").fill(from);
+        await field(assignmentForm, "Effective to").fill(to);
+        await field(assignmentForm, "Status").selectOption("active");
+        await field(assignmentForm, "Assignment reason").fill(reason);
+        await field(assignmentForm, "Config profile reference").fill(`salary.history.assignment.${suffix}`);
+        await assignmentForm.getByRole("button", { name: "Create assignment" }).click();
+      });
+    };
+    await createAssignment(currentVersion.id, "2026-01-01", "2026-12-31", `Current salary ${suffix}`);
+    await createAssignment(futureVersion.id, "2027-01-01", "", `Future revision ${suffix}`);
+
+    await assignmentForm.getByRole("button", { name: "New" }).click();
+    const [overlapResponse] = await Promise.all([
+      page.waitForResponse((response) => response.url().includes("/api/hr-admin/employee-salary-assignments") && response.request().method() === "POST"),
+      (async () => {
+        await field(assignmentForm, "Employee").selectOption(employee.id);
+        await field(assignmentForm, "Structure version").selectOption(futureVersion.id);
+        await field(assignmentForm, "Effective from").fill("2026-06-01");
+        await field(assignmentForm, "Effective to").fill("2027-06-30");
+        await field(assignmentForm, "Status").selectOption("active");
+        await field(assignmentForm, "Assignment reason").fill(`Rejected overlap ${suffix}`);
+        await assignmentForm.getByRole("button", { name: "Create assignment" }).click();
+      })(),
+    ]);
+    expect(overlapResponse.status()).toBe(400);
+    await expect(page.getByText(/already has an active salary assignment/i)).toBeVisible();
+
+    const invalidReference = await page.evaluate(async (payload) => {
+      const response = await fetch("/api/hr-admin/employee-salary-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return { status: response.status, body: await response.text() };
+    }, {
+      employee_id: employee.id,
+      structure_version_id: "00000000-0000-4000-8000-000000000809",
+      effective_from: "2028-01-01",
+      status: "active",
+      assignment_reason: `Invalid tenant-scoped reference ${suffix}`,
+    });
+    expect(invalidReference.status).toBe(400);
+    expect(invalidReference.body).toContain("Invalid selection");
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("salary setup controls remain usable on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");

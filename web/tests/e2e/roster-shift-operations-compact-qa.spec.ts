@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, hrAdmin, requestWithBrowserSession } from "../helpers/staging-auth";
 
 type PaginatedResponse<T> = {
   items: T[];
@@ -43,9 +43,9 @@ test.describe("E90-6 roster and shift operations compact QA", () => {
     await expect(assignmentFilters.getByText(/on this page/i).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    const assignmentResponse = await page.request.get("/api/hr-admin/employee-shift-assignments?page=1&page_size=3");
-    expect(assignmentResponse.status()).toBe(200);
-    const assignmentText = await assignmentResponse.text();
+    const assignmentResponse = await requestWithBrowserSession(page, "/api/hr-admin/employee-shift-assignments?page=1&page_size=3");
+    expect(assignmentResponse.status).toBe(200);
+    const assignmentText = assignmentResponse.body;
     expect(Buffer.byteLength(assignmentText, "utf8")).toBeLessThan(120_000);
     const assignments = JSON.parse(assignmentText) as PaginatedResponse<ShiftAssignmentRow>;
     expect(assignments.page_size).toBe(3);
@@ -64,17 +64,17 @@ test.describe("E90-6 roster and shift operations compact QA", () => {
     await expect(page.getByLabel("Roster rollout history pagination")).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    const templateResponse = await page.request.get("/api/hr-admin/shift-roster-templates?page=1&page_size=3");
-    expect(templateResponse.status()).toBe(200);
-    const templateText = await templateResponse.text();
+    const templateResponse = await requestWithBrowserSession(page, "/api/hr-admin/shift-roster-templates?page=1&page_size=3");
+    expect(templateResponse.status).toBe(200);
+    const templateText = templateResponse.body;
     expect(Buffer.byteLength(templateText, "utf8")).toBeLessThan(100_000);
     const templates = JSON.parse(templateText) as PaginatedResponse<RosterTemplateRow>;
     expect(templates.page_size).toBe(3);
     expect(templates.items.length).toBeLessThanOrEqual(3);
 
-    const rolloutResponse = await page.request.get("/api/hr-admin/shift-roster-rollouts?page=1&page_size=2");
-    expect(rolloutResponse.status()).toBe(200);
-    const rolloutText = await rolloutResponse.text();
+    const rolloutResponse = await requestWithBrowserSession(page, "/api/hr-admin/shift-roster-rollouts?page=1&page_size=2");
+    expect(rolloutResponse.status).toBe(200);
+    const rolloutText = rolloutResponse.body;
     expect(Buffer.byteLength(rolloutText, "utf8")).toBeLessThan(60_000);
     const rollouts = JSON.parse(rolloutText) as PaginatedResponse<RosterRolloutRow>;
     expect(rollouts.page_size).toBe(2);

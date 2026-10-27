@@ -184,6 +184,17 @@ def test_exact_id_evidence_is_postgresql_read_only_and_reconciles_owned_graph(ow
 
 
 @pytest.mark.django_db(transaction=True)
+def test_staging_evidence_requires_matching_deployment_fingerprint(owned_graph):
+    _, _, manifest, _ = owned_graph
+    with override_settings(HRMS_ENVIRONMENT="staging", HRMS_STAGING_ENVIRONMENT_FINGERPRINT=""):
+        with pytest.raises(CommandError, match="fingerprint"):
+            collect_onboarding_evidence(manifest)
+    with override_settings(HRMS_ENVIRONMENT="staging", HRMS_STAGING_ENVIRONMENT_FINGERPRINT="different"):
+        with pytest.raises(CommandError, match="fingerprint"):
+            collect_onboarding_evidence(manifest)
+
+
+@pytest.mark.django_db(transaction=True)
 def test_cleanup_is_dry_run_by_default_and_repeated_plan_is_idempotent(owned_graph):
     tenant, _, manifest, _ = owned_graph
     first = plan_onboarding_cleanup(manifest)

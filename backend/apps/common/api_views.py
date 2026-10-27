@@ -10,6 +10,7 @@ import re
 import secrets
 from decimal import Decimal
 from io import StringIO
+from uuid import UUID
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
@@ -75,6 +76,7 @@ from apps.common.api_serializers import (
     HrAdminEmployeeSalaryAssignmentSerializer,
     HrAdminEmployeeSalaryAssignmentWriteSerializer,
     EmployeeProfileSerializer,
+    EmployeeProfileUpdateSerializer,
     HrAdminEmployeeDetailSerializer,
     HrAdminEmployeeFormOptionsSerializer,
     HrAdminEmployeeListItemSerializer,
@@ -336,7 +338,7 @@ from apps.common.api_serializers import (
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, ScopeType, TenantMembership, User
 from apps.iam.permission_checks import get_membership_permission_keys, get_user_tenant_permission_keys
-from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
+from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location, OrganizationAuditEvent
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
     EmployeeStatutoryDeclaration,
@@ -1191,13 +1193,34 @@ def _get_organization_deactivation_conflicts(*, tenant, section: str, item) -> l
     return []
 
 
+def _organization_audit_state(item) -> dict:
+    state = {
+        "code": item.code,
+        "name": item.name,
+        "is_active": item.is_active,
+    }
+    for field in (
+        "registered_name", "country_code", "timezone", "primary_email", "primary_phone",
+        "address_line_1", "address_line_2", "city", "state", "postal_code", "branch_type",
+        "description", "is_payroll_eligible", "level", "legal_entity_id", "location_id",
+        "parent_id", "business_unit_id", "grade_id",
+    ):
+        if hasattr(item, field):
+            value = getattr(item, field)
+            state[field] = str(value) if isinstance(value, UUID) else value
+    return state
+
+
+@transaction.atomic
 def save_hr_admin_organization_item(actor, section: str, validated_data, *, item=None):
     model_class = ORGANIZATION_MODEL_MAP.get(section)
     if model_class is None:
         raise serializers.ValidationError({"section": "Unsupported organization section."})
 
     tenant = actor.tenant
-    if item is None:
+    creating = item is None
+    previous_state = {} if creating else _organization_audit_state(item)
+    if creating:
         item = model_class(tenant=tenant)
 
     code = validated_data.get("code")
@@ -1295,6 +1318,21 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
                 setattr(item, field, validated_data[field])
 
     item.save()
+    new_state = _organization_audit_state(item)
+    action = "created" if creating else "deactivated" if previous_state.get("is_active") and not item.is_active else "updated"
+    OrganizationAuditEvent.objects.create(
+        tenant=tenant,
+        actor_identifier=(
+            str(actor.membership.user_id)
+            if getattr(actor, "membership_id", None)
+            else str(getattr(actor, "id", "system"))
+        ),
+        section=section,
+        item_id=item.id,
+        action=action,
+        previous_state=previous_state,
+        new_state=new_state,
+    )
     return item
 
 
@@ -6798,6 +6836,40 @@ class MeProfileView(EmployeeContextMixin, APIView):
         payload = self.build_profile_payload(employee)
         return response.Response(EmployeeProfileSerializer(payload).data)
 
+    @transaction.atomic
+    def patch(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = EmployeeProfileUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        employee = Employee.objects.select_for_update().get(tenant=employee.tenant, id=employee.id)
+        changes = {
+            field: {"from": getattr(employee, field), "to": value}
+            for field, value in serializer.validated_data.items()
+            if getattr(employee, field) != value
+        }
+        if changes:
+            for field, change in changes.items():
+                setattr(employee, field, change["to"])
+            employee.save(update_fields=[*changes, "updated_at"])
+            now = timezone.now()
+            EmployeeLifecycleEvent.objects.create(
+                tenant=employee.tenant,
+                employee=employee,
+                event_type=LifecycleEventType.OTHER,
+                status=LifecycleEventStatus.COMPLETED,
+                title="Employee self-service profile updated",
+                description="Employee updated permitted self-service profile fields.",
+                effective_date=timezone.localdate(),
+                initiated_at=now,
+                completed_at=now,
+                workflow_reference=f"ess-profile:{employee.id}",
+                payload={"actor_membership_id": str(employee.membership_id), "changes": changes},
+            )
+        employee.refresh_from_db()
+        return response.Response(EmployeeProfileSerializer(self.build_profile_payload(employee)).data)
+
 
 class HrAdminContextMixin(EmployeeContextMixin):
     workspace_role_codes = ()
@@ -8727,7 +8799,19 @@ class HrAdminPayrollCalendarListCreateView(HrAdminContextMixin, APIView):
         serializer = HrAdminPayrollCalendarWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            item = save_hr_admin_payroll_calendar(employee, serializer.validated_data)
+            with transaction.atomic():
+                item = save_hr_admin_payroll_calendar(employee, serializer.validated_data)
+                _record_hr_admin_setup_audit_event(
+                    employee,
+                    event_type="payroll_calendar_created",
+                    source_ref="hrms.payroll_setup.configuration.audit.v1",
+                    event_snapshot={
+                        "action": "created",
+                        "payroll_calendar_id": str(item.id),
+                        "code": item.code,
+                        "frequency": item.frequency,
+                    },
+                )
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         return response.Response(HrAdminPayrollCalendarSerializer(build_hr_admin_payroll_calendar_payload(item)).data, status=status.HTTP_201_CREATED)
@@ -8774,7 +8858,23 @@ class HrAdminPayrollPeriodListCreateView(HrAdminContextMixin, APIView):
         serializer = HrAdminPayrollPeriodWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            item = save_hr_admin_payroll_period(employee, serializer.validated_data)
+            with transaction.atomic():
+                item = save_hr_admin_payroll_period(employee, serializer.validated_data)
+                _record_hr_admin_setup_audit_event(
+                    employee,
+                    event_type="payroll_period_created",
+                    source_ref="hrms.payroll_setup.configuration.audit.v1",
+                    event_snapshot={
+                        "action": "created",
+                        "payroll_period_id": str(item.id),
+                        "payroll_calendar_id": str(item.calendar_id),
+                        "code": item.code,
+                        "start_date": item.start_date.isoformat(),
+                        "end_date": item.end_date.isoformat(),
+                        "pay_date": item.pay_date.isoformat(),
+                        "status": item.status,
+                    },
+                )
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         item = PayrollPeriod.objects.select_related("calendar").get(id=item.id)
@@ -8823,7 +8923,21 @@ class HrAdminPayGroupListCreateView(HrAdminContextMixin, APIView):
         serializer = HrAdminPayGroupWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            item = save_hr_admin_pay_group(employee, serializer.validated_data)
+            with transaction.atomic():
+                item = save_hr_admin_pay_group(employee, serializer.validated_data)
+                _record_hr_admin_setup_audit_event(
+                    employee,
+                    event_type="payroll_pay_group_created",
+                    source_ref="hrms.payroll_setup.configuration.audit.v1",
+                    event_snapshot={
+                        "action": "created",
+                        "pay_group_id": str(item.id),
+                        "payroll_calendar_id": str(item.calendar_id),
+                        "legal_entity_id": str(item.legal_entity_id) if item.legal_entity_id else None,
+                        "code": item.code,
+                        "status": item.status,
+                    },
+                )
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         item = PayGroup.objects.select_related("calendar", "legal_entity", "branch", "location", "department", "employment_type").get(id=item.id)
@@ -9055,111 +9169,167 @@ def get_hr_admin_salary_setup_payload(actor) -> dict:
     }
 
 
-def save_hr_admin_salary_component(actor, validated_data, *, item=None):
-    if item is None:
-        item = SalaryComponent(tenant=actor.tenant)
+def _salary_configuration_audit_snapshot(item) -> dict:
+    snapshot = {
+        "resource_id": str(item.id),
+        "resource_type": item._meta.model_name,
+        "status": getattr(item, "status", ""),
+    }
     for field in [
         "code",
-        "name",
         "component_type",
         "value_type",
-        "formula_ref",
-        "applicability_rule_ref",
-        "rounding_rule_ref",
-        "accounting_mapping_ref",
-        "statutory_treatment_ref",
-        "is_taxable",
-        "is_proratable",
-        "payslip_visibility",
-        "status",
-        "config_snapshot",
+        "currency_code",
+        "effective_from",
+        "effective_to",
+        "employee_id",
+        "pay_group_id",
+        "structure_id",
+        "structure_version_id",
+        "component_id",
+        "version",
+        "annual_ctc",
+        "annual_ctc_override",
+        "amount",
+        "percentage",
+        "is_active",
     ]:
-        if field in validated_data:
-            setattr(item, field, validated_data[field])
-    item.save()
+        if hasattr(item, field):
+            value = getattr(item, field)
+            snapshot[field] = str(value) if value is not None else None
+    return snapshot
+
+
+def _record_salary_configuration_audit(actor, *, item, creating: bool, previous_state: dict) -> None:
+    resource_type = item._meta.model_name
+    _record_hr_admin_setup_audit_event(
+        actor,
+        event_type=f"salary_{resource_type}_{'created' if creating else 'updated'}",
+        source_ref="hrms.salary_setup.configuration.audit.v1",
+        event_snapshot={
+            "action": "created" if creating else "updated",
+            "resource_type": resource_type,
+            "resource_id": str(item.id),
+            "previous_state": previous_state,
+            "new_state": _salary_configuration_audit_snapshot(item),
+        },
+    )
+
+
+def save_hr_admin_salary_component(actor, validated_data, *, item=None):
+    creating = item is None
+    with transaction.atomic():
+        if item is None:
+            item = SalaryComponent(tenant=actor.tenant)
+        previous_state = {} if creating else _salary_configuration_audit_snapshot(item)
+        for field in [
+            "code", "name", "component_type", "value_type", "formula_ref", "applicability_rule_ref",
+            "rounding_rule_ref", "accounting_mapping_ref", "statutory_treatment_ref", "is_taxable",
+            "is_proratable", "payslip_visibility", "status", "config_snapshot",
+        ]:
+            if field in validated_data:
+                setattr(item, field, validated_data[field])
+        item.save()
+        _record_salary_configuration_audit(actor, item=item, creating=creating, previous_state=previous_state)
     return item
 
 
 def save_hr_admin_salary_structure(actor, validated_data, *, item=None):
-    if item is None:
-        item = SalaryStructure(tenant=actor.tenant)
-    if "pay_group_id" in validated_data:
-        pay_group = PayGroup.objects.filter(tenant=actor.tenant, id=validated_data["pay_group_id"]).first() if validated_data["pay_group_id"] else None
-        if validated_data["pay_group_id"] and not pay_group:
-            raise serializers.ValidationError({"pay_group_id": "Invalid selection."})
-        item.pay_group = pay_group
-    for field in ["code", "name", "currency_code", "status", "description", "config_snapshot"]:
-        if field in validated_data:
-            setattr(item, field, validated_data[field])
-    item.save()
+    creating = item is None
+    with transaction.atomic():
+        if item is None:
+            item = SalaryStructure(tenant=actor.tenant)
+        previous_state = {} if creating else _salary_configuration_audit_snapshot(item)
+        if "pay_group_id" in validated_data:
+            pay_group = PayGroup.objects.filter(tenant=actor.tenant, id=validated_data["pay_group_id"]).first() if validated_data["pay_group_id"] else None
+            if validated_data["pay_group_id"] and not pay_group:
+                raise serializers.ValidationError({"pay_group_id": "Invalid selection."})
+            item.pay_group = pay_group
+        for field in ["code", "name", "currency_code", "status", "description", "config_snapshot"]:
+            if field in validated_data:
+                setattr(item, field, validated_data[field])
+        item.save()
+        _record_salary_configuration_audit(actor, item=item, creating=creating, previous_state=previous_state)
     return item
 
 
 def save_hr_admin_salary_structure_version(actor, validated_data, *, item=None):
-    if item is None:
-        item = SalaryStructureVersion(tenant=actor.tenant)
-    if "structure_id" in validated_data:
-        structure = SalaryStructure.objects.filter(tenant=actor.tenant, id=validated_data["structure_id"]).first()
-        if not structure:
-            raise serializers.ValidationError({"structure_id": "Invalid selection."})
-        item.structure = structure
-        item.tenant = actor.tenant
-    for field in ["version", "effective_from", "effective_to", "status", "annual_ctc", "currency_code", "config_snapshot"]:
-        if field in validated_data:
-            setattr(item, field, validated_data[field])
-    if item.structure_id is None:
-        raise serializers.ValidationError({"structure_id": "This field is required."})
-    item.save()
+    creating = item is None
+    with transaction.atomic():
+        if item is None:
+            item = SalaryStructureVersion(tenant=actor.tenant)
+        previous_state = {} if creating else _salary_configuration_audit_snapshot(item)
+        if "structure_id" in validated_data:
+            structure = SalaryStructure.objects.filter(tenant=actor.tenant, id=validated_data["structure_id"]).first()
+            if not structure:
+                raise serializers.ValidationError({"structure_id": "Invalid selection."})
+            item.structure = structure
+            item.tenant = actor.tenant
+        for field in ["version", "effective_from", "effective_to", "status", "annual_ctc", "currency_code", "config_snapshot"]:
+            if field in validated_data:
+                setattr(item, field, validated_data[field])
+        if item.structure_id is None:
+            raise serializers.ValidationError({"structure_id": "This field is required."})
+        item.save()
+        _record_salary_configuration_audit(actor, item=item, creating=creating, previous_state=previous_state)
     return item
 
 
 def save_hr_admin_salary_structure_component(actor, validated_data, *, item=None):
-    if item is None:
-        item = SalaryStructureComponent(tenant=actor.tenant)
-    if "structure_version_id" in validated_data:
-        structure_version = SalaryStructureVersion.objects.filter(tenant=actor.tenant, id=validated_data["structure_version_id"]).first()
-        if not structure_version:
-            raise serializers.ValidationError({"structure_version_id": "Invalid selection."})
-        item.structure_version = structure_version
-        item.tenant = actor.tenant
-    if "component_id" in validated_data:
-        component = SalaryComponent.objects.filter(tenant=actor.tenant, id=validated_data["component_id"]).first()
-        if not component:
-            raise serializers.ValidationError({"component_id": "Invalid selection."})
-        item.component = component
-    for field in ["display_order", "amount", "percentage", "formula_ref", "calculation_rule_ref", "is_active", "config_snapshot"]:
-        if field in validated_data:
-            setattr(item, field, validated_data[field])
-    if item.structure_version_id is None:
-        raise serializers.ValidationError({"structure_version_id": "This field is required."})
-    if item.component_id is None:
-        raise serializers.ValidationError({"component_id": "This field is required."})
-    item.save()
+    creating = item is None
+    with transaction.atomic():
+        if item is None:
+            item = SalaryStructureComponent(tenant=actor.tenant)
+        previous_state = {} if creating else _salary_configuration_audit_snapshot(item)
+        if "structure_version_id" in validated_data:
+            structure_version = SalaryStructureVersion.objects.filter(tenant=actor.tenant, id=validated_data["structure_version_id"]).first()
+            if not structure_version:
+                raise serializers.ValidationError({"structure_version_id": "Invalid selection."})
+            item.structure_version = structure_version
+            item.tenant = actor.tenant
+        if "component_id" in validated_data:
+            component = SalaryComponent.objects.filter(tenant=actor.tenant, id=validated_data["component_id"]).first()
+            if not component:
+                raise serializers.ValidationError({"component_id": "Invalid selection."})
+            item.component = component
+        for field in ["display_order", "amount", "percentage", "formula_ref", "calculation_rule_ref", "is_active", "config_snapshot"]:
+            if field in validated_data:
+                setattr(item, field, validated_data[field])
+        if item.structure_version_id is None:
+            raise serializers.ValidationError({"structure_version_id": "This field is required."})
+        if item.component_id is None:
+            raise serializers.ValidationError({"component_id": "This field is required."})
+        item.save()
+        _record_salary_configuration_audit(actor, item=item, creating=creating, previous_state=previous_state)
     return item
 
 
 def save_hr_admin_employee_salary_assignment(actor, validated_data, *, item=None):
-    if item is None:
-        item = EmployeeSalaryAssignment(tenant=actor.tenant)
-    if "employee_id" in validated_data:
-        target_employee = Employee.objects.filter(tenant=actor.tenant, id=validated_data["employee_id"]).first()
-        if not target_employee:
-            raise serializers.ValidationError({"employee_id": "Invalid selection."})
-        item.employee = target_employee
-    if "structure_version_id" in validated_data:
-        structure_version = SalaryStructureVersion.objects.filter(tenant=actor.tenant, id=validated_data["structure_version_id"]).first()
-        if not structure_version:
-            raise serializers.ValidationError({"structure_version_id": "Invalid selection."})
-        item.structure_version = structure_version
-        item.tenant = actor.tenant
-    for field in ["effective_from", "effective_to", "status", "annual_ctc_override", "assignment_reason", "config_snapshot"]:
-        if field in validated_data:
-            setattr(item, field, validated_data[field])
-    if item.employee_id is None:
-        raise serializers.ValidationError({"employee_id": "This field is required."})
-    if item.structure_version_id is None:
-        raise serializers.ValidationError({"structure_version_id": "This field is required."})
-    item.save()
+    creating = item is None
+    with transaction.atomic():
+        if item is None:
+            item = EmployeeSalaryAssignment(tenant=actor.tenant)
+        previous_state = {} if creating else _salary_configuration_audit_snapshot(item)
+        if "employee_id" in validated_data:
+            target_employee = Employee.objects.filter(tenant=actor.tenant, id=validated_data["employee_id"]).first()
+            if not target_employee:
+                raise serializers.ValidationError({"employee_id": "Invalid selection."})
+            item.employee = target_employee
+        if "structure_version_id" in validated_data:
+            structure_version = SalaryStructureVersion.objects.filter(tenant=actor.tenant, id=validated_data["structure_version_id"]).first()
+            if not structure_version:
+                raise serializers.ValidationError({"structure_version_id": "Invalid selection."})
+            item.structure_version = structure_version
+            item.tenant = actor.tenant
+        for field in ["effective_from", "effective_to", "status", "annual_ctc_override", "assignment_reason", "config_snapshot"]:
+            if field in validated_data:
+                setattr(item, field, validated_data[field])
+        if item.employee_id is None:
+            raise serializers.ValidationError({"employee_id": "This field is required."})
+        if item.structure_version_id is None:
+            raise serializers.ValidationError({"structure_version_id": "This field is required."})
+        item.save()
+        _record_salary_configuration_audit(actor, item=item, creating=creating, previous_state=previous_state)
     return item
 
 
@@ -15341,6 +15511,7 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
         "employee_shift_assignments": "attendance.policies.manage",
         "leave_requests": "leave.requests.approve",
         "leave_policy_assignments": "leave.policies.manage",
+        "leave_balance_actions": "leave.balances.manage",
         "organization": "organization.manage",
     }
 
@@ -15418,26 +15589,63 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
         if not permission_key:
             raise serializers.ValidationError({"import_type": "This import type is not supported by the governed audit ledger."})
         self.require_tenant_permission(employee.tenant, permission_key)
-        item = HrmsImportBatchAudit.objects.create(
-            tenant=employee.tenant,
-            actor_user=request.user,
-            actor_identifier=serializer.validated_data.get("actor_identifier") or getattr(request.user, "username", "") or getattr(request.user, "email", "") or employee.employee_code,
-            import_type=import_type,
-            status=serializer.validated_data["status"],
-            file_name=serializer.validated_data.get("file_name") or "",
-            source_hash=serializer.validated_data["source_hash"],
-            row_count=serializer.validated_data["row_count"],
-            ready_count=serializer.validated_data.get("ready_count") or 0,
-            created_count=serializer.validated_data.get("created_count") or 0,
-            blocked_count=serializer.validated_data.get("blocked_count") or 0,
-            failed_count=serializer.validated_data.get("failed_count") or 0,
-            rollback_supported=serializer.validated_data.get("rollback_supported", False),
-            rollback_status=serializer.validated_data.get("rollback_status") or "not_requested",
-            source_ref=serializer.validated_data.get("source_ref") or "hrms.bulk_import.browser.v1",
-            evidence_snapshot=serializer.validated_data.get("evidence_snapshot") or {},
-            row_errors=serializer.validated_data.get("row_errors") or [],
-        )
+        values = serializer.validated_data
+        if import_type == "leave_balance_actions":
+            item = HrmsImportBatchAudit.objects.filter(
+                tenant=employee.tenant,
+                import_type=import_type,
+                source_hash=values["source_hash"],
+            ).first()
+            if item:
+                result = response.Response(
+                    HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data,
+                    status=status.HTTP_200_OK,
+                )
+                result["Idempotency-Replayed"] = "true"
+                return result
+            try:
+                with transaction.atomic():
+                    item = self._create_item(employee, request.user, values)
+            except IntegrityError:
+                item = HrmsImportBatchAudit.objects.get(
+                    tenant=employee.tenant,
+                    import_type=import_type,
+                    source_hash=values["source_hash"],
+                )
+                result = response.Response(
+                    HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data,
+                    status=status.HTTP_200_OK,
+                )
+                result["Idempotency-Replayed"] = "true"
+                return result
+            result = response.Response(HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data, status=status.HTTP_201_CREATED)
+            result["Idempotency-Replayed"] = "false"
+            return result
+
+        item = self._create_item(employee, request.user, values)
         return response.Response(HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def _create_item(employee, user, values):
+        return HrmsImportBatchAudit.objects.create(
+            tenant=employee.tenant,
+            actor_user=user,
+            actor_identifier=values.get("actor_identifier") or getattr(user, "username", "") or getattr(user, "email", "") or employee.employee_code,
+            import_type=values["import_type"],
+            status=values["status"],
+            file_name=values.get("file_name") or "",
+            source_hash=values["source_hash"],
+            row_count=values["row_count"],
+            ready_count=values.get("ready_count") or 0,
+            created_count=values.get("created_count") or 0,
+            blocked_count=values.get("blocked_count") or 0,
+            failed_count=values.get("failed_count") or 0,
+            rollback_supported=values.get("rollback_supported", False),
+            rollback_status=values.get("rollback_status") or "not_requested",
+            source_ref=values.get("source_ref") or "hrms.bulk_import.browser.v1",
+            evidence_snapshot=values.get("evidence_snapshot") or {},
+            row_errors=values.get("row_errors") or [],
+        )
 
 
 class HrAdminEmployeeListView(HrAdminContextMixin, APIView):
@@ -17734,22 +17942,30 @@ class HrAdminLeaveBalanceActionView(HrAdminContextMixin, APIView):
         serializer = HrAdminLeaveBalanceActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        target_employee = Employee.objects.filter(tenant=employee.tenant, id=serializer.validated_data["employee_id"]).first()
+        return execute_idempotent_mutation(
+            request=request,
+            tenant=employee.tenant,
+            action="hr_admin.leave_balance_action",
+            fingerprint_payload=serializer.validated_data,
+            operation=lambda: self._apply(request, employee, serializer.validated_data),
+        )
+
+    def _apply(self, request, employee, validated_data):
+        target_employee = Employee.objects.filter(tenant=employee.tenant, id=validated_data["employee_id"]).first()
         if not target_employee:
             return response.Response({"employee_id": ["Employee not found."]}, status=status.HTTP_400_BAD_REQUEST)
-        leave_policy = LeavePolicy.objects.filter(tenant=employee.tenant, id=serializer.validated_data["leave_policy_id"]).select_related("leave_type").first()
+        leave_policy = LeavePolicy.objects.filter(tenant=employee.tenant, id=validated_data["leave_policy_id"]).select_related("leave_type").first()
         if not leave_policy:
             return response.Response({"leave_policy_id": ["Leave policy not found."]}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             mutation_result = apply_leave_balance_admin_action(
                 actor=employee,
                 employee=target_employee,
                 leave_policy=leave_policy,
-                action=serializer.validated_data["action"],
-                units=serializer.validated_data["units"],
-                effective_date=serializer.validated_data.get("effective_date") or timezone.localdate(),
-                reason=serializer.validated_data.get("reason", ""),
+                action=validated_data["action"],
+                units=validated_data["units"],
+                effective_date=validated_data.get("effective_date") or timezone.localdate(),
+                reason=validated_data.get("reason", ""),
             )
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)

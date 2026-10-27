@@ -13,10 +13,19 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/leave-balances/actions/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+      "Idempotency-Key": request.headers.get("idempotency-key") ?? "",
+    },
     body: JSON.stringify(body),
     cache: "no-store",
   });
   const payload = await upstreamResponse.json().catch(() => ({}));
-  return NextResponse.json(payload, { status: upstreamResponse.status });
+  return NextResponse.json(payload, {
+    status: upstreamResponse.status,
+    headers: upstreamResponse.headers.get("idempotency-replayed")
+      ? { "Idempotency-Replayed": upstreamResponse.headers.get("idempotency-replayed")! }
+      : undefined,
+  });
 }

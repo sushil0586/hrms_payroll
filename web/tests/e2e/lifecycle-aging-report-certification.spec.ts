@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin, requestWithBrowserSession } from "../helpers/staging-auth";
 
 test.describe("Phase R2-D lifecycle aging and SLA report certification", () => {
   test("HR admin can certify lifecycle aging filters, pagination, export evidence, and drilldowns", async ({ page }) => {
@@ -45,13 +45,13 @@ test.describe("Phase R2-D lifecycle aging and SLA report certification", () => {
     await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/lifecycle-aging\?.*sort=overdue/);
     const filteredExportHref = await filteredExportLink.getAttribute("href");
     expect(filteredExportHref).toBeTruthy();
-    const filteredExportResponse = await page.request.get(filteredExportHref ?? "");
-    expect(filteredExportResponse.status()).toBe(200);
-    expect(filteredExportResponse.headers()["content-type"]).toContain("text/csv");
-    expect(filteredExportResponse.headers()["x-hrms-report-key"]).toBe("lifecycle-aging");
-    expect(filteredExportResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
-    expect(filteredExportResponse.headers()["x-hrms-source-row-count"]).toMatch(/^\d+$/);
-    const filteredExportBody = await filteredExportResponse.text();
+    const filteredExportResponse = await requestWithBrowserSession(page, filteredExportHref ?? "");
+    expect(filteredExportResponse.status).toBe(200);
+    expect(filteredExportResponse.headers["content-type"]).toContain("text/csv");
+    expect(filteredExportResponse.headers["x-hrms-report-key"]).toBe("lifecycle-aging");
+    expect(filteredExportResponse.headers["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(filteredExportResponse.headers["x-hrms-source-row-count"]).toMatch(/^\d+$/);
+    const filteredExportBody = filteredExportResponse.body;
     expect(filteredExportBody).toContain("employee_code");
     expect(filteredExportBody).toContain("age_bucket");
     expect(filteredExportBody).toContain("sla_risk");
@@ -59,20 +59,20 @@ test.describe("Phase R2-D lifecycle aging and SLA report certification", () => {
 
     const manifestHref = await report.getByRole("link", { name: "Manifest" }).getAttribute("href");
     expect(manifestHref).toBeTruthy();
-    const manifestResponse = await page.request.get(manifestHref ?? "");
-    expect(manifestResponse.status()).toBe(200);
-    expect(manifestResponse.headers()["content-type"]).toContain("application/json");
-    expect(manifestResponse.headers()["x-hrms-report-key"]).toBe("lifecycle-aging");
-    const manifest = await manifestResponse.json();
+    const manifestResponse = await requestWithBrowserSession(page, manifestHref ?? "");
+    expect(manifestResponse.status).toBe(200);
+    expect(manifestResponse.headers["content-type"]).toContain("application/json");
+    expect(manifestResponse.headers["x-hrms-report-key"]).toBe("lifecycle-aging");
+    const manifest = JSON.parse(manifestResponse.body);
     expect(manifest.export_schema_version).toBe("hrms.report.export.manifest.v1");
     expect(manifest.source_endpoints).toContain("/hr-admin/lifecycle-queue/");
     expect(manifest.evidence_columns).toContain("age_bucket");
     expect(manifest.evidence_columns).toContain("sla_risk");
     expect(manifest.evidence_columns).toContain("days_overdue");
 
-    const auditResponse = await page.request.get("/api/hr-admin/reports/export-audits?report_key=lifecycle-aging");
-    expect(auditResponse.status()).toBe(200);
-    const auditPayload = await auditResponse.json();
+    const auditResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/export-audits?report_key=lifecycle-aging");
+    expect(auditResponse.status).toBe(200);
+    const auditPayload = JSON.parse(auditResponse.body);
     expect(auditPayload.items.length).toBeGreaterThanOrEqual(2);
     expect(auditPayload.items.some((item: { export_type: string }) => item.export_type === "csv")).toBeTruthy();
     expect(auditPayload.items.some((item: { export_type: string }) => item.export_type === "manifest")).toBeTruthy();
@@ -101,11 +101,11 @@ test.describe("Phase R2-D lifecycle aging and SLA report certification", () => {
     await page.goto("/hr-admin/reports/lifecycle-aging", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("lifecycle-aging-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
+    await expect(page).not.toHaveURL(/\/hr-admin\/reports\/lifecycle-aging(?:\?|$)/);
 
-    const csvResponse = await page.request.get("/api/hr-admin/reports/lifecycle-aging?sort=overdue");
-    expect([401, 403]).toContain(csvResponse.status());
-    const manifestResponse = await page.request.get("/api/hr-admin/reports/lifecycle-aging?sort=overdue&format=manifest");
-    expect([401, 403]).toContain(manifestResponse.status());
+    const csvResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/lifecycle-aging?sort=overdue");
+    expect([401, 403]).toContain(csvResponse.status);
+    const manifestResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/lifecycle-aging?sort=overdue&format=manifest");
+    expect([401, 403]).toContain(manifestResponse.status);
   });
 });

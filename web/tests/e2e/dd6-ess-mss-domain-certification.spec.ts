@@ -71,9 +71,12 @@ test("DD-SS-005/008 session and connection recovery preserve the ESS leave draft
 
     const relogin = await context.newPage();
     await loginThroughBrowser(relogin, employee.username, employee.password);
+    await expect(relogin.getByRole("heading", { name: "My workspace" })).toBeVisible();
     await relogin.close();
 
-    await submit.dblclick();
+    const recoveredResponse = page.waitForResponse((response) => response.url().includes("/api/me/leave-requests") && response.request().method() === "POST");
+    await submit.click();
+    expect((await recoveredResponse).status()).toBe(201);
     await expect(dialog).toBeHidden();
     const requests = await backendGet(page, "/me/leave-requests/?page_size=100");
     expect(requests.status()).toBe(200);
@@ -148,7 +151,8 @@ test("DD-SS-006/007 manager retains tenant-scoped ESS and MSS contexts on compac
   try {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await gotoAuthenticated(page, "/workspace-access", manager);
+    await loginThroughBrowser(page, manager.username, manager.password);
+    await page.goto("/workspace-access", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/mss\/approvals/);
 
     const session = await backendGet(page, "/auth/session/");

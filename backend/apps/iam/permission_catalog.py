@@ -126,6 +126,7 @@ PERMISSION_CATALOG: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("platform.leads.manage", "Manage public leads", "Platform Admin", "Review and convert public signup leads.", "high", False, "platform", "", ("platform-admin",)),
     PermissionDefinition("platform.policy_packs.manage", "Manage policy packs", "Platform Admin", "Manage platform baseline policy packs.", "critical", False, "platform", "", ("platform-admin",)),
     PermissionDefinition("platform.permission_catalog.manage", "Manage permission catalog", "Platform Admin", "Manage platform permission definitions.", "critical", False, "platform", "", ("platform-admin",)),
+    PermissionDefinition("platform.qa_evidence.view", "View staging QA evidence", "Platform Admin", "Collect bounded read-only staging certification evidence.", "critical", False, "platform", "", ("platform-admin",)),
 )
 
 PERMISSION_CATALOG_BY_KEY = {item.key: item for item in PERMISSION_CATALOG}

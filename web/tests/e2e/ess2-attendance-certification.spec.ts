@@ -241,9 +241,12 @@ test.describe("ESS-2 production attendance", () => {
     expect((await page.request.get(`${backend}/api/v1/hr-admin/attendance-records/`, { headers })).status()).toBe(403);
     const anonymous = await page.request.get(`${backend}/api/v1/me/attendance-records/?month=2029-03`);
     expect([401, 403]).toContain(anonymous.status());
-    const proxied = await page.request.get("/api/me/attendance-records?month=2029-03&employee_id=" + workspace.manifest.credentials.manager.employee_id);
-    expect(proxied.status()).toBe(200);
-    expect((await proxied.json()).total_count).toBe(20);
+    const proxied = await page.evaluate(async (managerId) => {
+      const response = await fetch(`/api/me/attendance-records?month=2029-03&employee_id=${managerId}`);
+      return { status: response.status, body: await response.json() };
+    }, workspace.manifest.credentials.manager.employee_id);
+    expect(proxied.status).toBe(200);
+    expect(proxied.body.total_count).toBe(20);
     const unauthenticated = await playwright.request.newContext({ baseURL: "http://127.0.0.1:3149" });
     try {
       expect((await unauthenticated.get("/api/me/attendance-records?month=2029-03")).status()).toBe(401);

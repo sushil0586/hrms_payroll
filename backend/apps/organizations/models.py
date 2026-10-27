@@ -25,6 +25,30 @@ class OrganizationScopedModel(UUIDPrimaryKeyModel, TimeStampedModel):
         return self.name
 
 
+class OrganizationAuditEvent(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Audit evidence for organization master mutations."""
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="organization_audit_events",
+    )
+    actor_identifier = models.CharField(max_length=160)
+    section = models.CharField(max_length=40)
+    item_id = models.UUIDField()
+    action = models.CharField(max_length=20)
+    previous_state = models.JSONField(default=dict, blank=True)
+    new_state = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "section", "item_id", "-created_at"]),
+        ]
+        verbose_name = "Organization Audit Event"
+        verbose_name_plural = "Organization Audit Events"
+
+
 class LegalEntity(OrganizationScopedModel):
     """Represents a company or legal entity within a tenant."""
 

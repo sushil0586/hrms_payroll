@@ -19,13 +19,20 @@ async function proxyPlatformRequest(request: NextRequest, path: string[], method
   }
 
   const target = new URL(buildTarget(path));
-  request.nextUrl.searchParams.forEach((value, key) => target.searchParams.set(key, value));
+  for (const [key, value] of request.nextUrl.searchParams) target.searchParams.append(key, value);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Token ${token}`,
+  };
+  if (path.join("/") === "qa/staging-onboarding-evidence") {
+    for (const name of ["X-HRMS-Environment-Fingerprint", "X-HRMS-Manifest-SHA256"]) {
+      const value = request.headers.get(name);
+      if (value) headers[name] = value;
+    }
+  }
   const upstream = await fetch(target, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Token ${token}`,
-    },
+    headers,
     body: method === "GET" ? undefined : JSON.stringify(await request.json().catch(() => ({}))),
     cache: "no-store",
   });

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin, requestWithBrowserSession } from "../helpers/staging-auth";
 
 test.describe("Phase R4-R daily attendance register report certification", () => {
   test("HR admin can certify attendance register filters, pagination, export evidence, and drilldowns", async ({ page }) => {
@@ -45,13 +45,13 @@ test.describe("Phase R4-R daily attendance register report certification", () =>
     await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/attendance-register\?.*sort=date_desc/);
     const filteredExportHref = await filteredExportLink.getAttribute("href");
     expect(filteredExportHref).toBeTruthy();
-    const filteredExportResponse = await page.request.get(filteredExportHref ?? "");
-    expect(filteredExportResponse.status()).toBe(200);
-    expect(filteredExportResponse.headers()["content-type"]).toContain("text/csv");
-    expect(filteredExportResponse.headers()["x-hrms-report-key"]).toBe("attendance-register");
-    expect(filteredExportResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
-    expect(filteredExportResponse.headers()["x-hrms-source-row-count"]).toMatch(/^\d+$/);
-    const filteredExportBody = await filteredExportResponse.text();
+    const filteredExportResponse = await requestWithBrowserSession(page, filteredExportHref ?? "");
+    expect(filteredExportResponse.status).toBe(200);
+    expect(filteredExportResponse.headers["content-type"]).toContain("text/csv");
+    expect(filteredExportResponse.headers["x-hrms-report-key"]).toBe("attendance-register");
+    expect(filteredExportResponse.headers["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(filteredExportResponse.headers["x-hrms-source-row-count"]).toMatch(/^\d+$/);
+    const filteredExportBody = filteredExportResponse.body;
     expect(filteredExportBody).toContain("employee_code");
     expect(filteredExportBody).toContain("attendance_date");
     expect(filteredExportBody).toContain("exception_type");
@@ -59,20 +59,20 @@ test.describe("Phase R4-R daily attendance register report certification", () =>
 
     const manifestHref = await report.getByRole("link", { name: "Manifest" }).getAttribute("href");
     expect(manifestHref).toBeTruthy();
-    const manifestResponse = await page.request.get(manifestHref ?? "");
-    expect(manifestResponse.status()).toBe(200);
-    expect(manifestResponse.headers()["content-type"]).toContain("application/json");
-    expect(manifestResponse.headers()["x-hrms-report-key"]).toBe("attendance-register");
-    const manifest = await manifestResponse.json();
+    const manifestResponse = await requestWithBrowserSession(page, manifestHref ?? "");
+    expect(manifestResponse.status).toBe(200);
+    expect(manifestResponse.headers["content-type"]).toContain("application/json");
+    expect(manifestResponse.headers["x-hrms-report-key"]).toBe("attendance-register");
+    const manifest = JSON.parse(manifestResponse.body);
     expect(manifest.export_schema_version).toBe("hrms.report.export.manifest.v1");
     expect(manifest.source_endpoints).toContain("/hr-admin/attendance-records/");
     expect(manifest.evidence_columns).toContain("attendance_date");
     expect(manifest.evidence_columns).toContain("exception_type");
     expect(manifest.evidence_columns).toContain("payroll_readiness");
 
-    const auditResponse = await page.request.get("/api/hr-admin/reports/export-audits?report_key=attendance-register");
-    expect(auditResponse.status()).toBe(200);
-    const auditPayload = await auditResponse.json();
+    const auditResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/export-audits?report_key=attendance-register");
+    expect(auditResponse.status).toBe(200);
+    const auditPayload = JSON.parse(auditResponse.body);
     expect(auditPayload.items.length).toBeGreaterThanOrEqual(2);
     expect(auditPayload.items.some((item: { export_type: string }) => item.export_type === "csv")).toBeTruthy();
     expect(auditPayload.items.some((item: { export_type: string }) => item.export_type === "manifest")).toBeTruthy();
@@ -87,8 +87,8 @@ test.describe("Phase R4-R daily attendance register report certification", () =>
       await expect(openLink).toHaveAttribute("href", /\/hr-admin\/attendance-records\?editRecord=.+/);
       await openLink.click();
       await expect(page).toHaveURL(/\/hr-admin\/attendance-records\?editRecord=.+/);
-      await expect(page.getByRole("complementary", { name: "Attendance record detail" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Edit record" }).or(page.getByRole("link", { name: "Edit record" }))).toBeVisible();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await expect(page.getByRole("heading", { name: /^Edit / })).toBeVisible();
       await expectNoHorizontalOverflow(page);
     } else {
       await expect(report.getByText("No attendance register rows match the selected filters.")).toBeVisible();
@@ -105,9 +105,9 @@ test.describe("Phase R4-R daily attendance register report certification", () =>
     await expect(page.getByTestId("attendance-register-report")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Export filtered CSV" })).toHaveCount(0);
 
-    const csvResponse = await page.request.get("/api/hr-admin/reports/attendance-register?sort=date_desc");
-    expect([401, 403]).toContain(csvResponse.status());
-    const manifestResponse = await page.request.get("/api/hr-admin/reports/attendance-register?sort=date_desc&format=manifest");
-    expect([401, 403]).toContain(manifestResponse.status());
+    const csvResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/attendance-register?sort=date_desc");
+    expect([401, 403]).toContain(csvResponse.status);
+    const manifestResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/attendance-register?sort=date_desc&format=manifest");
+    expect([401, 403]).toContain(manifestResponse.status);
   });
 });

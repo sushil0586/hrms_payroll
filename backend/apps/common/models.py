@@ -393,6 +393,13 @@ class HrmsImportBatchAudit(UUIDPrimaryKeyModel, TimeStampedModel):
             models.Index(fields=["tenant", "status", "-created_at"]),
             models.Index(fields=["tenant", "source_hash"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "import_type", "source_hash"],
+                condition=models.Q(import_type="leave_balance_actions"),
+                name="uniq_leave_import_source_per_tenant",
+            ),
+        ]
         verbose_name = "HRMS Import Batch Audit"
         verbose_name_plural = "HRMS Import Batch Audits"
 

@@ -38,9 +38,11 @@ from apps.tenant_onboarding.api_views import (
     PlatformTenantOnboardingDetailView,
     PublicTenantLeadCreateView,
 )
+from apps.common.staging_evidence_api import PlatformStagingOnboardingEvidenceView
 
 
 urlpatterns = [
+    path("qa/staging-onboarding-evidence/", PlatformStagingOnboardingEvidenceView.as_view(), name="platform-staging-onboarding-evidence"),
     path("data-governance/", PlatformRetentionWorkspaceView.as_view(), name="platform-data-governance"),
     path("data-governance/preview/", PlatformRetentionPreviewView.as_view(), name="platform-data-governance-preview"),
     path("data-governance/legal-holds/", PlatformLegalHoldView.as_view(), name="platform-legal-holds"),

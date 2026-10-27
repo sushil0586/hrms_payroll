@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated } from "../helpers/staging-auth";
+import { gotoAuthenticated, requestWithBrowserSession } from "../helpers/staging-auth";
 
 const liveApiRequired = Boolean(process.env.HRMS_API_BASE_URL);
 
@@ -102,8 +102,12 @@ async function createEmployeeWithNetworkRecovery(page: Page, runRef: string): Pr
   await fillEmployeeBasics(page, { code, firstName: "PC", lastName: `Employee ${runRef}`, email });
 
   await page.getByRole("button", { name: "Create employee" }).click();
-  await expect(page.getByText("Save failed.")).toBeVisible();
-  await expect(page.getByText("Unable to reach the server. Check your connection and try again.")).toBeVisible();
+  await expect(page.getByText("Save needs attention.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Unable to reach the server. We could not confirm the outcome. Check the latest records before trying again to avoid submitting twice.",
+    ),
+  ).toBeVisible();
   await expect(page.locator(".employee-form-review-row").filter({ hasText: "Employee code" }).filter({ hasText: code })).toBeVisible();
   await expect(page.locator(".employee-form-review-row").filter({ hasText: "Work email" }).filter({ hasText: email })).toBeVisible();
 
@@ -148,7 +152,7 @@ test.describe("HR Admin Employee Directory production certification", () => {
       email: `duplicate.${runRef}@example.test`,
     });
     await page.getByRole("button", { name: "Create employee" }).click();
-    await expect(page.getByText("Save failed.")).toBeVisible();
+    await expect(page.getByText("Save needs attention.")).toBeVisible();
     await expect(page.getByText(/already|unique|exists|duplicate/i).first()).toBeVisible();
 
     const doubleCode = `PC-DBL-${runRef}`;
@@ -197,12 +201,13 @@ test.describe("HR Admin Employee Directory production certification", () => {
     const employeeRole = page.locator(".selection-row").filter({ hasText: "Employee" }).filter({ hasText: "employee" }).first();
     await expect(employeeRole).toBeVisible();
     await employeeRole.locator('input[type="checkbox"]').setChecked(true);
+    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Create access" }).click();
-    await expect(page.getByText("Employee access saved successfully.")).toBeVisible();
+    await expect(page.getByText("Employee access saved. Login, membership and role settings are up to date.")).toBeVisible();
 
-    const accessResponse = await page.request.get(`/api/hr-admin/employees/${employee.id}/access`);
-    expect(accessResponse.ok()).toBeTruthy();
-    const accessPayload = await accessResponse.json();
+    const accessResponse = await requestWithBrowserSession(page, `/api/hr-admin/employees/${employee.id}/access`);
+    expect(accessResponse.status).toBe(200);
+    const accessPayload = JSON.parse(accessResponse.body);
     expect(accessPayload.has_access).toBeTruthy();
     expect(accessPayload.membership_status).toBe("active");
 
@@ -213,7 +218,7 @@ test.describe("HR Admin Employee Directory production certification", () => {
     await continueToStep(page, "Structural mapping");
     await continueToStep(page, "Review");
     await page.getByRole("button", { name: "Save changes" }).click();
-    await expect(page.getByText("Save failed.")).toBeVisible();
+    await expect(page.getByText("Save needs attention.")).toBeVisible();
     await expect(page.getByText("Deactivate employee access first before moving this employee to an inactive or exited status.").first()).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}&action=access`);
@@ -222,11 +227,12 @@ test.describe("HR Admin Employee Directory production certification", () => {
     await field(page, "Membership status").selectOption("suspended");
     await page.getByLabel("Must change password").setChecked(true);
     await expect(page.getByRole("button", { name: "Update access" })).toBeEnabled();
+    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Update access" }).click();
-    await expect(page.getByText("Employee access saved successfully.")).toBeVisible();
-    const offboardedAccessResponse = await page.request.get(`/api/hr-admin/employees/${employee.id}/access`);
-    expect(offboardedAccessResponse.ok()).toBeTruthy();
-    const offboardedAccess = await offboardedAccessResponse.json();
+    await expect(page.getByText("Employee access saved. Login, membership and role settings are up to date.")).toBeVisible();
+    const offboardedAccessResponse = await requestWithBrowserSession(page, `/api/hr-admin/employees/${employee.id}/access`);
+    expect(offboardedAccessResponse.status).toBe(200);
+    const offboardedAccess = JSON.parse(offboardedAccessResponse.body);
     expect(offboardedAccess.is_user_active).toBe(false);
     expect(offboardedAccess.membership_status).toBe("suspended");
 

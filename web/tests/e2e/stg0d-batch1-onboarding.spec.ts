@@ -6,6 +6,9 @@ import {
   beginScenario,
   finishScenario,
   registerRunResource,
+  stagingEnvironmentFingerprint,
+  stagingEvidenceApiEnabled,
+  stagingManifestSha256,
   validateStagingRunConfiguration,
 } from "../helpers/staging-run-manifest";
 
@@ -65,6 +68,43 @@ async function fillTenantDialog(dialog: Locator, code = tenantCode, email = prim
   await dialog.getByLabel("Sandbox", { exact: true }).setChecked(true);
 }
 
+async function verifyPersistedEvidence(
+  page: Page,
+  scenarioId: string,
+  identifiers: Record<string, string | string[]> = {},
+) {
+  if (!stagingEvidenceApiEnabled()) return;
+  await login(page, platformAdmin);
+  const query = new URLSearchParams({
+    run_id: runRef,
+    scenario_id: scenarioId,
+    tenant_id: tenantId,
+    tenant_code: tenantCode,
+  });
+  for (const [name, value] of Object.entries(identifiers)) {
+    for (const item of Array.isArray(value) ? value : [value]) query.append(name, item);
+  }
+  const evidence = await requestWithBrowserSession(
+    page,
+    `/api/platform/qa/staging-onboarding-evidence?${query.toString()}`,
+    {
+      headers: {
+        "X-HRMS-Environment-Fingerprint": stagingEnvironmentFingerprint(),
+        "X-HRMS-Manifest-SHA256": stagingManifestSha256(),
+      },
+    },
+  );
+  expect(evidence.status, evidence.body).toBe(200);
+  const payload = JSON.parse(evidence.body) as {
+    passed?: boolean;
+    run_id?: string;
+    scenario_id?: string;
+    assertions?: Record<string, boolean>;
+  };
+  expect(payload).toMatchObject({ passed: true, run_id: runRef, scenario_id: scenarioId });
+  expect(Object.values(payload.assertions ?? {}).every(Boolean)).toBe(true);
+}
+
 test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () => {
   test.setTimeout(90_000);
 
@@ -115,6 +155,7 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
       attributes: { code: tenantCode, primary_email: primaryEmail, sandbox: true },
     });
     await expect(page).toHaveURL(new RegExp(`tenantId=${tenantId}`));
+    await verifyPersistedEvidence(page, "STG-E2E-0101");
   });
 
   test("STG-E2E-0102 rejects duplicate tenant code without a second tenant", async ({ page }) => {
@@ -133,6 +174,7 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
     expect(list.status).toBe(200);
     const matches = (JSON.parse(list.body) as Array<{ code: string }>).filter((item) => item.code === tenantCode);
     expect(matches).toHaveLength(1);
+    await verifyPersistedEvidence(page, "STG-E2E-0102");
   });
 
   test("STG-E2E-0103 rejects duplicate administrator email without partial identity", async ({ page }) => {
@@ -169,7 +211,9 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
       (response) => response.url().includes(`/api/platform/admin-contacts/${contactId}/provision-user`) && response.request().method() === "POST",
     );
     await provisionCard.getByRole("button", { name: "Create login access" }).click();
-    const provisionPayload = await (await provisionResponsePromise).json() as { user_id: string; membership_id: string };
+    const provisionResponse = await provisionResponsePromise;
+    const provisionPayload = await provisionResponse.json() as { user_id: string; membership_id: string };
+    expect(provisionResponse.status(), JSON.stringify(provisionPayload)).toBe(200);
     adminUserId = provisionPayload.user_id;
     adminMembershipId = provisionPayload.membership_id;
     registerRunResource("STG-E2E-0103", {
@@ -211,6 +255,11 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
     await provisionCard.getByRole("button", { name: "Create login access" }).click();
     expect((await duplicateResponsePromise).status()).toBe(400);
     await expect(page.getByText(/already exists/i).first()).toBeVisible();
+    await verifyPersistedEvidence(page, "STG-E2E-0103", {
+      admin_user_id: adminUserId,
+      admin_membership_id: adminMembershipId,
+      admin_contact_id: [contactId, duplicateContactId ?? ""],
+    });
   });
 
   test("STG-E2E-0104 activates the Enterprise subscription and exposes persisted state", async ({ page }) => {
@@ -228,6 +277,7 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
     const payload = await response.json() as { status?: string; subscription_plan?: string };
     expect(response.ok()).toBeTruthy();
     expect(payload).toMatchObject({ status: "active", subscription_plan: "enterprise" });
+    await verifyPersistedEvidence(page, "STG-E2E-0104");
   });
 
   test("STG-E2E-0105 provisioned Tenant Admin logs in and reaches tenant control center", async ({ page }) => {
@@ -238,6 +288,10 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
     const consoleResponse = await requestWithBrowserSession(page, "/api/tenant-admin/console");
     expect(consoleResponse.status).toBe(200);
     expect(consoleResponse.body).toContain(tenantId);
+    await verifyPersistedEvidence(page, "STG-E2E-0105", {
+      admin_user_id: adminUserId,
+      admin_membership_id: adminMembershipId,
+    });
   });
 
   test("STG-E2E-0106 non-platform Tenant Admin cannot list or create platform tenants", async ({ page }) => {
@@ -260,5 +314,10 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
     });
     await gotoReady(page, "/platform-admin/tenants");
     await expect(page.getByRole("heading", { name: "Tenant pipeline" })).toHaveCount(0);
+    await verifyPersistedEvidence(page, "STG-E2E-0106", {
+      admin_user_id: adminUserId,
+      admin_membership_id: adminMembershipId,
+      denied_tenant_code: `${tenantCode}-denied`,
+    });
   });
 });

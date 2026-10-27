@@ -10,7 +10,25 @@ from apps.organizations.models import (
     Grade,
     LegalEntity,
     Location,
+    OrganizationAuditEvent,
 )
+
+
+@admin.register(OrganizationAuditEvent)
+class OrganizationAuditEventAdmin(admin.ModelAdmin):
+    list_display = ("section", "item_id", "action", "actor_identifier", "tenant", "created_at")
+    list_filter = ("section", "action", "tenant")
+    search_fields = ("item_id", "actor_identifier", "tenant__name")
+    readonly_fields = ("tenant", "actor_identifier", "section", "item_id", "action", "previous_state", "new_state", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(LegalEntity)

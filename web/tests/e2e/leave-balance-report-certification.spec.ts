@@ -11,21 +11,21 @@ test.describe("Phase R4-S leave balance report certification", () => {
 
     const report = page.getByTestId("leave-balance-report");
     await expect(report).toBeVisible();
-    for (const column of ["Employee", "Policy", "Entitlement", "Usage", "Liability", "Risk", "Actions"]) {
+    for (const column of ["Employee", "Policy", "Entitlement", "Usage", "Balance quantities", "Balance state", "Actions"]) {
       await expect(report.getByRole("columnheader", { name: column })).toBeVisible();
     }
 
-    for (const metric of ["Balance rows", "Closing liability", "Reserved units", "High liability risk"]) {
+    for (const metric of ["Balance rows", "Policies represented", "Balances with reservations", "Negative available"]) {
       await expectSummaryMetric(report, metric);
     }
 
-    const search = report.getByPlaceholder("Search employee, policy, leave type");
+    const search = report.getByPlaceholder("Search employee, policy, leave type").or(report.getByLabel("Search leave"));
     await search.fill("no-such-leave-balance-row");
     await expect(search).toHaveValue("no-such-leave-balance-row");
     await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
-    for (const label of ["Leave policy", "Leave type", "Period year", "Liability risk"]) {
+    for (const label of ["Leave policy", "Leave type", "Period year", "Balance state"]) {
       const control = report.getByLabel(label);
       const optionCount = await control.locator("option").count();
       if (optionCount > 1) {
@@ -79,8 +79,7 @@ test.describe("Phase R4-S leave balance report certification", () => {
     expect(auditPayload.items[0].source_endpoints).toContain("/hr-admin/leave-balances/");
 
     await expect(report.locator(".pagination-bar")).toBeVisible();
-    await expect(report.getByRole("button", { name: "Previous" })).toBeVisible();
-    await expect(report.getByRole("button", { name: "Next" })).toBeVisible();
+    await expect(report.getByText(/Showing \d+-\d+ of \d+/)).toBeVisible();
 
     const openLink = report.getByRole("link", { name: "Open" }).first();
     if ((await openLink.count()) > 0) {
@@ -104,9 +103,9 @@ test.describe("Phase R4-S leave balance report certification", () => {
     await expect(page.getByTestId("leave-balance-report")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Export filtered CSV" })).toHaveCount(0);
 
-    const csvResponse = await page.request.get("/api/hr-admin/reports/leave-balance?sort=risk");
-    expect([401, 403]).toContain(csvResponse.status());
-    const manifestResponse = await page.request.get("/api/hr-admin/reports/leave-balance?sort=risk&format=manifest");
-    expect([401, 403]).toContain(manifestResponse.status());
+    const csvResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/leave-balance?sort=risk");
+    expect([401, 403]).toContain(csvResponse.status);
+    const manifestResponse = await requestWithBrowserSession(page, "/api/hr-admin/reports/leave-balance?sort=risk&format=manifest");
+    expect([401, 403]).toContain(manifestResponse.status);
   });
 });

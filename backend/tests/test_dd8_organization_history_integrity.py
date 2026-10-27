@@ -8,7 +8,7 @@ from django.db import close_old_connections
 from rest_framework import serializers
 
 from apps.common.api_views import import_hr_admin_organization_items
-from apps.organizations.models import Branch, LegalEntity
+from apps.organizations.models import Branch, LegalEntity, OrganizationAuditEvent
 from apps.tenants.models import Tenant
 
 
@@ -38,6 +38,12 @@ def test_organization_import_creates_dependency_graph_in_one_transaction():
     assert [item["code"] for item in created] == ["LE-1", "BR-1"]
     branch = Branch.objects.get(tenant=tenant, code="BR-1")
     assert branch.legal_entity.code == "LE-1"
+    events = OrganizationAuditEvent.objects.filter(tenant=tenant).order_by("created_at")
+    assert [(event.section, event.action) for event in events] == [
+        ("legal_entities", "created"),
+        ("branches", "created"),
+    ]
+    assert events[1].new_state["legal_entity_id"] == str(branch.legal_entity_id)
 
 
 def test_organization_import_rolls_back_all_rows_when_later_row_fails():
@@ -55,6 +61,7 @@ def test_organization_import_rolls_back_all_rows_when_later_row_fails():
 
     assert not LegalEntity.objects.filter(tenant=tenant, code="LE-ROLLBACK").exists()
     assert not Branch.objects.filter(tenant=tenant, code="BR-BAD").exists()
+    assert not OrganizationAuditEvent.objects.filter(tenant=tenant).exists()
 
 
 def test_organization_import_never_resolves_dependency_from_another_tenant():

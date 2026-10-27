@@ -139,8 +139,12 @@ class Command(BaseCommand):
     def _cleanup(self, tenant: Tenant) -> dict[str, int]:
         notifications = [item for item in Notification.objects.filter(tenant=tenant) if self._is_seed_payload(item.payload)]
         notification_ids = [item.id for item in notifications]
-        deleted_delivery_logs = NotificationDeliveryLog.objects.filter(tenant=tenant, notification_id__in=notification_ids).delete()[0]
-        deleted_notifications = Notification.objects.filter(id__in=notification_ids).delete()[0]
+        retained_notification_ids = set(
+            NotificationDeliveryLog.objects.filter(tenant=tenant, notification_id__in=notification_ids)
+            .values_list("notification_id", flat=True)
+        )
+        deletable_notification_ids = [item_id for item_id in notification_ids if item_id not in retained_notification_ids]
+        deleted_notifications = Notification.objects.filter(id__in=deletable_notification_ids).delete()[0]
 
         artifacts = [
             item
@@ -148,33 +152,56 @@ class Command(BaseCommand):
             if self._is_seed_payload(item.config_snapshot)
         ]
         artifact_ids = [item.id for item in artifacts]
-        deleted_access_grants = PayrollArtifactSignedAccessGrant.objects.filter(tenant=tenant, output_artifact_id__in=artifact_ids).delete()[0]
-        deleted_access_events = PayrollArtifactAccessEvent.objects.filter(tenant=tenant, output_artifact_id__in=artifact_ids).delete()[0]
-        deleted_artifacts = PayrollOutputArtifact.objects.filter(id__in=artifact_ids).delete()[0]
+        retained_artifact_ids = set(
+            PayrollArtifactAccessEvent.objects.filter(tenant=tenant, output_artifact_id__in=artifact_ids)
+            .values_list("output_artifact_id", flat=True)
+        )
+        deletable_artifact_ids = [item_id for item_id in artifact_ids if item_id not in retained_artifact_ids]
+        deleted_access_grants = PayrollArtifactSignedAccessGrant.objects.filter(
+            tenant=tenant,
+            output_artifact_id__in=deletable_artifact_ids,
+        ).delete()[0]
+        deleted_access_events = 0
+        deleted_artifacts = PayrollOutputArtifact.objects.filter(id__in=deletable_artifact_ids).delete()[0]
 
         run_codes = [f"{SEED_REF.lower().replace('_', '-')}-run"]
         runs = PayrollRun.objects.filter(tenant=tenant, code__in=run_codes)
         run_ids = list(runs.values_list("id", flat=True))
-        deleted_batches = PayrollOutputBatch.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
-        deleted_reviews = PayrollRunReview.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
-        deleted_calculations = PayrollRunCalculation.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
-        deleted_snapshots = PayrollInputSnapshot.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
-        deleted_runs = runs.delete()[0]
-
-        deleted_pay_group_assignments = PayGroupAssignment.objects.filter(
-            tenant=tenant,
-            config_snapshot__seed_ref=SEED_REF,
-        ).delete()[0]
-        deleted_pay_groups = PayGroup.objects.filter(tenant=tenant, code=f"{SEED_REF.lower().replace('_', '-')}-pay-group").delete()[0]
-        deleted_periods = PayrollPeriod.objects.filter(tenant=tenant, code=f"{SEED_REF.lower().replace('_', '-')}-period").delete()[0]
-        deleted_calendars = PayrollCalendar.objects.filter(tenant=tenant, code=f"{SEED_REF.lower().replace('_', '-')}-calendar").delete()[0]
+        retain_payroll_chain = bool(retained_artifact_ids)
+        if retain_payroll_chain:
+            deleted_batches = deleted_reviews = deleted_calculations = deleted_snapshots = deleted_runs = 0
+            deleted_pay_group_assignments = deleted_pay_groups = deleted_periods = deleted_calendars = 0
+        else:
+            deleted_batches = PayrollOutputBatch.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
+            deleted_reviews = PayrollRunReview.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
+            deleted_calculations = PayrollRunCalculation.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
+            deleted_snapshots = PayrollInputSnapshot.objects.filter(tenant=tenant, payroll_run_id__in=run_ids).delete()[0]
+            deleted_runs = runs.delete()[0]
+            deleted_pay_group_assignments = PayGroupAssignment.objects.filter(
+                tenant=tenant,
+                config_snapshot__seed_ref=SEED_REF,
+            ).delete()[0]
+            deleted_pay_groups = PayGroup.objects.filter(
+                tenant=tenant,
+                code=f"{SEED_REF.lower().replace('_', '-')}-pay-group",
+            ).delete()[0]
+            deleted_periods = PayrollPeriod.objects.filter(
+                tenant=tenant,
+                code=f"{SEED_REF.lower().replace('_', '-')}-period",
+            ).delete()[0]
+            deleted_calendars = PayrollCalendar.objects.filter(
+                tenant=tenant,
+                code=f"{SEED_REF.lower().replace('_', '-')}-calendar",
+            ).delete()[0]
 
         return {
             "notifications": deleted_notifications,
-            "notification_delivery_logs": deleted_delivery_logs,
+            "notification_delivery_logs": 0,
+            "retained_notifications_with_delivery_history": len(retained_notification_ids),
             "payroll_access_grants": deleted_access_grants,
             "payroll_access_events": deleted_access_events,
             "payroll_artifacts": deleted_artifacts,
+            "retained_payroll_artifacts_with_access_history": len(retained_artifact_ids),
             "payroll_output_batches": deleted_batches,
             "payroll_reviews": deleted_reviews,
             "payroll_calculations": deleted_calculations,

@@ -24,6 +24,7 @@ import type {
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { WorkspaceFormControls } from "@/components/patterns/workspace-form-controls";
+import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
 
 type Props = {
   balancesPage: HrAdminLeaveBalanceListResponse;
@@ -301,6 +302,7 @@ function LeaveBalanceImportWorkbench({
     isCommittingRef.current = true;
     setIsCommitting(true);
     const nextRows = [...rows];
+    const sourceHash = await sha256Hex(csvText.replace(/\r\n/g, "\n").trim());
 
     for (let index = 0; index < nextRows.length; index += 1) {
       const row = nextRows[index];
@@ -309,7 +311,10 @@ function LeaveBalanceImportWorkbench({
       try {
         response = await fetch("/api/hr-admin/leave-balances/actions", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": `leave-import:${sourceHash}:${row.payload.employee_id}:${row.index}`,
+          },
           body: JSON.stringify(row.payload),
         });
       } catch {
@@ -338,7 +343,28 @@ function LeaveBalanceImportWorkbench({
     const saved = nextRows.filter(row => row.status === "created").length;
     const failed = nextRows.filter(row => row.status === "failed").length;
     const blocked = nextRows.filter(row => row.status === "blocked").length;
-    setMessage(`Import processed: ${saved} saved, ${failed} failed or unconfirmed, ${blocked} blocked. Review row messages and the ledger before retrying any row.`);
+    const audit = await recordImportBatchAudit({
+      import_type: "leave_balance_actions",
+      status: failed ? "partial" : "committed",
+      file_name: "leave-balance-import.csv",
+      source_hash: sourceHash,
+      row_count: nextRows.length,
+      ready_count: readyCount,
+      created_count: saved,
+      blocked_count: blocked,
+      failed_count: failed,
+      rollback_supported: false,
+      rollback_status: "not_supported",
+      source_ref: "hrms.leave_balance_import.browser.v2",
+      evidence_snapshot: {
+        row_outcomes: nextRows.map(row => ({ row: row.index, status: row.status })),
+        replay_protection: "per_row_idempotency",
+      },
+      row_errors: nextRows.filter(row => row.status === "blocked" || row.status === "failed").map(row => ({ row: row.index, status: row.status, message: row.message })),
+    });
+    setMessage(audit
+      ? `Import processed: ${saved} saved, ${failed} failed or unconfirmed, ${blocked} blocked. Source identity ${sourceHash.slice(0, 12)} recorded.`
+      : `Import processed: ${saved} saved, ${failed} failed or unconfirmed, ${blocked} blocked. Audit confirmation was not received; review import history before retrying.`);
   }
 
   return (

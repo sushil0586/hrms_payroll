@@ -442,15 +442,16 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
       <section className="section section--tight">
         <nav aria-label="Payroll review workspace sections" className="payroll-setup-tabs payroll-review-route-tabs">
           {REVIEW_TABS.map((tab) => (
-            <Link
+            <a
               aria-current={activeTab === tab.id ? "page" : undefined}
               className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              data-navigation-mode="document"
               href={reviewHref(currentParams, { tab: tab.id, exceptionId: tab.id === "exceptions" ? selectedException?.id : undefined })}
               key={tab.id}
             >
               <strong>{tab.label}</strong>
               <span>{tab.helper}</span>
-            </Link>
+            </a>
           ))}
         </nav>
       </section>

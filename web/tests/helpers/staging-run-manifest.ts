@@ -1,4 +1,5 @@
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 const frozenScenarioIds = new Set([
@@ -119,8 +120,26 @@ export function validateStagingRunConfiguration() {
     throw new Error("Synthetic administrator recipient is outside the approved delivery domains.");
   }
   for (const value of ["STG_SES_DELIVERY_MODE", "STG_SECRET_SOURCE_REF"]) required(value);
+  if (process.env.STG_EVIDENCE_API_REQUIRED === "1") {
+    required("STG_ENVIRONMENT_FINGERPRINT");
+    if (!manifestPath()) throw new Error("STG_RUN_MANIFEST_PATH is required for evidence API collection.");
+  }
   const forbidden = (process.env.STG_DISALLOWED_RECIPIENTS ?? "").toLowerCase().split(",").map((item) => item.trim());
   if (forbidden.includes(recipient)) throw new Error("Synthetic administrator recipient is explicitly disallowed.");
+}
+
+export function stagingEvidenceApiEnabled() {
+  return process.env.STG_EVIDENCE_API_REQUIRED === "1";
+}
+
+export function stagingEnvironmentFingerprint() {
+  return required("STG_ENVIRONMENT_FINGERPRINT");
+}
+
+export function stagingManifestSha256() {
+  const target = manifestPath();
+  if (!target || !existsSync(target)) throw new Error("The run ownership manifest is unavailable for evidence collection.");
+  return createHash("sha256").update(readFileSync(target)).digest("hex");
 }
 
 export function beginRun(evidenceLocations: string[] = []) {
