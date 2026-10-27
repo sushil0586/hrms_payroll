@@ -1,0 +1,13 @@
+backend/apps/common/migrations/0011_staging_evidence_authorization.py
+backend/apps/common/models.py
+backend/apps/common/staging_evidence_api.py
+backend/tests/test_stg1f_staging_evidence_api.py
+docs/qa/hrms-evidence-api-security-patch-manifest.txt
+docs/qa/hrms-evidence-api-security-patch-release.md
+docs/qa/hrms-evidence-api-staging-configuration.md
+docs/qa/hrms-staging-batch1-entry-closure.md
+docs/qa/hrms-staging-certification-dashboard.md
+docs/qa/hrms-staging-evidence-api-least-privilege-remediation.md
+web/tests/e2e/stg0d-batch1-onboarding.spec.ts
+web/tests/helpers/staging-auth.ts
+web/tests/helpers/staging-run-manifest.ts

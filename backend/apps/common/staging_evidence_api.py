@@ -8,10 +8,12 @@ import re
 
 from django.conf import settings
 from django.db import connection, transaction
+from django.utils import timezone
 from rest_framework import exceptions, permissions, response, serializers, status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.views import APIView
 
+from apps.common.models import StagingEvidenceAuthorization
 from apps.iam.models import MembershipStatus, TenantMembership
 from apps.tenant_onboarding.models import TenantOnboardingAdminContact, TenantOnboardingEvent
 from apps.tenants.models import SubscriptionPlan, Tenant
@@ -19,6 +21,7 @@ from apps.tenants.models import SubscriptionPlan, Tenant
 
 logger = logging.getLogger("hrms.security.staging_evidence")
 PERMISSION_KEY = "platform.qa_evidence.view"
+DJANGO_PERMISSION_CODENAME = "view_staging_evidence"
 FROZEN_SCENARIO_IDS = {f"STG-E2E-010{number}" for number in range(1, 7)}
 RUN_ID_PATTERN = re.compile(r"^stg1-[a-z0-9][a-z0-9-]{5,55}$")
 SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
@@ -54,10 +57,57 @@ class IsConfiguredStagingEvidenceActor(permissions.BasePermission):
         user = request.user
         actors = {str(value).strip().lower() for value in getattr(settings, "HRMS_STAGING_EVIDENCE_API_ACTORS", ()) if str(value).strip()}
         actor = (getattr(user, "username", "") or "").strip().lower()
-        allowed = bool(user and user.is_authenticated and user.is_active and user.is_superuser and actors and actor in actors)
+        has_direct_permission = bool(
+            user
+            and getattr(user, "is_authenticated", False)
+            and user.user_permissions.filter(
+                content_type__app_label="common",
+                codename=DJANGO_PERMISSION_CODENAME,
+            ).exists()
+        )
+        allowed = bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and not user.is_staff
+            and not user.is_superuser
+            and actors
+            and actor in actors
+            and has_direct_permission
+        )
         if not allowed:
             _audit(request, outcome="denied", reason="identity_or_permission")
         return allowed
+
+
+def _require_run_authorization(request, query: dict, configured_fingerprint: str) -> StagingEvidenceAuthorization:
+    grant = StagingEvidenceAuthorization.objects.filter(
+        principal=request.user,
+        run_id=query["run_id"],
+        tenant_code=query["tenant_code"],
+        revoked_at__isnull=True,
+        expires_at__gt=timezone.now(),
+    ).first()
+    if grant is None:
+        _audit(
+            request, outcome="denied", reason="run_authorization", run_id=query["run_id"],
+            scenario_id=query["scenario_id"], tenant_id=str(query["tenant_id"]),
+        )
+        raise exceptions.PermissionDenied("An active staging evidence run authorization is required.")
+    if query["scenario_id"] not in set(grant.scenario_ids or []):
+        _audit(
+            request, outcome="denied", reason="scenario_authorization", run_id=query["run_id"],
+            scenario_id=query["scenario_id"], tenant_id=str(query["tenant_id"]),
+        )
+        raise exceptions.PermissionDenied("Scenario is outside the authorized staging evidence run.")
+    fingerprint_hash = hashlib.sha256(configured_fingerprint.encode("utf-8")).hexdigest()
+    if grant.environment_fingerprint_sha256 != fingerprint_hash:
+        _audit(
+            request, outcome="denied", reason="authorization_fingerprint", run_id=query["run_id"],
+            scenario_id=query["scenario_id"], tenant_id=str(query["tenant_id"]),
+        )
+        raise exceptions.PermissionDenied("Run authorization is for another environment.")
+    return grant
 
 
 class StagingOnboardingEvidenceQuerySerializer(serializers.Serializer):
@@ -196,6 +246,7 @@ class PlatformStagingOnboardingEvidenceView(APIView):
             raise exceptions.ValidationError({"manifest_sha256": "A valid manifest SHA-256 is required."})
 
         query = _parse_query_params(request)
+        _require_run_authorization(request, query, configured_fingerprint)
         tenant = Tenant.objects.filter(
             id=query["tenant_id"], code=query["tenant_code"], is_sandbox=True,
         ).first()

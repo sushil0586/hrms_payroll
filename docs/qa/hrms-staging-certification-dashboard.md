@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-27
 Environment: synthetic-only Lightsail staging
-Deployed commit: `20d832996ef505f0b6c2df2673204e841e7b6a52`
+Deployed commit: `c14b668e0e8eb641e4c4670e5eefeb7cf308cf59`
 
 ## Current Decision
 
@@ -20,7 +20,7 @@ Deployed commit: `20d832996ef505f0b6c2df2673204e841e7b6a52`
 | STG-1G.1 dependency remediation | **BLOCKED**: Next.js upgraded to 15.5.28; audit reduced to 0 critical/1 high/0 moderate; unresolved Expo CLI `node-forge` advisory has no patched release or approved disposition |
 | STG-1G.2 node-forge disposition | **APPROVAL REQUIRED**: no web bundle execution path was found, but `node-forge@1.4.0` is physically present via Expo tooling in the web runtime image; temporary web-only staging acceptance is recommended but not approved; mobile/EAS remains blocked |
 | 136-scenario local campaign | **CONDITIONAL**: 131 Local Passed, 0 Failed, 5 Blocked and 0 Not Run/incomplete. Batch 13 recovery/security and Batch 14 governed teardown passed locally; the five policy/provider blockers remain unchanged. These local results do not change staging statuses. |
-| STG-1 Batch-1 entry | **BLOCKED**, QA candidate is local-only and staging mutation authorization is absent |
+| STG-1 Batch-1 entry | **BLOCKED**: candidate is deployed, but the evidence API requires an over-privileged superuser; fingerprint, run namespace, identities, recovery reference and execution authorization are absent |
 | Start STG-1 immediately | **NO**, explicit mutation authorization is absent |
 | Synthetic functional staging | Conditional GO after STG-1 entry criteria |
 | Real-payroll staging | NO-GO |
@@ -64,7 +64,7 @@ These are mapping-readiness classifications, not staging execution results. All 
 | Automation blocked | 0 |
 | Authorized for staging execution | 0 |
 
-Batch 1 covers `STG-E2E-0101` through `0106`. Integrated STG-1F local verification passed all six browser workflows in 28.7 seconds with the evidence API required, followed by `42 passed` PostgreSQL/security regressions and independent database reconciliation. STG-1G independently reran all six in 20.9 seconds and passed 36 currently collected PostgreSQL tests, but found a critical Next.js dependency advisory. All six remain `Not Run` on staging: the source is uncommitted/undeployed, the security and operational blockers remain, and no staging mutation window has been authorized.
+Batch 1 covers `STG-E2E-0101` through `0106`. Integrated local verification passed all six browser workflows with independent evidence assertions. Release `c14b668e...` is deployed with healthy services and current migrations. All six remain `Not Run` on staging: the bounded evidence API is disabled and currently requires an allowlisted superuser instead of a least-privilege evidence actor; fingerprint, run namespace, recovery reference and execution authorization are absent.
 
 ## Batch Dashboard
 
@@ -92,26 +92,26 @@ Batch 1 covers `STG-E2E-0101` through `0106`. Integrated STG-1F local verificati
 |---|---|
 | Public HTTPS and health | Green |
 | AWS caller identity | Green; expected staging operator verified |
-| Lightsail inventory / host SSH | Red: IAM `GetInstances` denied and known keys rejected |
+| Lightsail inventory / host SSH | Amber: approved direct SSH works; AWS API inventory, alarm and snapshot reads remain IAM-denied |
 | App/database/broker connectivity | Green |
 | Migration compatibility | Green |
 | TypeScript/Django/static checks | Green |
 | Five-portal read-only smoke history | Green, historical evidence only |
 | PostgreSQL financial guards | Green locally; fresh staging execution pending |
 | SES synthetic delivery | Green with bounce-reconciliation limitation |
-| Tenant-safe Batch-1 evidence API | Green locally: integrated browser 6/6 and PostgreSQL/security 42/42; disabled by default and not deployed |
+| Tenant-safe Batch-1 evidence API | Amber: least-privilege non-staff identity and server-side expiring run authorization passed locally; patch and `common.0011` are not committed or deployed, and staging remains disabled |
 | Runtime dependency audit | Amber/red: Next.js 15.5.28 closes critical runtime findings; one high Expo CLI `node-forge` advisory remains open. Web bundle reachability was not found, but the package is physically present in the web image; security-owner exception approval or image/toolchain remediation is required |
 | Disposable fixture safeguards | Green on PostgreSQL; SQLite invocation invalid |
 | Strict production preflight | Red: five blockers |
 | External protected storage | Red |
-| Off-host backup and restore | Red |
+| Off-host backup and restore | Red: current `c14b668e` predeployment dump is valid but host-local; no isolated restore evidence |
 | Central monitoring/alerts | Red/unverified current state |
 | Real provider/payment | Red/disabled |
-| Host functional capacity | Amber: one worker only |
+| Host functional capacity | Amber: one worker; disk 69%; 29.45 GB private Docker build cache is reclaimable only under separate approval |
 
 ## Candidate And Working Tree
 
-- QA/tooling candidate: committed locally as `7a55b33e20bfc5ba34f2c15017edd271c2092664`; not pushed or deployed.
+- QA/tooling baseline `7a55b33e...` is superseded by the committed and deployed release candidate `c14b668e0e8eb641e4c4670e5eefeb7cf308cf59`.
 - `web/tests/e2e/db6-payroll-processing.spec.ts`: preserved separate four-line Actions-tab automation repair, unchanged at diff SHA-256 `8befa44fdf26f010e0995193a70ed41a31421df4c03d4920ba5610628c11cebb`; unstaged and uncommitted.
 - STG-1D adds documentation and dashboard reconciliation only; no application, migration, infrastructure, database, or scenario status changed.
 - STG-1E adds local-only fingerprint and staging email controls with PostgreSQL/email regression evidence; nothing was deployed.
@@ -134,7 +134,7 @@ No application code, migration, infrastructure, database or scenario status chan
 
 ## Next Milestone
 
-Name the security owner and either approve the exact STG-1G.2 time-limited web-only exception (with expiration and remediation ticket) or require removal of Expo dependencies from the web runtime image. Mobile/EAS remains outside the candidate.
+Review and authorize the verified least-privilege patch for an immutable staging build, then obtain one explicit Batch 1 approval naming the fingerprint, run namespace, execution/cleanup/recovery owners, window and quarantine or cleanup method.
 
 ## Final Local Closure (2026-10-27)
 
@@ -144,4 +144,30 @@ Name the security owner and either approve the exact STG-1G.2 time-limited web-o
 - Blockers remain `0710`, `0804`, `1010`, `1110`, and `1208`; none was converted without policy or external evidence.
 - Representative PostgreSQL validation preserved payroll immutability and identified a legacy seed-cleanup conflict with protected history. Cleanup now retains protected notification and payroll access history and reports retained counts; no database guard was weakened.
 - TypeScript, focused ESLint, Django checks, migration drift and the Next.js 15.5.28 production build passed. The raw dependency result remains 0 critical / 1 high (`GHSA-86w9-cpqp-85rv`).
-- Candidate remains uncommitted and undeployed. The separate payroll Playwright repair remains excluded with diff SHA-256 `8befa44fdf26f010e0995193a70ed41a31421df4c03d4920ba5610628c11cebb`.
+- Candidate is committed and deployed as `c14b668e0e8eb641e4c4670e5eefeb7cf308cf59`. The separate payroll Playwright repair remains excluded and uncommitted with diff SHA-256 `8befa44fdf26f010e0995193a70ed41a31421df4c03d4920ba5610628c11cebb`.
+
+## Fresh Batch 1 Closure (2026-10-27)
+
+- Backend image: `sha256:c166e384607fd8203ed5a3733cc433c952e12fb68ed3b2ac0cda3150a2661035`.
+- Web image: `sha256:a28657f4457d5d76b807717898bab4fa61f4370d7b7df099c085219bf2a78cb9`.
+- Environment is `staging`; fingerprint, evidence actors and SES recipients are unset; evidence API and destructive cleanup are disabled.
+- PostgreSQL, Redis, backend and web are healthy; Celery responds; all deployment restart counts are zero.
+- A dedicated PostgreSQL role is unnecessary if Batch 1 uses the bounded API. Its authorization must first be changed from allowlisted superuser to an approved least-privilege evidence principal.
+- Exact predeployment backup integrity passes, but it is host-local; encrypted off-host backup and isolated restore remain unverified.
+- No staging scenario ran. Status remains `0 Passed / 0 Failed / 136 Not Run`.
+- Detailed evidence and the authorization checklist are in `hrms-staging-batch1-entry-closure.md`.
+
+## Least-Privilege Evidence API Closure (2026-10-27)
+
+- Added direct `common.view_staging_evidence` permission and durable authorization bound to principal, run, tenant namespace, frozen scenario subset, fingerprint hash, expiry and revocation.
+- Active evidence callers must be non-staff and non-superuser; allowlisted superusers and Tenant Admins are rejected.
+- Isolated PostgreSQL security suite passed 20/20.
+- Production-built Batch 1 Playwright passed 6/6 in 21.4 seconds after one exact-ID automation synchronization fix; evidence assertions used a dedicated actor.
+- The patch is local-only and adds migration `common.0011`. Shared staging remains `0 Passed / 0 Failed / 136 Not Run`.
+
+## Evidence API Security Patch Freeze (2026-10-27)
+
+- Exact 13-file candidate prepared against parent `c14b668e0e8eb641e4c4670e5eefeb7cf308cf59`; no file was staged or committed.
+- Fresh isolated regression: PostgreSQL **20 passed**; production-built Playwright **6 passed in 22.5 seconds**; TypeScript, focused ESLint, Django checks, migration drift and production build passed.
+- `common.0011` is additive and grants no user or group permission automatically.
+- Deployment remains blocked because encrypted off-host backup and an isolated staging-derived restore are still unverified. Shared staging remains **136 Not Run**.

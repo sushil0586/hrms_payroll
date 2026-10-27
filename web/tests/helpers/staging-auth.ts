@@ -27,6 +27,11 @@ export const platformAdmin: Persona = {
   password: process.env.PLAYWRIGHT_LIVE_PLATFORM_ADMIN_PASSWORD ?? seedPassword,
 };
 
+export const stagingEvidenceActor: Persona = {
+  username: process.env.STG_EVIDENCE_API_USERNAME ?? "staging.evidence",
+  password: process.env.STG_EVIDENCE_API_PASSWORD ?? seedPassword,
+};
+
 export const tenantAdmin: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_TENANT_ADMIN_USERNAME ?? process.env.PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME ?? "nisha.rao",
   password: process.env.PLAYWRIGHT_LIVE_TENANT_ADMIN_PASSWORD ?? process.env.PLAYWRIGHT_LIVE_HR_ADMIN_PASSWORD ?? seedPassword,

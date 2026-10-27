@@ -122,6 +122,8 @@ export function validateStagingRunConfiguration() {
   for (const value of ["STG_SES_DELIVERY_MODE", "STG_SECRET_SOURCE_REF"]) required(value);
   if (process.env.STG_EVIDENCE_API_REQUIRED === "1") {
     required("STG_ENVIRONMENT_FINGERPRINT");
+    required("STG_EVIDENCE_API_USERNAME");
+    required("STG_EVIDENCE_API_PASSWORD");
     if (!manifestPath()) throw new Error("STG_RUN_MANIFEST_PATH is required for evidence API collection.");
   }
   const forbidden = (process.env.STG_DISALLOWED_RECIPIENTS ?? "").toLowerCase().split(",").map((item) => item.trim());

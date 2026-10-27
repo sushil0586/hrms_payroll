@@ -1,11 +1,15 @@
+import hashlib
 import logging
+from datetime import timedelta
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.db import connection
-from django.test import override_settings
+from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from apps.common.models import StagingEvidenceAuthorization
 from apps.iam.models import TenantMembership, User
 from apps.tenant_onboarding.models import TenantOnboardingAdminContact
 from apps.tenants.models import Tenant
@@ -39,15 +43,28 @@ def _tenant_payload(code: str) -> dict:
 @pytest.fixture()
 def graph():
     assert connection.vendor == "postgresql", "STG-1F evidence integrity tests require PostgreSQL."
-    actor = User.objects.create_user(
-        username="stg1f.evidence.actor",
-        email="evidence.actor@playwright.qa.invalid",
+    setup_actor = User.objects.create_user(
+        username="stg1f.setup.actor",
+        email="setup.actor@playwright.qa.invalid",
         password=PASSWORD,
         is_staff=True,
         is_superuser=True,
     )
+    actor = User.objects.create_user(
+        username="stg1f.evidence.actor",
+        email="evidence.actor@playwright.qa.invalid",
+        password=PASSWORD,
+        is_staff=False,
+        is_superuser=False,
+    )
+    actor.user_permissions.add(
+        Permission.objects.get(
+            content_type__app_label="common",
+            codename="view_staging_evidence",
+        )
+    )
     setup = APIClient()
-    setup.force_authenticate(actor)
+    setup.force_authenticate(setup_actor)
     tenant_response = setup.post("/api/v1/platform/tenants/", _tenant_payload(TENANT_CODE), format="json")
     assert tenant_response.status_code == 201, tenant_response.json()
     tenant = Tenant.objects.get(id=tenant_response.json()["id"])
@@ -86,9 +103,21 @@ def graph():
         {"status": "active", "subscription_plan": "enterprise"},
         format="json",
     )
+    authorization = StagingEvidenceAuthorization.objects.create(
+        principal=actor,
+        run_id=RUN_ID,
+        tenant_code=TENANT_CODE,
+        scenario_ids=[f"STG-E2E-010{number}" for number in range(1, 7)],
+        environment_fingerprint_sha256=hashlib.sha256(FINGERPRINT.encode()).hexdigest(),
+        authorization_ref="STG-1F-LOCAL-TEST",
+        authorized_by_identifier=setup_actor.username,
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
     return {
         "actor": actor,
+        "setup_actor": setup_actor,
         "token": Token.objects.create(user=actor),
+        "authorization": authorization,
         "tenant": tenant,
         "contact_ids": contact_ids,
         "user_id": provision.json()["user_id"],
@@ -171,10 +200,35 @@ def test_requires_strong_authenticated_identity(graph):
 
 
 def test_rejects_authenticated_actor_without_dedicated_configuration(graph, settings):
-    other = User.objects.create_user(username="stg1f.other", password=PASSWORD, is_superuser=True, is_staff=True)
+    other = User.objects.create_user(username="stg1f.other", password=PASSWORD)
     settings.HRMS_STAGING_EVIDENCE_API_ACTORS = [graph["actor"].username]
     result = _get(graph, client=_client(graph, token=Token.objects.create(user=other).key))
     assert result.status_code == 403
+
+
+def test_accepts_non_superuser_only_with_direct_permission_and_active_run(graph):
+    assert graph["actor"].is_superuser is False
+    assert graph["actor"].is_staff is False
+    assert graph["actor"].user_permissions.filter(codename="view_staging_evidence").exists()
+    assert _get(graph).status_code == 200
+
+
+def test_rejects_superuser_even_when_allowlisted(graph, settings):
+    superuser = graph["setup_actor"]
+    superuser.user_permissions.add(
+        Permission.objects.get(content_type__app_label="common", codename="view_staging_evidence")
+    )
+    settings.HRMS_STAGING_EVIDENCE_API_ACTORS = [superuser.username]
+    client = _client(graph, token=Token.objects.create(user=superuser).key)
+    assert _get(graph, client=client).status_code == 403
+
+
+def test_rejects_tenant_personas_without_direct_evidence_permission(graph, settings):
+    membership = TenantMembership.objects.get(id=graph["membership_id"])
+    tenant_admin = membership.user
+    settings.HRMS_STAGING_EVIDENCE_API_ACTORS = [tenant_admin.username]
+    client = _client(graph, token=Token.objects.create(user=tenant_admin).key)
+    assert _get(graph, client=client).status_code == 403
 
 
 def test_api_is_disabled_by_default_and_outside_staging(graph, settings):
@@ -194,6 +248,26 @@ def test_rejects_unsupported_scenario_invalid_run_and_missing_identifiers(graph)
     assert _get(graph, scenario_id="STG-E2E-0199").status_code == 400
     assert _get(graph, run_id="other-run", tenant_code=TENANT_CODE).status_code == 400
     assert _get(graph, scenario_id="STG-E2E-0105", admin_user_id="", admin_membership_id="").status_code == 400
+
+
+def test_rejects_forged_run_without_server_authorization(graph):
+    forged_run = "stg1-forged-001"
+    result = _get(graph, run_id=forged_run, tenant_code=f"pw-qa-{forged_run}")
+    assert result.status_code == 403
+
+
+def test_rejects_expired_and_revoked_run_authorization(graph):
+    grant = graph["authorization"]
+    grant.expires_at = timezone.now() - timedelta(seconds=1)
+    StagingEvidenceAuthorization.objects.filter(id=grant.id).update(expires_at=grant.expires_at)
+    assert _get(graph).status_code == 403
+
+    StagingEvidenceAuthorization.objects.filter(id=grant.id).update(
+        expires_at=timezone.now() + timedelta(hours=1),
+        revoked_at=timezone.now(),
+        revocation_reason="Test revocation",
+    )
+    assert _get(graph).status_code == 403
 
 
 def test_rejects_tenant_scope_and_cross_tenant_resource_identifiers(graph):
@@ -225,11 +299,17 @@ def test_get_only_contract_and_negative_operation_persistence(graph):
     denied_code = f"{TENANT_CODE}-denied"
     before = Tenant.objects.count()
     evidence = _get(graph, scenario_id="STG-E2E-0106", denied_tenant_code=denied_code)
-    mutation = _client(graph).post(EVIDENCE_URL, {}, format="json")
+    client = _client(graph)
+    mutations = [
+        client.post(EVIDENCE_URL, {}, format="json"),
+        client.put(EVIDENCE_URL, {}, format="json"),
+        client.patch(EVIDENCE_URL, {}, format="json"),
+        client.delete(EVIDENCE_URL),
+    ]
 
     assert evidence.status_code == 200
     assert evidence.json()["assertions"]["denied_tenant_absent"] is True
-    assert mutation.status_code == 405
+    assert {mutation.status_code for mutation in mutations} == {405}
     assert Tenant.objects.count() == before
     assert not Tenant.objects.filter(code=denied_code).exists()
 

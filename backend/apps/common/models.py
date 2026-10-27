@@ -5,6 +5,7 @@ import json
 import uuid
 
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -94,6 +95,80 @@ class MutationIdempotencyRecord(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.action}:{self.idempotency_key}:{self.status}"
+
+
+class StagingEvidenceAuthorization(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Time-bounded authorization for the staging-only evidence endpoint."""
+
+    principal = models.ForeignKey(
+        "iam.User",
+        on_delete=models.PROTECT,
+        related_name="staging_evidence_authorizations",
+    )
+    run_id = models.CharField(
+        max_length=60,
+        validators=[RegexValidator(r"^stg1-[a-z0-9][a-z0-9-]{5,55}$")],
+    )
+    tenant_code = models.CharField(
+        max_length=80,
+        validators=[RegexValidator(r"^pw-qa-stg1-[a-z0-9-]+$")],
+    )
+    scenario_ids = models.JSONField(default=list)
+    environment_fingerprint_sha256 = models.CharField(
+        max_length=64,
+        validators=[RegexValidator(r"^[a-f0-9]{64}$")],
+    )
+    authorization_ref = models.CharField(max_length=160)
+    authorized_by_identifier = models.CharField(max_length=160)
+    authorized_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(blank=True, null=True)
+    revocation_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-authorized_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["principal", "run_id"],
+                name="uniq_staging_evidence_principal_run",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["run_id", "tenant_code", "expires_at"]),
+            models.Index(fields=["principal", "revoked_at", "expires_at"]),
+        ]
+        permissions = [
+            ("view_staging_evidence", "Can view bounded staging evidence"),
+        ]
+
+    def clean(self):
+        errors = {}
+        expected_code = f"pw-qa-{self.run_id}" if self.run_id else ""
+        if self.tenant_code and self.tenant_code != expected_code:
+            errors["tenant_code"] = "Tenant code must be derived from the authorized run ID."
+        expected_scenarios = {f"STG-E2E-010{number}" for number in range(1, 7)}
+        scenarios = self.scenario_ids
+        if not isinstance(scenarios, list) or not scenarios or len(scenarios) != len(set(scenarios)):
+            errors["scenario_ids"] = "Scenario IDs must be a non-empty unique list."
+        elif not set(scenarios).issubset(expected_scenarios):
+            errors["scenario_ids"] = "Authorization contains a scenario outside frozen Batch 1."
+        if self.expires_at and self.authorized_at and self.expires_at <= self.authorized_at:
+            errors["expires_at"] = "Authorization expiry must follow its authorization time."
+        if self.revoked_at and not self.revocation_reason:
+            errors["revocation_reason"] = "Revoked authorization requires a reason."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def is_current(self) -> bool:
+        return self.revoked_at is None and self.expires_at > timezone.now()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.principal_id}:{self.run_id}"
 
 
 class HrmsLaunchRemediationStatus(models.TextChoices):

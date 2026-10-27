@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { platformAdmin, requestWithBrowserSession, type Persona } from "../helpers/staging-auth";
+import { platformAdmin, requestWithBrowserSession, stagingEvidenceActor, type Persona } from "../helpers/staging-auth";
 import {
   beginRun,
   beginScenario,
@@ -74,7 +74,7 @@ async function verifyPersistedEvidence(
   identifiers: Record<string, string | string[]> = {},
 ) {
   if (!stagingEvidenceApiEnabled()) return;
-  await login(page, platformAdmin);
+  await login(page, stagingEvidenceActor);
   const query = new URLSearchParams({
     run_id: runRef,
     scenario_id: scenarioId,
@@ -236,18 +236,23 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
     await namedControl(duplicateDialog, "full_name").fill("Duplicate Admin");
     await namedControl(duplicateDialog, "email").fill(adminEmail.toUpperCase());
     await namedControl(duplicateDialog, "job_title").fill("Tenant Admin");
+    const duplicateContactResponsePromise = page.waitForResponse(
+      (response) => response.url().includes(`/api/platform/tenants/${tenantId}/admin-contacts`) && response.request().method() === "POST",
+    );
     await duplicateDialog.getByRole("button", { name: "Add contact" }).click();
+    const duplicateContactResponse = await duplicateContactResponsePromise;
+    expect(duplicateContactResponse.status()).toBe(201);
+    const duplicateContactId = ((await duplicateContactResponse.json()) as { id: string }).id;
     await expect(page.getByText("Admin contact added.")).toBeVisible();
-    const duplicateOption = namedControl(provisionCard, "contact_id").locator("option").filter({ hasText: /Duplicate Admin/ });
-    const duplicateContactId = await duplicateOption.getAttribute("value");
     expect(duplicateContactId).toBeTruthy();
     registerRunResource("STG-E2E-0103", {
       resource_type: "admin_contact",
-      resource_id: duplicateContactId ?? "",
+      resource_id: duplicateContactId,
       tenant_id: tenantId,
       ownership: "created",
     });
-    await namedControl(provisionCard, "contact_id").selectOption(duplicateContactId ?? "");
+    await expect(namedControl(provisionCard, "contact_id").locator(`option[value="${duplicateContactId}"]`)).toHaveCount(1);
+    await namedControl(provisionCard, "contact_id").selectOption(duplicateContactId);
     await namedControl(provisionCard, "username").fill(`${adminUsername}.duplicate`);
     const duplicateResponsePromise = page.waitForResponse(
       (response) => response.url().includes("/api/platform/admin-contacts/") && response.url().endsWith("/provision-user") && response.request().method() === "POST",
@@ -258,7 +263,7 @@ test.describe.serial("STG-0D Batch-1 platform tenant onboarding automation", () 
     await verifyPersistedEvidence(page, "STG-E2E-0103", {
       admin_user_id: adminUserId,
       admin_membership_id: adminMembershipId,
-      admin_contact_id: [contactId, duplicateContactId ?? ""],
+      admin_contact_id: [contactId, duplicateContactId],
     });
   });
 
