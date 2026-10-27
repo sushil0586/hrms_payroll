@@ -13,14 +13,14 @@ Deployed commit: `c14b668e0e8eb641e4c4670e5eefeb7cf308cf59`
 | STG-1A tooling | **PASS** locally: ownership manifest, exact-ID evidence and governed cleanup verified |
 | STG-1B candidate freeze | **PASS** for the reviewed candidate; superseded by the authorized 41-file STG-1C commit |
 | STG-1C commit/operations | **CONDITIONAL**: 41-file QA candidate committed locally at `7a55b33e`; no push/deployment occurred |
-| STG-1D operational closure | **BLOCKED**: fresh provenance access, tenant-limited evidence access, fingerprint settings, email isolation, off-host restore, and approvals incomplete |
-| STG-1E access/security remediation | **CONDITIONAL**: AWS identity restored and local fingerprint/email controls pass; Lightsail IAM, SSH, evidence API, recovery, deployment and approvals remain blocked |
-| STG-1F evidence/access closure | **PASS locally**: all six browser workflows passed with independent tenant-safe evidence API assertions; Lightsail/SSH provenance, deployment, recovery and staging execution approvals remain blocked |
+| STG-1D operational closure | **CONDITIONAL**: fresh Lightsail/SSH provenance and encrypted off-host restore are verified; evidence-patch deployment, fingerprint, identities and execution approval remain pending |
+| STG-1E access/security remediation | **CONDITIONAL**: AWS/Lightsail access and recovery are now verified; evidence API deployment, fingerprint, identities and approvals remain pending |
+| STG-1F evidence/access closure | **PASS locally**: all six browser workflows passed with independent tenant-safe evidence API assertions; deployment and staging execution approval remain pending |
 | STG-1G release-candidate freeze | **BLOCKED, superseded by STG-1G.1**: fresh 6/6 browser and 36/36 PostgreSQL checks passed, but the original candidate used vulnerable `next@15.5.24`; no commit or deployment |
 | STG-1G.1 dependency remediation | **BLOCKED**: Next.js upgraded to 15.5.28; audit reduced to 0 critical/1 high/0 moderate; unresolved Expo CLI `node-forge` advisory has no patched release or approved disposition |
 | STG-1G.2 node-forge disposition | **APPROVAL REQUIRED**: no web bundle execution path was found, but `node-forge@1.4.0` is physically present via Expo tooling in the web runtime image; temporary web-only staging acceptance is recommended but not approved; mobile/EAS remains blocked |
 | 136-scenario local campaign | **CONDITIONAL**: 131 Local Passed, 0 Failed, 5 Blocked and 0 Not Run/incomplete. Batch 13 recovery/security and Batch 14 governed teardown passed locally; the five policy/provider blockers remain unchanged. These local results do not change staging statuses. |
-| STG-1 Batch-1 entry | **BLOCKED**: candidate is deployed, but the evidence API requires an over-privileged superuser; fingerprint, run namespace, identities, recovery reference and execution authorization are absent |
+| STG-1 Batch-1 entry | **BLOCKED**: recovery reference now passes, but the least-privilege evidence patch is not deployed; fingerprint, run namespace, identities and execution authorization remain absent |
 | Start STG-1 immediately | **NO**, explicit mutation authorization is absent |
 | Synthetic functional staging | Conditional GO after STG-1 entry criteria |
 | Real-payroll staging | NO-GO |
@@ -64,7 +64,7 @@ These are mapping-readiness classifications, not staging execution results. All 
 | Automation blocked | 0 |
 | Authorized for staging execution | 0 |
 
-Batch 1 covers `STG-E2E-0101` through `0106`. Integrated local verification passed all six browser workflows with independent evidence assertions. Release `c14b668e...` is deployed with healthy services and current migrations. All six remain `Not Run` on staging: the bounded evidence API is disabled and currently requires an allowlisted superuser instead of a least-privilege evidence actor; fingerprint, run namespace, recovery reference and execution authorization are absent.
+Batch 1 covers `STG-E2E-0101` through `0106`. Integrated local verification passed all six browser workflows with independent evidence assertions. Release `c14b668e...` is deployed with healthy services and current migrations. All six remain `Not Run` on staging: the least-privilege evidence patch is committed but undeployed; fingerprint, run namespace, identities and execution authorization are absent. The recovery reference now passes.
 
 ## Batch Dashboard
 
@@ -92,19 +92,19 @@ Batch 1 covers `STG-E2E-0101` through `0106`. Integrated local verification pass
 |---|---|
 | Public HTTPS and health | Green |
 | AWS caller identity | Green; expected staging operator verified |
-| Lightsail inventory / host SSH | Amber: approved direct SSH works; AWS API inventory, alarm and snapshot reads remain IAM-denied |
+| Lightsail inventory / host SSH | Green: scoped AWS inventory and short-lived certificate SSH verified for `saas-staging-01` |
 | App/database/broker connectivity | Green |
 | Migration compatibility | Green |
 | TypeScript/Django/static checks | Green |
 | Five-portal read-only smoke history | Green, historical evidence only |
 | PostgreSQL financial guards | Green locally; fresh staging execution pending |
 | SES synthetic delivery | Green with bounce-reconciliation limitation |
-| Tenant-safe Batch-1 evidence API | Amber: least-privilege non-staff identity and server-side expiring run authorization passed locally; patch and `common.0011` are not committed or deployed, and staging remains disabled |
+| Tenant-safe Batch-1 evidence API | Amber: patch `c2703e8...`, `common.0011`, dedicated non-staff identity, fingerprint and expiring run grant are deployed; 404/401/403/405/200 smoke passed. Centralized evidence-access audit retention remains unverified |
 | Runtime dependency audit | Amber/red: Next.js 15.5.28 closes critical runtime findings; one high Expo CLI `node-forge` advisory remains open. Web bundle reachability was not found, but the package is physically present in the web image; security-owner exception approval or image/toolchain remediation is required |
 | Disposable fixture safeguards | Green on PostgreSQL; SQLite invocation invalid |
 | Strict production preflight | Red: five blockers |
-| External protected storage | Red |
-| Off-host backup and restore | Red: current `c14b668e` predeployment dump is valid but host-local; no isolated restore evidence |
+| External protected storage | Green for current synthetic staging: private media volume included in versioned SSE-KMS backup |
+| Off-host backup and restore | Green for synthetic staging: versioned SSE-KMS S3 backup and isolated PostgreSQL 16 restore reconciled; recurring schedule and full host-loss drill remain pending |
 | Central monitoring/alerts | Red/unverified current state |
 | Real provider/payment | Red/disabled |
 | Host functional capacity | Amber: one worker; disk 69%; 29.45 GB private Docker build cache is reclaimable only under separate approval |
@@ -153,7 +153,7 @@ Review and authorize the verified least-privilege patch for an immutable staging
 - Environment is `staging`; fingerprint, evidence actors and SES recipients are unset; evidence API and destructive cleanup are disabled.
 - PostgreSQL, Redis, backend and web are healthy; Celery responds; all deployment restart counts are zero.
 - A dedicated PostgreSQL role is unnecessary if Batch 1 uses the bounded API. Its authorization must first be changed from allowlisted superuser to an approved least-privilege evidence principal.
-- Exact predeployment backup integrity passes, but it is host-local; encrypted off-host backup and isolated restore remain unverified.
+- Encrypted off-host backup and isolated restore now pass for synthetic staging; recurring automation and a separate-host loss drill remain pending.
 - No staging scenario ran. Status remains `0 Passed / 0 Failed / 136 Not Run`.
 - Detailed evidence and the authorization checklist are in `hrms-staging-batch1-entry-closure.md`.
 
@@ -167,7 +167,37 @@ Review and authorize the verified least-privilege patch for an immutable staging
 
 ## Evidence API Security Patch Freeze (2026-10-27)
 
-- Exact 13-file candidate prepared against parent `c14b668e0e8eb641e4c4670e5eefeb7cf308cf59`; no file was staged or committed.
+- Exact 13-file candidate was committed locally as `c2703e810208179a94e8cc15615bb78c27c51104` against parent `c14b668e0e8eb641e4c4670e5eefeb7cf308cf59`; it is not pushed or deployed.
 - Fresh isolated regression: PostgreSQL **20 passed**; production-built Playwright **6 passed in 22.5 seconds**; TypeScript, focused ESLint, Django checks, migration drift and production build passed.
 - `common.0011` is additive and grants no user or group permission automatically.
-- Deployment remains blocked because encrypted off-host backup and an isolated staging-derived restore are still unverified. Shared staging remains **136 Not Run**.
+- Recovery is now verified; deployment still requires immutable images, `common.0011`, staging fingerprint, dedicated evidence identity, run authorization and security smoke approval. Shared staging remains **136 Not Run**.
+
+## Off-Host Recovery Certification (2026-10-27)
+
+- Scoped AWS inventory and short-lived certificate SSH access were verified for `saas-staging-01`; the browser SSH tunnel's `UPSTREAM_ERROR [515]` did not prevent controlled CLI access.
+- Created a private, versioned S3 backup boundary with TLS-only policy, SSE-KMS encryption, annual key rotation, lifecycle retention and dedicated short-lived uploader/restore roles.
+- Uploaded backup set `20261027T131553Z`; all objects are versioned and checksum verification passed through the restricted restore role.
+- Restored into a disposable PostgreSQL 16 container with no published ports, network disabled and tmpfs storage. Source/restored counts matched for 166 public tables, 130 migrations, 2 tenants, 15 memberships, 2 payroll runs and 549 foreign keys; orphan tenant memberships were zero.
+- Measured initialization and restore duration was 2 seconds. The restore container and decrypted rehearsal copies were removed.
+- Recovery gate is **PASS for synthetic staging**. Recurring automation, approved tiered retention/Object Lock, S3 data-event logging and a separate-host loss drill remain limitations. Shared staging remains **136 Not Run**. Details: `hrms-staging-offhost-backup-restore-certification.md`.
+
+## Evidence API Patch Deployment (2026-10-27)
+
+- Owner authorization was received and patch `c2703e810208179a94e8cc15615bb78c27c51104` was deployed from an exact Git archive.
+- Backend/worker/beat image: `sha256:f9b6471c24839ccd9a8b40e24f54b81e0b45550097ed21becd13a9a50dc3ee49`; web image: `sha256:1084912d497c6d7673c4a090e2db009b982c46aa088de910960002285d7929da`.
+- `common.0011` is applied; Django checks and migration drift passed. Core containers are running with zero restarts and HTTPS/API health return 200.
+- A dedicated non-staff/non-superuser evidence identity has only `common.view_staging_evidence`, with a fingerprint-bound, expiring and revocable synthetic run grant.
+- Deployed smoke passed disabled 404, unauthenticated 401, authorization/scope 403, method 405 and exact scoped 200 checks. Expiry and revocation both denied access and reactivation restored only the original scoped result.
+- The staging email backend is fail-closed with zero allowed recipients; no email or payroll operation ran.
+- Recovery reference `20261027T131553Z` remains versioned, SSE-KMS encrypted and suitable for rollback.
+- Deployment is **CONDITIONAL PASS** because centralized `hrms.security.staging_evidence` audit retention was not observable in container logs. Shared staging remains **136 Not Run**. Details: `hrms-staging-evidence-api-patch-deployment-certification.md`.
+
+## Evidence Audit Logging Closure (2026-10-27)
+
+- Deployed logger diagnosis is conclusive: `hrms.security.staging_evidence` has no handler, propagates to a handlerless root logger, and inherits effective `WARNING`; its `INFO` audit events are filtered before Docker.
+- Read-only staging probes returned expected denied `403` and authorized `200` responses, but neither correlation ID produced a container audit record.
+- Docker retains only bounded host-local `json-file` logs. No active CloudWatch Agent, Fluent Bit, Vector, Promtail, Filebeat or Logstash collector was found, and CloudWatch Logs inventory access is not granted to the staging operator.
+- A local four-file patch adds a dedicated non-propagating `INFO` stdout handler, allowlisted JSON formatter, correlation/environment/authorization metadata, pseudonymous actor/tenant references and redaction tests.
+- Focused PostgreSQL security regression passed **21/21**; Django checks, migration drift, Python compilation and whitespace checks passed. Task-owned PostgreSQL was removed.
+- Certification is **BLOCKED** until the patch is approved/committed/deployed and denied/allowed events are searchable in an approved encrypted central destination with enforced retention and access controls.
+- Batch 1 remains unauthorized and shared staging remains **136 Not Run**. Details: `hrms-staging-evidence-audit-logging-certification.md`.

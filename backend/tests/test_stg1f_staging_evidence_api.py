@@ -1,4 +1,6 @@
 import hashlib
+import io
+import json
 import logging
 from datetime import timedelta
 
@@ -10,6 +12,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from apps.common.models import StagingEvidenceAuthorization
+from apps.common.security_logging import SecurityAuditJsonFormatter
 from apps.iam.models import TenantMembership, User
 from apps.tenant_onboarding.models import TenantOnboardingAdminContact
 from apps.tenants.models import Tenant
@@ -314,12 +317,48 @@ def test_get_only_contract_and_negative_operation_persistence(graph):
     assert not Tenant.objects.filter(code=denied_code).exists()
 
 
-def test_access_and_denial_events_are_audited_without_sensitive_payloads(graph, caplog):
-    caplog.set_level(logging.INFO, logger="hrms.security.staging_evidence")
-    assert _get(graph).status_code == 200
-    assert _get(graph, headers={"HTTP_X_HRMS_ENVIRONMENT_FINGERPRINT": "wrong"}).status_code == 403
+def test_access_and_denial_events_reach_structured_handler_without_sensitive_payloads(graph):
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(SecurityAuditJsonFormatter())
+    audit_logger = logging.getLogger("hrms.security.staging_evidence")
+    original_handlers = audit_logger.handlers[:]
+    original_level = audit_logger.level
+    original_propagate = audit_logger.propagate
+    audit_logger.handlers = [handler]
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = False
+    try:
+        assert _get(graph, headers={"HTTP_X_REQUEST_ID": "audit-allowed-001"}).status_code == 200
+        assert _get(
+            graph,
+            headers={
+                "HTTP_X_HRMS_ENVIRONMENT_FINGERPRINT": "wrong",
+                "HTTP_X_REQUEST_ID": "audit-denied-001",
+            },
+        ).status_code == 403
+    finally:
+        audit_logger.handlers = original_handlers
+        audit_logger.setLevel(original_level)
+        audit_logger.propagate = original_propagate
 
-    records = [record for record in caplog.records if record.getMessage() == "staging_evidence_access"]
-    assert {record.outcome for record in records} >= {"allowed", "denied"}
-    assert all(not hasattr(record, "password") for record in records)
-    assert all("@playwright.qa.invalid" not in record.getMessage() for record in records)
+    events = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert {event["outcome"] for event in events} == {"allowed", "denied"}
+    assert {event["correlation_id"] for event in events} == {"audit-allowed-001", "audit-denied-001"}
+    assert events[0]["logger"] == "hrms.security.staging_evidence"
+    assert all(event["environment"] == "staging" for event in events)
+    assert all(event["actor_ref"] and len(event["actor_ref"]) == 24 for event in events)
+    assert all("actor" not in event for event in events)
+    assert all("tenant_id" not in event for event in events)
+    serialized = stream.getvalue().lower()
+    assert "@playwright.qa.invalid" not in serialized
+    assert "password" not in serialized
+    assert "authorization" not in serialized or "authorization_ref" in serialized
+
+
+def test_evidence_logger_has_dedicated_info_handler():
+    audit_logger = logging.getLogger("hrms.security.staging_evidence")
+    assert audit_logger.getEffectiveLevel() == logging.INFO
+    assert audit_logger.propagate is False
+    assert audit_logger.handlers
+    assert all(handler.level <= logging.INFO for handler in audit_logger.handlers)

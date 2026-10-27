@@ -6,6 +6,31 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "security_audit_json": {
+            "()": "apps.common.security_logging.SecurityAuditJsonFormatter",
+        },
+    },
+    "handlers": {
+        "staging_evidence_audit": {
+            "class": "logging.StreamHandler",
+            "formatter": "security_audit_json",
+            "level": "INFO",
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "loggers": {
+        "hrms.security.staging_evidence": {
+            "handlers": ["staging_evidence_audit"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
 
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)

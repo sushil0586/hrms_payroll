@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import uuid
 
 from django.conf import settings
 from django.db import connection, transaction
@@ -28,24 +29,50 @@ SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 MAX_CONTACT_IDS = 10
 
 
+def _pseudonymous_ref(value) -> str:
+    normalized = str(value or "").strip()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24] if normalized else ""
+
+
 def _actor_identifier(request) -> str:
     user = getattr(request, "user", None)
     value = getattr(user, "username", "") or getattr(user, "email", "") or "anonymous"
     return str(value)
 
 
-def _audit(request, *, outcome: str, reason: str, run_id: str = "", scenario_id: str = "", tenant_id: str = "") -> None:
+def _correlation_id(request) -> str:
+    existing = getattr(request, "_hrms_security_correlation_id", "")
+    if existing:
+        return existing
+    supplied = request.headers.get("X-Request-ID", "") or request.headers.get("X-Correlation-ID", "")
+    value = supplied.strip()[:120] if re.fullmatch(r"[A-Za-z0-9._:-]{1,120}", supplied.strip()) else uuid.uuid4().hex
+    request._hrms_security_correlation_id = value
+    return value
+
+
+def _audit(
+    request,
+    *,
+    outcome: str,
+    reason: str,
+    run_id: str = "",
+    scenario_id: str = "",
+    tenant_id: str = "",
+    authorization_ref: str = "",
+) -> None:
     logger.info(
         "staging_evidence_access",
         extra={
             "security_event": "staging_evidence_access",
             "outcome": outcome,
             "reason": reason,
-            "actor": _actor_identifier(request),
+            "actor_ref": _pseudonymous_ref(_actor_identifier(request)),
+            "authorization_ref": authorization_ref,
             "run_id": run_id,
             "scenario_id": scenario_id,
-            "tenant_id": tenant_id,
-            "request_path": request.path,
+            "environment": str(getattr(settings, "HRMS_ENVIRONMENT", "")),
+            "correlation_id": _correlation_id(request),
+            "tenant_ref": _pseudonymous_ref(tenant_id),
         },
     )
 
@@ -85,19 +112,20 @@ def _require_run_authorization(request, query: dict, configured_fingerprint: str
         principal=request.user,
         run_id=query["run_id"],
         tenant_code=query["tenant_code"],
-        revoked_at__isnull=True,
-        expires_at__gt=timezone.now(),
     ).first()
-    if grant is None:
+    authorization_ref = grant.authorization_ref if grant else ""
+    if grant is None or grant.revoked_at is not None or grant.expires_at <= timezone.now():
         _audit(
             request, outcome="denied", reason="run_authorization", run_id=query["run_id"],
             scenario_id=query["scenario_id"], tenant_id=str(query["tenant_id"]),
+            authorization_ref=authorization_ref,
         )
         raise exceptions.PermissionDenied("An active staging evidence run authorization is required.")
     if query["scenario_id"] not in set(grant.scenario_ids or []):
         _audit(
             request, outcome="denied", reason="scenario_authorization", run_id=query["run_id"],
             scenario_id=query["scenario_id"], tenant_id=str(query["tenant_id"]),
+            authorization_ref=authorization_ref,
         )
         raise exceptions.PermissionDenied("Scenario is outside the authorized staging evidence run.")
     fingerprint_hash = hashlib.sha256(configured_fingerprint.encode("utf-8")).hexdigest()
@@ -105,6 +133,7 @@ def _require_run_authorization(request, query: dict, configured_fingerprint: str
         _audit(
             request, outcome="denied", reason="authorization_fingerprint", run_id=query["run_id"],
             scenario_id=query["scenario_id"], tenant_id=str(query["tenant_id"]),
+            authorization_ref=authorization_ref,
         )
         raise exceptions.PermissionDenied("Run authorization is for another environment.")
     return grant
@@ -246,7 +275,7 @@ class PlatformStagingOnboardingEvidenceView(APIView):
             raise exceptions.ValidationError({"manifest_sha256": "A valid manifest SHA-256 is required."})
 
         query = _parse_query_params(request)
-        _require_run_authorization(request, query, configured_fingerprint)
+        grant = _require_run_authorization(request, query, configured_fingerprint)
         tenant = Tenant.objects.filter(
             id=query["tenant_id"], code=query["tenant_code"], is_sandbox=True,
         ).first()
@@ -254,6 +283,7 @@ class PlatformStagingOnboardingEvidenceView(APIView):
             _audit(
                 request, outcome="denied", reason="tenant_scope", run_id=query["run_id"],
                 scenario_id=query["scenario_id"], tenant_id=str(query["tenant_id"]),
+                authorization_ref=grant.authorization_ref,
             )
             raise exceptions.PermissionDenied("Tenant identifiers are outside the approved run scope.")
 
@@ -269,6 +299,7 @@ class PlatformStagingOnboardingEvidenceView(APIView):
             _audit(
                 request, outcome="denied", reason="resource_scope", run_id=query["run_id"],
                 scenario_id=query["scenario_id"], tenant_id=str(tenant.id),
+                authorization_ref=grant.authorization_ref,
             )
             raise
 
@@ -292,5 +323,6 @@ class PlatformStagingOnboardingEvidenceView(APIView):
         _audit(
             request, outcome="allowed", reason="evidence_collected", run_id=query["run_id"],
             scenario_id=query["scenario_id"], tenant_id=str(tenant.id),
+            authorization_ref=grant.authorization_ref,
         )
         return response.Response(payload, status=status.HTTP_200_OK)
