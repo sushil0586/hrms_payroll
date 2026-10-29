@@ -397,7 +397,7 @@ export function EmployeeDocumentQueue({
               </div>
               <div className="record-card__actions">
                 <button className="button button--ghost button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedDocumentId(""); }} type="button">Close</button>
-                {canExportDocuments && selectedDocument.artifact_id ? <Link className="button button--ghost button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.id}/download`}>Download</Link> : null}
+                {canExportDocuments && selectedDocument.is_downloadable ? <Link className="button button--ghost button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.id}/download`}>Download</Link> : null}
                 {canVerifyDocuments ? (
                   <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openReviewModal(selectedDocument.id); }} type="button">Review</button>
                 ) : (
@@ -450,6 +450,7 @@ export function EmployeeDocumentQueue({
                   <div className="detail-row"><span className="detail-label">File</span><span className="detail-value">{selectedDocument.file_name}</span></div>
                   <div className="detail-row"><span className="detail-label">File type</span><span className="detail-value">{selectedDocument.mime_type || "Unknown"}</span></div>
                   <div className="detail-row"><span className="detail-label">File size</span><span className="detail-value">{formatFileSize(selectedDocument.file_size_bytes)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Stored file</span><span className="detail-value">{selectedDocument.is_downloadable ? "Available" : "Unavailable"}</span></div>
                   <div className="detail-row"><span className="detail-label">Artifact</span><span className="detail-value">{selectedDocument.artifact_id || "Not linked"}</span></div>
                   <div className="detail-row"><span className="detail-label">Previous version</span><span className="detail-value">{selectedDocument.previous_document_id ? "Available" : "Original upload"}</span></div>
                   <div className="detail-row"><span className="detail-label">Review steps</span><span className="detail-value">{selectedDocument.review_history.length}</span></div>

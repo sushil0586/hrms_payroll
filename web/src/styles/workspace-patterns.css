@@ -16,6 +16,14 @@
 :is(:is(.accerio-shell,.accerio-standalone) .accerio-page, .ess-experience-shell) .workspace-filter-form details > div { position: static; width: auto; display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); padding: var(--space-3) 0 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
 :is(:is(.accerio-shell,.accerio-standalone) .accerio-page, .ess-experience-shell) .workspace-filter-form details:not([open]) > div { display: none; }
 :is(:is(.accerio-shell,.accerio-standalone) .accerio-page, .ess-experience-shell) .workspace-filter-form .workspace-filter-actions { grid-column: -2 / -1; justify-content: flex-end; }
+/* A composed filter bar is one full-width form region. Without this span it is
+   treated as the first cell of the outer form grid, compressing every nested
+   filter into a narrow card and leaving the rest of the workspace empty. */
+:is(:is(.accerio-shell,.accerio-standalone) .accerio-page, .ess-experience-shell) .workspace-filter-form > .workspace-filter-fields > .workspace-filter-bar {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 0;
+}
 :is(.accerio-shell,.accerio-standalone) .accerio-page .workspace-table-region { max-width: 100%; overflow-x: auto; border-block: 1px solid var(--ds-border); border-radius: 0; scrollbar-width: auto; }
 :is(.accerio-shell,.accerio-standalone) .accerio-page .workspace-data-table { width: 100%; border-collapse: collapse; font-size: var(--type-size-md); }
 :is(.accerio-shell,.accerio-standalone) .accerio-page .workspace-data-table th { padding: var(--space-3); background: var(--ds-surface-subtle); color: var(--ds-text-muted); font-size: var(--type-size-xs); text-align: left; }
@@ -317,7 +325,7 @@
 .accerio-standalone { min-height: 100dvh; padding: var(--space-4); background: var(--ds-shell-canvas); font-family: var(--font-sans); }
 
 /* Employee directory Phase 2: scoped composition; shared controls retain their contracts. */
-.accerio-shell.workspace-tone--hr .accerio-page.employee-directory-phase2 > .employee-master-layout {
+.accerio-shell.workspace-tone--hr .accerio-page.employee-directory-phase2 > [data-local-update-hydrated] > .employee-master-layout {
   grid-template-columns: minmax(0,1fr); align-items: start;
 }
 .accerio-shell.workspace-tone--hr .employee-directory-phase2 .hr-employee-summary-strip {
@@ -329,7 +337,7 @@
 .accerio-shell.workspace-tone--hr .employee-directory-phase2 .employee-directory-status-totals {
   flex-basis: 100%; font-size: var(--type-size-xs);
 }
-.accerio-shell.workspace-tone--hr .employee-directory-phase2 > .employee-master-layout > .queue-toolbar > .queue-toolbar__header { padding-block: var(--space-2); }
+.accerio-shell.workspace-tone--hr .employee-directory-phase2 > [data-local-update-hydrated] > .employee-master-layout > .queue-toolbar > .queue-toolbar__header { padding-block: var(--space-2); }
 .accerio-shell.workspace-tone--hr .employee-directory-phase2 .directory-filter-bar,
 .accerio-shell.workspace-tone--hr .employee-directory-phase2 .directory-filter-bar .workspace-filter-fields {
   display: grid; grid-template-columns: minmax(0,2fr) repeat(3,minmax(0,1fr)); gap: var(--space-3); align-items: end;

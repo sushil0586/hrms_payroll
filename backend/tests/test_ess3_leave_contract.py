@@ -80,3 +80,23 @@ class Ess3LeaveContractTests(TestCase):
                 storage, key = artifact.stored_file.storage, artifact.stored_file.name
                 artifact.stored_file.delete(save=False)
                 self.assertFalse(storage.exists(key))
+
+    def test_missing_leave_attachment_returns_controlled_not_found(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from apps.documents.services import store_document_artifact
+        from apps.common.api_views import _append_leave_attachment_metadata
+
+        user, employee = self.actors[0]
+        artifact = store_document_artifact(
+            tenant=employee.tenant,
+            employee=employee,
+            uploaded_file=SimpleUploadedFile('removed-evidence.txt', b'Removed evidence', content_type='text/plain'),
+            actor_identifier=str(user.pk),
+        )
+        _append_leave_attachment_metadata(leave_request=self.requests[0], artifact=artifact, action='leave_request')
+        storage, key = artifact.stored_file.storage, artifact.stored_file.name
+        storage.delete(key)
+
+        result = self.client.get(f'/api/v1/me/leave-requests/{self.requests[0].id}/attachments/{artifact.id}/download/')
+        self.assertEqual(result.status_code, 404)
+        self.assertEqual(result.json()['detail'], 'Stored file is no longer available.')

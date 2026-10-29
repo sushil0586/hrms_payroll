@@ -192,7 +192,7 @@ const essModalCases: ModalCase[] = [
     name: "ESS document history detail",
     persona: employee,
     route: "/ess/documents",
-    trigger: (page) => page.getByRole("table", { name: "Document history" }).getByRole("button", { name: "Review" }),
+    trigger: (page) => page.getByRole("table", { name: "Document history" }).getByRole("button", { name: "View" }),
     verify: async (dialog) => {
       await expect(dialog.getByText("Review status")).toBeVisible();
       await expect(dialog.getByText("Audit trail")).toBeVisible();

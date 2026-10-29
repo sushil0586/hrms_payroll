@@ -279,10 +279,10 @@ export function DocumentComplianceReportWorkspace({ documents, initialFilters = 
                       {canReview ? <a data-navigation-mode="document" className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>
                         Review
                       </a> : null}
-                      {item.artifact_id && canDownload ? (
-                        <a data-navigation-mode="document" className="button button--ghost" href={`/api/hr-admin/employee-documents/${item.id}/download`}>
+                      {item.is_downloadable && canDownload ? (
+                        <AsyncDownloadButton className="button button--ghost" href={`/api/hr-admin/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>
                           Download
-                        </a>
+                        </AsyncDownloadButton>
                       ) : null}
                     </div>
                   </td>

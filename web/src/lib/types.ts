@@ -1635,6 +1635,7 @@ export type HrAdminEmployeeDocument = {
   category_id: string;
   category_name: string;
   artifact_id: string | null;
+  is_downloadable: boolean;
   previous_document_id: string | null;
   replaced_by_document_id: string | null;
   version_number: number;
@@ -1710,6 +1711,7 @@ export type HrAdminGeneratedLetter = {
   employee_code: string;
   employee_name: string;
   artifact_id: string | null;
+  is_downloadable: boolean;
   letter_type: string;
   title: string;
   template_code: string;

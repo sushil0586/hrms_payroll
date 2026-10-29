@@ -6,6 +6,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ManagerDecisionPanel } from "@/app/mss/approvals/manager-decision-panel";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import type { AttendanceRegularizationItem, LeaveRequestItem } from "@/lib/types";
 
@@ -108,8 +109,9 @@ function LeaveEvidenceList({ item }: { item: LeaveRequestItem }) {
   return (
     <div className="leave-evidence-list">
       {attachments.map((attachment) => (
-        <a
+        <AsyncDownloadButton
           className="leave-evidence-item"
+          fileName={attachment.file_name}
           href={`/api/manager/leave-requests/${item.id}/attachments/${attachment.id}/download`}
           key={attachment.id}
         >
@@ -118,7 +120,7 @@ function LeaveEvidenceList({ item }: { item: LeaveRequestItem }) {
             <small>{attachment.label || attachment.action.replaceAll("_", " ")}</small>
           </span>
           <span className="button button--secondary">Download</span>
-        </a>
+        </AsyncDownloadButton>
       ))}
       {!attachments.length && item.attachment_reference ? (
         <div className="leave-evidence-item leave-evidence-item--static">

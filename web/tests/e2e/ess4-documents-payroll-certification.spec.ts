@@ -229,7 +229,7 @@ test.describe("ESS-4 production documents and payroll", () => {
     await expect(dialog).toBeHidden();
     const row = page.getByRole("table", { name: "Document history" }).locator("tbody tr").filter({ hasText: "QA Fresh Employee Evidence" });
     await expect(row).toContainText(/Pending/i);
-    await row.getByRole("button", { name: "Review", exact: true }).click();
+    await row.getByRole("button", { name: "View", exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("ess4-evidence.pdf");
     const download = page.waitForEvent("download");
     await page.getByRole("dialog").getByRole("link", { name: "Download file", exact: true }).click();
@@ -260,7 +260,7 @@ test.describe("ESS-4 production documents and payroll", () => {
     const replacement = history.locator("tbody tr").filter({ hasText: "QA Replacement Evidence" });
     await expect(replacement).toContainText("v2");
     await expect(history.locator("tbody tr").filter({ hasText: "QA Fresh Employee Evidence" })).toContainText("replaced");
-    await replacement.getByRole("button", { name: "Review", exact: true }).click();
+    await replacement.getByRole("button", { name: "View", exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("v2");
     await capture(page, `${test.info().project.name}-replacement-detail.png`);
   });

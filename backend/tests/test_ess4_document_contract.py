@@ -42,6 +42,38 @@ class Ess4DocumentContractTests(TestCase):
                 storage.delete(key)
                 self.assertFalse(storage.exists(key))
 
+    def test_missing_physical_file_is_reported_without_a_server_error(self):
+        user, employee = self.actors[0]
+        category, _ = DocumentCategory.objects.get_or_create(
+            tenant=employee.tenant,
+            code='ess4-stale-file',
+            defaults={'name': 'Stale file evidence'},
+        )
+        artifact = store_document_artifact(
+            tenant=employee.tenant,
+            employee=employee,
+            uploaded_file=SimpleUploadedFile('removed.txt', b'Removed after upload', content_type='text/plain'),
+            actor_identifier=str(user.pk),
+        )
+        document = EmployeeDocument.objects.create(
+            tenant=employee.tenant,
+            employee=employee,
+            category=category,
+            artifact=artifact,
+            title='Removed file',
+        )
+        storage, key = artifact.stored_file.storage, artifact.stored_file.name
+        storage.delete(key)
+
+        listing = self.client.get('/api/v1/me/document-center/')
+        self.assertEqual(listing.status_code, 200)
+        listed_document = next(item for item in listing.json()['items'] if item['id'] == str(document.id))
+        self.assertFalse(listed_document['is_downloadable'])
+
+        download = self.client.get(f'/api/v1/me/employee-documents/{document.id}/download/')
+        self.assertEqual(download.status_code, 404)
+        self.assertEqual(download.json()['detail'], 'Stored file is no longer available.')
+
     def test_foreign_category_and_disabled_self_upload_are_rejected_without_artifacts(self):
         own = self.actors[0][1]
         foreign = self.actors[-1][1]

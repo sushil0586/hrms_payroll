@@ -18298,6 +18298,7 @@ def test_hr_admin_can_generate_list_and_download_letter_artifact(api_client: API
     assert payload["employee_id"] == str(employee.id)
     assert payload["letter_type"] == "confirmation"
     assert payload["artifact_id"]
+    assert payload["is_downloadable"] is True
     assert payload["file_url"].endswith(f"/api/v1/hr-admin/generated-letters/{payload['id']}/download/")
     assert "Dear Riya" in payload["rendered_text"]
     assert payload["payload_snapshot"]["generated_by_identifier"] == "EMP-0001"

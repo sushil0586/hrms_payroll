@@ -75,7 +75,7 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes, pending, on
           </div>
           <span className="queue-summary-chip"><strong>{filteredItems.length}</strong> in this view</span>
         </div>
-        <WorkspaceFilterForm action="/hr-admin/leave-types" label="Leave type filters" className="workspace-filter-form--three" onSubmit={(event) => event.preventDefault()}>
+        <WorkspaceFilterForm action="/hr-admin/leave-types" label="Leave type filters" className="workspace-filter-form--three" updateMode="scoped" onSubmit={(event) => event.preventDefault()}>
           <label className="form-field">
             <span>Search</span>
             <input className="input-control" name="q" placeholder="Name, code, category" type="search" value={query} onChange={(event) => setQuery(event.target.value)} />

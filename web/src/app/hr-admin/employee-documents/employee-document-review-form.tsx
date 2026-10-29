@@ -107,7 +107,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       <div><strong>{document.employee_name} · {document.employee_code}</strong><p>{document.category_name} · {document.file_name}</p></div>
       <WorkspaceStatusBadge tone={tone(document.verification_status)}>{humanize(document.verification_status)}</WorkspaceStatusBadge>
       <p>{document.review_status_label} · {document.expires_on ? `Expires ${document.expires_on}` : "No expiry recorded"}</p>
-      {canDownload && document.artifact_id ? <a className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${itemId}/download`}>Download current file</a> : <p className="muted">{document.artifact_id ? "Downloading requires document export access." : "No stored file is linked to this record."}</p>}
+      {canDownload && document.is_downloadable ? <a className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${itemId}/download`}>Download current file</a> : <p className="muted">{document.is_downloadable ? "Downloading requires document export access." : "No stored file is available for this record."}</p>}
     </section>
     {error ? <div className="notice notice--error" role="alert" ref={errorRef} tabIndex={-1}><strong>Review not confirmed</strong><span>{error}</span></div> : null}
     <fieldset disabled={busy || !ready} className="document-review-fields">

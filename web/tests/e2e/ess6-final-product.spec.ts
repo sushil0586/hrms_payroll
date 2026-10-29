@@ -170,7 +170,7 @@ test("journey governed document upload detail download and durable ownership", a
   await dialog.getByLabel("File", { exact: false }).setInputFiles({ name: "ess6-proof.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 ESS6 synthetic only\n") });
   await dialog.getByRole("button", { name: "Submit for review", exact: true }).click(); await expect(dialog).toBeHidden();
   const row = page.getByRole("table", { name: "Document history" }).getByRole("row").filter({ hasText: "ESS6 integrated evidence" });
-  await expect(row).toBeVisible(); await row.getByRole("button", { name: "Review", exact: true }).click();
+  await expect(row).toBeVisible(); await row.getByRole("button", { name: "View", exact: true }).click();
   await axe(page, "document-detail-dialog");
   const download = page.waitForEvent("download"); await page.getByRole("dialog").getByRole("link", { name: "Download file", exact: true }).click(); expect((await download).suggestedFilename()).toBe("ess6-proof.pdf");
   const center = await (await page.request.get(`${backend}/me/document-center/`, { headers: await auth(page) })).json();

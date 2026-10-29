@@ -23,6 +23,7 @@
     "start": "NEXT_DIST_DIR=.next/build next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "audit:workspace-consistency": "node scripts/check-workspace-consistency.mjs",
     "test:e2e": "playwright test tests/e2e",
     "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "certify:users:phase1": "playwright test tests/e2e/user-journey-phase1-access-routing.spec.ts",

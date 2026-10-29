@@ -148,7 +148,7 @@ export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCr
           </div>
           <span className="queue-summary-chip"><strong>{filteredPolicies.length}</strong> shown</span>
         </div>
-        <WorkspaceFilterForm action="/hr-admin/leave-policies" label="Leave policy filters" className="workspace-filter-form--three" onSubmit={(event) => event.preventDefault()}>
+        <WorkspaceFilterForm action="/hr-admin/leave-policies" label="Leave policy filters" className="workspace-filter-form--three" updateMode="scoped" onSubmit={(event) => event.preventDefault()}>
           <label className="form-field">
             <span>Search</span>
             <input className="input-control" name="q" placeholder="Policy name, code, type, status" value={query} onChange={(event) => setQuery(event.target.value)} />

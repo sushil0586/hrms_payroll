@@ -135,7 +135,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
           </div>
 
         </div>
-        <WorkspaceFilterForm key={JSON.stringify(currentFilters)} action="/hr-admin/leave-requests" label="Leave request filters" className="workspace-filter-form--block" onSubmit={event => {
+        <WorkspaceFilterForm key={JSON.stringify(currentFilters)} action="/hr-admin/leave-requests" label="Leave request filters" className="workspace-filter-form--block" updateMode="scoped" onSubmit={event => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
           const from = String(data.get("from_date") || "");
@@ -235,7 +235,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
               pageSize={pagination.page_size}
               totalCount={pagination.total_count}
             />
-            <WorkspaceFilterForm key={`pagination:${JSON.stringify(currentFilters)}`} action="/hr-admin/leave-requests" label="Leave request pagination" className="workspace-filter-form--inline" onSubmit={(event) => { event.preventDefault(); const value = Number(new FormData(event.currentTarget).get("page_size")); onApplyFilters?.({ ...currentFilters, page: 1, page_size: value }); }}>
+            <WorkspaceFilterForm key={`pagination:${JSON.stringify(currentFilters)}`} action="/hr-admin/leave-requests" label="Leave request pagination" className="workspace-filter-form--inline" updateMode="scoped" onSubmit={(event) => { event.preventDefault(); const value = Number(new FormData(event.currentTarget).get("page_size")); onApplyFilters?.({ ...currentFilters, page: 1, page_size: value }); }}>
               {Object.entries(currentFilters).filter(([key]) => !["page", "page_size"].includes(key)).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)}
               <label className="form-field attendance-pagination-rows">
                 <span className="muted">Rows</span>

@@ -224,6 +224,14 @@ function documentTone(item: HrAdminEmployeeDocument) {
   return "info";
 }
 
+function documentReviewLabel(item: HrAdminEmployeeDocument) {
+  if (item.reupload_requested || item.verification_status === "rejected") return "Returned";
+  if (item.verification_status === "verified") return "Verified";
+  if (item.verification_status === "expired") return "Expired";
+  if (item.verification_status === "pending") return "Pending review";
+  return item.verification_status.replaceAll("_", " ");
+}
+
 function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument; onClose: () => void }) {
   return (
     <HrAdminActionModal
@@ -234,7 +242,7 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
       eyebrow="Document detail"
       footer={(
         <>
-          {item.artifact_id ? <AsyncDownloadButton href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download file</AsyncDownloadButton> : null}
+          {item.is_downloadable ? <AsyncDownloadButton href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download file</AsyncDownloadButton> : null}
           <button className="button button--primary" onClick={onClose} type="button">Close</button>
         </>
       )}
@@ -248,12 +256,12 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
               <span className="workspace-card__eyebrow">Current review</span>
               <h3>{item.review_status_label || item.verification_status}</h3>
             </div>
-            <WorkspaceStatusBadge tone={documentTone(item)}>{item.review_status_label || item.verification_status}</WorkspaceStatusBadge>
+            <WorkspaceStatusBadge tone={documentTone(item)}>{documentReviewLabel(item)}</WorkspaceStatusBadge>
           </div>
           <WorkspaceInformation fields={[["Version", `v${item.version_number}`], ["Document number", item.document_number || "Not set"], ["File name", item.file_name || "Not available"], ["File size", formatFileSize(item.file_size_bytes)], ["Issued on", formatDate(item.issued_on)], ["Expires on", item.expires_on || "No expiry"], ["Expiry state", item.expiry_label], ["Review owner", item.review_owner_label || "Not assigned"], ["Review status", item.review_status_label || item.verification_status]]} />
         </section>
 
-        {!item.artifact_id ? <p className="notice">No stored file is available for this record.</p> : null}
+        {!item.is_downloadable ? <p className="notice">No stored file is available for this record.</p> : null}
         <details className="ess-document-versions"><summary tabIndex={0}>Category file history ({item.version_history.length})</summary>
           <ul>{item.version_history.map((version) => <li key={version.id}>v{version.version_number} · {version.title} · {version.status}</li>)}</ul>
         </details>
@@ -476,7 +484,7 @@ function RequirementDetailModal({
       eyebrow="Required document"
       footer={(
         <>
-          {currentDocument?.artifact_id ? <AsyncDownloadButton href={`/api/me/employee-documents/${item.current_document_id}/download`} fileName={currentDocument?.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
+          {currentDocument?.is_downloadable ? <AsyncDownloadButton href={`/api/me/employee-documents/${item.current_document_id}/download`} fileName={currentDocument?.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
           <button className="button button--secondary" onClick={onClose} type="button">Close</button>
           {item.allow_employee_upload ? (
             <button className="button button--primary" onClick={onUpload} type="button">
@@ -491,7 +499,7 @@ function RequirementDetailModal({
     >
         <div className="ess-document-requirement-detail">
           {item.current_document_id && !currentDocument ? <p className="notice">The current file is outside this history page. Use history filters to locate its file details.</p> : null}
-          {currentDocument && !currentDocument.artifact_id ? <p className="notice">No stored file is available for the current record.</p> : null}
+          {currentDocument && !currentDocument.is_downloadable ? <p className="notice">No stored file is available for the current record.</p> : null}
           <section className="ess-modal-section">
             <div className="ess-documents-detail-header">
               <div>
@@ -933,7 +941,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
                 <tr>
                   <th>Document</th>
                   <th>Category</th>
-                  <th>Review</th>
+                  <th>Status</th>
                   <th>Expiry</th>
                   <th>Uploaded</th>
                   <th>Actions</th>
@@ -953,7 +961,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
                       <span className="workspace-table__secondary">{item.status}</span>
                     </td>
                     <td>
-                      <WorkspaceStatusBadge tone={documentTone(item)}>{item.review_status_label || item.verification_status}</WorkspaceStatusBadge>
+                      <WorkspaceStatusBadge tone={documentTone(item)}>{documentReviewLabel(item)}</WorkspaceStatusBadge>
                       <span className="workspace-table__secondary">{item.reupload_requested ? "Re-upload requested" : item.review_owner_label || "Not assigned"}</span>
                     </td>
                     <td>
@@ -963,8 +971,8 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
                     <td>{formatDate(item.created_at)}</td>
                     <td>
                       <span className="table-actions">
-                        <button className="button button--secondary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedDocument(item); }} type="button">Review</button>
-                        {item.artifact_id ? <AsyncDownloadButton className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
+                        <button className="button button--secondary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedDocument(item); }} type="button">View</button>
+                        {item.is_downloadable ? <AsyncDownloadButton className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
                       </span>
                     </td>
                   </tr>

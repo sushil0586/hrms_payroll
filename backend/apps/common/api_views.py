@@ -3193,6 +3193,31 @@ def _get_employee_document_review_runtime(item: EmployeeDocument) -> dict:
     }
 
 
+def _employee_document_file_available(artifact) -> bool:
+    """Return whether an artifact still has a readable storage object."""
+    if not artifact or not artifact.stored_file or not artifact.stored_file.name:
+        return False
+    try:
+        return artifact.stored_file.storage.exists(artifact.stored_file.name)
+    except Exception:  # Storage backends expose different availability exceptions.
+        return False
+
+
+def _stored_artifact_download_response(artifact, *, filename: str, missing_detail: str):
+    if not artifact or not artifact.stored_file:
+        return response.Response({"detail": missing_detail}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        file_handle = artifact.stored_file.open("rb")
+    except FileNotFoundError:
+        return response.Response({"detail": "Stored file is no longer available."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception:
+        return response.Response({"detail": "File storage is temporarily unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    response_file = FileResponse(file_handle, as_attachment=True, filename=filename)
+    if artifact.mime_type:
+        response_file["Content-Type"] = artifact.mime_type
+    return response_file
+
+
 def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
     artifact = item.artifact
     replaced_by = item.replacement_versions.order_by("-created_at").first()
@@ -3212,6 +3237,7 @@ def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
         "category_id": item.category_id,
         "category_name": item.category.name,
         "artifact_id": artifact.id if artifact else None,
+        "is_downloadable": _employee_document_file_available(artifact),
         "previous_document_id": item.previous_document_id,
         "replaced_by_document_id": replaced_by.id if replaced_by else None,
         "version_number": item.version_number,
@@ -3585,6 +3611,7 @@ def build_hr_admin_generated_letter_payload(item: GeneratedLetter) -> dict:
         "employee_code": item.employee.employee_code,
         "employee_name": _generated_letter_employee_name(item.employee),
         "artifact_id": item.artifact_id,
+        "is_downloadable": _employee_document_file_available(item.artifact),
         "letter_type": item.letter_type,
         "title": item.title,
         "template_code": item.template_code,
@@ -7239,15 +7266,11 @@ class MeEmployeeDocumentDownloadView(EmployeeContextMixin, APIView):
         if not item or not item.artifact_id or not item.artifact or not item.artifact.stored_file:
             return response.Response({"detail": "Document file not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        stored_file = item.artifact.stored_file
-        response_file = FileResponse(
-            stored_file.open("rb"),
-            as_attachment=True,
+        return _stored_artifact_download_response(
+            item.artifact,
             filename=item.artifact.original_filename or item.file_name or f"{item.title}.bin",
+            missing_detail="Document file not found.",
         )
-        if item.artifact.mime_type:
-            response_file["Content-Type"] = item.artifact.mime_type
-        return response_file
 
 
 def _payroll_access_event_payload(event: PayrollArtifactAccessEvent) -> dict:
@@ -19179,15 +19202,11 @@ class HrAdminEmployeeDocumentDownloadView(HrAdminContextMixin, APIView):
         if not item or not item.artifact_id or not item.artifact or not item.artifact.stored_file:
             return response.Response({"detail": "Document file not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        stored_file = item.artifact.stored_file
-        response_file = FileResponse(
-            stored_file.open("rb"),
-            as_attachment=True,
+        return _stored_artifact_download_response(
+            item.artifact,
             filename=item.artifact.original_filename or item.file_name or f"{item.title}.bin",
+            missing_detail="Document file not found.",
         )
-        if item.artifact.mime_type:
-            response_file["Content-Type"] = item.artifact.mime_type
-        return response_file
 
 
 class HrAdminEmployeeDocumentReminderActionView(HrAdminContextMixin, APIView):
@@ -19308,13 +19327,11 @@ class HrAdminGeneratedLetterDownloadView(HrAdminContextMixin, APIView):
         if not item or not item.artifact_id or not item.artifact or not item.artifact.stored_file:
             return response.Response({"detail": "Generated letter file not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        response_file = FileResponse(
-            item.artifact.stored_file.open("rb"),
-            as_attachment=True,
+        return _stored_artifact_download_response(
+            item.artifact,
             filename=item.artifact.original_filename or item.file_name or f"{item.title}.txt",
+            missing_detail="Generated letter file not found.",
         )
-        response_file["Content-Type"] = item.artifact.mime_type or "text/plain"
-        return response_file
 
 
 class HrAdminLifecycleOptionsView(HrAdminContextMixin, APIView):
@@ -21388,10 +21405,11 @@ class MeLeaveRequestAttachmentDownloadView(EmployeeContextMixin, APIView):
         artifact = DocumentArtifact.objects.filter(id=artifact_id, tenant=employee.tenant, employee=employee).first()
         if not artifact or not artifact.stored_file:
             return response.Response({"detail": "Leave attachment file not found."}, status=status.HTTP_404_NOT_FOUND)
-        response_file = FileResponse(artifact.stored_file.open("rb"), as_attachment=True, filename=artifact.original_filename or "leave-attachment.bin")
-        if artifact.mime_type:
-            response_file["Content-Type"] = artifact.mime_type
-        return response_file
+        return _stored_artifact_download_response(
+            artifact,
+            filename=artifact.original_filename or "leave-attachment.bin",
+            missing_detail="Leave attachment file not found.",
+        )
 
 
 class MeAttendanceRegularizationListCreateView(EmployeeContextMixin, APIView):
@@ -21546,10 +21564,11 @@ class ManagerLeaveRequestAttachmentDownloadView(ManagerDecisionMixin, APIView):
         artifact = DocumentArtifact.objects.filter(id=artifact_id, tenant=actor.tenant, employee=leave_request.employee).first()
         if not artifact or not artifact.stored_file:
             return response.Response({"detail": "Leave attachment file not found."}, status=status.HTTP_404_NOT_FOUND)
-        response_file = FileResponse(artifact.stored_file.open("rb"), as_attachment=True, filename=artifact.original_filename or "leave-attachment.bin")
-        if artifact.mime_type:
-            response_file["Content-Type"] = artifact.mime_type
-        return response_file
+        return _stored_artifact_download_response(
+            artifact,
+            filename=artifact.original_filename or "leave-attachment.bin",
+            missing_detail="Leave attachment file not found.",
+        )
 
 
 class ManagerLeaveRequestApproveView(ManagerDecisionMixin, APIView):

@@ -122,7 +122,7 @@ test.describe("ESS Documents launch certification", () => {
     await expect(page.getByRole("button", { name: "Clear filters" })).toBeVisible();
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
 
-    const reviewButton = page.getByRole("button", { name: "Review" }).first();
+    const reviewButton = page.getByRole("button", { name: "View" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
       const detail = page.getByRole("dialog", { name: documentDetailDialogName });
@@ -152,7 +152,7 @@ test.describe("ESS Documents launch certification", () => {
     await expect(uploadDialog).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
 
-    const reviewButton = page.getByRole("button", { name: "Review" }).first();
+    const reviewButton = page.getByRole("button", { name: "View" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
       await expectDialogStable(page, documentDetailDialogName);
