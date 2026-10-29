@@ -24,8 +24,8 @@ COPY backend .
 RUN python manage.py collectstatic --noinput \
     && python -m pip uninstall -y pip setuptools wheel \
     && rm -rf /usr/local/lib/python3.12/ensurepip \
-    && addgroup -S hrms \
-    && adduser -S -D -H -G hrms -h /app hrms \
+    && addgroup -S -g 10001 hrms \
+    && adduser -S -D -H -u 10001 -G hrms -h /app hrms \
     && chown -R hrms:hrms /app
 
 USER hrms
