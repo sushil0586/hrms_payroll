@@ -6,7 +6,6 @@ import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-tabl
 
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { DocumentReviewDialog } from "@/app/hr-admin/employee-documents/document-review-dialog";
@@ -46,6 +45,12 @@ type Props = {
     expiredOnPage: number;
     expiringOnPage: number;
   };
+  pending?: boolean;
+  onQuery: (query: Props["currentFilters"]) => void;
+  onReview: (itemId: string) => void;
+  onCloseReview: () => void;
+  onReviewSaved: (itemId: string) => Promise<boolean> | boolean;
+  onRefresh: () => Promise<boolean>;
 };
 
 function formatFileSize(fileSizeBytes: number) {
@@ -107,11 +112,13 @@ export function EmployeeDocumentQueue({
   initialActionNotice = "",
   initialActionNoticeTitle = "Action complete.",
   summary,
+  pending = false,
+  onQuery,
+  onReview,
+  onCloseReview,
+  onReviewSaved,
+  onRefresh,
 }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const reviewDocumentId = searchParams.get("reviewDocument") ?? "";
   const [search, setSearch] = useState(currentFilters.q);
   const [verificationStatus, setVerificationStatus] = useState(currentFilters.verification_status || "all");
   const [recordStatus, setRecordStatus] = useState(currentFilters.status || "all");
@@ -131,7 +138,7 @@ export function EmployeeDocumentQueue({
   const employeeFollowUpCount = items.filter((item) => item.reupload_requested || item.verification_status === "rejected" || item.is_expired).length;
   const allActionableSelected = actionableIds.length > 0 && actionableIds.every((id) => selectedIds.includes(id));
   const selectedDocument = items.find((item) => item.id === selectedDocumentId) ?? null;
-  const modalReviewDocument = canVerifyDocuments && reviewDocumentId ? reviewDocument : null;
+  const modalReviewDocument = canVerifyDocuments ? reviewDocument : null;
   const numericPageSize = currentFilters.page_size;
   const detailTitle = useRef<HTMLHeadingElement>(null);
   useEffect(() => { if (selectedDocumentId) detailTitle.current?.focus(); }, [selectedDocumentId]);
@@ -152,19 +159,19 @@ export function EmployeeDocumentQueue({
   }
 
   function goToPage(page: number, applyDraft = false) {
-    router.push(`${pathname}${buildQueryString({
-      q: (applyDraft ? search.trim() : currentFilters.q) || undefined,
-      verification_status: applyDraft ? (verificationStatus !== "all" ? verificationStatus : undefined) : currentFilters.verification_status || undefined,
-      status: applyDraft ? (recordStatus !== "all" ? recordStatus : undefined) : currentFilters.status || undefined,
-      category_id: applyDraft ? (categoryId !== "all" ? categoryId : undefined) : currentFilters.category_id || undefined,
-      expiry_filter: applyDraft ? (expiryFilter !== "all" ? expiryFilter : undefined) : currentFilters.expiry_filter || undefined,
+    onQuery({
+      q: applyDraft ? search.trim() : currentFilters.q,
+      verification_status: applyDraft ? (verificationStatus !== "all" ? verificationStatus : "") : currentFilters.verification_status,
+      status: applyDraft ? (recordStatus !== "all" ? recordStatus : "") : currentFilters.status,
+      category_id: applyDraft ? (categoryId !== "all" ? categoryId : "") : currentFilters.category_id,
+      expiry_filter: applyDraft ? (expiryFilter !== "all" ? expiryFilter : "") : currentFilters.expiry_filter,
       page,
       page_size: applyDraft ? Number(pageSize) : numericPageSize,
-    })}`);
+    });
   }
 
   function currentQueueHref(params: Record<string, string | number | boolean | undefined> = {}) {
-    return `${pathname}${buildQueryString({
+    return `/hr-admin/employee-documents${buildQueryString({
       q: currentFilters.q || undefined,
       verification_status: currentFilters.verification_status || undefined,
       status: currentFilters.status || undefined,
@@ -179,7 +186,7 @@ export function EmployeeDocumentQueue({
   function openReviewModal(itemId: string) {
     setActionNotice("");
     setActionError("");
-    router.push(currentQueueHref({ reviewDocument: itemId }));
+    onReview(itemId);
   }
 
   async function sendReminder() {
@@ -213,11 +220,11 @@ export function EmployeeDocumentQueue({
     setActionNoticeTitle("Reminder action complete.");
     setSelectedIds([]);
     setIsSubmittingReminder(false);
-    router.refresh();
+    await onRefresh();
   }
 
   return (
-    <section className="section queue-layout document-queue-layout">
+    <section className="section queue-layout document-queue-layout" aria-busy={pending || undefined}>
       <div className="hr-employee-summary-strip document-summary-strip">
         <span><strong>{pagination.total_count}</strong> matching documents</span>
         <span><strong>{summary.categoriesConfigured}</strong> categories</span>
@@ -292,7 +299,7 @@ export function EmployeeDocumentQueue({
             setActionError("");
             setActionNotice("");
             setActionNoticeTitle("Action complete.");
-            router.push(pathname);
+            onQuery({ q: "", verification_status: "", status: "", category_id: "", expiry_filter: "", page: 1, page_size: 25 });
            }} type="button">Clear filters</button>
           {canManageDocuments ? (
             <>
@@ -486,6 +493,8 @@ export function EmployeeDocumentQueue({
           canDownload={canExportDocuments}
           cancelHref={currentQueueHref({ reviewDocument: undefined })}
           successHref={currentQueueHref({ reviewDocument: undefined, review_saved: 1 })}
+          onClose={onCloseReview}
+          onSaved={onReviewSaved}
         />
       ) : null}
     </section>

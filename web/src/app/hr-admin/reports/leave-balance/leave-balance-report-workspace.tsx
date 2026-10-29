@@ -3,8 +3,8 @@
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
-import { useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
@@ -12,6 +12,7 @@ import { availableLeaveUnits as availableAfterReserved, leaveUtilizationPercent 
 import type { HrAdminLeaveBalance } from "@/lib/types";
 
 const PAGE_SIZE = 10;
+const DEFAULT_SORT = "risk";
 
 type LeaveReportRow = HrAdminLeaveBalance & {
   availableAfterReserved: number;
@@ -50,21 +51,65 @@ function formatUnits(value: string | number) {
   return Number(value).toFixed(2);
 }
 
+type LeaveReportFilters = { query: string; policy: string; leaveType: string; periodYear: string; risk: string; state: string; sortBy: string };
+
+function screenParams(filters: LeaveReportFilters, page = 1) {
+  const params = new URLSearchParams();
+  if (filters.query.trim()) params.set("q", filters.query.trim());
+  if (filters.policy !== "All") params.set("leave_policy", filters.policy);
+  if (filters.leaveType !== "All") params.set("leave_type", filters.leaveType);
+  if (filters.periodYear !== "All") params.set("period_year", filters.periodYear);
+  if (filters.risk !== "All") params.set("liability_risk", filters.risk);
+  if (filters.state !== "All") params.set("liability_state", filters.state);
+  if (filters.sortBy !== DEFAULT_SORT) params.set("sort", filters.sortBy);
+  if (page > 1) params.set("page", String(page));
+  return params;
+}
+
 export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBalance[] }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const params = useSearchParams();
-  const query = params.get("q") ?? "";
-  const policy = params.get("leave_policy") ?? "All";
-  const leaveType = params.get("leave_type") ?? "All";
-  const periodYear = params.get("period_year") ?? "All";
-  const risk = params.get("liability_risk") ?? "All";
-  const state = params.get("liability_state") ?? "All";
-  const sortBy = params.get("sort") ?? "risk";
+  const searchKey = params.toString();
+  const committed: LeaveReportFilters = {
+    query: params.get("q") ?? "",
+    policy: params.get("leave_policy") ?? "All",
+    leaveType: params.get("leave_type") ?? "All",
+    periodYear: params.get("period_year") ?? "All",
+    risk: params.get("liability_risk") ?? "All",
+    state: params.get("liability_state") ?? "All",
+    sortBy: params.get("sort") ?? DEFAULT_SORT,
+  };
+  const [draft, setDraft] = useState({ key: searchKey, ...committed });
+  const activeDraft = draft.key === searchKey ? draft : { key: searchKey, ...committed };
+  const { query, policy, leaveType, periodYear, risk, state, sortBy } = committed;
   const parsedPage = Number(params.get("page"));
   const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-  function pageHref(value: number) {
-    const next = new URLSearchParams(params.toString());
-    next.set("page", String(value));
-    return `/hr-admin/reports/leave-balance?${next}`;
+  function updateDraft(next: Partial<LeaveReportFilters>) {
+    setDraft((current) => ({
+      ...(current.key === searchKey ? current : { key: searchKey, ...committed }),
+      ...next,
+      key: searchKey,
+    }));
+  }
+
+  function writeFilters(filters: LeaveReportFilters, nextPage: number, mode: "push" | "replace" = "push") {
+    const next = screenParams(filters, nextPage);
+    setDraft({ key: next.toString(), ...filters });
+    const href = `${pathname}${next.size ? `?${next}` : ""}`;
+    if (mode === "replace") router.replace(href, { scroll: false });
+    else router.push(href, { scroll: false });
+  }
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const { key: _key, ...filters } = activeDraft;
+    void _key;
+    writeFilters(filters, 1);
+  }
+
+  function clearFilters() {
+    writeFilters({ query: "", policy: "All", leaveType: "All", periodYear: "All", risk: "All", state: "All", sortBy: DEFAULT_SORT }, 1);
   }
 
   const rows = useMemo(() => items.map(toReportRow), [items]);
@@ -128,6 +173,12 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
   }, [leaveType, periodYear, policy, query, risk, state, sortBy]);
   const manifestHref = `${exportHref}&format=manifest`;
 
+  useEffect(() => {
+    if (page === currentPage) return;
+    const next = screenParams({ query, policy, leaveType, periodYear, risk, state, sortBy }, currentPage);
+    router.replace(`${pathname}${next.size ? `?${next}` : ""}`, { scroll: false });
+  }, [currentPage, leaveType, page, pathname, periodYear, policy, query, risk, router, sortBy, state]);
+
   return (
     <section className="section section--tight" aria-label="Leave balance report workspace">
       <div className="report-catalog-workspace leave-balance-report" data-testid="leave-balance-report">
@@ -152,47 +203,46 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
         </div>
 
         {risk !== "All" ? <p className="notice" role="status">Legacy risk filter is not assessed. Clear filters to review factual balance states.</p> : null}
-        <WorkspaceFilterForm action="/hr-admin/reports/leave-balance" label="Leave balance filters" className="workspace-filter-form--block">
-          {risk !== "All" ? <input type="hidden" name="liability_risk" value={risk} /> : null}
+        <WorkspaceFilterForm action="/hr-admin/reports/leave-balance" label="Leave balance filters" className="workspace-filter-form--block" onSubmit={applyFilters} updateMode="scoped">
           <div className="report-filter-panel__header">
             <div>
               <strong>Filter balance ledger</strong>
               <span>Review exact quantities within the relevant policy and year; states describe recorded balances.</span>
             </div>
-            <a data-navigation-mode="document" className="button button--ghost" href="/hr-admin/reports/leave-balance">Clear filters</a>
+            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
           </div>
           <div className="report-filter-grid">
             <label className="report-filter-field">
               <span>Search leave</span>
-              <input className="input-control" type="search" name="q" defaultValue={query} placeholder="Search employee, policy, leave type" />
+              <input className="input-control" type="search" name="q" value={activeDraft.query} onChange={(event) => updateDraft({ query: event.target.value })} placeholder="Search employee, policy, leave type" />
             </label>
             <label className="report-filter-field">
               <span>Leave policy</span>
-              <select aria-label="Leave policy" className="input-control" name="leave_policy" defaultValue={policy}>
+              <select aria-label="Leave policy" className="input-control" name="leave_policy" value={activeDraft.policy} onChange={(event) => updateDraft({ policy: event.target.value })}>
                 {policies.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
               <span>Leave type</span>
-              <select aria-label="Leave type" className="input-control" name="leave_type" defaultValue={leaveType}>
+              <select aria-label="Leave type" className="input-control" name="leave_type" value={activeDraft.leaveType} onChange={(event) => updateDraft({ leaveType: event.target.value })}>
                 {leaveTypes.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
               <span>Period year</span>
-              <select aria-label="Period year" className="input-control" name="period_year" defaultValue={periodYear}>
+              <select aria-label="Period year" className="input-control" name="period_year" value={activeDraft.periodYear} onChange={(event) => updateDraft({ periodYear: event.target.value })}>
                 {years.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
               <span>Balance state</span>
-              <select aria-label="Balance state" className="input-control" name="liability_state" defaultValue={state}>
+              <select aria-label="Balance state" className="input-control" name="liability_state" value={activeDraft.state} onChange={(event) => updateDraft({ state: event.target.value })}>
                 {states.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
             <label className="report-filter-field">
               <span>Sort</span>
-              <select aria-label="Sort" className="input-control" name="sort" defaultValue={sortBy}>
+              <select aria-label="Sort" className="input-control" name="sort" value={activeDraft.sortBy} onChange={(event) => updateDraft({ sortBy: event.target.value })}>
                 <option value="risk">Negative available first</option>
                 <option value="employee">Employee</option>
                 <option value="policy">Policy</option>
@@ -289,9 +339,9 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
         </WorkspaceTableScrollRegion>
 
         <div className="pagination-bar" role="group" aria-label="Leave balance pagination">
-          <a data-navigation-mode="document" className="button button--secondary" aria-disabled={currentPage === 1} href={currentPage > 1 ? pageHref(currentPage - 1) : undefined}>Previous</a>
+          <button className="button button--secondary" disabled={currentPage === 1} onClick={() => writeFilters(committed, currentPage - 1)} type="button">Previous</button>
           <span>Showing {filteredRows.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PAGE_SIZE, filteredRows.length)} of {filteredRows.length}</span>
-          <a data-navigation-mode="document" className="button button--secondary" aria-disabled={currentPage === pageCount} href={currentPage < pageCount ? pageHref(currentPage + 1) : undefined}>Next</a>
+          <button className="button button--secondary" disabled={currentPage === pageCount} onClick={() => writeFilters(committed, currentPage + 1)} type="button">Next</button>
         </div>
       </div>
     </section>

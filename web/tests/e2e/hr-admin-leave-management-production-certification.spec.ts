@@ -299,7 +299,7 @@ test.describe("HR Admin Leave Management production certification", () => {
 
     await gotoAuthenticated(page, "/ess/leave", employee);
     await expectPageReady(page, "Leave");
-    await expect(page.getByRole("heading", { name: "Balance snapshot" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your entitlements" })).toBeVisible();
     await expect(page.getByText(leaveType.name).first()).toBeVisible();
     await page.getByRole("button", { name: "Apply leave" }).first().click();
     const dialog = page.getByRole("dialog", { name: "Apply leave" });
@@ -318,9 +318,16 @@ test.describe("HR Admin Leave Management production certification", () => {
       dialog.getByRole("button", { name: "Submit leave" }).click(),
     ]);
     expect(leaveResponse.status()).toBe(201);
-    const leaveRequest = (await leaveResponse.json()) as LeaveRequestPayload;
-    expect(leaveRequest.status).toBe("pending");
-    await expect(dialog.getByRole("status")).toContainText("Submitted successfully.");
+    await expect(page.getByRole("status").filter({ hasText: "Leave request submitted." })).toBeVisible();
+
+    await authenticateForSetup(page, manager);
+    const pendingPayload = await apiGet<ManagerPendingLeaveList | ManagerPendingLeaveItem[]>(
+      page,
+      "/manager/leave-requests/pending/?page_size=100",
+    );
+    const pendingItems = Array.isArray(pendingPayload) ? pendingPayload : pendingPayload.items ?? [];
+    const leaveRequest = pendingItems.find((item) => item.reason === reason);
+    expect(leaveRequest, `Expected pending request for ${reason}`).toBeTruthy();
 
     await authenticateForSetup(page, hrAdmin);
     const reservedBalances = await getBalances(page, targetEmployee.id, leavePolicy.id);
@@ -330,7 +337,7 @@ test.describe("HR Admin Leave Management production certification", () => {
     expect(numeric(pendingBalance!.consumed_amount)).toBe(0);
 
     await authenticateForSetup(page, manager);
-    const approvalResponse = await page.request.post(`${apiBaseUrl()}/manager/leave-requests/${leaveRequest.id}/approve/`, {
+    const approvalResponse = await page.request.post(`${apiBaseUrl()}/manager/leave-requests/${leaveRequest!.id}/approve/`, {
       headers: await authHeaders(page),
       data: { comment: decisionNote },
     });
@@ -346,7 +353,7 @@ test.describe("HR Admin Leave Management production certification", () => {
     expect(numeric(approvedBalance!.consumed_amount)).toBe(1);
     expect(numeric(approvedBalance!.closing_balance)).toBe(5);
 
-    await gotoAuthenticated(page, `/ess/leave?status=approved&requestId=${leaveRequest.id}`, employee);
+    await gotoAuthenticated(page, `/ess/leave?status=approved&requestId=${leaveRequest!.id}`, employee);
     await expectPageReady(page, "Leave");
     await expect(card(page, reason)).toBeVisible();
     await expect(card(page, reason)).toContainText("approved");
@@ -393,8 +400,17 @@ test.describe("HR Admin Leave Management production certification", () => {
       dialog.getByRole("button", { name: "Submit leave" }).click(),
     ]);
     expect(leaveResponse.status()).toBe(201);
-    const leaveRequest = (await leaveResponse.json()) as LeaveRequestPayload;
-    expect(leaveRequest.status).toBe("pending");
+    await page.waitForURL(/submitted=[0-9a-f-]+/);
+    const leaveRequestId = new URL(page.url()).searchParams.get("submitted");
+    expect(leaveRequestId).toMatch(/^[0-9a-f-]{36}$/);
+    const createdRequests = await apiGet<LeaveRequestPayload[] | { items?: LeaveRequestPayload[]; results?: LeaveRequestPayload[] }>(
+      page,
+      "/me/leave-requests/?status=pending&page=1&page_size=100",
+    );
+    const leaveRequestItems = Array.isArray(createdRequests) ? createdRequests : createdRequests.items ?? createdRequests.results ?? [];
+    const leaveRequest = leaveRequestItems.find((item) => item.id === leaveRequestId);
+    expect(leaveRequest?.status).toBe("pending");
+    if (!leaveRequest) throw new Error("Committed leave request was not present in the canonical pending list.");
 
     await gotoAuthenticated(page, `/ess/leave?status=pending&requestId=${leaveRequest.id}`, employee);
     await expectPageReady(page, "Leave");
@@ -406,8 +422,8 @@ test.describe("HR Admin Leave Management production certification", () => {
     await expect(detail.getByText(fileName).first()).toBeVisible();
     const employeeDownload = detail.locator(`a[href*="/api/me/leave-requests/${leaveRequest.id}/attachments/"][href$="/download"]`).first();
     await expect(employeeDownload).toBeVisible();
-    const employeeDownloadResponse = await page.request.get((await employeeDownload.getAttribute("href")) ?? "");
-    expect(employeeDownloadResponse.ok()).toBeTruthy();
+    const employeeDownloadStatus = await page.evaluate(async (href) => (await fetch(href, { credentials: "same-origin" })).status, (await employeeDownload.getAttribute("href")) ?? "");
+    expect(employeeDownloadStatus).toBe(200);
 
     await authenticateForSetup(page, manager);
     await page.goto("/mss/approvals?queue=leave&leavePage=1", { waitUntil: "domcontentloaded" });
@@ -417,8 +433,8 @@ test.describe("HR Admin Leave Management production certification", () => {
     await expect(reviewDialog.getByText(fileName).first()).toBeVisible();
     const managerDownload = reviewDialog.locator(`a[href*="/api/manager/leave-requests/${leaveRequest.id}/attachments/"][href$="/download"]`).first();
     await expect(managerDownload).toBeVisible();
-    const managerDownloadResponse = await page.request.get((await managerDownload.getAttribute("href")) ?? "");
-    expect(managerDownloadResponse.ok()).toBeTruthy();
+    const managerDownloadStatus = await page.evaluate(async (href) => (await fetch(href, { credentials: "same-origin" })).status, (await managerDownload.getAttribute("href")) ?? "");
+    expect(managerDownloadStatus).toBe(200);
     await expectNoHorizontalOverflow(page);
   });
 });

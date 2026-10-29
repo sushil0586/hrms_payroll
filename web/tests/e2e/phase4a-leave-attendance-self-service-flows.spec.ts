@@ -490,7 +490,7 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     expect(approvalResult.ok).toBeTruthy();
     expect(approvalResult.requestBody).toMatchObject({ comment: decisionNote });
     expect(approvalResult.payload.status).toBe("approved");
-    await expect(page.getByText("Request approved.").first()).toBeVisible();
+    await expect(page.getByText("Attendance regularization approved.").first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await gotoAuthenticated(page, `/ess/attendance?status=approved&regId=${regularizationResult.payload.id}`, employee);
@@ -533,20 +533,19 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await page.goto("/ess/attendance");
     await expectPageReady(page, "Attendance");
     const duplicateDialog = await openRegularizationDialog(page);
-    await field(duplicateDialog, "Attendance record").selectOption(attendanceRecordId);
-    await field(duplicateDialog, "Requested status").selectOption("remote");
-    await field(duplicateDialog, "Reason").fill(`${duplicateReason}_SECOND`);
-    const duplicateResult = await submitAndCapture<Record<string, unknown>>(
-      page,
-      "/api/me/attendance-regularizations",
-      "POST",
-      async () => {
-        await submitCorrectionButton(duplicateDialog).click();
-      },
-    );
+    await expect(field(duplicateDialog, "Attendance record").locator(`option[value="${attendanceRecordId}"]`)).toHaveCount(0);
+    const duplicateResult = await page.evaluate(async ({ requestBody }) => {
+      const response = await fetch("/api/me/attendance-regularizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      return { ok: response.ok, status: response.status, payload: await response.json().catch(() => ({})) };
+    }, { requestBody: firstPending.requestBody });
     expect(duplicateResult.ok).toBeFalsy();
     expect(duplicateResult.status).toBe(400);
-    await expect(duplicateDialog.getByText("A pending attendance regularization already exists for this attendance record.").first()).toBeVisible();
+    expect(JSON.stringify(duplicateResult.payload)).toContain("A pending attendance regularization already exists for this attendance record.");
+    await duplicateDialog.getByRole("button", { name: "Close" }).click();
 
     await gotoAuthenticated(page, `/mss/approvals?queue=attendance&regId=${firstPending.payload.id}`, manager);
     await expectPageReady(page, "Manager approvals");
@@ -564,7 +563,7 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     expect(rejectionResult.ok).toBeTruthy();
     expect(rejectionResult.requestBody).toMatchObject({ comment: decisionNote });
     expect(rejectionResult.payload.status).toBe("rejected");
-    await expect(page.getByText("Request rejected.").first()).toBeVisible();
+    await expect(page.getByText("Attendance regularization rejected.").first()).toBeVisible();
 
     await gotoAuthenticated(page, `/ess/attendance?status=rejected&regId=${firstPending.payload.id}`, employee);
     await expectPageReady(page, "Attendance");

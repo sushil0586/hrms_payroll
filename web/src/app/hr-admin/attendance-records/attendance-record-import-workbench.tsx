@@ -16,6 +16,7 @@ type Props = {
   statusOptions: HrAdminEnumOption[];
   sourceOptions: HrAdminEnumOption[];
   canManageRecords?: boolean;
+  onCommitted?: () => Promise<boolean>;
 };
 
 type AttendanceImportPayload = HrAdminAttendanceRecordWriteInput & {
@@ -197,7 +198,7 @@ function sampleCsv(records: HrAdminAttendanceRecord[], shifts: HrAdminOptionItem
   return `${headers.join(",")}\n${rows.map((row) => row.join(",")).join("\n")}`;
 }
 
-export function AttendanceRecordImportWorkbench({ records, employees = [], shifts, statusOptions, sourceOptions, canManageRecords = true }: Props) {
+export function AttendanceRecordImportWorkbench({ records, employees = [], shifts, statusOptions, sourceOptions, canManageRecords = true, onCommitted }: Props) {
   const resolveLatestEmployeesByCode = useLatestEmployeeCodeResolution();
   const [csvText, setCsvText] = useState(templateCsv());
   const [rows, setRows] = useState<ImportRow[]>([]);
@@ -321,6 +322,10 @@ export function AttendanceRecordImportWorkbench({ records, employees = [], shift
       evidence_snapshot: { headers, ui: "attendance-record-import-workbench" },
       row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
     });
+    if (nextRows.some((row) => row.status === "created") && onCommitted) {
+      const confirmed = await onCommitted();
+      if (!confirmed) setMessage("Import writes completed, but the attendance queue could not be confirmed. Keep this result and retry the queue read; do not commit the rows again.");
+    }
   }
 
   return (

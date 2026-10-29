@@ -1,15 +1,20 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
-import { ShiftsWorkbench } from "@/app/hr-admin/shifts/shifts-workbench";
+import { ShiftsWorkspace } from "@/app/hr-admin/shifts/shifts-workspace";
 import { getHrAdminShifts } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
-export default async function HrAdminShiftsPage() {
+type SearchParamValue = string | string[] | undefined;
+export default async function HrAdminShiftsPage({ searchParams }: { searchParams?: Promise<Record<string, SearchParamValue>> }) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-operations" });
   const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
   const result = await getHrAdminShifts();
+  const params = (await searchParams) ?? {};
+  const value = (key: string) => Array.isArray(params[key]) ? params[key]?.[0] ?? "" : params[key] ?? "";
+  const editId = value("editShift");
+  const initialModal = editId ? { mode: "edit" as const, id: editId } : value("shiftModal") === "create" ? { mode: "create" as const, id: "" } : { mode: "" as const, id: "" };
 
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
@@ -35,7 +40,7 @@ export default async function HrAdminShiftsPage() {
         secondaryMetricValue={result.data.filter((item) => item.is_active).length}
       /></details>
 
-      <ShiftsWorkbench canManagePolicies={canManagePolicies} items={result.data} state={result.state} />
+      <ShiftsWorkspace canManagePolicies={canManagePolicies} initialData={{ items: result.data, state: result.state === "live" ? "live" : "demo" }} initialModal={initialModal} />
     </main>
   );
 }

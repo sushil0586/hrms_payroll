@@ -139,7 +139,13 @@ function NavigationFeedbackBoundary({ children, routeKey, documentNavigation }: 
   function handleClick(event: MouseEvent<HTMLDivElement>) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
-    if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.dataset.navigationMode === "document") return;
+    if (
+      !anchor
+      || anchor.target
+      || anchor.hasAttribute("download")
+      || anchor.dataset.navigationMode === "document"
+      || anchor.dataset.navigationMode === "local"
+    ) return;
     const url = new URL(anchor.href, window.location.href);
     if (url.origin !== window.location.origin || isSameDocumentHash(url)) return;
     if (`${url.pathname}${url.search}` === `${window.location.pathname}${window.location.search}`) {
@@ -155,7 +161,7 @@ function NavigationFeedbackBoundary({ children, routeKey, documentNavigation }: 
 
   function handleSubmit(event: FormEvent<HTMLDivElement>) {
     const form = event.target as HTMLFormElement;
-    if (!(form instanceof HTMLFormElement) || form.dataset.navigationMode === "document") return;
+    if (!(form instanceof HTMLFormElement) || form.dataset.navigationMode === "document" || form.dataset.navigationMode === "local") return;
     const declaredMethod = form.getAttribute("method")?.toLowerCase();
     const isServerQueryForm = declaredMethod === "get" || (!declaredMethod && form.hasAttribute("action"));
     if (!isServerQueryForm) return;

@@ -67,7 +67,7 @@ test.describe("HR Admin documents and notifications workflow certification", () 
     for (const label of ["Search", "Verification status", "Record status"]) {
       await expect(field(page, label)).toBeVisible();
     }
-    await page.getByText("More filters").click();
+    await page.getByText("More filters", { exact: true }).click();
     for (const label of ["Category", "Expiry focus"]) {
       await expect(field(page, label)).toBeVisible();
     }
@@ -156,8 +156,8 @@ test.describe("HR Admin documents and notifications workflow certification", () 
     await expect(page.getByText("Full document review save is temporarily unavailable.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.getByRole("button", { name: "Save review" }).click();
-    await expect(page).toHaveURL(/\/hr-admin\/employee-documents\?review_saved=1$/);
-    await expect(page.getByText("Review action complete.")).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.has("reviewDocument")).toBe(false);
+    await expect(page.getByText("Document action complete.")).toBeVisible();
     await expect(page.getByText("Document review updated.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.unroute("**/api/hr-admin/employee-documents/*");

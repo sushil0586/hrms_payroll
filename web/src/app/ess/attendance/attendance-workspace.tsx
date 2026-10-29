@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { WorkspaceCalendar } from "@/components/patterns/workspace-calendar";
@@ -11,9 +11,11 @@ import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
+import { ScopedResourceError, useScopedWorkspaceResource } from "@/lib/ui/use-scoped-workspace-resource";
 import type {
   AttendanceRegularizationItem,
   EssAttendanceMonth,
@@ -38,6 +40,8 @@ type Feedback = {
 };
 
 type AttendanceRegularizationField = "attendance_record_id" | "requested_check_out_at" | "reason";
+type AttendanceQuery = { month: string; page: number; page_size: number };
+type RegularizationQuery = { status: string; page: number; page_size: number };
 
 const subscribeToHydration = () => () => undefined;
 const clientHydrationSnapshot = () => true;
@@ -124,6 +128,18 @@ function getErrorMessage(payload: unknown) {
     if (Array.isArray(value) && value.length) return String(value[0]);
   }
   return String((payload as Record<string, unknown>).detail || "Unable to submit attendance regularization.");
+}
+
+function scopedReadError(payload: unknown, fallback: string) {
+  if (payload && typeof payload === "object" && typeof (payload as { detail?: unknown }).detail === "string") {
+    return String((payload as { detail: string }).detail);
+  }
+  return fallback;
+}
+
+function positiveParam(value: string | null, fallback: number) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function formatRecordLabel(record: EssAttendanceRecordOption) {
@@ -518,14 +534,6 @@ function AttendanceDetailModal({ item, onClose }: { item: AttendanceRegularizati
 export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail, attendance: initialAttendance, currentParams, isDemo, regularizations: initialRegularizations }: Props) {
   const router = useRouter();
   const correctionActionRef = useRef<HTMLButtonElement | null>(null);
-  const refreshVersion = useRef(0);
-  const [fresh, setFresh] = useState<{ source: EssAttendanceMonth; attendance: EssAttendanceMonth; regularizations: EssAttendanceRegularizationListResponse } | null>(null);
-  const attendance = fresh?.source === initialAttendance ? fresh.attendance : initialAttendance;
-  const regularizations = fresh?.source === initialAttendance ? fresh.regularizations : initialRegularizations;
-  const [refreshingSource, setRefreshingSource] = useState<EssAttendanceMonth | null>(null);
-  const isRefreshing = refreshingSource === initialAttendance;
-  const [refreshFailure, setRefreshFailure] = useState<{ source: EssAttendanceMonth; message: string } | null>(null);
-  const refreshError = refreshFailure?.source === initialAttendance ? refreshFailure.message : null;
   const hydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const [regularizeOpen, setRegularizeOpen] = useState(false);
   const [initialRecordId, setInitialRecordId] = useState<string>();
@@ -533,8 +541,107 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
   const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const searchParams = useSearchParams();
+  const initialAttendanceQuery: AttendanceQuery = {
+    month: normalizeParam(currentParams.month) ?? "",
+    page: initialAttendance.page,
+    page_size: initialAttendance.page_size,
+  };
+  const initialRegularizationQuery: RegularizationQuery = {
+    status: normalizeParam(currentParams.status) ?? "all",
+    page: initialRegularizations.page,
+    page_size: initialRegularizations.page_size,
+  };
+  const requestAttendance = useCallback(async (query: AttendanceQuery, signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(query.page), page_size: String(query.page_size) });
+    if (query.month) params.set("month", query.month);
+    const response = await fetch(`/api/me/attendance-records?${params}`, { cache: "no-store", signal });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) throw new ScopedResourceError("Your session has expired.", 401);
+    if (!response.ok || !payload || typeof payload !== "object" || !Array.isArray((payload as EssAttendanceMonth).items)) {
+      throw new ScopedResourceError(scopedReadError(payload, "Attendance records could not be updated."), response.status);
+    }
+    return payload as EssAttendanceMonth;
+  }, []);
+  const requestRegularizations = useCallback(async (query: RegularizationQuery, signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(query.page), page_size: String(query.page_size) });
+    if (query.status !== "all") params.set("status", query.status);
+    const response = await fetch(`/api/me/attendance-regularizations?${params}`, { cache: "no-store", signal });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) throw new ScopedResourceError("Your session has expired.", 401);
+    if (!response.ok || !payload || typeof payload !== "object" || !Array.isArray((payload as EssAttendanceRegularizationListResponse).items)) {
+      throw new ScopedResourceError(scopedReadError(payload, "Correction history could not be updated."), response.status);
+    }
+    return payload as EssAttendanceRegularizationListResponse;
+  }, []);
+  const attendanceHistoryHref = useCallback((query: AttendanceQuery) => {
+    const url = new URL(window.location.href);
+    if (query.month) url.searchParams.set("month", query.month); else url.searchParams.delete("month");
+    if (query.page > 1) url.searchParams.set("page", String(query.page)); else url.searchParams.delete("page");
+    if (query.page_size !== 10) url.searchParams.set("page_size", String(query.page_size)); else url.searchParams.delete("page_size");
+    url.searchParams.delete("day");
+    return `${url.pathname}${url.search}`;
+  }, []);
+  const regularizationHistoryHref = useCallback((query: RegularizationQuery) => {
+    const url = new URL(window.location.href);
+    if (query.status !== "all") url.searchParams.set("status", query.status); else url.searchParams.delete("status");
+    if (query.page > 1) url.searchParams.set("reg_page", String(query.page)); else url.searchParams.delete("reg_page");
+    url.searchParams.delete("regId");
+    return `${url.pathname}${url.search}`;
+  }, []);
+  const readAttendanceHistory = useCallback((): AttendanceQuery => {
+    const params = new URLSearchParams(window.location.search);
+    const size = positiveParam(params.get("page_size"), 10);
+    return {
+      month: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.get("month") || "") ? params.get("month")! : "",
+      page: positiveParam(params.get("page"), 1),
+      page_size: [5, 10, 20, 31].includes(size) ? size : 10,
+    };
+  }, []);
+  const readRegularizationHistory = useCallback((): RegularizationQuery => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedStatus = params.get("status") || "all";
+    return {
+      status: ["all", "pending", "approved", "rejected"].includes(requestedStatus) ? requestedStatus : "all",
+      page: positiveParam(params.get("reg_page"), 1),
+      page_size: 5,
+    };
+  }, []);
+  const onUnauthorized = useCallback(() => router.replace("/login"), [router]);
+  const resolveAttendanceQuery = useCallback((query: AttendanceQuery, data: EssAttendanceMonth) => ({ ...query, page: data.page, page_size: data.page_size }), []);
+  const resolveRegularizationQuery = useCallback((query: RegularizationQuery, data: EssAttendanceRegularizationListResponse) => ({ ...query, page: data.page, page_size: data.page_size }), []);
+  const [monthDraft, setMonthDraft] = useState(initialAttendance.month);
+  const [pageSizeDraft, setPageSizeDraft] = useState(String(initialAttendance.page_size));
+  const syncAttendanceControls = useCallback((query: AttendanceQuery, data: EssAttendanceMonth) => {
+    setMonthDraft(data.month || query.month);
+    setPageSizeDraft(String(data.page_size));
+  }, []);
+  const attendanceResource = useScopedWorkspaceResource({
+    initialData: initialAttendance,
+    initialQuery: initialAttendanceQuery,
+    request: requestAttendance,
+    resolveQuery: resolveAttendanceQuery,
+    historyHref: attendanceHistoryHref,
+    readHistoryQuery: readAttendanceHistory,
+    onApplied: syncAttendanceControls,
+    onUnauthorized,
+    fallbackError: "Attendance records could not be updated. The last confirmed period is still shown.",
+  });
+  const regularizationResource = useScopedWorkspaceResource({
+    initialData: initialRegularizations,
+    initialQuery: initialRegularizationQuery,
+    request: requestRegularizations,
+    resolveQuery: resolveRegularizationQuery,
+    historyHref: regularizationHistoryHref,
+    readHistoryQuery: readRegularizationHistory,
+    onUnauthorized,
+    fallbackError: "Correction history could not be updated. The last confirmed results are still shown.",
+  });
+  const attendance = attendanceResource.data;
+  const regularizations = regularizationResource.data;
+  const isRefreshing = attendanceResource.isPending;
+  const refreshError = attendanceResource.error;
   const view = searchParams.get("view") === "list" ? "list" : "calendar";
-  const params = { ...currentParams, ...Object.fromEntries(searchParams.entries()), month: attendance.month };
+  const params = { ...currentParams, ...Object.fromEntries(searchParams.entries()), month: attendanceResource.query.month || undefined };
   const href = (updates: Record<string, string | undefined>) => buildHref(params, updates);
   const eligible = attendance.days.filter((day) => day.can_regularize && day.derivation_summary).map((day) => ({ ...day, derivation_summary: day.derivation_summary! }));
   const dayParam = searchParams.get("day");
@@ -543,7 +650,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
   const linkedRequest = (linkedDetail?.id !== dismissedRequestId ? linkedDetail : null) ?? regularizations.items.find((item) => item.id === normalizeParam(currentParams.regId) && item.id !== dismissedRequestId) ?? null;
   const selectedRequest = clickedRegularization ?? linkedRequest;
   const pending = regularizations.status_counts.pending ?? 0;
-  const status = normalizeParam(currentParams.status) ?? "all";
+  const status = regularizationResource.query.status;
   const dateTime = (value: string | null) => attendanceTimestamp(value, attendance.timezone);
   const offset = (new Date(`${attendance.period_start}T00:00:00Z`).getUTCDay() + 6) % 7;
   const dayCount = Number(attendance.period_end.slice(8));
@@ -554,27 +661,10 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
     return date.toISOString().slice(0, 7);
   }
   async function refreshRecords() {
-    const version = ++refreshVersion.current;
-    setRefreshingSource(initialAttendance);
-    setRefreshFailure(null);
-    try {
-      const recordsQuery = new URLSearchParams({ month: attendance.month, page: String(attendance.page), page_size: String(attendance.page_size) });
-      const historyQuery = new URLSearchParams({ status, page: String(regularizations.page), page_size: String(regularizations.page_size) });
-      const results = await Promise.all([
-        fetch(`/api/me/attendance-records?${recordsQuery}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) }),
-        fetch(`/api/me/attendance-regularizations?${historyQuery}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) }),
-      ]);
-      if (results.some((result) => result.status === 401)) { router.replace("/login"); return; }
-      if (results.some((result) => !result.ok)) throw new Error("Refresh failed");
-      const [nextAttendance, nextHistory] = await Promise.all(results.map((result) => result.json()));
-      if (version !== refreshVersion.current) return;
-      setFresh({ source: initialAttendance, attendance: nextAttendance as EssAttendanceMonth, regularizations: nextHistory as EssAttendanceRegularizationListResponse });
-    } catch {
-      if (version !== refreshVersion.current) return;
-      setRefreshFailure({ source: initialAttendance, message: "The correction was submitted, but updated records could not be loaded. Showing the last loaded records. Retry refresh; do not resubmit the correction." });
-    } finally {
-      if (version === refreshVersion.current) setRefreshingSource((source) => source === initialAttendance ? null : source);
-    }
+    await Promise.all([
+      attendanceResource.load(attendanceResource.query, "none"),
+      regularizationResource.load(regularizationResource.query, "none"),
+    ]);
   }
   function selectLocal(event: MouseEvent<HTMLAnchorElement>, updates: Record<string, string>) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -599,12 +689,10 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
   }, [eligible.length, isRefreshing, refreshError]);
 
   return (
-    <main className="shell shell--workspace ess-experience-shell ess-compact ess-attendance accerio-page">
+    <main className="shell shell--workspace ess-experience-shell ess-compact ess-attendance accerio-page" data-hydrated={hydrated}>
       <WorkspaceStandardHeader title="Attendance" description="Review your recorded days and request an authorized correction." actions={<><button className="button button--primary" disabled={!eligible.length || isDemo || isRefreshing || Boolean(refreshError)} ref={correctionActionRef} onClick={(event) => requestCorrection(undefined, event.currentTarget)} type="button">Regularize attendance</button><a data-navigation-mode="document" className="button button--secondary" href="/ess">Overview</a></>} />
       <p className="sr-only" id="ess-attendance-table-scroll-help">When this table region is focused, use Left and Right arrow keys to scroll its columns.</p>
       {invalidMonth ? <p className="notice notice--error" role="alert">The requested month is invalid. Showing the current tenant month; choose a month below to continue.</p> : null}
-      {isRefreshing ? <p role="status" className="notice">Refreshing attendance and correction history…</p> : null}
-      {refreshError ? <div role="alert" className="notice notice--error"><p>{refreshError}</p><button className="button button--secondary" disabled={isRefreshing} onClick={() => void refreshRecords()} type="button">Retry refresh</button></div> : null}
       {submitted ? <p className="notice notice--success" role="status">Attendance regularization submitted. Track the approval in Regularizations below.</p> : null}
       {isDemo ? <p className="notice">Preview mode. Corrections are unavailable.</p> : null}
       <div className="attendance-summary-strip" role="group" aria-label="Attendance period summary">
@@ -614,29 +702,35 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
         <span><strong>{attendance.summary.pending_corrections}</strong> awaiting approval in this period</span>
       </div>
       <WorkspaceStandardPanel title="Attendance period" description={`${formatDate(attendance.period_start)} – ${formatDate(attendance.period_end)} · Times: ${attendance.timezone} · Today: ${formatDate(attendance.today)}`}>
-        <form data-navigation-mode="document" action="/ess/attendance" method="get" className="ess-attendance-toolbar">
-          <label>Month<input className="input-control" name="month" type="month" min="0001-01" max="9999-12" required defaultValue={attendance.month} key={attendance.month} /></label>
+        <div aria-busy={attendanceResource.isPending}>
+        {attendanceResource.error ? <div role="alert" className="notice notice--error"><p>{attendanceResource.error}</p><button className="button button--secondary" disabled={attendanceResource.isPending} onClick={() => void attendanceResource.load(attendanceResource.query, "none")} type="button">Retry period</button></div> : null}
+        <WorkspaceFilterForm action="/ess/attendance" className="ess-attendance-toolbar" label="Attendance period filters" pending={attendanceResource.isPending} updateMode="scoped" onSubmit={(event) => {
+          event.preventDefault();
+          void attendanceResource.load({ month: monthDraft, page: 1, page_size: Number(pageSizeDraft) || 10 });
+        }}>
+          <label>Month<input className="input-control" name="month" type="month" min="0001-01" max="9999-12" required value={monthDraft} onChange={(event) => setMonthDraft(event.target.value)} /></label>
           <input type="hidden" name="view" value={view} />
-          <label>Rows per page<select className="input-control" name="page_size" defaultValue={attendance.page_size} key={attendance.page_size}>{[5, 10, 20, 31].map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+          <label>Rows per page<select className="input-control" name="page_size" value={pageSizeDraft} onChange={(event) => setPageSizeDraft(event.target.value)}>{[5, 10, 20, 31].map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
           <button className="button button--secondary" type="submit">Show period</button>
-          <a data-navigation-mode="document" className="button button--secondary" href="/ess/attendance">Current period</a>
-        </form>
+          <a data-navigation-mode="local" className="button button--secondary" href="/ess/attendance" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setPageSizeDraft("10"); void attendanceResource.load({ month: "", page: 1, page_size: 10 }); }}>Current period</a>
+        </WorkspaceFilterForm>
         <nav className="ess-attendance-toolbar" aria-label="Attendance view and month">
-          {attendance.month !== "0001-01" ? <a data-navigation-mode="document" href={href({ month: adjacentMonth(-1), day: undefined, page: "1" })}>Previous month</a> : null}
+          {attendance.month !== "0001-01" ? <a data-navigation-mode="local" href={href({ month: adjacentMonth(-1), day: undefined, page: "1" })} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); const month = adjacentMonth(-1); setMonthDraft(month); void attendanceResource.load({ ...attendanceResource.query, month, page: 1 }); }}>Previous month</a> : null}
           <strong>{periodLabel}</strong>
-          {attendance.month !== "9999-12" ? <a data-navigation-mode="document" href={href({ month: adjacentMonth(1), day: undefined, page: "1" })}>Next month</a> : null}
-          <a data-navigation-mode="document" href={href({ view: "calendar" })} onClick={(event) => selectLocal(event, { view: "calendar" })} aria-current={view === "calendar" ? "page" : undefined}>Calendar</a>
-          <a data-navigation-mode="document" href={href({ view: "list" })} onClick={(event) => selectLocal(event, { view: "list" })} aria-current={view === "list" ? "page" : undefined}>List</a>
+          {attendance.month !== "9999-12" ? <a data-navigation-mode="local" href={href({ month: adjacentMonth(1), day: undefined, page: "1" })} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); const month = adjacentMonth(1); setMonthDraft(month); void attendanceResource.load({ ...attendanceResource.query, month, page: 1 }); }}>Next month</a> : null}
+          <a data-navigation-mode="local" href={href({ view: "calendar" })} onClick={(event) => selectLocal(event, { view: "calendar" })} aria-current={view === "calendar" ? "page" : undefined}>Calendar</a>
+          <a data-navigation-mode="local" href={href({ view: "list" })} onClick={(event) => selectLocal(event, { view: "list" })} aria-current={view === "list" ? "page" : undefined}>List</a>
         </nav>
         {!attendance.days.length ? <p className="ess-empty" role="status">No attendance records in this period. Missing days are not inferred as absences.</p> : null}
-        {view === "calendar" ? <WorkspaceCalendar offset={offset} onSelect={(event, day) => selectLocal(event, { day })} days={Array.from({ length: dayCount }, (_, index) => {
+        {view === "calendar" ? <WorkspaceCalendar navigationMode="scoped" offset={offset} onSelect={(event, day) => selectLocal(event, { day })} days={Array.from({ length: dayCount }, (_, index) => {
           const day = `${attendance.month}-${String(index + 1).padStart(2, "0")}`;
           const record = attendance.days.find((item) => item.attendance_date === day);
           return { date: day, number: index + 1, status: record ? formatStatus(record.status) : "No record", shortStatus: record ? calendarStatusCode[record.status] ?? "?" : "—", finalized: Boolean(record?.is_locked), selected: day === selectedDate, href: href({ day }), label: `${day}: ${record ? formatStatus(record.status) : "No record"}${record?.is_locked ? ", finalized" : ""}` };
         })} /> : <>
-          <div className="workspace-table-scroll" role="region" aria-label="Attendance records" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance days"><thead><tr><th scope="col">Day</th><th scope="col">Status</th><th scope="col">Shift</th><th scope="col">Recorded hours</th><th scope="col">Protection</th></tr></thead><tbody>{attendance.items.map((day) => <tr key={day.id} className={day.attendance_date === selectedDate ? "is-selected" : ""}><th scope="row"><a data-navigation-mode="document" onClick={(event) => selectLocal(event, { day: day.attendance_date })} aria-current={day.attendance_date === selectedDate ? "date" : undefined} href={href({ day: day.attendance_date })}>{formatDate(day.attendance_date)}</a></th><td>{formatStatus(day.status)}</td><td>{day.shift || "Not recorded"}</td><td>{day.work_duration_hours}</td><td>{day.is_locked ? "Finalized" : "Not finalized"}</td></tr>)}</tbody></table></div>
-          <div aria-label="Attendance pagination"><PaginationBar navigationMode="document" page={attendance.page} pageSize={attendance.page_size} totalCount={attendance.total_count} hasNext={attendance.has_next} hasPrevious={attendance.has_previous} firstHref={href({ page: "1" })} lastHref={href({ page: String(attendance.total_pages) })} previousHref={href({ page: String(Math.max(1, attendance.page - 1)) })} nextHref={href({ page: String(attendance.page + 1) })} /></div>
+          <div className="workspace-table-scroll" role="region" aria-label="Attendance records" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance days"><thead><tr><th scope="col">Day</th><th scope="col">Status</th><th scope="col">Shift</th><th scope="col">Recorded hours</th><th scope="col">Protection</th></tr></thead><tbody>{attendance.items.map((day) => <tr key={day.id} className={day.attendance_date === selectedDate ? "is-selected" : ""}><th scope="row"><a data-navigation-mode="local" onClick={(event) => selectLocal(event, { day: day.attendance_date })} aria-current={day.attendance_date === selectedDate ? "date" : undefined} href={href({ day: day.attendance_date })}>{formatDate(day.attendance_date)}</a></th><td>{formatStatus(day.status)}</td><td>{day.shift || "Not recorded"}</td><td>{day.work_duration_hours}</td><td>{day.is_locked ? "Finalized" : "Not finalized"}</td></tr>)}</tbody></table></div>
+          <div aria-label="Attendance pagination"><PaginationBar navigationMode="scoped" pending={attendanceResource.isPending} page={attendance.page} pageSize={attendance.page_size} totalCount={attendance.total_count} hasNext={attendance.has_next} hasPrevious={attendance.has_previous} firstHref={href({ page: "1" })} lastHref={href({ page: String(attendance.total_pages) })} previousHref={href({ page: String(Math.max(1, attendance.page - 1)) })} nextHref={href({ page: String(attendance.page + 1) })} onFirst={() => void attendanceResource.load({ ...attendanceResource.query, page: 1 })} onLast={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.total_pages })} onPrevious={() => void attendanceResource.load({ ...attendanceResource.query, page: Math.max(1, attendance.page - 1) })} onNext={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.page + 1 })} /></div>
         </>}
+        </div>
       </WorkspaceStandardPanel>
       <WorkspaceStandardPanel title={`Day details · ${formatDate(selectedDate)}`} description="Recorded attendance values; raw punches cannot be edited here.">
         {selectedDay ? <>
@@ -648,10 +742,13 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
         {!eligible.length ? <p className="ess-section-note">No eligible records in this period. Finalized days and requests awaiting approval cannot be resubmitted.</p> : null}
       </WorkspaceStandardPanel>
       <WorkspaceStandardPanel title="Regularizations" description={`All periods · ${pending} awaiting approval. View request details and the recorded decision.`}>
-        <nav className="ess-attendance-toolbar" aria-label="Regularization status">{["all", "pending", "approved", "rejected"].map((item) => <a data-navigation-mode="document" key={item} href={href({ status: item, reg_page: "1", regId: undefined })} aria-current={status === item ? "page" : undefined}>{formatStatus(item)} ({regularizations.status_counts[item as keyof typeof regularizations.status_counts] ?? 0})</a>)}</nav>
+        <div aria-busy={regularizationResource.isPending}>
+        {regularizationResource.error ? <div role="alert" className="notice notice--error"><p>{regularizationResource.error}</p><button className="button button--secondary" disabled={regularizationResource.isPending} onClick={() => void regularizationResource.load(regularizationResource.query, "none")} type="button">Retry history</button></div> : null}
+        <nav className="ess-attendance-toolbar" aria-label="Regularization status">{["all", "pending", "approved", "rejected"].map((item) => <a data-navigation-mode="local" key={item} href={href({ status: item, reg_page: "1", regId: undefined })} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void regularizationResource.load({ ...regularizationResource.query, status: item, page: 1 }); }} aria-current={status === item ? "page" : undefined}>{formatStatus(item)} ({regularizations.status_counts[item as keyof typeof regularizations.status_counts] ?? 0})</a>)}</nav>
         <div className="workspace-table-scroll" role="region" aria-label="Correction history" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance regularization history"><thead><tr><th scope="col">Day</th><th scope="col">Requested status</th><th scope="col">Approval status</th><th scope="col">Approver / note</th><th scope="col">Details</th></tr></thead><tbody>{regularizations.items.map((item) => <tr key={item.id}><th scope="row">{formatDate(item.attendance_date)}</th><td>{formatStatus(item.requested_status)}</td><td><WorkspaceStatusBadge tone={statusTone(item.status)}>{formatStatus(item.status)}</WorkspaceStatusBadge></td><td>{getRegularizationOwnerLabel(item)}<br />{item.manager_comment || item.rejection_reason || getApprovalWaitingLabel(item)}</td><td><button className="button button--secondary" type="button" onClick={(event) => { event.currentTarget.focus(); setDismissedRequestId(null); setClickedRegularization(item); }}>View</button></td></tr>)}</tbody></table></div>
         {!regularizations.items.length ? <p className="ess-empty">No regularizations in this view.</p> : null}
-        <div aria-label="Regularization pagination"><PaginationBar navigationMode="document" page={regularizations.page} pageSize={regularizations.page_size} totalCount={regularizations.total_count} hasNext={regularizations.has_next} hasPrevious={regularizations.has_previous} firstHref={href({ reg_page: "1", regId: undefined })} lastHref={href({ reg_page: String(Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size))), regId: undefined })} previousHref={href({ reg_page: String(Math.max(1, regularizations.page - 1)), regId: undefined })} nextHref={href({ reg_page: String(regularizations.page + 1), regId: undefined })} /></div>
+        <div aria-label="Regularization pagination"><PaginationBar navigationMode="scoped" pending={regularizationResource.isPending} page={regularizations.page} pageSize={regularizations.page_size} totalCount={regularizations.total_count} hasNext={regularizations.has_next} hasPrevious={regularizations.has_previous} firstHref={href({ reg_page: "1", regId: undefined })} lastHref={href({ reg_page: String(Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size))), regId: undefined })} previousHref={href({ reg_page: String(Math.max(1, regularizations.page - 1)), regId: undefined })} nextHref={href({ reg_page: String(regularizations.page + 1), regId: undefined })} onFirst={() => void regularizationResource.load({ ...regularizationResource.query, page: 1 })} onLast={() => void regularizationResource.load({ ...regularizationResource.query, page: Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size)) })} onPrevious={() => void regularizationResource.load({ ...regularizationResource.query, page: Math.max(1, regularizations.page - 1) })} onNext={() => void regularizationResource.load({ ...regularizationResource.query, page: regularizations.page + 1 })} /></div>
+        </div>
       </WorkspaceStandardPanel>
       {hydrated && regularizeOpen ? createPortal(<AttendanceRegularizationModal attendanceRecords={eligible} initialRecordId={initialRecordId} isDemo={isDemo} onClose={() => setRegularizeOpen(false)} onSubmitted={() => { setSubmitted(true); void refreshRecords(); }} />, document.body) : null}
       {hydrated && selectedRequest ? createPortal(<AttendanceDetailModal item={selectedRequest} onClose={() => { setDismissedRequestId(selectedRequest.id); setClickedRegularization(null); }} />, document.body) : null}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import type { FieldErrors } from "@/lib/ui/validation";
 import type { HrAdminPayrollRuleDefinition, HrAdminPayrollRuleVersion, HrAdminPayrollRulesSetupResponse } from "@/lib/types";
@@ -192,7 +191,6 @@ export function PayrollRuleOperationsPanel({
   selectedRule: HrAdminPayrollRuleDefinition | null;
   selectedVersion: HrAdminPayrollRuleVersion | null;
 }) {
-  const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
   const [activeActionTab, setActiveActionTab] = useState<PayrollRuleActionTab>("definition");
   const [definitionForm, setDefinitionForm] = useState(() => definitionToForm(selectedRule, initialSetup));
@@ -282,7 +280,7 @@ export function PayrollRuleOperationsPanel({
     setDefinitionForm(definitionToForm(rule, setup));
     setVersionForm((current) => ({ ...current, rule_id: rule.id }));
     setFeedback({ tone: "success", message: "payroll rule definition saved." });
-    router.refresh();
+
   }
 
   async function saveVersion() {
@@ -343,7 +341,7 @@ export function PayrollRuleOperationsPanel({
     setSetup((current) => ({ ...current, versions: replaceOrAppend(current.versions, version) }));
     setVersionForm(versionToForm(version, version.rule_id, setup));
     setFeedback({ tone: "success", message: "payroll rule version saved." });
-    router.refresh();
+
   }
 
   return (

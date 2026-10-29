@@ -9,7 +9,6 @@ import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { leaveDecisionMessage } from "@/lib/ui/leave-decision-message";
 import { requireText } from "@/lib/ui/validation";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
 
 type Props = {
@@ -22,7 +21,7 @@ type Props = {
   employeeReason?: string | null;
   requestAction?: string;
   canDecide?: boolean;
-  onCompleted?: () => void;
+  onCompleted?: () => Promise<boolean | void> | boolean | void;
 };
 
 function getErrorMessage(payload: unknown, status: number) {
@@ -48,7 +47,6 @@ export function ManagerDecisionPanel({
   canDecide = true,
   onCompleted,
 }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
   const [commentError, setCommentError] = useState("");
@@ -65,7 +63,7 @@ export function ManagerDecisionPanel({
   const actionLocked = Boolean(successMessage);
 
   async function handleDecision(action: "approve" | "reject") {
-    if (isSubmittingRef.current || isRefreshing) {
+    if (isSubmittingRef.current) {
       return;
     }
     isSubmittingRef.current = true;
@@ -137,12 +135,22 @@ export function ManagerDecisionPanel({
       : action === "approve" ? "Attendance regularization approved." : "Attendance regularization rejected.";
     setSuccessMessage(message);
     setToast({ title: "Action saved.", message, tone: "success" });
-    setComment("");
+    let confirmed = true;
+    try {
+      confirmed = (await onCompleted?.()) !== false;
+    } catch {
+      confirmed = false;
+    }
+    if (confirmed) {
+      setComment("");
+    } else {
+      const uncertain = "The decision was saved, but the latest queue could not be confirmed. Do not submit it again; retry the queue read first.";
+      setError(uncertain);
+      setToast({ title: "Queue confirmation needed.", message: uncertain, tone: "error" });
+    }
     setIsSubmitting(false);
     setPendingAction(null);
     isSubmittingRef.current = false;
-    onCompleted?.();
-    refresh();
   }
 
   useEffect(() => {
@@ -175,7 +183,7 @@ export function ManagerDecisionPanel({
           ref={commentRef}
           aria-describedby={commentError ? `mss-${itemId}-comment-error` : undefined}
           className="input-control"
-          disabled={isSubmitting || isRefreshing || actionLocked || !isPending || !canDecide}
+          disabled={isSubmitting || actionLocked || !isPending || !canDecide}
           aria-invalid={Boolean(commentError)}
           onChange={(event) => {
             setComment(event.target.value);
@@ -227,8 +235,8 @@ export function ManagerDecisionPanel({
             className="button button--primary"
             disabled={isSubmitting || actionLocked || !isPending || !canDecide}
             onClick={() => handleDecision("approve")}
-            pending={pendingAction === "approve" || isRefreshing}
-            pendingLabel={isRefreshing ? "Refreshing approval queue" : isCancellationRequest ? "Approving cancellation" : "Approving request"}
+            pending={pendingAction === "approve"}
+            pendingLabel={isCancellationRequest ? "Approving cancellation" : "Approving request"}
             type="button"
           >
             {isCancellationRequest ? "Approve cancellation" : "Approve request"}
@@ -237,8 +245,8 @@ export function ManagerDecisionPanel({
             className="button button--secondary"
             disabled={isSubmitting || actionLocked || !isPending || !canDecide}
             onClick={() => handleDecision("reject")}
-            pending={pendingAction === "reject" || isRefreshing}
-            pendingLabel={isRefreshing ? "Refreshing approval queue" : isCancellationRequest ? "Rejecting cancellation" : "Rejecting request"}
+            pending={pendingAction === "reject"}
+            pendingLabel={isCancellationRequest ? "Rejecting cancellation" : "Rejecting request"}
             type="button"
           >
             {isCancellationRequest ? "Reject cancellation" : "Reject request"}

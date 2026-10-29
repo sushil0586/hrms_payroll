@@ -5,7 +5,6 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import type { HrAdminPayrollProviderSchemaMappingPack } from "@/lib/types";
 
@@ -384,7 +383,6 @@ function runLocalSimulation({
 }
 
 export function MappingPackRuleBuilder({ pack }: Props) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [targetSchemaRef, setTargetSchemaRef] = useState(pack.target_schema_ref);
   const [enforcementMode, setEnforcementMode] = useState(pack.enforcement_mode);
@@ -444,7 +442,7 @@ export function MappingPackRuleBuilder({ pack }: Props) {
       return;
     }
     setNotice("Mapping rules saved.");
-    router.refresh();
+
   }
 
   async function runSimulation() {

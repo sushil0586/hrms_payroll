@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
   const body = isMultipart ? await request.formData() : JSON.stringify(await request.json().catch(() => ({})));
   const upstreamResponse = await fetch(`${API_BASE_URL}/me/leave-requests/${requestId}/cancel/`, {
     method: "POST",
-    headers: { ...(isMultipart ? {} : { "Content-Type": "application/json" }), Authorization: `Token ${token}` },
+    headers: { ...(isMultipart ? {} : { "Content-Type": "application/json" }), Authorization: `Token ${token}`, "Idempotency-Key": request.headers.get("idempotency-key") ?? "" },
     body,
     cache: "no-store",
   });

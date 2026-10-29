@@ -12,6 +12,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onReconcile?: () => Promise<boolean>;
+  onCancel?: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -41,7 +43,7 @@ function getWaitingLabel(item: AttendanceRegularizationItem) {
   return "Pending approval from configured approver";
 }
 
-export function AttendanceRegularizationReviewForm({ item, cancelHref, successHref, compact = false }: Props) {
+export function AttendanceRegularizationReviewForm({ item, cancelHref, successHref, compact = false, onReconcile, onCancel }: Props) {
   const router = useRouter();
   const [comment, setComment] = useState(item.status === "approved" ? item.manager_comment || "" : item.rejection_reason || item.manager_comment || "");
   const [error, setError] = useState("");
@@ -75,11 +77,19 @@ export function AttendanceRegularizationReviewForm({ item, cancelHref, successHr
       submittingRef.current = false;
       return;
     }
+    if (onReconcile) {
+      const reconciled = await onReconcile();
+      if (!reconciled) {
+        setError("The decision was accepted, but the queue could not be confirmed. Do not submit it again; retry the queue read.");
+        setIsSubmitting(false);
+      }
+      return;
+    }
     router.push(successHref ?? "/hr-admin/attendance-regularizations");
-    router.refresh();
   }
 
   function handleCancel() {
+    if (onCancel) { onCancel(); return; }
     if (cancelHref) {
       router.push(cancelHref);
       return;

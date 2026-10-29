@@ -5,7 +5,6 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { TenantAdminConsole } from "@/lib/types";
@@ -53,7 +52,6 @@ function riskLabel(value: string) {
 }
 
 export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: boolean; data: TenantAdminConsole }) {
-  const router = useRouter();
   const [roles, setRoles] = useState<RoleItem[]>(data.role_management.roles);
   const permissionCatalog = data.role_management.permission_catalog.filter((item) => item.tenant_assignable);
   const permissionLabelByKey = useMemo(() => new Map(permissionCatalog.map((item) => [item.key, item.label])), [permissionCatalog]);
@@ -223,6 +221,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       description: description.trim(),
       is_active: isActive,
       permission_keys: selectedPermissionKeys,
+      ...(dialogMode === "edit" && editingRole ? { expected_updated_at: editingRole.updated_at } : {}),
     };
     const target = dialogMode === "edit" && editingRole ? `/api/tenant-admin/roles/${editingRole.id}` : "/api/tenant-admin/roles";
     setBusyRef(dialogMode ?? "role");
@@ -243,7 +242,6 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       setNotice(dialogMode === "edit" ? "Role updated successfully." : "Role created successfully.");
       if (result.role) upsertRole(result.role);
       closeDialog();
-      router.refresh();
     } catch {
       setFormError("The role-save outcome is unconfirmed. Your changes were preserved; check the role list or audit before retrying.");
     } finally {
@@ -276,7 +274,6 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       setNoticeTone("success");
       setNotice(action === "activate" ? "Role activated successfully." : "Role deactivated successfully.");
       if (result.role) upsertRole(result.role);
-      router.refresh();
     } catch {
       setNoticeTone("error");
       setNotice("The role-status outcome is unconfirmed. Check the role list or audit before retrying.");

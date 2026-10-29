@@ -55,7 +55,7 @@
 .accerio-shell.workspace-tone .topbar-context__label { display: none; }
 .accerio-shell.workspace-tone .topbar-context strong { font-size: var(--type-size-md); font-weight: 600; color: var(--ds-text); white-space: nowrap; }
 .accerio-shell.workspace-tone .workspace-search { flex: 1; min-width: 160px; max-width: 360px; width: auto; order: 0; }
-.accerio-shell.workspace-tone .search-chip--calm { display: flex; height: 38px; min-height: 38px; padding: 0 var(--space-3); gap: var(--space-2); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-shell-search); box-shadow: none; }
+.accerio-shell.workspace-tone .search-chip--calm { display: flex; height: 44px; min-height: 44px; padding: 0 var(--space-3); gap: var(--space-2); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-shell-search); box-shadow: none; }
 .accerio-shell.workspace-tone .workspace-search__input { min-width: 0; min-height: 0; height: 34px; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: var(--type-size-sm); color: var(--ds-text); }
 .accerio-shell.workspace-tone .workspace-search__input::placeholder { color: var(--ds-text-muted); }
 .accerio-shell.workspace-tone .workspace-search__panel { z-index: 40; top: calc(100% + var(--space-2)); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); background: var(--ds-surface); color: var(--ds-text); max-height: min(65dvh, 480px); overflow-y: auto; }

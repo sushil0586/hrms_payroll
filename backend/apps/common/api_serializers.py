@@ -795,6 +795,7 @@ class TenantAdminRoleWriteSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, max_length=1200)
     is_active = serializers.BooleanField(required=False, default=True)
     permission_keys = serializers.ListField(child=serializers.CharField(max_length=120), required=False, allow_empty=True)
+    expected_updated_at = serializers.DateTimeField(required=False)
 
     def validate_name(self, value):
         return value.strip()
@@ -4223,9 +4224,11 @@ class HrAdminEmployeeShiftAssignmentSerializer(serializers.Serializer):
     conflict_count = serializers.IntegerField(required=False)
     has_blocking_conflict = serializers.BooleanField(required=False)
     conflict_summary = serializers.CharField(required=False)
+    updated_at = serializers.DateTimeField()
 
 
 class HrAdminEmployeeShiftAssignmentWriteSerializer(serializers.Serializer):
+    expected_updated_at = serializers.DateTimeField(required=False, write_only=True)
     employee_id = serializers.UUIDField(required=False)
     shift_id = serializers.UUIDField(required=False)
     assignment_kind = serializers.ChoiceField(
@@ -4349,9 +4352,11 @@ class HrAdminShiftRosterTemplateSerializer(serializers.Serializer):
     shift = serializers.CharField()
     assignment_kind = serializers.CharField()
     config_snapshot = serializers.JSONField(required=False)
+    updated_at = serializers.DateTimeField()
 
 
 class HrAdminShiftRosterTemplateWriteSerializer(serializers.Serializer):
+    expected_updated_at = serializers.DateTimeField(required=False, write_only=True)
     code = serializers.CharField(max_length=60, required=False)
     name = serializers.CharField(max_length=255, required=False)
     description = serializers.CharField(required=False, allow_blank=True, default="")

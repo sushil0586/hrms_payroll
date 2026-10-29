@@ -7,12 +7,14 @@ const clientReady = () => true;
 const serverReady = () => false;
 
 /** Module-owned controls and query names; shared GET, action and reset presentation. */
-export function WorkspaceFilterForm({ action, children, label = "Filters", className = "", onSubmit }: {
+export function WorkspaceFilterForm({ action, children, label = "Filters", className = "", onSubmit, pending = false, updateMode = "document" }: {
   action: string;
   onSubmit?: FormEventHandler<HTMLFormElement>;
   label?: string;
   children: ReactNode;
   className?: string;
+  pending?: boolean;
+  updateMode?: "document" | "scoped";
 }) {
   const interactive = useSyncExternalStore(subscribeToHydration, clientReady, serverReady);
   const [restoration, setRestoration] = useState(0);
@@ -34,5 +36,5 @@ export function WorkspaceFilterForm({ action, children, label = "Filters", class
       window.removeEventListener("popstate", restoreCommitted);
     };
   }, []);
-  return <form key={restoration} onSubmit={onSubmit} data-navigation-mode="document" action={action} method="get" aria-label={label} className={`workspace-filter-form ${className}`}><fieldset className="workspace-filter-fields" disabled={!interactive} aria-label={label}>{children}</fieldset></form>;
+  return <form key={restoration} onSubmit={onSubmit} data-navigation-mode={updateMode === "document" ? "document" : "local"} action={action} method="get" aria-busy={pending} aria-label={label} className={`workspace-filter-form ${className}`}><fieldset className="workspace-filter-fields" disabled={!interactive || pending} aria-label={label}>{children}</fieldset></form>;
 }

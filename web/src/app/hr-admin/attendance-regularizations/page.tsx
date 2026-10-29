@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { attendanceDateError, attendanceQueueHref } from "../attendance-records/filter-contract";
 import Link from "next/link";
 
-import { AttendanceRegularizationQueue } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-queue";
+import { AttendanceRegularizationsWorkspace, type RegularizationQuery } from "@/app/hr-admin/attendance-regularizations/attendance-regularizations-workspace";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceRegularization, getHrAdminAttendanceRegularizations, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -19,7 +19,7 @@ function normalizeParam(value: SearchParamValue) {
 
 export default async function HrAdminAttendanceRegularizationsPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view"], fallbackPath: "/hr-admin" });
-  const canReviewRegularizations = sessionHasPermission(sessionUser, "attendance.regularization.review");
+  const canReviewRegularizations = !sessionUser || sessionHasPermission(sessionUser, "attendance.regularization.review");
   const currentParams = (await searchParams) ?? {};
   const page = Math.max(Math.floor(Number(normalizeParam(currentParams.page) || "1")) || 1, 1);
   const pageSize = ([10,25,50,100].includes(Number(normalizeParam(currentParams.page_size))) ? Number(normalizeParam(currentParams.page_size)) : 25);
@@ -68,28 +68,14 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
         secondaryMetricLabel="status options"
         secondaryMetricValue={optionsResult.data.regularization_statuses.length}
       /></details>
-      <AttendanceRegularizationQueue
-        items={result.data.items}
+      <AttendanceRegularizationsWorkspace
+        initialData={{ ...result.data, state: result.state === "live" ? "live" : "demo", reviewItem: reviewResult?.data ?? null }}
+        initialQuery={{
+          q, status, requested_status: requestedStatus, current_status: currentStatus, from_date: fromDate,
+          to_date: toDate, page, page_size: pageSize, reviewRegularization: reviewRegularizationId,
+        } satisfies RegularizationQuery}
         regularizationStatusOptions={optionsResult.data.regularization_statuses}
         attendanceStatusOptions={optionsResult.data.attendance_statuses}
-        reviewItem={reviewResult?.data ?? null}
-        currentFilters={{
-          q,
-          status,
-          requested_status: requestedStatus,
-          current_status: currentStatus,
-          from_date: fromDate,
-          to_date: toDate,
-          page,
-          page_size: pageSize,
-        }}
-        pagination={{
-          total_count: result.data.total_count,
-          page: result.data.page,
-          page_size: result.data.page_size,
-          has_next: result.data.has_next,
-          has_previous: result.data.has_previous,
-        }}
         canReviewRegularizations={canReviewRegularizations}
       />
     </main>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminWorkflowTemplates } from "@/lib/api";
@@ -58,18 +59,18 @@ export default async function HrAdminWorkflowTemplatesPage({ searchParams }: Pag
         <section className="card panel queue-toolbar panel-card-soft workflow-filter-panel" aria-labelledby="workflow-template-catalog-heading">
           <div className="queue-toolbar__header">
             <div><h2 className="section-heading-soft" id="workflow-template-catalog-heading">Template catalog</h2><p className="section-copy section-copy-soft">Find a reusable approval chain by identity, module, trigger or state.</p></div>
-            <div className="queue-toolbar__meta"><span className="queue-summary-chip"><strong>{filteredTemplates.length}</strong> shown</span><span className="queue-summary-chip"><strong>{result.data.length}</strong> loaded</span></div>
+            <div className="queue-toolbar__meta"><span className="queue-summary-chip"><strong data-workflow-template-count>{filteredTemplates.length}</strong> shown</span><span className="queue-summary-chip"><strong>{result.data.length}</strong> loaded</span></div>
           </div>
-          <form className="queue-toolbar__grid" method="get">
+          <LocalCatalogFilterForm className="queue-toolbar__grid" pathname="/hr-admin/workflow-templates" itemSelector="[data-workflow-template]" emptySelector="[data-workflow-template-empty]" countSelector="[data-workflow-template-count]" mode="workflow-templates">
             <label className="form-field"><span className="muted">Search templates</span><input className="input-control" defaultValue={q} name="q" placeholder="Name, code, trigger, or description" type="search" /></label>
             <label className="form-field"><span className="muted">Module</span><select className="input-control" defaultValue={moduleFilter} name="module"><option value="all">All modules</option>{modules.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
             <label className="form-field"><span className="muted">Status</span><select className="input-control" defaultValue={statusFilter} name="status"><option value="all">All statuses</option>{statuses.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
-            <div className="queue-toolbar__actions"><button className="button button--primary" type="submit">Apply filters</button><Link className="button button--ghost" href="/hr-admin/workflow-templates">Clear filters</Link></div>
-          </form>
+            <div className="queue-toolbar__actions"><button className="button button--primary" type="submit">Apply filters</button></div>
+          </LocalCatalogFilterForm>
         </section>
         <div className="queue-list workflow-catalog-list">
-          {filteredTemplates.map((item) => (
-            <article className="record-card workflow-catalog-card" key={item.id}>
+          {result.data.map((item) => (
+            <article className="record-card workflow-catalog-card" key={item.id} hidden={!filteredTemplates.some((entry) => entry.id === item.id)} data-workflow-template data-filter-search={`${item.name} ${item.code} ${item.trigger_key} ${item.description}`} data-filter-module={item.module} data-filter-status={item.status}>
               <div className="record-card__header">
                 <div className="record-card__title-block">
                   <h3>{item.name}</h3>
@@ -105,8 +106,8 @@ export default async function HrAdminWorkflowTemplatesPage({ searchParams }: Pag
               </div>
             </article>
           ))}
-          {filteredTemplates.length === 0 ? (
-            <section className="card panel panel-card-soft workflow-empty-state">
+
+            <section className="card panel panel-card-soft workflow-empty-state" data-workflow-template-empty hidden={filteredTemplates.length !== 0}>
               <div>
                 <span className="eyebrow">{hasFilters ? "No matching templates" : "No workflow templates"}</span>
                 <h2 className="section-heading-soft">{hasFilters ? "No templates match the current filters." : "Create the first approval template."}</h2>
@@ -116,7 +117,6 @@ export default async function HrAdminWorkflowTemplatesPage({ searchParams }: Pag
               </div>
               <Link className={`button ${hasFilters ? "button--secondary" : "button--primary"}`} href={hasFilters ? "/hr-admin/workflow-templates" : "/hr-admin/workflow-templates/new"}>{hasFilters ? "Clear filters" : "Create workflow template"}</Link>
             </section>
-          ) : null}
         </div>
       </section>
     </main>

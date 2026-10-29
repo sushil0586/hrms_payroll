@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 
 test.describe("Public landing and lead intake", () => {
-  test("homepage is a polished public product page with signup and contact intake", async ({ page }) => {
+  test("homepage explains the operating flow and accepts governed pilot requests", async ({ page }) => {
     const leadRequests: unknown[] = [];
     await page.route("**/api/public-leads", async (route) => {
       leadRequests.push(route.request().postDataJSON());
@@ -15,12 +15,12 @@ test.describe("Public landing and lead intake", () => {
     });
 
     await page.goto("/", { waitUntil: "networkidle" });
-    await expectPageReady(page, "Run payroll, compliance, and employee operations");
+    await expectPageReady(page, "One clear operating flow for HR and payroll");
     await expect(page.getByRole("link", { name: "Request access" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Talk to sales" })).toBeVisible();
-    await expect(page.getByText("100 employee")).toBeVisible();
-    await expect(page.getByText("22 browser")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Start guided, then scale per employee." })).toBeVisible();
+    await expect(page.getByRole("link", { name: "See the complete flow" })).toBeVisible();
+    await expect(page.getByText("India-ready payroll operations")).toBeVisible();
+    await expect(page.getByText("Role-based access")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Confidence comes from how the work is handled." })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.locator("#signup").getByLabel("Company name").fill("Acme Payroll Services");
@@ -47,8 +47,8 @@ test.describe("Public landing and lead intake", () => {
   test("public landing remains aligned on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/", { waitUntil: "networkidle" });
-    await expect(page.getByRole("heading", { name: "Run payroll, compliance, and employee operations from one audit-ready SaaS workspace." })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Customer login" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "One clear operating flow for HR and payroll." })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Customer sign in" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

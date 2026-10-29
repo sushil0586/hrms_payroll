@@ -11,16 +11,22 @@ const sections = [
   ["permissions", "Access & updates"],
 ] as const;
 
-export function ProfileSectionNav({ section }: { section: string }) {
+export function ProfileSectionNav({ section, onSelect }: { section: string; onSelect: (section: string) => void }) {
   return (
     <>
       <nav className="ess-profile-nav" aria-label="Profile sections">
         {sections.map(([key, label]) => (
           <Link
+            data-navigation-mode="local"
             prefetch={false}
             key={key}
             href={`/ess/profile?section=${key}`}
             aria-current={section === key ? "page" : undefined}
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              onSelect(key);
+            }}
           >
             {label}
           </Link>
@@ -33,9 +39,7 @@ export function ProfileSectionNav({ section }: { section: string }) {
           className="input-control"
           value={section}
           onChange={(event) => {
-            const destination = new URL("/ess/profile", window.location.origin);
-            destination.searchParams.set("section", event.target.value);
-            window.location.assign(destination.href);
+            onSelect(event.target.value);
           }}
         >
           {sections.map(([key, label]) => (

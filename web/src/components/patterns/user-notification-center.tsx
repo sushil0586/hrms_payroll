@@ -1,7 +1,9 @@
+"use client";
+
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { PageIntro } from "@/components/patterns/page-intro";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { FormEvent, MouseEvent, ReactNode } from "react";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { UserNotificationDetailAction } from "@/components/patterns/user-notification-detail-action";
@@ -29,6 +31,13 @@ type Props = {
   actionDescription?: string;
   listTitle?: string;
   listDescription?: string;
+  hydrated?: boolean;
+  pending?: boolean;
+  error?: string;
+  onRetry?: () => void;
+  onFilter?: (params: Record<string, string>) => void;
+  onPage?: (page: number) => void;
+  onReadSaved?: (itemId: string, readAt: string | null) => void;
 };
 
 function normalizeParam(value: SearchParamValue) {
@@ -123,6 +132,13 @@ export function UserNotificationCenter({
   actionDescription = "Keep this page focused on finding alerts. Open a notification only when you need the full message, delivery trail, or source workflow.",
   listTitle = "Inbox list",
   listDescription = "Open one notification at a time and jump to the related workflow when needed.",
+  hydrated,
+  pending = false,
+  error = "",
+  onRetry,
+  onFilter,
+  onPage,
+  onReadSaved,
 }: Props) {
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
@@ -137,9 +153,26 @@ export function UserNotificationCenter({
   const failedOnPage = data.items.filter((item) => item.status === "failed").length;
   const closeHref = buildHref(basePath, currentParams, {});
   const hasActiveFilters = Boolean(q || status || channel || priority || subjectType);
+  const submitFilters = (event: FormEvent<HTMLFormElement>) => {
+    if (!onFilter) return;
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const next: Record<string, string> = {};
+    for (const key of ["q", "status", "channel", "priority", "subject_type", "page_size"]) {
+      const value = String(form.get(key) || "").trim();
+      if (value) next[key] = value;
+    }
+    next.page = "1";
+    onFilter(next);
+  };
+  const clearFilters = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!onFilter || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    onFilter({ page: "1", page_size: "10" });
+  };
 
   return (
-    <main className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace} accerio-page`}>
+    <main aria-busy={pending} className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace} accerio-page`} data-hydrated={hydrated}>
       <PageIntro
         appearance="accerio"
         eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
@@ -156,6 +189,8 @@ export function UserNotificationCenter({
           <span><strong>{failedOnPage}</strong> failed on page</span>
         </div>
       </section>
+
+      {error ? <section className="workspace-section"><div className="notice notice--error" role="alert"><strong>Notifications could not be refreshed.</strong><span className="muted">{error}</span>{onRetry ? <button className="button button--secondary" onClick={onRetry} type="button">Retry</button> : null}</div></section> : null}
 
       <section className="workspace-section queue-layout user-notification-center">
         <section className="workspace-data-panel queue-toolbar user-notification-filters">
@@ -175,7 +210,7 @@ export function UserNotificationCenter({
 
           <details className="workspace-filter-disclosure user-notification-filter-disclosure" open>
             <summary>Refine notification inbox</summary>
-            <form className="workspace-filter-disclosure__content queue-toolbar__grid" method="get">
+            <form className="workspace-filter-disclosure__content queue-toolbar__grid" key={`${q}|${status}|${channel}|${priority}|${subjectType}|${pageSize}`} method="get" onSubmit={submitFilters}>
               <label className="form-field">
                 <span className="muted">Search</span>
                 <input className="input-control" defaultValue={q} name="q" placeholder="Title, body, event, or reference" />
@@ -237,7 +272,7 @@ export function UserNotificationCenter({
                 <button className="button button--primary" type="submit">
                   Apply filters
                 </button>
-                <Link className="button button--ghost" href={basePath}>
+                <Link className="button button--ghost" href={basePath} onClick={clearFilters}>
                   Clear filters
                 </Link>
               </div>
@@ -294,7 +329,7 @@ export function UserNotificationCenter({
                         <td><span className="workspace-table__secondary">{formatDateTime(item.created_at)}</span></td>
                         <td>
                           <div className="table-actions">
-                            <UserNotificationDetailAction closeHref={closeHref} endpoint={`${apiEndpointBase}/${item.id}`} item={item} sourceHref={resolveSourceHref(item, workspace)} />
+                            <UserNotificationDetailAction closeHref={closeHref} endpoint={`${apiEndpointBase}/${item.id}`} item={item} onReadSaved={(readAt) => onReadSaved?.(item.id, readAt)} sourceHref={resolveSourceHref(item, workspace)} />
                           </div>
                         </td>
                       </tr>
@@ -305,7 +340,7 @@ export function UserNotificationCenter({
                 <div className="notice user-notification-empty">
                   <strong>{hasActiveFilters ? "No notifications match the current filters." : "No notifications yet."}</strong>
                   <span className="muted">{hasActiveFilters ? "Clear filters or widen the search to review the full inbox." : "New team alerts will appear here when a workflow needs attention."}</span>
-                  {hasActiveFilters ? <Link className="button button--secondary" href={basePath}>Clear filters</Link> : null}
+                  {hasActiveFilters ? <Link className="button button--secondary" href={basePath} onClick={clearFilters}>Clear filters</Link> : null}
                 </div>
               )}
             </WorkspaceTableScrollRegion>
@@ -323,6 +358,12 @@ export function UserNotificationCenter({
         pageSize={data.page_size}
         previousHref={buildHref(basePath, currentParams, { itemId: undefined, page: String(Math.max(1, page - 1)) })}
         totalCount={data.total_count}
+        navigationMode={onPage ? "scoped" : undefined}
+        pending={pending}
+        onFirst={onPage ? () => onPage(1) : undefined}
+        onPrevious={onPage ? () => onPage(Math.max(1, page - 1)) : undefined}
+        onNext={onPage ? () => onPage(page + 1) : undefined}
+        onLast={onPage ? () => onPage(totalPages) : undefined}
       />
     </main>
   );

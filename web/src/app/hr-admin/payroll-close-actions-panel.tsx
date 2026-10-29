@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 type PayrollAction = {
@@ -43,7 +42,6 @@ type Props = {
 };
 
 export function PayrollCloseActionsPanel({ title, eyebrow, description, actions }: Props) {
-  const router = useRouter();
   const initialRefs = useMemo(
     () => Object.fromEntries(actions.map((action) => [action.id, action.defaultProfileRef ?? ""])),
     [actions],
@@ -136,7 +134,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
         if (payload.job.status === "succeeded") {
           setError("");
           setMessage(`${action.label} completed.`);
-          router.refresh();
+
         } else if (payload.job.status === "failed") {
           setMessage("");
           setError(payload.job.error?.message || `${action.label} failed.`);
@@ -154,7 +152,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
       if (timer) window.clearTimeout(timer);
       controllers.forEach((controller) => controller.abort());
     };
-  }, [actions, jobs, pollBlocked, router]);
+  }, [actions, jobs, pollBlocked]);
 
   async function retryJob(action: PayrollAction, job: PayrollJob) {
     if (busyAction) return;
@@ -228,7 +226,6 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
         setPollFailures((value) => ({ ...value, [action.id]: 0 }));
       }
       setMessage(payload.detail || (payload.job ? `${action.label} accepted and queued.` : `${action.label} completed.`));
-      if (!payload.job || payload.job.status === "succeeded") router.refresh();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Payroll action failed.");
     } finally {

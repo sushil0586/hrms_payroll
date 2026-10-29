@@ -164,7 +164,7 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
   const summary = summaryResult.data?.counts ? summaryResult.data : fallbackSummary();
   const requestedTenantId = normalizeParam(params.tenantId);
   const shouldLoadLeads = panel === "leads";
-  const shouldLoadTenants = panel === "tenants" || panel === "events";
+  const shouldLoadTenants = panel === "tenants" || panel === "events" || Boolean(requestedTenantId);
   const shouldLoadPolicyPacks = panel === "policy-packs" || panel === "onboarding";
   const needsSelectedTenant = ["launch", "onboarding", "admins", "policy-packs", "events"].includes(panel);
 

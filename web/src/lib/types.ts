@@ -483,9 +483,11 @@ export type HrAdminEmployeeShiftAssignment = {
   conflict_count?: number;
   has_blocking_conflict?: boolean;
   conflict_summary?: string;
+  updated_at: string;
 };
 
 export type HrAdminEmployeeShiftAssignmentWriteInput = {
+  expected_updated_at?: string;
   employee_id: string | null;
   shift_id: string | null;
   assignment_kind: "fixed" | "weekly_rotation" | "temporary_override";
@@ -639,9 +641,11 @@ export type HrAdminShiftRosterTemplate = {
       }>;
     };
   };
+  updated_at: string;
 };
 
 export type HrAdminShiftRosterTemplateWriteInput = {
+  expected_updated_at?: string;
   code: string;
   name: string;
   description: string;
@@ -2795,6 +2799,7 @@ export type TenantAdminConsole = {
       is_active: boolean;
       active_membership_count: number;
       permission_keys: string[];
+      updated_at: string;
     }>;
     permission_catalog: Array<{
       key: string;
@@ -6083,6 +6088,15 @@ export type EssPayrollPayslipListResponse = PaginatedListResponse<EssPayrollPays
 export type ManagerLeaveApprovalListResponse = PaginatedListResponse<LeaveRequestItem>;
 
 export type ManagerAttendanceApprovalListResponse = PaginatedListResponse<AttendanceRegularizationItem>;
+
+export type MssApprovalInboxResponse = {
+  summary: ManagerTeamSummary;
+  pendingLeave: ManagerLeaveApprovalListResponse;
+  pendingRegularizations: ManagerAttendanceApprovalListResponse;
+  selectedLeaveDetail: LeaveRequestItem | null;
+  selectedRegularizationDetail: AttendanceRegularizationItem | null;
+  state: "live" | "demo";
+};
 
 export type HrAdminLeavePolicyAssignmentListResponse = PaginatedListResponse<HrAdminScopedAssignment>;
 

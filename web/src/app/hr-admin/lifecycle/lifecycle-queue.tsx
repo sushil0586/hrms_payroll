@@ -1,6 +1,6 @@
 "use client";
 import {useDocumentUploadDraft} from "@/lib/ui/use-document-upload-draft";
-import {postLifecycleBulk,lifecycleNavigate} from "@/lib/ui/lifecycle-bulk";
+import {postLifecycleBulk} from "@/lib/ui/lifecycle-bulk";
 import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 
@@ -56,6 +56,10 @@ type Props = {
     onboardingCount: number;
     pendingProbationCount: number;
   };
+  onNavigate: (href: string) => void;
+  onRefresh?: () => Promise<boolean>;
+  onOpenRecord?: (item: HrAdminLifecycleQueueItem) => void;
+  onEditRecord?: (item: HrAdminLifecycleQueueItem) => void;
 };
 
 const BULK_ASSIGNABLE_TYPES = new Set(["onboarding", "probation", "movement"]);
@@ -97,6 +101,7 @@ export function LifecycleQueue({
   lifecycleOptions,
   editProbationReview,editOnboarding,workflowTemplates,recordItem,editRecordItem,
   summary,
+  onNavigate,onRefresh,onOpenRecord,onEditRecord,
 }: Props) {
 
   const pathname = usePathname();
@@ -123,6 +128,7 @@ export function LifecycleQueue({
   const [bulkStatus, setBulkStatus] = useState("");
   const inspectTrigger=useRef<HTMLButtonElement|null>(null);const detailRef=useRef<HTMLElement|null>(null);
   const [selectedItemKey, setSelectedItemKey] = useState("");
+  const navigate=onNavigate;
 
   useEffect(()=>{if(selectedItemKey){detailRef.current?.scrollIntoView({block:"start"});detailRef.current?.focus({preventScroll:true});}},[selectedItemKey]);
   const statusOptions = itemType !== "all" ? (statusOptionsByType[itemType] ?? []) : [];
@@ -164,8 +170,8 @@ export function LifecycleQueue({
         : [];
 
   function goToPage(page: number, apply = false) {
-    if(!apply){lifecycleNavigate(currentQueueHref({page}));return;}
-    lifecycleNavigate(`${pathname}${buildQueryString({
+    if(!apply){navigate(currentQueueHref({page}));return;}
+    navigate(`${pathname}${buildQueryString({
       q: search.trim() || undefined,
       item_type: itemType !== "all" ? itemType : undefined,
       status: status !== "all" ? status : undefined,
@@ -220,7 +226,7 @@ export function LifecycleQueue({
         confirmed+=count;setFeedback(`${confirmed} requested records confirmed updated so far. Reload the queue for current rows.`);
       }
       setSelectedKeys([]);
-      setFeedback(`${confirmed} records confirmed updated. Other selected records were not reported updated. Reload the queue for current rows.`);
+      const refreshed=await onRefresh?.();setFeedback(`${confirmed} records confirmed updated. Other selected records were not reported updated.${refreshed===false?" Queue refresh failed; the last confirmed rows remain visible.":" Queue rows are current."}`);
 
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update lifecycle owners.");
@@ -257,7 +263,7 @@ export function LifecycleQueue({
     };
     try {
       const count=await postLifecycleBulk("/api/hr-admin/lifecycle-status-bulk-actions",body);
-      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);
+      const refreshed=await onRefresh?.();setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated.${refreshed===false?" Queue refresh failed; the last confirmed rows remain visible.":" Queue rows are current."}`);
       setSelectedKeys([]);
 
 
@@ -270,7 +276,7 @@ export function LifecycleQueue({
 
   return (
     <section className="section queue-layout lifecycle-queue-layout"><fieldset className="lifecycle-fields" disabled={!ready||isSubmitting} data-hydrated={ready}>
-      {error||feedback?<div className="notice" role={error?"alert":"status"} ref={noticeRef} tabIndex={-1}>{error?<p>{error}</p>:null}{feedback?<p>{feedback}</p>:null}<a data-navigation-mode="document" href={currentQueueHref()}>Reload queue</a></div>:null}
+      {error||feedback?<div className="notice" role={error?"alert":"status"} ref={noticeRef} tabIndex={-1}>{error?<p>{error}</p>:null}{feedback?<p>{feedback}</p>:null}{onRefresh?<button className="button button--secondary button--compact" type="button" onClick={()=>void onRefresh()}>Reload queue</button>:<a data-navigation-mode="document" href={currentQueueHref()}>Reload queue</a>}</div>:null}
       <div className="hr-employee-summary-strip lifecycle-summary-strip">
         <span><strong>{pagination.total_count}</strong> matching records</span>
         <span><strong>{summary.onboardingCount}</strong> onboardings</span>
@@ -361,7 +367,7 @@ export function LifecycleQueue({
             setPageSize("25");
             setBulkOwner("");
             setBulkStatus("");
-            lifecycleNavigate(pathname);
+            navigate(pathname);
            }} type="button">Clear filters</button>
           <button className="button button--secondary" disabled={assignableItems.length === 0} onClick={toggleAssignablePage} type="button">
             {allAssignableSelected ? "Clear selection" : "Select page"}
@@ -512,8 +518,8 @@ export function LifecycleQueue({
               </div>
               <div className="record-card__actions">
                 <button className="button button--ghost button--compact" onClick={() => { inspectTrigger.current?.focus();setSelectedItemKey(""); }} type="button">Close</button>
-                <a data-navigation-mode="document" className="button button--secondary button--compact" data-lifecycle-trigger={`record-${getItemKey(selectedItem)}`} href={currentQueueHref({ editRecord: undefined, record: getItemKey(selectedItem) })}>Open record</a>
-                <a data-navigation-mode="document" className="button button--primary button--compact" data-lifecycle-trigger={`edit-${getItemKey(selectedItem)}`} href={currentQueueHref({ record: undefined, editRecord: getItemKey(selectedItem) })}>Edit record</a>
+                {onOpenRecord?<button className="button button--secondary button--compact" data-lifecycle-trigger={`record-${getItemKey(selectedItem)}`} type="button" onClick={()=>onOpenRecord(selectedItem)}>Open record</button>:<a data-navigation-mode="document" className="button button--secondary button--compact" data-lifecycle-trigger={`record-${getItemKey(selectedItem)}`} href={currentQueueHref({ editRecord: undefined, record: getItemKey(selectedItem) })}>Open record</a>}
+                {onEditRecord?<button className="button button--primary button--compact" data-lifecycle-trigger={`edit-${getItemKey(selectedItem)}`} type="button" onClick={()=>onEditRecord(selectedItem)}>Edit record</button>:<a data-navigation-mode="document" className="button button--primary button--compact" data-lifecycle-trigger={`edit-${getItemKey(selectedItem)}`} href={currentQueueHref({ record: undefined, editRecord: getItemKey(selectedItem) })}>Edit record</a>}
               </div>
             </div>
             <div className="document-detail-identity">

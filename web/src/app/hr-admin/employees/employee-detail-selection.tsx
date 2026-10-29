@@ -27,6 +27,7 @@ type SelectionProviderProps = {
   children: ReactNode;
   initialDetail: HrAdminEmployeeDetail | null;
   initialSelectedId: string | null;
+  onAction?: (action: "edit" | "access" | "bank", detail: HrAdminEmployeeDetail) => void;
 };
 
 const SelectionContext = createContext<SelectionContextValue | null>(null);
@@ -50,6 +51,7 @@ export function EmployeeSelectionProvider({
   children,
   initialDetail,
   initialSelectedId,
+  onAction,
 }: SelectionProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -88,11 +90,12 @@ export function EmployeeSelectionProvider({
     setState("loading");
 
     try {
-      const response = await fetch(`/api/hr-admin/employees/${employeeId}`, {
+      const response = await fetch(`/api/hr-admin/employees/workspace?employeeId=${encodeURIComponent(employeeId)}`, {
         cache: "no-store",
         signal: controller.signal,
       });
-      const payload = (await response.json().catch(() => null)) as HrAdminEmployeeDetail | { detail?: string } | null;
+      const workspacePayload = (await response.json().catch(() => null)) as { detail?: HrAdminEmployeeDetail | string } | null;
+      const payload = workspacePayload && typeof workspacePayload.detail === "object" ? workspacePayload.detail : workspacePayload;
       if (requestRef.current?.id !== requestId || selectedIdRef.current !== employeeId) return;
       if (!response.ok || !payload || !("id" in payload)) throw new Error(detailError(payload));
       cacheRef.current.set(employeeId, payload);
@@ -183,6 +186,7 @@ export function EmployeeSelectionProvider({
           <EmployeeDetailDrawer
             canEditEmployees={canEditEmployees}
             canManageEmployeeAccess={canManageEmployeeAccess}
+            onAction={onAction}
           />
         ) : null}
       </section>
@@ -356,9 +360,10 @@ function EmployeeDetailContent({ detail }: { detail: HrAdminEmployeeDetail }) {
   );
 }
 
-function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess }: {
+function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess, onAction }: {
   canEditEmployees: boolean;
   canManageEmployeeAccess: boolean;
+  onAction?: (action: "edit" | "access" | "bank", detail: HrAdminEmployeeDetail) => void;
 }) {
   const { detail, dismiss, error, retry, selectedId, state } = useEmployeeSelection();
   const pathname = usePathname();
@@ -393,8 +398,8 @@ function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess }: {
           <Link data-navigation-mode="document" prefetch={false} className="button button--ghost button--compact" href={href({ employeeId: undefined, action: undefined })} scroll={false} onClick={event=>{if(event.button===0&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey){event.preventDefault();dismiss(href({employeeId:undefined,action:undefined}));}}}>Close details</Link>
           {detail && (canEditEmployees || canManageEmployeeAccess) ? (
             <div className="employee-detail-primary-actions">
-              {canEditEmployees ? <a className="button button--secondary button--compact" data-navigation-mode="document" href={href({ action: "edit", employeeId: detail.id })}>Edit</a> : null}
-              <ActionMenu documentNavigation items={actionItems} label="Actions" />
+              {canEditEmployees ? onAction ? <button className="button button--secondary button--compact" type="button" onClick={()=>onAction("edit",detail)}>Edit</button> : <a className="button button--secondary button--compact" data-navigation-mode="document" href={href({ action: "edit", employeeId: detail.id })}>Edit</a> : null}
+              {onAction ? <>{canManageEmployeeAccess?<button className="button button--ghost button--compact" type="button" onClick={()=>onAction("access",detail)}>Manage access</button>:null}{canEditEmployees?<button className="button button--ghost button--compact" type="button" onClick={()=>onAction("bank",detail)}>Bank accounts</button>:null}</> : <ActionMenu documentNavigation items={actionItems} label="Actions" />}
             </div>
           ) : null}
         </div>

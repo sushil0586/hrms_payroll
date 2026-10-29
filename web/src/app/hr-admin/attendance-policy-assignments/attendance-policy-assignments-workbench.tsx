@@ -5,8 +5,6 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
 
 import { AttendancePolicyAssignmentForm } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignment-form";
 import { attendancePolicyAssignmentToFormValue, createEmptyAttendancePolicyAssignmentValue } from "@/app/hr-admin/attendance-policy-assignments/form-values";
@@ -24,6 +22,13 @@ type Props = {
   state: "live" | "demo";
   options: AssignmentOptions;
   canManagePolicies: boolean;
+  modalMode?: "" | "create" | "edit";
+  editAssignmentId?: string;
+  pending?: boolean;
+  onOpenCreate: () => void;
+  onOpenEdit: (id: string) => void;
+  onCloseModal: () => void;
+  onReconcile: () => Promise<boolean>;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -42,15 +47,13 @@ function statusTone(item: HrAdminScopedAssignment): "success" | "warning" | "dan
   return item.is_active ? "success" : "neutral";
 }
 
-export function AttendancePolicyAssignmentsWorkbench({ items, state, options, canManagePolicies }: Props) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+export function AttendancePolicyAssignmentsWorkbench({ items, state, options, canManagePolicies, modalMode: controlledModalMode, editAssignmentId: controlledEditId, pending = false, onOpenCreate, onOpenEdit, onCloseModal, onReconcile }: Props) {
   const [query, setQuery] = useWorkspaceQueryFilter("q", "");
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [scope, setScope] = useWorkspaceQueryFilter("scope", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
-  const modalMode = searchParams.get("assignmentModal") ?? "";
-  const editAssignmentId = searchParams.get("editAssignment") ?? "";
+  const modalMode = controlledModalMode ?? "";
+  const editAssignmentId = controlledEditId ?? "";
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -74,7 +77,7 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
   const editItem = canManagePolicies && editAssignmentId ? items.find((item) => item.id === editAssignmentId) ?? null : null;
 
   function queueHref(overrides: Record<string, string | number | boolean | undefined> = {}) {
-    return `${pathname}${buildQueryString(overrides)}`;
+    return `/hr-admin/attendance-policy-assignments${buildQueryString(overrides)}`;
   }
 
   return (
@@ -126,7 +129,7 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
             setStatus("all");
             setScope("all");
           }} type="button">Clear filters</button>
-          {canManagePolicies ? <Link className="button button--primary" href={queueHref({ assignmentModal: "create" })}>Create attendance assignment</Link> : null}
+          {canManagePolicies ? <button className="button button--primary" onClick={onOpenCreate} type="button">Create attendance assignment</button> : null}
         </div>
       </section>
 
@@ -189,7 +192,7 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                <Link className="button button--primary" href={queueHref({ editAssignment: selectedItem.id })}>Edit assignment</Link>
+                <button className="button button--primary" onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit assignment</button>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit assignment</button>
               )}
@@ -224,8 +227,10 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
           title="Create attendance assignment"
           description="Map attendance policy behavior to a rollout scope."
           tabs={["Policy", "Scope", "State"]}
+          busy={pending}
+          onClose={onCloseModal}
         >
-          <AttendancePolicyAssignmentForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyAttendancePolicyAssignmentValue()} mode="create" options={options} />
+          <AttendancePolicyAssignmentForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyAttendancePolicyAssignmentValue()} mode="create" options={options} onCancel={onCloseModal} onSaved={async () => { const ok=await onReconcile(); if(ok) onCloseModal(); return ok; }} />
         </HrAdminActionModal>
       ) : null}
 
@@ -238,8 +243,10 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
           title={`Edit ${editItem.policy_name}`}
           description="Adjust scope, priority and activation state."
           tabs={["Policy", "Scope", "State"]}
+          busy={pending}
+          onClose={onCloseModal}
         >
-          <AttendancePolicyAssignmentForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={attendancePolicyAssignmentToFormValue(editItem)} itemId={editItem.id} mode="edit" options={options} />
+          <AttendancePolicyAssignmentForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={attendancePolicyAssignmentToFormValue(editItem)} itemId={editItem.id} mode="edit" options={options} onCancel={onCloseModal} onSaved={async () => { const ok=await onReconcile(); if(ok) onCloseModal(); return ok; }} />
         </HrAdminActionModal>
       ) : null}
     </section>

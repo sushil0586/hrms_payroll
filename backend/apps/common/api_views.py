@@ -514,6 +514,8 @@ from apps.attendance.models import (
     ShiftRosterRollout,
     ShiftRosterTemplateStatus,
     AttendanceRecord,
+    AttendancePeriodClose,
+    AttendancePeriodCloseStatus,
     AttendanceRegularization,
     RegularizationStatus,
     AttendanceStatus,
@@ -902,10 +904,29 @@ def _validate_employee_structure_consistency(item: Employee):
         )
 
 
+def _employee_audit_snapshot(item: Employee) -> dict:
+    return {
+        "employee_code": item.employee_code,
+        "employment_status": item.employment_status,
+        "date_of_joining": item.date_of_joining.isoformat() if item.date_of_joining else None,
+        "legal_entity_id": str(item.legal_entity_id) if item.legal_entity_id else None,
+        "branch_id": str(item.branch_id) if item.branch_id else None,
+        "location_id": str(item.location_id) if item.location_id else None,
+        "business_unit_id": str(item.business_unit_id) if item.business_unit_id else None,
+        "department_id": str(item.department_id) if item.department_id else None,
+        "cost_center_id": str(item.cost_center_id) if item.cost_center_id else None,
+        "designation_id": str(item.designation_id) if item.designation_id else None,
+        "grade_id": str(item.grade_id) if item.grade_id else None,
+        "employment_type_id": str(item.employment_type_id) if item.employment_type_id else None,
+        "reporting_manager_id": str(item.reporting_manager_id) if item.reporting_manager_id else None,
+    }
+
+
 @transaction.atomic
 def save_hr_admin_employee(actor, validated_data, *, item=None):
     tenant = actor.tenant
     is_new = item is None
+    previous_state = {} if is_new else _employee_audit_snapshot(item)
     model_map = {
         "legal_entity_id": LegalEntity,
         "branch_id": Branch,
@@ -995,6 +1016,21 @@ def save_hr_admin_employee(actor, validated_data, *, item=None):
     ensure_employee_leave_balances(item)
     ensure_employee_attendance_records(item)
     refresh_attendance_records_for_employee(item)
+    new_state = _employee_audit_snapshot(item)
+    _record_hr_admin_setup_audit_event(
+        actor,
+        event_type="employee_created" if is_new else "employee_updated",
+        source_ref="hrms.employee.configuration.audit.v1",
+        event_snapshot={
+            "employee_id": str(item.id),
+            "action": "created" if is_new else "updated",
+            "permission": "employees.create" if is_new else "employees.edit",
+            "changed_fields": sorted(validated_data.keys()),
+            "effective_date": item.date_of_joining.isoformat() if item.date_of_joining else None,
+            "previous_state": previous_state,
+            "new_state": new_state,
+        },
+    )
     return item
 
 
@@ -1613,7 +1649,24 @@ def save_hr_admin_shift(actor, validated_data, *, item=None):
         if field in validated_data:
             setattr(item, field, validated_data[field])
 
-    item.save()
+    duplicate = Shift.objects.filter(tenant=actor.tenant, code=item.code)
+    if item.pk:
+        duplicate = duplicate.exclude(pk=item.pk)
+    if item.code and duplicate.exists():
+        raise serializers.ValidationError({"code": "A shift with this code already exists."})
+
+    try:
+        # Preserve a controlled API response if concurrent creates race the
+        # pre-check and one request wins the tenant/code constraint.
+        with transaction.atomic():
+            item.save()
+    except IntegrityError as exc:
+        cause = exc.__cause__
+        constraint = getattr(getattr(cause, "diag", None), "constraint_name", "") or ""
+        sqlite_duplicate = "attendance_shift.tenant_id" in str(exc) and "attendance_shift.code" in str(exc)
+        if constraint.startswith("attendance_shift_tenant_id_code_") or sqlite_duplicate:
+            raise serializers.ValidationError({"code": "A shift with this code already exists."}) from exc
+        raise
     return item
 
 
@@ -2355,6 +2408,7 @@ def build_hr_admin_employee_shift_assignment_payload(*, tenant, item):
         "conflict_count": len(conflict_check["conflicts"]),
         "has_blocking_conflict": conflict_check["has_blocking_conflict"],
         "conflict_summary": conflict_check["summary"],
+        "updated_at": item.updated_at,
     }
 
 
@@ -2388,8 +2442,13 @@ def save_hr_admin_employee_shift_assignment(actor, validated_data, *, item=None)
     if item.effective_to and item.effective_to < item.effective_from:
         raise serializers.ValidationError({"effective_to": "Effective to must be on or after effective from."})
 
+    raw_config = validated_data.get("config_snapshot", getattr(item, "config_snapshot", {}))
+    if item.assignment_kind == EmployeeShiftAssignmentKind.WEEKLY_ROTATION and "config_snapshot" in validated_data:
+        raw_rotation = raw_config.get("rotation") if isinstance(raw_config, dict) else None
+        if not isinstance(raw_rotation, dict) or not raw_rotation.get("entries"):
+            raise serializers.ValidationError({"config_snapshot": "Weekly rotation assignments need at least one rotation step."})
     normalized_config = normalize_employee_shift_assignment_config(
-        validated_data.get("config_snapshot", getattr(item, "config_snapshot", {})),
+        raw_config,
         fallback_shift_id=str(item.shift_id),
         effective_from=item.effective_from,
     )
@@ -2441,6 +2500,7 @@ def build_hr_admin_shift_roster_template_payload(item: ShiftRosterTemplate) -> d
             getattr(item, "config_snapshot", {}),
             fallback_shift_id=str(item.shift_id),
         ),
+        "updated_at": item.updated_at,
     }
 
 
@@ -2472,8 +2532,19 @@ def save_hr_admin_shift_roster_template(actor, validated_data, *, item=None):
     if not item.name:
         raise serializers.ValidationError({"name": "This field is required."})
 
+    duplicate_codes = ShiftRosterTemplate.objects.filter(tenant=tenant, code=item.code)
+    if item.id:
+        duplicate_codes = duplicate_codes.exclude(id=item.id)
+    if duplicate_codes.exists():
+        raise serializers.ValidationError({"code": "A roster template with this code already exists."})
+
+    raw_config = validated_data.get("config_snapshot", getattr(item, "config_snapshot", {}))
+    if item.assignment_kind == EmployeeShiftAssignmentKind.WEEKLY_ROTATION and "config_snapshot" in validated_data:
+        raw_rotation = raw_config.get("rotation") if isinstance(raw_config, dict) else None
+        if not isinstance(raw_rotation, dict) or not raw_rotation.get("entries"):
+            raise serializers.ValidationError({"config_snapshot": "Weekly rotation templates need at least one rotation step."})
     normalized_config = normalize_employee_shift_assignment_config(
-        validated_data.get("config_snapshot", getattr(item, "config_snapshot", {})),
+        raw_config,
         fallback_shift_id=str(item.shift_id),
     )
     if item.assignment_kind == EmployeeShiftAssignmentKind.WEEKLY_ROTATION:
@@ -7145,11 +7216,17 @@ class MeEmployeeDocumentListCreateView(EmployeeContextMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = MeEmployeeDocumentCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = create_self_service_employee_document(employee, serializer.validated_data)
-        item = EmployeeDocument.objects.select_related("employee", "category", "artifact").get(id=item.id)
-        return response.Response(
-            HrAdminEmployeeDocumentSerializer(build_hr_admin_employee_document_payload(item)).data,
-            status=status.HTTP_201_CREATED,
+        fingerprint = _document_upload_fingerprint(serializer.validated_data)
+        def operation():
+            item = create_self_service_employee_document(employee, serializer.validated_data)
+            item = EmployeeDocument.objects.select_related("employee", "category", "artifact").get(id=item.id)
+            return response.Response(
+                HrAdminEmployeeDocumentSerializer(build_hr_admin_employee_document_payload(item)).data,
+                status=status.HTTP_201_CREATED,
+            )
+        return execute_idempotent_mutation(
+            request=request, tenant=employee.tenant, action="ess.document.upload",
+            fingerprint_payload=fingerprint, operation=operation,
         )
 
 
@@ -16493,6 +16570,7 @@ class HrAdminLifecycleOwnerBulkActionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         serializer = HrAdminLifecycleOwnerBulkActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         record_type = serializer.validated_data["record_type"]
@@ -16529,6 +16607,7 @@ class HrAdminLifecycleStatusBulkActionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         serializer = HrAdminLifecycleStatusBulkActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         record_type = serializer.validated_data["record_type"]
@@ -16991,7 +17070,20 @@ class HrAdminLeaveTypeListCreateView(HrAdminContextMixin, APIView):
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeaveTypeWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_leave_type(employee, serializer.validated_data)
+        with transaction.atomic():
+            item = save_hr_admin_leave_type(employee, serializer.validated_data)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_type_created",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_type_id": str(item.id),
+                    "leave_type_code": item.code,
+                    "leave_type_name": item.name,
+                    "action": "created",
+                    "permission": "leave.policies.manage",
+                },
+            )
         return response.Response(HrAdminLeaveTypeSerializer(build_hr_admin_leave_type_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
@@ -17011,12 +17103,29 @@ class HrAdminLeaveTypeDetailView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
-        item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
-        if not item:
-            return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminLeaveTypeWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_leave_type(employee, serializer.validated_data, item=item)
+        with transaction.atomic():
+            item = LeaveType.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+            if not item:
+                return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
+            previous_snapshot = build_hr_admin_leave_type_payload(item)
+            item = save_hr_admin_leave_type(employee, serializer.validated_data, item=item)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_type_updated",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_type_id": str(item.id),
+                    "leave_type_code": item.code,
+                    "leave_type_name": item.name,
+                    "action": "updated",
+                    "permission": "leave.policies.manage",
+                    "changed_fields": sorted(serializer.validated_data.keys()),
+                    "previous_state": {key: previous_snapshot.get(key) for key in serializer.validated_data},
+                    "new_state": {key: build_hr_admin_leave_type_payload(item).get(key) for key in serializer.validated_data},
+                },
+            )
         return response.Response(HrAdminLeaveTypeSerializer(build_hr_admin_leave_type_payload(item)).data)
 
 
@@ -17082,25 +17191,26 @@ class HrAdminLeaveTypeDeactivateView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
-        item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
-        if not item:
-            return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
-        if item.is_active:
-            item.is_active = False
-            item.save(update_fields=["is_active", "updated_at"])
-            _record_hr_admin_setup_audit_event(
-                employee,
-                event_type="leave_type_deactivated",
-                source_ref="hrms.rbac.leave_setup.audit.v1",
-                event_snapshot={
-                    "leave_type_id": str(item.id),
-                    "leave_type_code": item.code,
-                    "leave_type_name": item.name,
-                    "action": "deactivated",
-                    "permission": "leave.policies.manage",
-                    "impact": build_hr_admin_leave_type_impact_payload(item, action="deactivate"),
-                },
-            )
+        with transaction.atomic():
+            item = LeaveType.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+            if not item:
+                return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
+            if item.is_active:
+                item.is_active = False
+                item.save(update_fields=["is_active", "updated_at"])
+                _record_hr_admin_setup_audit_event(
+                    employee,
+                    event_type="leave_type_deactivated",
+                    source_ref="hrms.rbac.leave_setup.audit.v1",
+                    event_snapshot={
+                        "leave_type_id": str(item.id),
+                        "leave_type_code": item.code,
+                        "leave_type_name": item.name,
+                        "action": "deactivated",
+                        "permission": "leave.policies.manage",
+                        "impact": build_hr_admin_leave_type_impact_payload(item, action="deactivate"),
+                    },
+                )
         return response.Response(
             {
                 "leave_type": HrAdminLeaveTypeSerializer(build_hr_admin_leave_type_payload(item)).data,
@@ -17311,20 +17421,21 @@ class HrAdminLeavePolicyListCreateView(HrAdminContextMixin, APIView):
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeavePolicyWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_leave_policy(employee, serializer.validated_data)
-        _record_hr_admin_setup_audit_event(
-            employee,
-            event_type="leave_policy_created",
-            source_ref="hrms.rbac.leave_setup.audit.v1",
-            event_snapshot={
-                "leave_policy_id": str(item.id),
-                "leave_policy_code": item.code,
-                "leave_policy_name": item.name,
-                "leave_type_id": str(item.leave_type_id),
-                "action": "created",
-                "permission": "leave.policies.manage",
-            },
-        )
+        with transaction.atomic():
+            item = save_hr_admin_leave_policy(employee, serializer.validated_data)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_policy_created",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_policy_id": str(item.id),
+                    "leave_policy_code": item.code,
+                    "leave_policy_name": item.name,
+                    "leave_type_id": str(item.leave_type_id),
+                    "action": "created",
+                    "permission": "leave.policies.manage",
+                },
+            )
         return response.Response(HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
@@ -17344,29 +17455,31 @@ class HrAdminLeavePolicyDetailView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
-        item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
-        if not item:
-            return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminLeavePolicyWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        previous_snapshot = build_hr_admin_leave_policy_payload(item)
-        item = save_hr_admin_leave_policy(employee, serializer.validated_data, item=item)
-        _record_hr_admin_setup_audit_event(
-            employee,
-            event_type="leave_policy_updated",
-            source_ref="hrms.rbac.leave_setup.audit.v1",
-            event_snapshot={
-                "leave_policy_id": str(item.id),
-                "leave_policy_code": item.code,
-                "leave_policy_name": item.name,
-                "leave_type_id": str(item.leave_type_id),
-                "action": "updated",
-                "permission": "leave.policies.manage",
-                "changed_fields": sorted(serializer.validated_data.keys()),
-                "previous_status": previous_snapshot["status"],
-                "new_status": item.status,
-            },
-        )
+        with transaction.atomic():
+            item = LeavePolicy.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
+            if not item:
+                return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
+            previous_snapshot = build_hr_admin_leave_policy_payload(item)
+            item = save_hr_admin_leave_policy(employee, serializer.validated_data, item=item)
+            current_snapshot = build_hr_admin_leave_policy_payload(item)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_policy_updated",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_policy_id": str(item.id),
+                    "leave_policy_code": item.code,
+                    "leave_policy_name": item.name,
+                    "leave_type_id": str(item.leave_type_id),
+                    "action": "updated",
+                    "permission": "leave.policies.manage",
+                    "changed_fields": sorted(serializer.validated_data.keys()),
+                    "previous_state": {key: previous_snapshot.get(key) for key in serializer.validated_data},
+                    "new_state": {key: current_snapshot.get(key) for key in serializer.validated_data},
+                },
+            )
         return response.Response(HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data)
 
 
@@ -17451,28 +17564,29 @@ class HrAdminLeavePolicyArchiveView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
-        item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
-        if not item:
-            return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
-        if item.status != LeavePolicyStatus.ARCHIVED:
-            previous_status = item.status
-            item.status = LeavePolicyStatus.ARCHIVED
-            item.effective_to = item.effective_to or timezone.localdate()
-            item.save(update_fields=["status", "effective_to", "updated_at"])
-            _record_hr_admin_setup_audit_event(
-                employee,
-                event_type="leave_policy_archived",
-                source_ref="hrms.rbac.leave_setup.audit.v1",
-                event_snapshot={
-                    "leave_policy_id": str(item.id),
-                    "leave_policy_code": item.code,
-                    "leave_policy_name": item.name,
-                    "action": "archived",
-                    "previous_status": previous_status,
-                    "permission": "leave.policies.manage",
-                    "impact": build_hr_admin_leave_policy_impact_payload(item, action="archive"),
-                },
-            )
+        with transaction.atomic():
+            item = LeavePolicy.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
+            if not item:
+                return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
+            if item.status != LeavePolicyStatus.ARCHIVED:
+                previous_status = item.status
+                item.status = LeavePolicyStatus.ARCHIVED
+                item.effective_to = item.effective_to or timezone.localdate()
+                item.save(update_fields=["status", "effective_to", "updated_at"])
+                _record_hr_admin_setup_audit_event(
+                    employee,
+                    event_type="leave_policy_archived",
+                    source_ref="hrms.rbac.leave_setup.audit.v1",
+                    event_snapshot={
+                        "leave_policy_id": str(item.id),
+                        "leave_policy_code": item.code,
+                        "leave_policy_name": item.name,
+                        "action": "archived",
+                        "previous_status": previous_status,
+                        "permission": "leave.policies.manage",
+                        "impact": build_hr_admin_leave_policy_impact_payload(item, action="archive"),
+                    },
+                )
         return response.Response(
             {
                 "policy": HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data,
@@ -17697,7 +17811,21 @@ class HrAdminLeavePolicyAssignmentListCreateView(HrAdminContextMixin, APIView):
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeavePolicyAssignmentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_leave_policy_assignment(employee, serializer.validated_data)
+        with transaction.atomic():
+            item = save_hr_admin_leave_policy_assignment(employee, serializer.validated_data)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_policy_assignment_created",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_policy_assignment_id": str(item.id),
+                    "leave_policy_id": str(item.leave_policy_id),
+                    "action": "created",
+                    "permission": "leave.policies.manage",
+                    "priority": item.priority,
+                    "is_active": item.is_active,
+                },
+            )
         item = LeavePolicyAssignment.objects.select_related(
             "leave_policy",
             "leave_policy__leave_type",
@@ -17792,25 +17920,26 @@ class HrAdminLeavePolicyAssignmentDetailView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
-        item = LeavePolicyAssignment.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_policy").first()
-        if not item:
-            return response.Response({"detail": "Leave policy assignment not found."}, status=status.HTTP_404_NOT_FOUND)
-        audit_snapshot = {
-            "leave_policy_assignment_id": str(item.id),
-            "leave_policy_id": str(item.leave_policy_id),
-            "leave_policy_name": item.leave_policy.name,
-            "is_active": item.is_active,
-            "priority": item.priority,
-            "action": "deleted",
-            "permission": "leave.policies.manage",
-        }
-        item.delete()
-        _record_hr_admin_setup_audit_event(
-            employee,
-            event_type="leave_policy_assignment_deleted",
-            source_ref="hrms.rbac.leave_setup.audit.v1",
-            event_snapshot=audit_snapshot,
-        )
+        with transaction.atomic():
+            item = LeavePolicyAssignment.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).select_related("leave_policy").first()
+            if not item:
+                return response.Response({"detail": "Leave policy assignment not found."}, status=status.HTTP_404_NOT_FOUND)
+            audit_snapshot = {
+                "leave_policy_assignment_id": str(item.id),
+                "leave_policy_id": str(item.leave_policy_id),
+                "leave_policy_name": item.leave_policy.name,
+                "is_active": item.is_active,
+                "priority": item.priority,
+                "action": "deleted",
+                "permission": "leave.policies.manage",
+            }
+            item.delete()
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_policy_assignment_deleted",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot=audit_snapshot,
+            )
         return response.Response({"detail": "Leave policy assignment removed."})
 
     def patch(self, request, item_id):
@@ -17818,12 +17947,31 @@ class HrAdminLeavePolicyAssignmentDetailView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "leave.policies.manage")
-        item = LeavePolicyAssignment.objects.filter(tenant=employee.tenant, id=item_id).first()
-        if not item:
-            return response.Response({"detail": "Leave policy assignment not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminLeavePolicyAssignmentWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_leave_policy_assignment(employee, serializer.validated_data, item=item)
+        with transaction.atomic():
+            item = LeavePolicyAssignment.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+            if not item:
+                return response.Response({"detail": "Leave policy assignment not found."}, status=status.HTTP_404_NOT_FOUND)
+            previous_snapshot = build_hr_admin_assignment_payload(item, policy_id_field="leave_policy_id", policy_name="leave_policy")
+            item = save_hr_admin_leave_policy_assignment(employee, serializer.validated_data, item=item)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_policy_assignment_updated",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_policy_assignment_id": str(item.id),
+                    "leave_policy_id": str(item.leave_policy_id),
+                    "action": "updated",
+                    "permission": "leave.policies.manage",
+                    "changed_fields": sorted(serializer.validated_data.keys()),
+                    "previous_state": {key: previous_snapshot.get(key) for key in serializer.validated_data},
+                    "new_state": {
+                        key: build_hr_admin_assignment_payload(item, policy_id_field="leave_policy_id", policy_name="leave_policy").get(key)
+                        for key in serializer.validated_data
+                    },
+                },
+            )
         item = LeavePolicyAssignment.objects.select_related(
             "leave_policy",
             "leave_policy__leave_type",
@@ -18228,10 +18376,31 @@ class HrAdminEmployeeShiftAssignmentListCreateView(HrAdminContextMixin, APIView)
         self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminEmployeeShiftAssignmentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_employee_shift_assignment(employee, serializer.validated_data)
-        item = EmployeeShiftAssignment.objects.select_related("employee", "shift").get(id=item.id)
-        payload = build_hr_admin_employee_shift_assignment_payload(tenant=employee.tenant, item=item)
-        return response.Response(HrAdminEmployeeShiftAssignmentSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+        def create_assignment():
+            with transaction.atomic():
+                item = save_hr_admin_employee_shift_assignment(employee, serializer.validated_data)
+                _record_hr_admin_setup_audit_event(
+                    employee,
+                    event_type="attendance_shift_assignment_created",
+                    source_ref="hrms.rbac.attendance_setup.audit.v1",
+                    event_snapshot={
+                        "assignment_id": str(item.id),
+                        "action": "created",
+                        "permission": "attendance.policies.manage",
+                    },
+                )
+            item = EmployeeShiftAssignment.objects.select_related("employee", "shift").get(id=item.id)
+            payload = build_hr_admin_employee_shift_assignment_payload(tenant=employee.tenant, item=item)
+            return response.Response(HrAdminEmployeeShiftAssignmentSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+        return execute_idempotent_mutation(
+            request=request,
+            tenant=employee.tenant,
+            action="attendance.employee_shift_assignment.create",
+            fingerprint_payload=request.data,
+            operation=create_assignment,
+        )
 
 
 class HrAdminEmployeeShiftAssignmentDetailView(HrAdminContextMixin, APIView):
@@ -18251,12 +18420,62 @@ class HrAdminEmployeeShiftAssignmentDetailView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
-        item = EmployeeShiftAssignment.objects.filter(tenant=employee.tenant, id=item_id).first()
-        if not item:
-            return response.Response({"detail": "Employee shift assignment not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminEmployeeShiftAssignmentWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_employee_shift_assignment(employee, serializer.validated_data, item=item)
+        validated_data = dict(serializer.validated_data)
+        expected_updated_at = validated_data.pop("expected_updated_at", None)
+        with transaction.atomic():
+            item = EmployeeShiftAssignment.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+            if not item:
+                return response.Response({"detail": "Employee shift assignment not found."}, status=status.HTTP_404_NOT_FOUND)
+            if expected_updated_at and item.updated_at != expected_updated_at:
+                return response.Response(
+                    {"detail": "This assignment changed after you opened it. Refresh and try again.", "updated_at": item.updated_at},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            target_employee = item.employee
+            if validated_data.get("employee_id"):
+                target_employee = Employee.objects.filter(
+                    tenant=employee.tenant,
+                    id=validated_data["employee_id"],
+                ).first()
+            proposed_from = validated_data.get("effective_from", item.effective_from)
+            proposed_to = validated_data.get("effective_to", item.effective_to)
+            protected_windows = [
+                (item.employee, item.effective_from, item.effective_to),
+                (target_employee, proposed_from, proposed_to),
+            ]
+            for protected_employee, window_start, window_end in protected_windows:
+                if not protected_employee or not window_start:
+                    continue
+                close_scope = AttendancePeriodClose.objects.filter(
+                    tenant=employee.tenant,
+                    legal_entity_id=protected_employee.legal_entity_id,
+                    status=AttendancePeriodCloseStatus.CLOSED,
+                    period_end__gte=window_start,
+                )
+                if window_end:
+                    close_scope = close_scope.filter(period_start__lte=window_end)
+                if close_scope.exists():
+                    return response.Response(
+                        {"detail": "This shift assignment overlaps a closed attendance period and cannot be edited."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            previous_updated_at = item.updated_at
+            item = save_hr_admin_employee_shift_assignment(employee, validated_data, item=item)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="attendance_shift_assignment_updated",
+                source_ref="hrms.rbac.attendance_setup.audit.v1",
+                event_snapshot={
+                    "assignment_id": str(item.id),
+                    "action": "updated",
+                    "permission": "attendance.policies.manage",
+                    "changed_fields": sorted(validated_data.keys()),
+                    "previous_updated_at": previous_updated_at,
+                    "new_updated_at": item.updated_at,
+                },
+            )
         item = EmployeeShiftAssignment.objects.select_related("employee", "shift").get(id=item.id)
         payload = build_hr_admin_employee_shift_assignment_payload(tenant=employee.tenant, item=item)
         return response.Response(HrAdminEmployeeShiftAssignmentSerializer(payload).data)
@@ -18373,7 +18592,19 @@ class HrAdminShiftRosterTemplateListCreateView(HrAdminContextMixin, APIView):
         self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminShiftRosterTemplateWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_shift_roster_template(employee, serializer.validated_data)
+        with transaction.atomic():
+            item = save_hr_admin_shift_roster_template(employee, serializer.validated_data)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="attendance_shift_roster_template_created",
+                source_ref="hrms.rbac.attendance_setup.audit.v1",
+                event_snapshot={
+                    "template_id": str(item.id),
+                    "action": "created",
+                    "permission": "attendance.policies.manage",
+                    "configured_fields": sorted(serializer.validated_data.keys()),
+                },
+            )
         item = ShiftRosterTemplate.objects.select_related("shift").get(id=item.id)
         return response.Response(HrAdminShiftRosterTemplateSerializer(build_hr_admin_shift_roster_template_payload(item)).data, status=status.HTTP_201_CREATED)
 
@@ -18394,12 +18625,34 @@ class HrAdminShiftRosterTemplateDetailView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
-        item = ShiftRosterTemplate.objects.filter(tenant=employee.tenant, id=item_id).first()
-        if not item:
-            return response.Response({"detail": "Shift roster template not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminShiftRosterTemplateWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        item = save_hr_admin_shift_roster_template(employee, serializer.validated_data, item=item)
+        validated_data = dict(serializer.validated_data)
+        expected_updated_at = validated_data.pop("expected_updated_at", None)
+        with transaction.atomic():
+            item = ShiftRosterTemplate.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+            if not item:
+                return response.Response({"detail": "Shift roster template not found."}, status=status.HTTP_404_NOT_FOUND)
+            if expected_updated_at and item.updated_at != expected_updated_at:
+                return response.Response(
+                    {"detail": "This roster template changed after you opened it. Refresh and try again.", "updated_at": item.updated_at},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            previous_updated_at = item.updated_at
+            item = save_hr_admin_shift_roster_template(employee, validated_data, item=item)
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="attendance_shift_roster_template_updated",
+                source_ref="hrms.rbac.attendance_setup.audit.v1",
+                event_snapshot={
+                    "template_id": str(item.id),
+                    "action": "updated",
+                    "permission": "attendance.policies.manage",
+                    "changed_fields": sorted(validated_data.keys()),
+                    "previous_updated_at": previous_updated_at,
+                    "new_updated_at": item.updated_at,
+                },
+            )
         item = ShiftRosterTemplate.objects.select_related("shift").get(id=item.id)
         return response.Response(HrAdminShiftRosterTemplateSerializer(build_hr_admin_shift_roster_template_payload(item)).data)
 
@@ -18876,11 +19129,17 @@ class HrAdminEmployeeDocumentListView(HrAdminContextMixin, APIView):
         self.require_tenant_permission(employee.tenant, "documents.manage")
         serializer = HrAdminEmployeeDocumentCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        item = create_hr_admin_employee_document(employee, serializer.validated_data)
-        item = EmployeeDocument.objects.select_related("employee", "category", "artifact").get(id=item.id)
-        return response.Response(
-            HrAdminEmployeeDocumentSerializer(build_hr_admin_employee_document_payload(item)).data,
-            status=status.HTTP_201_CREATED,
+        fingerprint = _document_upload_fingerprint(serializer.validated_data)
+        def operation():
+            item = create_hr_admin_employee_document(employee, serializer.validated_data)
+            item = EmployeeDocument.objects.select_related("employee", "category", "artifact").get(id=item.id)
+            return response.Response(
+                HrAdminEmployeeDocumentSerializer(build_hr_admin_employee_document_payload(item)).data,
+                status=status.HTTP_201_CREATED,
+            )
+        return execute_idempotent_mutation(
+            request=request, tenant=employee.tenant, action="hr.document.upload",
+            fingerprint_payload=fingerprint, operation=operation,
         )
 
 
@@ -20891,29 +21150,27 @@ class MeLeaveRequestListCreateView(EmployeeContextMixin, APIView):
         leave_type = LeaveType.objects.filter(id=payload.pop("leave_type_id"), tenant=employee.tenant).first()
         if not leave_type:
             return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
-        file_signature = None
-        if uploaded_file:
-            digest = hashlib.sha256()
-            for chunk in uploaded_file.chunks():
-                digest.update(chunk)
-            uploaded_file.seek(0)
-            file_signature = {"name": uploaded_file.name, "size": uploaded_file.size, "sha256": digest.hexdigest()}
+        file_signature = _uploaded_file_fingerprint(uploaded_file)
 
         def operation():
-            artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="leave_request") if uploaded_file else None
-            try:
-                leave_request = submit_leave_request(employee=employee, leave_type=leave_type, **payload)
-            except DjangoValidationError as exc:
-                _delete_document_artifact_quietly(artifact)
-                error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave request."}
-                return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
-            if artifact:
-                _append_leave_attachment_metadata(
-                    leave_request=leave_request,
-                    artifact=artifact,
+            with transaction.atomic():
+                try:
+                    leave_request = submit_leave_request(employee=employee, leave_type=leave_type, **payload)
+                except DjangoValidationError as exc:
+                    error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave request."}
+                    return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
+                artifact = _store_leave_attachment_for_employee(
+                    employee=employee,
+                    uploaded_file=uploaded_file,
                     action="leave_request",
-                    label=str(payload.get("attachment_reference", "") or artifact.original_filename),
-                )
+                ) if uploaded_file else None
+                if artifact:
+                    _append_leave_attachment_metadata(
+                        leave_request=leave_request,
+                        artifact=artifact,
+                        action="leave_request",
+                        label=str(payload.get("attachment_reference", "") or artifact.original_filename),
+                    )
             result = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
             return response.Response(MutationResultSerializer(result).data, status=status.HTTP_201_CREATED)
 
@@ -20948,33 +21205,36 @@ class MeLeaveRequestWithdrawView(EmployeeContextMixin, APIView):
         if not leave_request:
             return response.Response({"detail": "Leave request not found."}, status=status.HTTP_404_NOT_FOUND)
         payload_data, uploaded_file = _extract_leave_payload(request)
-        artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="withdrawal") if uploaded_file else None
-        if artifact and not str(payload_data.get("attachment_reference", "") or "").strip():
-            payload_data["attachment_reference"] = artifact.original_filename
+        if uploaded_file and not str(payload_data.get("attachment_reference", "") or "").strip():
+            payload_data["attachment_reference"] = uploaded_file.name
         serializer = LeaveRequestLifecycleActionSerializer(data=payload_data)
         if not serializer.is_valid():
-            _delete_document_artifact_quietly(artifact)
             raise serializers.ValidationError(serializer.errors)
-        try:
-            leave_request = withdraw_leave_request(
-                leave_request=leave_request,
-                actor_employee=employee,
-                reason=serializer.validated_data.get("reason", ""),
-                attachment_reference=serializer.validated_data.get("attachment_reference", ""),
-            )
-        except DjangoValidationError as exc:
-            _delete_document_artifact_quietly(artifact)
-            error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave lifecycle action."}
-            return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
-        if artifact:
-            _append_leave_attachment_metadata(
-                leave_request=leave_request,
-                artifact=artifact,
-                action="withdrawal",
-                label=str(serializer.validated_data.get("attachment_reference", "") or artifact.original_filename),
-            )
-        payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data)
+        def operation():
+            with transaction.atomic():
+                try:
+                    result = withdraw_leave_request(
+                        leave_request=leave_request, actor_employee=employee,
+                        reason=serializer.validated_data.get("reason", ""),
+                        attachment_reference=serializer.validated_data.get("attachment_reference", ""),
+                    )
+                except DjangoValidationError as exc:
+                    error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave lifecycle action."}
+                    return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
+                artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="withdrawal") if uploaded_file else None
+                if artifact:
+                    _append_leave_attachment_metadata(
+                        leave_request=result, artifact=artifact, action="withdrawal",
+                        label=str(serializer.validated_data.get("attachment_reference", "") or artifact.original_filename),
+                    )
+            payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(payload).data)
+        return execute_idempotent_mutation(
+            request=request, tenant=employee.tenant, action="ess.leave.withdraw",
+            fingerprint_payload={"request_id": str(leave_request.id), **serializer.validated_data,
+                                 "attachment": _uploaded_file_fingerprint(uploaded_file)},
+            operation=operation,
+        )
 
 
 class MeLeaveRequestCancelView(EmployeeContextMixin, APIView):
@@ -20988,33 +21248,36 @@ class MeLeaveRequestCancelView(EmployeeContextMixin, APIView):
         if not leave_request:
             return response.Response({"detail": "Leave request not found."}, status=status.HTTP_404_NOT_FOUND)
         payload_data, uploaded_file = _extract_leave_payload(request)
-        artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="cancellation") if uploaded_file else None
-        if artifact and not str(payload_data.get("attachment_reference", "") or "").strip():
-            payload_data["attachment_reference"] = artifact.original_filename
+        if uploaded_file and not str(payload_data.get("attachment_reference", "") or "").strip():
+            payload_data["attachment_reference"] = uploaded_file.name
         serializer = LeaveRequestLifecycleActionSerializer(data=payload_data)
         if not serializer.is_valid():
-            _delete_document_artifact_quietly(artifact)
             raise serializers.ValidationError(serializer.errors)
-        try:
-            leave_request = cancel_leave_request(
-                leave_request=leave_request,
-                actor_employee=employee,
-                reason=serializer.validated_data.get("reason", ""),
-                attachment_reference=serializer.validated_data.get("attachment_reference", ""),
-            )
-        except DjangoValidationError as exc:
-            _delete_document_artifact_quietly(artifact)
-            error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave lifecycle action."}
-            return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
-        if artifact:
-            _append_leave_attachment_metadata(
-                leave_request=leave_request,
-                artifact=artifact,
-                action="cancellation",
-                label=str(serializer.validated_data.get("attachment_reference", "") or artifact.original_filename),
-            )
-        payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
-        return response.Response(MutationResultSerializer(payload).data)
+        def operation():
+            with transaction.atomic():
+                try:
+                    result = cancel_leave_request(
+                        leave_request=leave_request, actor_employee=employee,
+                        reason=serializer.validated_data.get("reason", ""),
+                        attachment_reference=serializer.validated_data.get("attachment_reference", ""),
+                    )
+                except DjangoValidationError as exc:
+                    error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave lifecycle action."}
+                    return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
+                artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="cancellation") if uploaded_file else None
+                if artifact:
+                    _append_leave_attachment_metadata(
+                        leave_request=result, artifact=artifact, action="cancellation",
+                        label=str(serializer.validated_data.get("attachment_reference", "") or artifact.original_filename),
+                    )
+            payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
+            return response.Response(MutationResultSerializer(payload).data)
+        return execute_idempotent_mutation(
+            request=request, tenant=employee.tenant, action="ess.leave.cancel",
+            fingerprint_payload={"request_id": str(leave_request.id), **serializer.validated_data,
+                                 "attachment": _uploaded_file_fingerprint(uploaded_file)},
+            operation=operation,
+        )
 
 
 def _extract_leave_payload(request) -> tuple[dict, object | None]:
@@ -21027,6 +21290,22 @@ def _extract_leave_payload(request) -> tuple[dict, object | None]:
     if hasattr(payload, "dict"):
         payload = payload.dict()
     return dict(payload), uploaded_file
+
+
+def _uploaded_file_fingerprint(uploaded_file) -> dict | None:
+    if not uploaded_file:
+        return None
+    digest = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        digest.update(chunk)
+    uploaded_file.seek(0)
+    return {"name": uploaded_file.name, "size": uploaded_file.size, "sha256": digest.hexdigest()}
+
+
+def _document_upload_fingerprint(validated_data: dict) -> dict:
+    payload = {key: value for key, value in validated_data.items() if key != "file"}
+    payload["file"] = _uploaded_file_fingerprint(validated_data.get("file"))
+    return payload
 
 
 def _leave_actor_identifier(employee) -> str:

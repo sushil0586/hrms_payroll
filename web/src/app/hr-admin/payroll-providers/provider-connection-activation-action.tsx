@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type Props = {
   connectionId: string;
@@ -27,8 +26,8 @@ function apiErrorMessage(payload: unknown, fallback: string) {
 }
 
 export function ProviderConnectionActivationAction({ connectionId }: Props) {
-  const router = useRouter();
   const [isActivating, setIsActivating] = useState(false);
+  const [isActive, setIsActive] = useState(false);
   const [notice, setNotice] = useState("");
 
   async function activateConnection() {
@@ -49,8 +48,9 @@ export function ProviderConnectionActivationAction({ connectionId }: Props) {
         setNotice("Provider activation was not confirmed. Verify the connection before retrying.");
         return;
       }
+      setIsActive(true);
       setNotice("Provider connection activated.");
-      router.refresh();
+
     } catch {
       setNotice("Provider activation could not be confirmed. Verify the connection before retrying.");
     } finally {
@@ -60,8 +60,8 @@ export function ProviderConnectionActivationAction({ connectionId }: Props) {
 
   return (
     <div className="payroll-provider-activation-action">
-      <button className="button button--primary" type="button" onClick={activateConnection} disabled={isActivating}>
-        {isActivating ? "Activating" : "Activate connection"}
+      <button className="button button--primary" type="button" onClick={activateConnection} disabled={isActivating || isActive}>
+        {isActivating ? "Activating" : isActive ? "Connection active" : "Activate connection"}
       </button>
       {notice ? <span role="status">{notice}</span> : null}
     </div>

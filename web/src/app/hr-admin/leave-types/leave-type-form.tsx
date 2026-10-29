@@ -22,15 +22,16 @@ type Props = {
   itemId?: string;
   item?: HrAdminLeaveType;
   returnPath?: string;
+  onSaved?: () => Promise<boolean> | boolean;
 };
 
-type LeaveTypeField = "code" | "name" | "color_code";
+type LeaveTypeField = "code" | "name" | "category" | "unit" | "color_code";
 
 function getErrorMessage(payload: unknown, status: number) {
   return mutationErrorMessage(payload, status, "Unable to save leave type.");
 }
 
-export function LeaveTypeForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-types" }: Props) {
+export function LeaveTypeForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-types", onSaved }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -108,7 +109,7 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item, retur
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || typeof payload?.id !== "string" || !payload.id) {
-      setFieldErrors(apiFieldErrors(payload, Object.keys(nextErrors) as LeaveTypeField[]));
+      setFieldErrors(apiFieldErrors(payload, ["code", "name", "category", "unit", "color_code"]));
       const message = response.ok ? "The server returned an incomplete confirmation. Check the latest list before retrying; your entries are still here." : getErrorMessage(payload, response.status);
       setError(message);
       setToast({ title: response.ok || response.status >= 500 ? "Save not confirmed." : "Unable to save.", message, tone: "error" });
@@ -125,7 +126,8 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item, retur
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     rememberActionSuccess(returnPath, typeof payload.id === "string" ? payload.id : itemId ?? "", "Leave type saved.", mode === "create" ? "Leave type created and available in this list." : "Your changes to this leave type were saved.");
-    window.location.assign(returnPath);
+    if (onSaved) await onSaved();
+    else window.location.assign(returnPath);
   }
 
   useEffect(() => {
@@ -158,8 +160,8 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item, retur
               <label className="form-field"><span className="muted">Code</span><input aria-label="Code" aria-invalid={Boolean(fieldErrors.code)} aria-describedby={fieldErrors.code ? "leave-type-code-error" : undefined} className="input-control" disabled={codeLocked} required value={formValue.code} onChange={(e) => update("code", e.target.value)} />{fieldErrors.code ? <span className="field-error-text" id="leave-type-code-error">{fieldErrors.code}</span> : null}<GovernanceLockHint fieldPath="code" item={item} /></label>
               <label className="form-field"><span className="muted">Name</span><input aria-label="Name" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? "leave-type-name-error" : undefined} className="input-control" disabled={nameLocked} required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span className="field-error-text" id="leave-type-name-error">{fieldErrors.name}</span> : null}<GovernanceLockHint fieldPath="name" item={item} /></label>
               <label className="form-field"><span className="muted">Short code</span><input aria-label="Short code" className="input-control" disabled={shortCodeLocked} value={formValue.short_code} onChange={(e) => update("short_code", e.target.value)} /><GovernanceLockHint fieldPath="short_code" item={item} /></label>
-              <label className="form-field"><span className="muted">Category</span><select aria-label="Category" className="input-control" disabled={categoryLocked} value={formValue.category} onChange={(e) => update("category", e.target.value)}>{options.leave_categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><GovernanceLockHint fieldPath="category" item={item} /></label>
-              <label className="form-field"><span className="muted">Unit</span><select aria-label="Unit" className="input-control" disabled={unitLocked} value={formValue.unit} onChange={(e) => update("unit", e.target.value)}>{options.leave_units.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><GovernanceLockHint fieldPath="unit" item={item} /></label>
+              <label className="form-field"><span className="muted">Category</span><select aria-label="Category" aria-invalid={Boolean(fieldErrors.category)} aria-describedby={fieldErrors.category ? "leave-type-category-error" : undefined} className="input-control" disabled={categoryLocked} name="category" value={formValue.category} onChange={(e) => update("category", e.target.value)}>{options.leave_categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{fieldErrors.category ? <span className="field-error-text" id="leave-type-category-error">{fieldErrors.category}</span> : null}<GovernanceLockHint fieldPath="category" item={item} /></label>
+              <label className="form-field"><span className="muted">Unit</span><select aria-label="Unit" aria-invalid={Boolean(fieldErrors.unit)} aria-describedby={fieldErrors.unit ? "leave-type-unit-error" : undefined} className="input-control" disabled={unitLocked} name="unit" value={formValue.unit} onChange={(e) => update("unit", e.target.value)}>{options.leave_units.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{fieldErrors.unit ? <span className="field-error-text" id="leave-type-unit-error">{fieldErrors.unit}</span> : null}<GovernanceLockHint fieldPath="unit" item={item} /></label>
               <label className="form-field"><span className="muted">Color code</span><input aria-label="Color code" aria-invalid={Boolean(fieldErrors.color_code)} aria-describedby={fieldErrors.color_code ? "leave-type-color_code-error" : undefined} className="input-control" disabled={colorCodeLocked} value={formValue.color_code} onChange={(e) => update("color_code", e.target.value)} placeholder="#0b6e4f" />{fieldErrors.color_code ? <span className="field-error-text" id="leave-type-color_code-error">{fieldErrors.color_code}</span> : null}<GovernanceLockHint fieldPath="color_code" item={item} /></label>
               <label className="form-field" style={{ gridColumn: "1 / -1" }}><span className="muted">Description</span><input aria-label="Description" className="input-control" disabled={descriptionLocked} value={formValue.description} onChange={(e) => update("description", e.target.value)} /><GovernanceLockHint fieldPath="description" item={item} /></label>
             </div>

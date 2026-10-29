@@ -15,6 +15,8 @@ type Props = {
   employees: HrAdminEmployeeListItem[];
   categories: HrAdminDocumentCategory[];
   options: HrAdminDocumentOptions;
+  onCancel?: () => void;
+  onStored?: (document: HrAdminEmployeeDocument) => Promise<boolean> | boolean;
 };
 
 type FormValue = {
@@ -75,7 +77,7 @@ function extractErrors(payload: unknown): { message: string; fieldErrors: FieldE
   return { message: "Unable to upload employee document.", fieldErrors };
 }
 
-export function EmployeeDocumentUploadForm({ employees, options, categories }: Props) {
+export function EmployeeDocumentUploadForm({ employees, options, categories, onCancel, onStored }: Props) {
   const [formValue, setFormValue] = useState<FormValue>(INITIAL_VALUE);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState("");
@@ -87,7 +89,9 @@ export function EmployeeDocumentUploadForm({ employees, options, categories }: P
   const errorRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const guard = useDocumentUploadDraft(!receipt && documentUploadSnapshot(formValue) !== documentUploadSnapshot(INITIAL_VALUE), isSubmitting);
+  const idempotencyKey = useRef(`hr-document-upload:${crypto.randomUUID()}`);
+  const isDirty = !receipt && documentUploadSnapshot(formValue) !== documentUploadSnapshot(INITIAL_VALUE);
+  const guard = useDocumentUploadDraft(isDirty, isSubmitting);
   const category = categories.find((item) => item.id === formValue.category_id);
   const acceptedMimes = category && typeof category.visibility_rules === "object" && category.visibility_rules !== null && Array.isArray(category.visibility_rules.accepted_mime_types) ? category.visibility_rules.accepted_mime_types.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
@@ -104,6 +108,7 @@ export function EmployeeDocumentUploadForm({ employees, options, categories }: P
   );
 
   function update<Key extends keyof FormValue>(key: Key, value: FormValue[Key]) {
+    idempotencyKey.current = `hr-document-upload:${crypto.randomUUID()}`;
     setFieldErrors((current) => ({ ...current, [key]: undefined }));
     setFormValue((current) => ({ ...current, [key]: value }));
   }
@@ -146,7 +151,10 @@ export function EmployeeDocumentUploadForm({ employees, options, categories }: P
     if (formValue.file) body.set("file", formValue.file);
 
     try {
-      const response = await uploadFormData("/api/hr-admin/employee-documents", body, { onProgress: setUploadProgress });
+      const response = await uploadFormData("/api/hr-admin/employee-documents", body, {
+        onProgress: setUploadProgress,
+        headers: { "Idempotency-Key": idempotencyKey.current },
+      });
       if (!response.ok) {
         const nextErrors = extractErrors(response.payload);
         setError(response.status >= 500 ? "Upload outcome could not be confirmed. Check document history before retrying; your draft is retained." : nextErrors.message);
@@ -156,6 +164,10 @@ export function EmployeeDocumentUploadForm({ employees, options, categories }: P
       const stored = storedEmployeeDocument(response.payload);
       if (!stored) throw new Error("Unconfirmed storage acknowledgement");
       setReceipt(stored);
+      if (onStored) {
+        const refreshed = await onStored(stored);
+        if (!refreshed) setError("Document was stored, but the queue could not be refreshed. Close this receipt and retry the queue update.");
+      }
     } catch {
       setError("Upload outcome could not be confirmed. Check document history before retrying; your draft is retained.");
     } finally {
@@ -168,7 +180,7 @@ export function EmployeeDocumentUploadForm({ employees, options, categories }: P
   if (receipt) return <div ref={receiptRef} tabIndex={-1} role="status" className="workspace-standard-panel document-upload-receipt">
     <h2>Document stored</h2><p>{receipt.title} — {receipt.file_name} · v{receipt.version_number}</p>
     <p>{receipt.verification_status === "verified" ? "Accepted automatically by the category policy." : "Submitted for HR verification."}</p>
-    <a data-navigation-mode="document" className="button button--primary" href="/hr-admin/employee-documents">View document queue</a>
+    {onCancel ? <button className="button button--primary" onClick={onCancel} type="button">View document queue</button> : <a data-navigation-mode="document" className="button button--primary" href="/hr-admin/employee-documents">View document queue</a>}
   </div>;
 
   return (
@@ -263,7 +275,7 @@ export function EmployeeDocumentUploadForm({ employees, options, categories }: P
         <div className="form-actions-bar">
           <span className="muted">A receipt appears only after the server confirms storage.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--secondary" disabled={isSubmitting} onClick={() => guard.cancel("/hr-admin/employee-documents")} type="button">
+            <button className="button button--secondary" disabled={isSubmitting} onClick={() => onCancel ? (isDirty ? (window.confirm("Discard unsaved changes?") && onCancel()) : onCancel()) : guard.cancel("/hr-admin/employee-documents")} type="button">
               Cancel
             </button>
             <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Uploading document" type="submit">

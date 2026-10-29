@@ -56,7 +56,7 @@ test.describe("Global feedback styling", () => {
     });
 
     await page.goto("/", { waitUntil: "networkidle" });
-    await expectPageReady(page, "Run payroll, compliance, and employee operations");
+    await expectPageReady(page, "One clear operating flow for HR and payroll");
 
     await fillSignupForm(page, "priya@acme.example");
     await page.locator("#signup").getByRole("button", { name: "Request pilot access" }).click();

@@ -13,6 +13,8 @@ type Props = {
   itemId?: string;
   compact?: boolean;
   returnPath?: string;
+  onSaved?: (itemId:string)=>Promise<boolean>|boolean;
+  onCancel?: ()=>void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -49,11 +51,11 @@ function selectedName(items: Array<{ id: string; name: string }>, value: string 
   return items.find((item) => item.id === value)?.name ?? "Selected record";
 }
 
-export function DocumentRequirementForm({ initialValue, mode, options, itemId, compact = false, returnPath = "/hr-admin/document-requirements" }: Props) {
+export function DocumentRequirementForm({ initialValue, mode, options, itemId, compact = false, returnPath = "/hr-admin/document-requirements",onSaved,onCancel }: Props) {
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const draft = useDocumentSetupDraft(formValue, isSubmitting, compact, returnPath);
+  const draft = useDocumentSetupDraft(formValue, isSubmitting, compact, returnPath,onCancel,onSaved);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (compact && draft.ready) formRef.current?.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled)")?.focus(); }, [compact, draft.ready]);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -123,7 +125,8 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId, c
       setIsSubmitting(false);
       return;
     }
-    draft.saved();
+    if(typeof payload?.id!=="string"||!payload.id||(itemId&&payload.id!==itemId)){setError("Save outcome could not be confirmed. Check the list before retrying; your draft is retained.");draft.endSubmit();setIsSubmitting(false);return;}
+    if(!await draft.saved(payload.id)){setError("Requirement saved, but the register could not be refreshed. Retry the register update before another change.");draft.endSubmit();setIsSubmitting(false);return;}
   }
 
   return (

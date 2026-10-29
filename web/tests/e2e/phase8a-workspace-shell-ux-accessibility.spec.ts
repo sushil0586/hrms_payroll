@@ -25,7 +25,7 @@ const viewports = [
 ];
 
 const routes: Phase8Route[] = [
-  { path: "/", heading: /Run payroll, compliance, and employee operations/i, label: "public-landing" },
+  { path: "/", heading: /One clear operating flow for HR and payroll/i, label: "public-landing" },
   { path: "/hr-admin", heading: "Control center", persona: hrAdmin, label: "hr-admin-control", expectsSidebar: true },
   { path: "/hr-admin/employees", heading: "Employees", persona: hrAdmin, label: "hr-admin-employees", expectsSidebar: true },
   { path: "/hr-admin/saas-control-plane", heading: "SaaS Control Plane", persona: hrAdmin, label: "saas-control-plane", expectsSidebar: true },

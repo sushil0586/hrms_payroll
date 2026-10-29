@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework import response, status
+from rest_framework.renderers import JSONRenderer
 
 from apps.common.models import MutationIdempotencyRecord, MutationIdempotencyStatus
 
@@ -90,7 +91,8 @@ def execute_idempotent_mutation(
             )
 
         result = operation()
-        payload = result.data if isinstance(result.data, (dict, list)) else {"detail": str(result.data)}
+        raw_payload = result.data if isinstance(result.data, (dict, list)) else {"detail": str(result.data)}
+        payload = json.loads(JSONRenderer().render(raw_payload))
         record.response_status = result.status_code
         record.response_payload = payload
         record.resource_id = str(payload.get("id", "")) if isinstance(payload, dict) else ""

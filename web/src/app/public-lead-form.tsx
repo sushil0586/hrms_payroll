@@ -8,6 +8,7 @@ type Props = {
   intent: "signup" | "contact";
   submitLabel: string;
   compact?: boolean;
+  minimal?: boolean;
 };
 
 type LeadField = "company_name" | "contact_name" | "work_email" | "employee_count" | "country_code";
@@ -18,7 +19,7 @@ function readMessage(payload: unknown) {
   return typeof detail === "string" ? detail : "Unable to submit request.";
 }
 
-export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) {
+export function PublicLeadForm({ intent, submitLabel, compact = false, minimal = false }: Props) {
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeadField>>({});
@@ -87,7 +88,7 @@ export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) 
   }
 
   return (
-    <form className={`public-lead-form${compact ? " public-lead-form--compact" : ""}`} noValidate onSubmit={handleSubmit}>
+    <form className={`public-lead-form${compact ? " public-lead-form--compact" : ""}${minimal ? " public-lead-form--minimal" : ""}`} noValidate onSubmit={handleSubmit}>
       <input aria-hidden="true" autoComplete="off" className="public-lead-form__honeypot" name="website" tabIndex={-1} />
       <label className="form-field">
         <span className="muted">Company name</span>
@@ -105,37 +106,41 @@ export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) 
         {fieldErrors.work_email ? <span className="field-error-text" role="alert">{fieldErrors.work_email}</span> : null}
       </label>
       <label className="form-field">
-        <span className="muted">Phone</span>
-        <input className="input-control" name="phone_number" placeholder="+91 90000 00000" />
-      </label>
-      <label className="form-field">
         <span className="muted">Employees</span>
         <input aria-invalid={Boolean(fieldErrors.employee_count)} className="input-control" min={1} name="employee_count" placeholder="100" type="number" onChange={() => clearFieldError("employee_count")} />
         {fieldErrors.employee_count ? <span className="field-error-text" role="alert">{fieldErrors.employee_count}</span> : null}
       </label>
-      <label className="form-field">
-        <span className="muted">Preferred plan</span>
-        <select className="input-control" name="preferred_plan" defaultValue={intent === "signup" ? "growth" : ""}>
-          <option value="">Not sure yet</option>
-          <option value="starter">Starter</option>
-          <option value="growth">Growth</option>
-          <option value="business">Business</option>
-          <option value="partner">Partner / payroll bureau</option>
-        </select>
-      </label>
-      <label className="form-field">
-        <span className="muted">Industry</span>
-        <input className="input-control" name="industry" placeholder="Technology, services, manufacturing" />
-      </label>
-      <label className="form-field">
-        <span className="muted">Country</span>
-        <input aria-invalid={Boolean(fieldErrors.country_code)} className="input-control" maxLength={2} name="country_code" defaultValue="IN" onChange={() => clearFieldError("country_code")} />
-        {fieldErrors.country_code ? <span className="field-error-text" role="alert">{fieldErrors.country_code}</span> : null}
-      </label>
-      <label className="form-field public-lead-form__message">
-        <span className="muted">Message</span>
-        <textarea className="input-control" name="message" placeholder="Tell us about payroll size, compliance needs, migration timeline, or pilot expectations." />
-      </label>
+      {minimal ? <input name="country_code" type="hidden" value="IN" /> : (
+        <>
+          <label className="form-field">
+            <span className="muted">Phone</span>
+            <input className="input-control" name="phone_number" placeholder="+91 90000 00000" />
+          </label>
+          <label className="form-field">
+            <span className="muted">Preferred plan</span>
+            <select className="input-control" name="preferred_plan" defaultValue={intent === "signup" ? "growth" : ""}>
+              <option value="">Not sure yet</option>
+              <option value="starter">Starter</option>
+              <option value="growth">Growth</option>
+              <option value="business">Business</option>
+              <option value="partner">Partner / payroll bureau</option>
+            </select>
+          </label>
+          <label className="form-field">
+            <span className="muted">Industry</span>
+            <input className="input-control" name="industry" placeholder="Technology, services, manufacturing" />
+          </label>
+          <label className="form-field">
+            <span className="muted">Country</span>
+            <input aria-invalid={Boolean(fieldErrors.country_code)} className="input-control" maxLength={2} name="country_code" defaultValue="IN" onChange={() => clearFieldError("country_code")} />
+            {fieldErrors.country_code ? <span className="field-error-text" role="alert">{fieldErrors.country_code}</span> : null}
+          </label>
+          <label className="form-field public-lead-form__message">
+            <span className="muted">Message</span>
+            <textarea className="input-control" name="message" placeholder="Tell us about payroll size, compliance needs, migration timeline, or pilot expectations." />
+          </label>
+        </>
+      )}
       <div className="form-actions-bar public-lead-form__actions">
         <span className="muted">No tenant is created until platform admin approves the request.</span>
         <button className="button button--primary" disabled={status === "submitting"} type="submit">

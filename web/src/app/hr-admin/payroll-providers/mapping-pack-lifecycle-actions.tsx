@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
@@ -22,7 +21,7 @@ function apiErrorMessage(payload: unknown, fallback: string) {
 }
 
 export function MappingPackLifecycleActions({ packId, status }: Props) {
-  const router = useRouter();
+  const [currentStatus, setCurrentStatus] = useState(status);
   const [busyAction, setBusyAction] = useState("");
   const [notice, setNotice] = useState("");
   const [isError, setIsError] = useState(false);
@@ -49,8 +48,11 @@ export function MappingPackLifecycleActions({ packId, status }: Props) {
         setNotice(apiErrorMessage(result, `Mapping pack ${action} failed.`));
         return;
       }
+      const responseStatus = result && typeof result === "object" ? (result as { status?: string }).status : undefined;
+      if (action === "activate") setCurrentStatus(responseStatus ?? "active");
+      if (action === "archive") setCurrentStatus(responseStatus ?? "archived");
       setNotice(apiErrorMessage(result, `Mapping pack ${action} completed.`));
-      router.refresh();
+
     } catch {
       setIsError(true);
       setNotice(`Mapping pack ${action} could not reach the service. Try again.`);
@@ -88,9 +90,9 @@ export function MappingPackLifecycleActions({ packId, status }: Props) {
   return (
     <div className="payroll-provider-mapping-actions">
       <AsyncActionButton className="button button--secondary" type="button" onClick={() => postAction("clone")} disabled={isBusy} pending={busyAction === "clone"} pendingLabel="Cloning">Clone</AsyncActionButton>
-      <AsyncActionButton className="button button--primary" type="button" onClick={() => postAction("activate")} disabled={isBusy || status === "active"} pending={busyAction === "activate"} pendingLabel="Activating">Activate</AsyncActionButton>
+      <AsyncActionButton className="button button--primary" type="button" onClick={() => postAction("activate")} disabled={isBusy || currentStatus === "active"} pending={busyAction === "activate"} pendingLabel="Activating">{currentStatus === "active" ? "Active" : "Activate"}</AsyncActionButton>
       <AsyncActionButton className="button button--secondary" type="button" onClick={exportPack} disabled={isBusy} pending={busyAction === "export"} pendingLabel="Preparing export">Export</AsyncActionButton>
-      <AsyncActionButton className="button button--secondary" type="button" onClick={() => postAction("archive")} disabled={isBusy || status === "archived"} pending={busyAction === "archive"} pendingLabel="Archiving">Archive</AsyncActionButton>
+      <AsyncActionButton className="button button--secondary" type="button" onClick={() => postAction("archive")} disabled={isBusy || currentStatus === "archived"} pending={busyAction === "archive"} pendingLabel="Archiving">{currentStatus === "archived" ? "Archived" : "Archive"}</AsyncActionButton>
       {notice ? <span role={isError ? "alert" : "status"}>{notice}</span> : null}
     </div>
   );

@@ -1,4 +1,5 @@
 
+import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
@@ -99,13 +100,13 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
               </p>
             </div>
             <div className="queue-toolbar__meta">
-              <span className="queue-summary-chip"><strong>{filteredEvents.length}</strong> matching</span>
+              <span className="queue-summary-chip"><strong data-notification-event-count>{filteredEvents.length}</strong> matching</span>
               <span className="queue-summary-chip"><strong>{activeInView}</strong> active in view</span>
               <span className="queue-summary-chip"><strong>{templatedInView}</strong> templated</span>
             </div>
           </div>
 
-          <form className="queue-toolbar__grid" method="get">
+          <LocalCatalogFilterForm className="queue-toolbar__grid" pathname="/hr-admin/notification-events" itemSelector="[data-notification-event]" emptySelector="[data-notification-event-empty]" countSelector="[data-notification-event-count]" mode="notification-events">
             <label className="form-field">
               <span className="muted">Search</span>
               <input className="input-control" defaultValue={normalizeParam(currentParams.q) ?? ""} name="q" placeholder="Event name, code, or trigger key" />
@@ -152,11 +153,8 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
               <button className="button button--primary" type="submit">
                 Apply filters
               </button>
-              <Link className="button button--ghost" href="/hr-admin/notification-events">
-                Clear filters
-              </Link>
             </div>
-          </form>
+          </LocalCatalogFilterForm>
         </section>
       </section>
 
@@ -168,10 +166,10 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
               <p className="section-copy-soft">Review active routing, template linkage, audience, and queue activity in one register.</p>
             </div>
             <span className="queue-summary-chip">
-              <strong>{filteredEvents.length}</strong> shown
+              <strong data-notification-event-count>{filteredEvents.length}</strong> shown
             </span>
           </div>
-          {filteredEvents.length ? (
+
             <WorkspaceTableScrollRegion label="Notification events table 1" className="notification-table-scroll workspace-table-region">
               <table className="notification-catalog-table notification-catalog-table--events">
                 <thead>
@@ -185,8 +183,8 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEvents.map((item) => (
-                    <tr key={item.id}>
+                  {result.data.map((item) => (
+                    <tr key={item.id} hidden={!filteredEvents.some((entry) => entry.id === item.id)} data-notification-event data-filter-search={`${item.name} ${item.code} ${item.trigger_key} ${item.module} ${item.channel}`} data-filter-module={item.module} data-filter-channel={item.channel} data-filter-active={item.is_active ? "active" : "inactive"} data-filter-template-mode={item.template_name ? "templated" : "direct"}>
                       <td data-label="Event">
                         <strong>{item.name}</strong>
                         <span>{item.trigger_key}</span>
@@ -221,13 +219,11 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
                 </tbody>
               </table>
             </WorkspaceTableScrollRegion>
-          ) : null}
-          {filteredEvents.length === 0 ? (
-            <div className="card panel panel-card-soft">
+
+            <div className="card panel panel-card-soft" data-notification-event-empty hidden={filteredEvents.length !== 0}>
               <strong>No events match the current filters.</strong>
               <p className="muted">Try clearing one or more filters to widen the event catalog view.</p>
             </div>
-          ) : null}
         </div>
       </section>
     </main>

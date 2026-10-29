@@ -185,7 +185,6 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
     }
 
     router.push("/hr-admin/notification-events");
-    router.refresh();
   }
 
   return (

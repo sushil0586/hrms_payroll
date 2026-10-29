@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import type {
@@ -25,6 +24,9 @@ type Props = {
   previousRolloutHref: string;
   nextRolloutHref: string;
   lastRolloutHref: string;
+  pending?: boolean;
+  onRolloutPage?: (page: number) => void;
+  onApplied?: () => Promise<boolean> | boolean;
 };
 
 function selectOptions(items: HrAdminOptionItem[]) {
@@ -81,6 +83,9 @@ export function ShiftRosterRolloutPanel({
   previousRolloutHref,
   nextRolloutHref,
   lastRolloutHref,
+  pending,
+  onRolloutPage,
+  onApplied,
 }: Props) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [legalEntityId, setLegalEntityId] = useState("");
@@ -166,6 +171,10 @@ export function ShiftRosterRolloutPanel({
         return;
       }
       setResult(payload);
+      if (!dryRun && onApplied) {
+        const reconciled = await onApplied();
+        if (!reconciled) setError("The rollout was accepted, but history could not be confirmed. Do not apply it again; retry the history read.");
+      }
     } catch {
       setError("Unable to reach the server. Check your connection and try again.");
     } finally {
@@ -277,7 +286,12 @@ export function ShiftRosterRolloutPanel({
               </div>
             ))}
           </div>
-        ) : null}
+        ) : (
+          <div className="notice" role="status">
+            <strong>No roster rollout history yet.</strong>
+            <span className="muted">Preview or apply an approved rollout to create the first history record.</span>
+          </div>
+        )}
         <div className="pagination-bar" aria-label="Roster rollout history pagination">
           <div className="pagination-bar__summary">
             <span className="queue-summary-chip">
@@ -290,10 +304,10 @@ export function ShiftRosterRolloutPanel({
             </span>
           </div>
           <div className="pagination-bar__actions">
-            {hasPreviousRollout ? <Link className="button button--secondary" href={firstRolloutHref}>First</Link> : <button className="button button--secondary" disabled type="button">First</button>}
-            {hasPreviousRollout ? <Link className="button button--secondary" href={previousRolloutHref}>Previous</Link> : <button className="button button--secondary" disabled type="button">Previous</button>}
-            {hasNextRollout ? <Link className="button button--secondary" href={nextRolloutHref}>Next</Link> : <button className="button button--secondary" disabled type="button">Next</button>}
-            {hasNextRollout ? <Link className="button button--secondary" href={lastRolloutHref}>Last</Link> : <button className="button button--secondary" disabled type="button">Last</button>}
+            {hasPreviousRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(1)} type="button">First</button> : <a className="button button--secondary" href={firstRolloutHref}>First</a> : <button className="button button--secondary" disabled type="button">First</button>}
+            {hasPreviousRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(rolloutPage - 1)} type="button">Previous</button> : <a className="button button--secondary" href={previousRolloutHref}>Previous</a> : <button className="button button--secondary" disabled type="button">Previous</button>}
+            {hasNextRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(rolloutPage + 1)} type="button">Next</button> : <a className="button button--secondary" href={nextRolloutHref}>Next</a> : <button className="button button--secondary" disabled type="button">Next</button>}
+            {hasNextRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(Math.max(1, Math.ceil(rolloutTotalCount / Math.max(rolloutPageSize, 1))))} type="button">Last</button> : <a className="button button--secondary" href={lastRolloutHref}>Last</a> : <button className="button button--secondary" disabled type="button">Last</button>}
           </div>
         </div>
       </div>

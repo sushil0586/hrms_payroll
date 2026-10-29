@@ -5,16 +5,18 @@ import {WorkspaceFilterForm} from "@/components/patterns/workspace-filter-form";
 import type {HrAdminEnumOption,HrAdminOptionItem} from "@/lib/types";
 import {attendanceDateError,type AttendanceRecordFilters} from "./filter-contract";
 
-export function AttendanceRecordFilterForm({filters,statusOptions,sourceOptions,shiftOptions}: {
+export function AttendanceRecordFilterForm({filters,statusOptions,sourceOptions,shiftOptions,onApply,onClear,pending=false}: {
   filters: AttendanceRecordFilters;
   statusOptions: HrAdminEnumOption[]; sourceOptions: HrAdminEnumOption[]; shiftOptions: HrAdminOptionItem[];
+  onApply?: (filters: AttendanceRecordFilters) => void; onClear?: () => void; pending?: boolean;
 }) {
   const [error,setError]=useState("");
-  return <WorkspaceFilterForm action="/hr-admin/attendance-records" label="Attendance filters" className="attendance-record-filter-bar workspace-filter-form--three" onSubmit={event=>{
+  return <WorkspaceFilterForm action="/hr-admin/attendance-records" updateMode={onApply ? "scoped" : "document"} pending={pending} label="Attendance filters" className="attendance-record-filter-bar workspace-filter-form--three" onSubmit={event=>{
     const data=new FormData(event.currentTarget);
     const message=attendanceDateError(String(data.get("from_date")||""),String(data.get("to_date")||""));
     setError(message);
-    if(message){event.preventDefault();event.currentTarget.querySelector<HTMLInputElement>('[name="to_date"]')?.focus()}
+    if(message){event.preventDefault();event.currentTarget.querySelector<HTMLInputElement>('[name="to_date"]')?.focus();return;}
+    if(onApply){event.preventDefault();onApply({q:String(data.get("q")||""),status:String(data.get("status")||""),source:String(data.get("source")||""),shift_id:String(data.get("shift_id")||""),lock_state:String(data.get("lock_state")||""),regularized_state:String(data.get("regularized_state")||""),from_date:String(data.get("from_date")||""),to_date:String(data.get("to_date")||""),late_only:data.get("late_only")==="1",page:1,page_size:filters.page_size});}
   }}>
     <input type="hidden" name="page" value="1"/><input type="hidden" name="page_size" value={filters.page_size}/>
     <label className="form-field"><span className="text-label-premium">Search</span><input className="input-control" name="q" defaultValue={filters.q} placeholder="Employee, code, shift, source, date"/></label>
@@ -31,7 +33,7 @@ export function AttendanceRecordFilterForm({filters,statusOptions,sourceOptions,
         <label className="toggle-inline"><input type="checkbox" name="late_only" value="1" defaultChecked={filters.late_only}/><span>Late rows only</span></label>
       </div>
     </details>
-    <div className="workspace-filter-actions"><button className="button button--primary" type="submit">Apply filters</button><a className="button button--ghost" data-navigation-mode="document" href="/hr-admin/attendance-records">Clear filters</a></div>
+    <div className="workspace-filter-actions"><button className="button button--primary" type="submit">Apply filters</button>{onClear?<button className="button button--ghost" onClick={onClear} type="button">Clear filters</button>:<a className="button button--ghost" data-navigation-mode="document" href="/hr-admin/attendance-records">Clear filters</a>}</div>
     {error?<p className="workspace-filter-validation" role="alert">{error}</p>:null}
   </WorkspaceFilterForm>;
 }

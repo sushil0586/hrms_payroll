@@ -21,6 +21,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: () => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -29,6 +31,7 @@ function getErrorMessage(payload: unknown) {
   if (conflictCheck?.summary) return conflictCheck.summary;
   for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
     if (Array.isArray(value) && value.length) return String(value[0]);
+    if (typeof value === "string" && value) return value;
   }
   return String((payload as Record<string, unknown>).detail || "Unable to save shift assignment.");
 }
@@ -59,11 +62,14 @@ export function EmployeeShiftAssignmentForm({
   cancelHref,
   successHref = "/hr-admin/employee-shift-assignments",
   compact = false,
+  onSaved,
+  onCancel,
 }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminEmployeeShiftAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
   const submittingRef = useRef(false);
@@ -170,7 +176,7 @@ export function EmployeeShiftAssignmentForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingRef.current) return;
+    if (submittingRef.current || acceptedUnconfirmed) return;
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
       return;
@@ -198,7 +204,16 @@ export function EmployeeShiftAssignmentForm({
       submittingRef.current = false;
       return;
     }
-    window.location.assign(successHref);
+    if (onSaved) {
+      setAcceptedUnconfirmed(true);
+      const reconciled = await onSaved();
+      if (!reconciled) {
+        setError("The assignment was accepted, but the queue could not be confirmed. Do not submit it again; retry the queue read.");
+        setIsSubmitting(false);
+      }
+      return;
+    }
+    router.push(successHref);
   }
 
   const rotationSummary = formValue.config_snapshot.rotation.entries
@@ -363,8 +378,8 @@ export function EmployeeShiftAssignmentForm({
         <div className="form-actions-bar">
           <span className="muted">Shift assignment runtime supports fixed windows, weekly rotations, and temporary overrides.</span>
           <div className="form-actions-bar__buttons">
-            <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Saving shift assignment" type="submit">{mode === "create" ? "Create assignment" : "Save changes"}</AsyncActionButton>
-            <button className="button button--secondary" onClick={() => (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
+            <AsyncActionButton className="button button--primary" disabled={acceptedUnconfirmed} pending={isSubmitting} pendingLabel="Saving shift assignment" type="submit">{acceptedUnconfirmed ? "Accepted; awaiting confirmation" : mode === "create" ? "Create assignment" : "Save changes"}</AsyncActionButton>
+            <button className="button button--secondary" onClick={() => onCancel ? onCancel() : (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>
       </section>

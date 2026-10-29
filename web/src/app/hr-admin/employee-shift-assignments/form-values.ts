@@ -2,6 +2,7 @@ import type { HrAdminEmployeeShiftAssignment, HrAdminEmployeeShiftAssignmentWrit
 
 export function employeeShiftAssignmentToFormValue(item: HrAdminEmployeeShiftAssignment): HrAdminEmployeeShiftAssignmentWriteInput {
   return {
+    expected_updated_at: item.updated_at,
     employee_id: item.employee_id,
     shift_id: item.shift_id,
     assignment_kind: item.assignment_kind,

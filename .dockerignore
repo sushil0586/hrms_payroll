@@ -16,6 +16,7 @@ docs
 docs-site
 docs-site/site
 web/tests
+backend/tests
 mobile/*
 !mobile/package.json
 .env

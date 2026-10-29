@@ -93,11 +93,13 @@ async function expectNativeRequired(field: Locator) {
 }
 
 function field(page: Page, label: string) {
-  return page
-    .locator("label.form-field")
-    .filter({ has: page.locator("span", { hasText: new RegExp(`^${label}$`) }) })
-    .locator("input, select, textarea")
-    .first();
+  const accessibleLabel = new RegExp(`^${label}(?: \\(required\\))?$`, "i");
+  return page.getByLabel(accessibleLabel, { exact: true }).or(
+    page
+      .locator("label.form-field")
+      .filter({ has: page.locator("span", { hasText: accessibleLabel }) })
+      .locator("input, select, textarea"),
+  ).first();
 }
 
 async function expectFields(page: Page, labels: string[]) {
@@ -117,17 +119,17 @@ async function selectByCreatedName(page: Page, label: string, record: CreatedRec
 async function expectOrganizationListPage(page: Page, section: SectionConfig, code: string, name: string) {
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(code)}&status=all`);
   await expectPageReady(page, "Organization masters");
-  await expect(page.getByRole("heading", { name: "Structure catalog" })).toBeVisible();
-  await expect(page.getByRole("link", { name: new RegExp(section.listLabel) })).toBeVisible();
-  await expect(field(page, "Search")).toHaveValue(code);
-  await expect(field(page, "Status")).toHaveValue("all");
-  await expect(page.getByRole("link", { name: /All/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Active/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Inactive/ })).toBeVisible();
-  await expect(page.locator(".employee-directory-item").filter({ hasText: code }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: `${name} detail` })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Organization masters" })).toBeVisible();
+  await expect(page.getByRole("combobox").nth(0)).toContainText(section.listLabel);
+  await expect(page.getByRole("textbox").nth(0)).toHaveValue(code);
+  await expect(page.getByRole("combobox").nth(1)).toHaveValue("all");
+  const row = page.getByRole("row").filter({ hasText: code }).first();
+  await expect(row).toBeVisible();
+  await row.getByRole("link", { name: "Inspect" }).click();
+  const detail = page.getByRole("region", { name: "Selected organization record" });
+  await expect(detail.getByRole("heading", { name, exact: true })).toBeVisible();
   for (const label of section.detailLabels) {
-    await expect(page.locator(".detail-row").filter({ hasText: label }).first()).toBeVisible();
+    await expect(detail.locator(".detail-row").filter({ hasText: label }).first()).toBeVisible();
   }
   await expectNoHorizontalOverflow(page);
 }
@@ -135,7 +137,7 @@ async function expectOrganizationListPage(page: Page, section: SectionConfig, co
 async function openEditForCode(page: Page, section: SectionConfig, code: string) {
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(code)}&status=all`);
   await expectPageReady(page, "Organization masters");
-  const editLink = page.locator(".employee-directory-item").filter({ hasText: code }).getByRole("link", { name: "Edit" }).first();
+  const editLink = page.getByRole("row").filter({ hasText: code }).getByRole("link", { name: "Edit" }).first();
   await expect(editLink).toBeVisible();
   const href = await editLink.getAttribute("href");
   expect(href).toBeTruthy();
@@ -204,8 +206,9 @@ async function expectDuplicateRejected(
   await field(page, "Active").selectOption("true");
   await section.fill(page, existing.code, `${existing.name} Duplicate`, created);
   await submitCreate(page, section);
-  await expect(page.getByText("Save failed.")).toBeVisible();
-  await expect(page.getByText("This code is already in use.").first()).toBeVisible();
+  const outcome = page.getByRole("alert").filter({ hasText: "Review this outcome." });
+  await expect(outcome).toContainText("This code is already in use.");
+  await expect(field(page, "Code")).toHaveAttribute("aria-invalid", "true");
   await expectNoHorizontalOverflow(page);
 }
 
@@ -238,14 +241,17 @@ async function deactivateRecord(page: Page, section: SectionConfig, record: Crea
 
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(record.code)}&status=inactive`);
   await expectPageReady(page, "Organization masters");
-  await expect(page.locator(".employee-directory-item").filter({ hasText: record.code }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: `${record.name} detail` })).toBeVisible();
-  await expect(page.locator(".detail-row").filter({ hasText: "Status" }).filter({ hasText: "inactive" })).toBeVisible();
+  const inactiveRow = page.getByRole("row").filter({ hasText: record.code }).first();
+  await expect(inactiveRow).toBeVisible();
+  await inactiveRow.getByRole("link", { name: "Inspect" }).click();
+  const detail = page.getByRole("region", { name: "Selected organization record" });
+  await expect(detail.getByRole("heading", { name: record.name, exact: true })).toBeVisible();
+  await expect(detail.locator(".detail-row").filter({ hasText: "Status" }).filter({ hasText: "inactive" })).toBeVisible();
 
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(record.code)}&status=active`);
   await expectPageReady(page, "Organization masters");
-  await expect(page.locator(".employee-directory-item").filter({ hasText: record.code })).toHaveCount(0);
-  await expect(page.getByText("No items match this review state.")).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: record.code })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("No organization records match the filters.");
 }
 
 const sections: SectionConfig[] = [
@@ -449,6 +455,95 @@ async function runSectionCrud(page: Page, section: SectionConfig) {
 }
 
 test.describe("HR admin organization master CRUD", () => {
+  test("CRUD V2 organization feedback remains truthful, accessible, responsive, and durable", async ({ page }) => {
+    test.setTimeout(180_000);
+    const suffix = Date.now().toString(36);
+    const code = `v2-le-${suffix}`;
+    const name = `V2 Legal Entity ${suffix}`;
+    const createPath = "/api/hr-admin/organization/legal_entities";
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+    await expectPageReady(page, "Create Legal Entity");
+    await page.getByRole("button", { name: "Create legal entity" }).click();
+    await expect(field(page, "Code")).toBeFocused();
+    await expectNativeRequired(field(page, "Code"));
+    await expectNoHorizontalOverflow(page);
+
+    await field(page, "Code").fill(code);
+    await field(page, "Name").fill(name);
+    await field(page, "Active").selectOption("true");
+    await field(page, "Registered name").fill(`${name} Pvt Ltd`);
+    await field(page, "Country code").fill("IN");
+    await field(page, "Timezone").fill("Asia/Kolkata");
+    await field(page, "Primary email").fill(`${code}@example.com`);
+    await field(page, "Primary phone").fill("+91 9876543210");
+
+    let failedCalls = 0;
+    await page.route(`**${createPath}`, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      failedCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Synthetic write unavailable" }) });
+    }, { times: 1 });
+
+    const createButton = page.getByRole("button", { name: "Create legal entity" });
+    await createButton.click();
+    await expect(page.getByRole("button", { name: "Saving..." })).toBeDisabled();
+    await page.locator("form.organization-editor").evaluate((form: HTMLFormElement) => form.requestSubmit());
+    const failure = page.getByRole("alert").filter({ hasText: "Review this outcome." });
+    await expect(failure).toContainText("could not be confirmed");
+    await expect(failure).toBeFocused();
+    await expect(field(page, "Code")).toHaveValue(code);
+    await expect(page.getByRole("status")).toHaveCount(0);
+    expect(failedCalls).toBe(1);
+
+    const createdResponse = page.waitForResponse((response) =>
+      response.url().endsWith(createPath) && response.request().method() === "POST" && response.status() === 201,
+    );
+    await createButton.click();
+    const created = await createdResponse;
+    expect(created.status()).toBe(201);
+    await expect(page).toHaveURL(/saved=1/);
+    const createdId = new URL(page.url()).searchParams.get("itemId");
+    expect(createdId).toBeTruthy();
+    const receipt = page.getByRole("status").filter({ hasText: "Current record loaded." });
+    await expect(receipt).toContainText(name);
+    await expect(receipt).toHaveCount(1);
+    await page.reload();
+    await expect(receipt).toContainText(name);
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await gotoAuthenticated(page, `/hr-admin/organization/legal_entities/${createdId}/edit`);
+    await field(page, "Primary phone").fill("+91 9876543211");
+    const updatedResponse = page.waitForResponse((response) =>
+      response.url().includes(`/api/hr-admin/organization/legal_entities/${createdId}`)
+        && response.request().method() === "PATCH" && response.status() === 200,
+    );
+    await page.getByRole("button", { name: "Save changes" }).click();
+    expect((await updatedResponse).ok()).toBeTruthy();
+    await expect(page).toHaveURL(/saved=1/);
+    await expect(page.getByRole("status").filter({ hasText: "Current record loaded." })).toHaveCount(1);
+    await page.reload();
+    await page.getByRole("link", { name: "Edit selected record" }).click();
+    await expect(field(page, "Primary phone")).toHaveValue("+91 9876543211");
+    await expectNoHorizontalOverflow(page);
+
+    await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+    await field(page, "Code").fill(code);
+    await field(page, "Name").fill(`${name} duplicate`);
+    await field(page, "Active").selectOption("true");
+    const duplicateResponse = page.waitForResponse((response) =>
+      response.url().endsWith(createPath) && response.request().method() === "POST" && response.status() === 400,
+    );
+    await page.getByRole("button", { name: "Create legal entity" }).click();
+    expect((await duplicateResponse).status()).toBe(400);
+    await expect(page.getByRole("alert").filter({ hasText: "Review this outcome." })).toContainText("already in use");
+    await expect(field(page, "Code")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByRole("status")).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("limited organization viewer role sees read-only masters and receives backend denials", async ({ page }) => {
     test.setTimeout(120_000);
     test.skip(!process.env.HRMS_API_BASE_URL, "Limited organization role proof requires a live HRMS API.");
@@ -536,8 +631,9 @@ test.describe("HR admin organization master CRUD", () => {
     await expect(page.locator('main a[href="/hr-admin/employees"]')).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Create / })).toHaveCount(0);
     await expect(page.getByTestId("organization-import-workbench")).toHaveCount(0);
-    await expect(page.locator(".employee-directory-item").first()).toBeVisible();
-    await expect(page.locator(".employee-directory-item").first().getByRole("link", { name: "Edit" })).toHaveCount(0);
+    const readOnlyRow = page.getByRole("table", { name: "Organization masters" }).getByRole("row").filter({ hasText: departmentPayload.code }).first();
+    await expect(readOnlyRow).toBeVisible();
+    await expect(readOnlyRow.getByRole("link", { name: "Edit" })).toHaveCount(0);
 
     const detailResponse = await browserSessionJson(page, `/api/hr-admin/organization/departments/${departmentId}`);
     expect(detailResponse.ok).toBeTruthy();

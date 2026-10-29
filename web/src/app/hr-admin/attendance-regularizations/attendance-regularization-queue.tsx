@@ -6,8 +6,6 @@ import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
-import Link from "next/link";
 
 import { AttendanceRegularizationInlineReview } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-inline-review";
 import { AttendanceRegularizationReviewForm } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-review-form";
@@ -17,21 +15,17 @@ import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form
 import { attendanceDateError } from "../attendance-records/filter-contract";
 import type { AttendanceRegularizationItem, HrAdminEnumOption } from "@/lib/types";
 
+type RegularizationFilters = {
+  q: string; status: string; requested_status: string; current_status: string;
+  from_date: string; to_date: string; page: number; page_size: number;
+};
+
 type Props = {
   items: AttendanceRegularizationItem[];
   regularizationStatusOptions: HrAdminEnumOption[];
   attendanceStatusOptions: HrAdminEnumOption[];
   reviewItem?: AttendanceRegularizationItem | null;
-  currentFilters: {
-    q: string;
-    status: string;
-    requested_status: string;
-    current_status: string;
-    from_date: string;
-    to_date: string;
-    page: number;
-    page_size: number;
-  };
+  currentFilters: RegularizationFilters;
   pagination: {
     total_count: number;
     page: number;
@@ -40,6 +34,11 @@ type Props = {
     has_previous: boolean;
   };
   canReviewRegularizations?: boolean;
+  pending?: boolean;
+  onQuery: (query: Partial<RegularizationFilters>) => void;
+  onOpenReview: (id: string) => void;
+  onCloseReview: () => void;
+  onReconcile: () => Promise<boolean>;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -84,10 +83,14 @@ export function AttendanceRegularizationQueue({
   currentFilters,
   pagination,
   canReviewRegularizations = true,
+  pending = false,
+  onQuery,
+  onOpenReview,
+  onCloseReview,
+  onReconcile,
 }: Props) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const reviewRegularizationId = searchParams.get("reviewRegularization") ?? "";
+  const pathname = "/hr-admin/attendance-regularizations";
+  const reviewRegularizationId = reviewItem?.id ?? "";
   const scope = JSON.stringify(currentFilters);
   const [selection, setSelection] = useState({scope, id: ""});
   const selectedItemId = selection.scope === scope ? selection.id : "";
@@ -111,7 +114,7 @@ export function AttendanceRegularizationQueue({
   }
 
   function goToPage(page: number) {
-    window.location.assign(currentQueueHref({ page, reviewRegularization: undefined }));
+    onQuery({ page });
   }
   return (
     <section className="section queue-layout attendance-regularization-layout">
@@ -134,10 +137,11 @@ export function AttendanceRegularizationQueue({
             <span className="queue-summary-chip"><strong>{items.length}</strong> on this page</span>
           </div>
         </div>
-        <WorkspaceFilterForm key={scope} action={pathname} label="Regularization filters" className="workspace-filter-form--three" onSubmit={event => {
+        <WorkspaceFilterForm key={scope} action={pathname} updateMode="scoped" pending={pending} label="Regularization filters" className="workspace-filter-form--three" onSubmit={event => {
           const data = new FormData(event.currentTarget);
           const error = attendanceDateError(String(data.get("from_date") || ""), String(data.get("to_date") || ""));
-          setFilterError(error); if(error) { event.preventDefault(); event.currentTarget.querySelector<HTMLInputElement>('[name="to_date"]')?.focus(); }
+          setFilterError(error); if(error) { event.preventDefault(); event.currentTarget.querySelector<HTMLInputElement>('[name="to_date"]')?.focus(); return; }
+          event.preventDefault(); onQuery({ q:String(data.get("q")||""),status:String(data.get("status")||""),requested_status:String(data.get("requested_status")||""),current_status:String(data.get("current_status")||""),from_date:String(data.get("from_date")||""),to_date:String(data.get("to_date")||""),page:1 });
         }}>
           <input type="hidden" name="page" value="1"/><input type="hidden" name="page_size" value={currentFilters.page_size}/>
           <label className="form-field">
@@ -181,7 +185,7 @@ export function AttendanceRegularizationQueue({
 
         <div className="workspace-filter-actions">
           <button className="button button--primary" type="submit">Apply filters</button>
-          <a className="button button--secondary" href={pathname}>Clear filters</a>
+          <button className="button button--secondary" onClick={() => onQuery({q:"",status:"",requested_status:"",current_status:"",from_date:"",to_date:"",page:1})} type="button">Clear filters</button>
         </div>
         </WorkspaceFilterForm>
         {filterError ? <p className="notice notice--error" role="alert">{filterError}</p> : null}
@@ -256,7 +260,7 @@ export function AttendanceRegularizationQueue({
               <div className="record-card__actions">
                 <button className="button button--ghost button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
                 {canReviewRegularizations ? (
-                  <Link className="button button--secondary button--compact" href={currentQueueHref({ reviewRegularization: selectedItem.id })}>Review request</Link>
+                  <button className="button button--secondary button--compact" onClick={() => onOpenReview(selectedItem.id)} type="button">Review request</button>
                 ) : (
                   <button className="button button--secondary button--compact" disabled title="Requires attendance.regularization.review permission." type="button">Review request</button>
                 )}
@@ -298,7 +302,7 @@ export function AttendanceRegularizationQueue({
               </details>
             </div>
             {canReviewRegularizations ? (
-              <AttendanceRegularizationInlineReview item={selectedItem} reviewHref={currentQueueHref({ reviewRegularization: selectedItem.id })} />
+              <AttendanceRegularizationInlineReview item={selectedItem} reviewHref={currentQueueHref({ reviewRegularization: selectedItem.id })} onOpenReview={() => onOpenReview(selectedItem.id)} onReconcile={onReconcile} />
             ) : (
               <div className="notice"><strong>Read-only regularization view.</strong><span className="muted">Approvals and rejections require attendance regularization review permission.</span></div>
             )}
@@ -313,7 +317,7 @@ export function AttendanceRegularizationQueue({
             <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> of {totalPages}</span>
             <label className="lifecycle-page-size-control">
               <span>Rows</span>
-              <select className="input-control" onChange={(event) => window.location.assign(currentQueueHref({page: 1, page_size: Number(event.target.value)}))} value={currentFilters.page_size}>
+              <select className="input-control" onChange={(event) => onQuery({page:1,page_size:Number(event.target.value)})} value={currentFilters.page_size}>
                 {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
               </select>
             </label>
@@ -331,19 +335,22 @@ export function AttendanceRegularizationQueue({
       </section>
 
       {modalReviewItem ? (
-        <HrAdminActionModal documentNavigation
+        <HrAdminActionModal
           className="attendance-review-modal"
           closeHref={currentQueueHref({ reviewRegularization: undefined })}
           description="Review and decide this correction request without leaving the queue."
           eyebrow="Attendance review"
           labelledBy="attendance-review-modal-title"
           title={`Review ${modalReviewItem.employee_name || "regularization"}`}
+          onClose={onCloseReview}
         >
           <AttendanceRegularizationReviewForm
             compact
             cancelHref={currentQueueHref({ reviewRegularization: undefined })}
             item={modalReviewItem}
             successHref={currentQueueHref({ reviewRegularization: undefined })}
+            onReconcile={async () => { const ok=await onReconcile(); if(ok) onCloseReview(); return ok; }}
+            onCancel={onCloseReview}
           />
         </HrAdminActionModal>
       ) : null}

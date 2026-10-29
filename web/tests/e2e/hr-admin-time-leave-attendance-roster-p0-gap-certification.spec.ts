@@ -53,7 +53,20 @@ async function firstEmployeeAndShift(page: Page): Promise<{ employee: EmployeeOp
   const employeesResponse = await backendGet(page, "/hr-admin/employees/option-search/?limit=25");
   expect(employeesResponse.ok()).toBeTruthy();
   const employeesPayload = await employeesResponse.json();
-  const employee = employeesPayload.items?.find((item: EmployeeOption) => item.employee_code) as EmployeeOption | undefined;
+  const candidates = (employeesPayload.items ?? []).filter((item: EmployeeOption) => item.employee_code) as EmployeeOption[];
+  let employee: EmployeeOption | undefined;
+  for (const candidate of candidates) {
+    const assignmentsResponse = await backendGet(
+      page,
+      `/hr-admin/employee-shift-assignments/?page=1&page_size=10&q=${encodeURIComponent(candidate.employee_code)}`,
+    );
+    expect(assignmentsResponse.ok()).toBeTruthy();
+    const assignmentsPayload = await assignmentsResponse.json();
+    if ((assignmentsPayload.items?.length ?? 0) === 0) {
+      employee = candidate;
+      break;
+    }
+  }
   test.skip(!employee, "No employee option is available for HR Admin time/attendance certification.");
 
   const optionsResponse = await backendGet(page, "/hr-admin/attendance-operations/workbench-options/?include_shifts=true");
@@ -111,6 +124,7 @@ test.describe("Phase 3B.3 HR Admin time, leave, attendance, roster P0 gap certif
     test.setTimeout(4 * 60 * 1000);
     await gotoAuthenticated(page, "/hr-admin/attendance-records?page_size=10", hrAdmin);
     await expectPageReady(page, "Attendance records");
+    await page.getByText("Attendance import tools", { exact: true }).click();
     await expect(page.getByTestId("attendance-record-import-workbench")).toBeVisible();
 
     const { employee, shift } = await firstEmployeeAndShift(page);

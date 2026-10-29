@@ -166,7 +166,7 @@ test.describe("HR Admin attendance operations workflow certification", () => {
     await page.getByRole("button", { name: "Apply filters" }).click();
     await expect(page).toHaveURL(/\/hr-admin\/attendance-regularizations\?.*q=no-regularization-should-match-this/);
     await expect(page.getByText("No regularizations match the current filters.")).toBeVisible();
-    await page.getByRole("button", { name: "Clear filters" }).click();
+    await page.getByRole("link", { name: "Clear filters" }).click();
     await expectPageReady(page, "Regularizations");
     const regularizationTable = page.getByRole("table").first();
     if (await regularizationTable.isVisible().catch(() => false)) {

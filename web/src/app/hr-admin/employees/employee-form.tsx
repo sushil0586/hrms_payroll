@@ -18,6 +18,8 @@ export type EmployeeFormProps = {
   employeeId?: string;
   cancelHref?: string;
   onSubmittingChange?: (busy: boolean) => void;
+  onSaved?: (employeeId: string) => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 const subscribeToHydration = () => () => {};
@@ -239,7 +241,7 @@ function sanitizeStructureValue(
   return nextValue;
 }
 
-export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHref, onSubmittingChange }: EmployeeFormProps) {
+export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHref, onSubmittingChange, onSaved, onCancel }: EmployeeFormProps) {
   const ready = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const [formValue, setFormValue] = useState(initialValue);
   const [activeStep, setActiveStep] = useState<EmployeeFormStep>("identity");
@@ -277,7 +279,9 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
 
   function cancel() {
     if (isSubmittingRef.current) return;
-    if (cancelHref) {
+    if (onCancel) {
+      if (!dirty || window.confirm("Discard unsaved changes?")) onCancel();
+    } else if (cancelHref) {
       window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"));
     } else if (!dirty || window.confirm("Discard unsaved changes?")) {
       savedRef.current = true;
@@ -442,6 +446,17 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
     }
 
     const redirectId = payload.id || employeeId;
+    if (redirectId && onSaved) {
+      const reconciled = await onSaved(String(redirectId));
+      if (!reconciled) {
+        setError("Employee saved, but the directory could not be refreshed. Retry the directory update before making another change.");
+        setIsSubmitting(false);
+        isSubmittingRef.current = false;
+        return;
+      }
+      savedRef.current = true;
+      return;
+    }
     const destination = new URL(cancelHref || "/hr-admin/employees", window.location.origin);
     destination.searchParams.delete("create");
     destination.searchParams.delete("action");

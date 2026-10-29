@@ -27,6 +27,7 @@ type Props = {
   itemId?: string;
   initialEmployeeLabel?: string | null;
   returnPath?: string;
+  onSaved?: () => Promise<boolean> | boolean;
 };
 
 type LeavePolicyAssignmentField = "leave_policy_id" | "priority";
@@ -56,7 +57,7 @@ function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string
   return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
 }
 
-export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel, returnPath = "/hr-admin/leave-policy-assignments" }: Props) {
+export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel, returnPath = "/hr-admin/leave-policy-assignments", onSaved }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -228,7 +229,8 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
     });
     // Keep checks suspended until the destination owns the document.
     rememberActionSuccess(returnPath, typeof payload.id === "string" ? payload.id : itemId ?? "", "Leave assignment saved.", mode === "create" ? "Leave assignment created and available in this list." : "Your changes to this leave assignment were saved.");
-    window.location.assign(returnPath);
+    if (onSaved) await onSaved();
+    else window.location.assign(returnPath);
   }
 
   useEffect(() => {

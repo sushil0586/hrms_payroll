@@ -1,8 +1,8 @@
 import Link from "next/link";
 
-import { HolidayCalendarsWorkbench } from "@/app/hr-admin/holiday-calendars/holiday-calendars-workbench";
+import { HolidayCalendarsWorkspace } from "@/app/hr-admin/holiday-calendars/holiday-calendars-workspace";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendanceOperationOptions, getHrAdminHolidayCalendar, getHrAdminHolidayCalendars } from "@/lib/api";
+import { getHrAdminAttendanceOperationOptions, getHrAdminHolidayCalendars } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type SearchParamValue = string | string[] | undefined;
@@ -23,9 +23,7 @@ export default async function HrAdminHolidayCalendarsPage({ searchParams }: Page
     getHrAdminAttendanceOperationOptions(),
   ]);
   const editCalendarId = normalizeParam(currentParams.editCalendar) ?? "";
-  const editItem = canManagePolicies && editCalendarId
-    ? result.data.find((item) => item.id === editCalendarId) ?? (await getHrAdminHolidayCalendar(editCalendarId)).data
-    : null;
+  const initialModal = editCalendarId ? { mode: "edit" as const, id: editCalendarId } : normalizeParam(currentParams.calendarModal) === "create" ? { mode: "create" as const, id: "" } : { mode: "" as const, id: "" };
 
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
@@ -41,12 +39,11 @@ export default async function HrAdminHolidayCalendarsPage({ searchParams }: Page
         }
       />
 
-      <HolidayCalendarsWorkbench
+      <HolidayCalendarsWorkspace
         canManagePolicies={canManagePolicies}
-        editItem={editItem}
-        items={result.data}
+        initialData={{ items: result.data, state: result.state === "live" && optionsResult.state === "live" ? "live" : "demo" }}
+        initialModal={initialModal}
         options={optionsResult.data}
-        state={result.state === "live" && optionsResult.state === "live" ? "live" : "demo"}
       />
     </main>
   );

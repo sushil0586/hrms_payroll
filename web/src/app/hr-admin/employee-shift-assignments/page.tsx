@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { EmployeeShiftAssignmentImportWorkbench } from "@/app/hr-admin/employee-shift-assignments/employee-shift-assignment-import-workbench";
 import { EmployeeShiftAssignmentGovernancePanel } from "@/app/hr-admin/employee-shift-assignments/employee-shift-assignment-governance-panel";
-import { EmployeeShiftAssignmentsWorkbench } from "@/app/hr-admin/employee-shift-assignments/employee-shift-assignments-workbench";
+import { EmployeeShiftAssignmentsWorkspace } from "@/app/hr-admin/employee-shift-assignments/employee-shift-assignments-workspace";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeShiftAssignment, getHrAdminEmployeeShiftAssignments, getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -40,9 +40,8 @@ export default async function HrAdminEmployeeShiftAssignmentsPage({ searchParams
   ]);
   const pageItems = result.data.items;
   const editAssignmentId = normalizeParam(currentParams.editAssignment) ?? "";
-  const editItem = canManagePolicies && editAssignmentId
-    ? pageItems.find((item) => item.id === editAssignmentId) ?? (await getHrAdminEmployeeShiftAssignment(editAssignmentId)).data
-    : null;
+  const initialModal = editAssignmentId ? { mode: "edit" as const, id: editAssignmentId } : normalizeParam(currentParams.assignmentModal) === "create" ? { mode: "create" as const, id: "" } : { mode: "" as const, id: "" };
+  const initialEditItem = canManagePolicies && editAssignmentId ? pageItems.find((item) => item.id === editAssignmentId) ?? (await getHrAdminEmployeeShiftAssignment(editAssignmentId)).data : null;
   const totalCount = result.data.total_count;
   const totalPages = result.data.total_pages ?? Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(result.data.page, totalPages);
@@ -78,17 +77,13 @@ export default async function HrAdminEmployeeShiftAssignmentsPage({ searchParams
         secondaryMetricValue={primaryCount}
       /></details>
 
-      <EmployeeShiftAssignmentsWorkbench
+      <EmployeeShiftAssignmentsWorkspace
         canManagePolicies={canManagePolicies}
-        currentParams={currentParams}
-        editItem={editItem}
-        items={pageItems}
+        initialData={{ ...result.data, page: safePage, page_size: pageSize, state: result.state === "live" ? "live" : "demo" }}
+        initialQuery={{ ...filters, page: safePage, page_size: pageSize }}
+        initialModal={initialModal}
+        initialEditItem={initialEditItem}
         options={optionsResult.data}
-        page={safePage}
-        pageSize={pageSize}
-        state={result.state}
-        totalCount={totalCount}
-        totalPages={totalPages}
       />
 
       {canManagePolicies ? (

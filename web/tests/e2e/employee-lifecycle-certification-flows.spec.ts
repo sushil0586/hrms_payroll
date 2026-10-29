@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { submitAndCaptureMutation } from "../helpers/crud-contract";
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
 function uniqueCode(prefix: string) {
@@ -117,31 +118,28 @@ async function selectLegalEntityWithoutStructuralMappings(page: Page) {
 }
 
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
-  const [response] = await Promise.all([
-    page.waitForResponse((item) => item.url().includes(`/api/hr-admin/${path}`) && item.request().method() === method),
-    action(),
-  ]);
-  const payload = (await response.json().catch(() => ({}))) as T;
-  if (response.ok() && method === "POST" && path === "employees" && !(payload as { id?: string }).id) {
+  const result = await submitAndCaptureMutation<T>(page, `/api/hr-admin/${path}`, method, action);
+  const payload = result.payload;
+  if (result.ok && method === "POST" && path === "employees" && !(payload as { id?: string }).id) {
     await page.waitForURL((url) => Boolean(url.searchParams.get("employeeId")));
     (payload as { id?: string }).id = new URL(page.url()).searchParams.get("employeeId") ?? undefined;
   }
   return {
-    ok: response.ok(),
-    status: response.status(),
+    ok: result.ok,
+    status: result.status,
     payload,
   };
 }
 
 async function expectEmployeeFormCertified(page: Page, mode: "create" | "edit") {
   await expect(page.getByRole("heading", { level: 1, name: mode === "create" ? "Create employee" : /Edit employee:/, exact: mode === "create" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: mode === "create" ? "Create employee master" : "Edit employee master" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Employee details" })).toBeVisible();
   await expect(page.locator("form.employee-child-form")).toBeVisible();
 
-  await expect(page.getByRole("button", { name: /1\.Identity/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /2\.Contact/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /3\.Structure/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /4\.Review/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /1\.\s*Identity/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /2\.\s*Contact/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /3\.\s*Structure/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /4\.\s*Review/ })).toBeVisible();
 
   await expect(page.getByRole("heading", { name: "Identity and employment" })).toBeVisible();
   for (const label of [
@@ -253,8 +251,8 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     expect(createResult.payload.id).toBeTruthy();
     await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}`), { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Employees" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Employee directory" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Employee master detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Directory" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Priya Tester" })).toBeVisible();
     await expect(page.getByText(code).first()).toBeVisible();
     await expect(page.getByText("Priya Tester", { exact: false }).first()).toBeVisible();
 
@@ -268,7 +266,9 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
       await page.getByRole("button", { name: "Create employee" }).click();
     });
     expect(duplicateResult.ok).toBeFalsy();
-    await expect(page.getByText("Save failed.")).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "Save needs attention." })).toContainText(
+      "This employee code is already in use.",
+    );
 
     await gotoAuthenticated(page, `/hr-admin/employees/${createResult.payload.id}/edit`);
     await expectPageReady(page, /Edit employee:/);
@@ -287,18 +287,23 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     });
     expect(updateResult.ok).toBeTruthy();
     await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}`), { timeout: 30_000 });
-    const detailPanel = page.locator("article").filter({ has: page.getByRole("heading", { name: "Employee master detail" }) });
+    const detailPanel = page.locator("article").filter({ has: page.getByRole("heading", { name: "Priya Tester" }) });
     await expect(detailPanel.getByText("Priya Certified").first()).toBeVisible();
     await expect(detailPanel.getByText("On Notice").first()).toBeVisible();
 
     const actionsMenu = detailPanel.locator("details.action-menu").filter({ hasText: "Actions" }).first();
+    await expect(detailPanel.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
     await expect(actionsMenu.locator("summary")).toBeVisible();
     await actionsMenu.locator("summary").click();
-    await expect(actionsMenu.getByRole("link", { name: "Edit employee" })).toBeVisible();
-    await expect(actionsMenu.getByRole("link", { name: "Manage access" })).toBeVisible();
-    await actionsMenu.locator("summary").click();
-    await detailPanel.getByRole("link", { name: "Access", exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}&action=access`), { timeout: 30_000 });
+    const manageAccessLink = actionsMenu.getByRole("link", { name: "Manage access" });
+    await expect(manageAccessLink).toBeVisible();
+    const manageAccessHref = await manageAccessLink.getAttribute("href");
+    expect(manageAccessHref).toBeTruthy();
+    await page.goto(manageAccessHref!);
+    await expect.poll(() => {
+      const url = new URL(page.url());
+      return [url.pathname, url.searchParams.get("employeeId"), url.searchParams.get("action")];
+    }).toEqual(["/hr-admin/employees", createResult.payload.id, "access"]);
     await expect(page.getByRole("dialog", { name: "Manage access" })).toBeVisible();
     await expect(page.locator("form.employee-child-form")).toBeVisible();
 
@@ -325,12 +330,13 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await field(page, "Temporary password").fill("Password@123");
     await page.locator(".selection-row input[type='checkbox']").first().check();
     await expect(page.getByRole("button", { name: "Create access" })).toBeEnabled();
+    page.once("dialog", (dialog) => dialog.accept());
     const accessResult = await submitAndCapture(page, `employees/${createResult.payload.id}/access`, "POST", async () => {
       await page.getByRole("button", { name: "Create access" }).click();
     });
     expect(accessResult.ok).toBeTruthy();
     await expect(page.getByText("Access updated.")).toBeVisible();
-    await expect(page.getByText("Employee access saved successfully.")).toBeVisible();
+    await expect(page.getByText("Employee access saved. Login, membership and role settings are up to date.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

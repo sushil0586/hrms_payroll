@@ -47,7 +47,7 @@ test.describe("Production tenant and role isolation proof", () => {
 
   test("public landing keeps privileged workspaces behind sign-in", async ({ page }, testInfo) => {
     await page.goto("/");
-    await expectPageReady(page, "Run payroll, compliance, and employee operations from one audit-ready SaaS workspace.");
+    await expectPageReady(page, "One clear operating flow for HR and payroll.");
 
     await expectVisibleText(page, [
       "Accerio HRMS",

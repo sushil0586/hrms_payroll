@@ -1,12 +1,9 @@
 
-import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminLeaveType, getHrAdminLeaveTypes, getHrAdminPolicyOptions } from "@/lib/api";
+import { getHrAdminLeaveTypes, getHrAdminPolicyOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
-import { createEmptyLeaveTypeValue, leaveTypeToFormValue } from "./form-values";
-import { LeaveTypeForm } from "./leave-type-form";
-import { LeaveTypesWorkbench } from "./leave-types-workbench";
+import { LeaveTypesWorkspace } from "./leave-types-workspace";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -23,18 +20,11 @@ export default async function HrAdminLeaveTypesPage({ searchParams }: PageProps)
   const currentParams = (await searchParams) ?? {};
   const createModal = normalizeParam(currentParams.leaveTypeModal) === "create";
   const editLeaveTypeId = normalizeParam(currentParams.editLeaveType);
-  const shouldLoadModal = canManagePolicies && (createModal || Boolean(editLeaveTypeId));
-  const [result, optionsResult, editResult] = await Promise.all([
+  const [result, optionsResult] = await Promise.all([
     getHrAdminLeaveTypes(),
-    shouldLoadModal ? getHrAdminPolicyOptions() : Promise.resolve(null),
-    canManagePolicies && editLeaveTypeId ? getHrAdminLeaveType(editLeaveTypeId) : Promise.resolve(null),
+    getHrAdminPolicyOptions(),
   ]);
   const activeCount = result.data.filter((item) => item.is_active).length;
-  const modalTitle = createModal ? "Create leave type" : editResult?.data ? "Edit leave type" : "";
-  const context = new URLSearchParams();
-  for (const [key,value] of Object.entries(currentParams)) { const normalized=normalizeParam(value); if(normalized && key!=="leaveTypeModal" && key!=="editLeaveType") context.set(key,normalized); }
-  const closeHref = `/hr-admin/leave-types${context.size ? `?${context}` : ""}`;
-  const createHref = `${closeHref}${context.size ? "&" : "?"}leaveTypeModal=create`;
 
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
@@ -45,11 +35,6 @@ export default async function HrAdminLeaveTypesPage({ searchParams }: PageProps)
         description="Manage the leave categories employees and managers work with before layering policy assignments, accrual rules, and approval logic on top."
         actions={
           <>
-            {canManagePolicies ? (
-              <a data-navigation-mode="document" className="button button--primary" href={createHref}>
-                Create leave type
-              </a>
-            ) : null}
             <a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/policies">
               Back to policies
             </a>
@@ -69,36 +54,7 @@ export default async function HrAdminLeaveTypesPage({ searchParams }: PageProps)
       />
       </details>
 
-      <LeaveTypesWorkbench canManagePolicies={canManagePolicies} leaveTypes={result.data} />
-
-      {shouldLoadModal && optionsResult && (createModal || editResult?.data) ? (
-        <HrAdminActionModal
-          documentNavigation
-          closeHref={closeHref}
-          description="Required fields are marked with an asterisk. Existing validation, governance locks, and save APIs are unchanged."
-          eyebrow="Leave setup"
-          labelledBy="leave-type-modal-title"
-          title={modalTitle}
-        >
-          {createModal ? (
-            <LeaveTypeForm
-              initialValue={createEmptyLeaveTypeValue(optionsResult.data.leave_categories[0]?.value || "paid", optionsResult.data.leave_units[0]?.value || "day")}
-              mode="create"
-              options={optionsResult.data}
-              returnPath={closeHref}
-            />
-          ) : editResult?.data ? (
-            <LeaveTypeForm
-              initialValue={leaveTypeToFormValue(editResult.data)}
-              item={editResult.data}
-              itemId={editResult.data.id}
-              mode="edit"
-              options={optionsResult.data}
-              returnPath={closeHref}
-            />
-          ) : null}
-        </HrAdminActionModal>
-      ) : null}
+      <LeaveTypesWorkspace initialData={{ items: result.data, options: optionsResult.data, state: result.state === "live" ? "live" : "demo" }} canManagePolicies={canManagePolicies} initialModal={canManagePolicies && editLeaveTypeId ? { mode: "edit", id: editLeaveTypeId } : canManagePolicies && createModal ? { mode: "create", id: "" } : { mode: "", id: "" }} />
     </main>
   );
 }

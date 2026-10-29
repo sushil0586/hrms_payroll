@@ -2,7 +2,7 @@
 
 import {useState,useEffect,useRef,useSyncExternalStore} from "react";
 import {useDocumentUploadDraft} from "@/lib/ui/use-document-upload-draft";
-import {postLifecycleBulk,lifecycleNavigate} from "@/lib/ui/lifecycle-bulk";
+import {postLifecycleBulk} from "@/lib/ui/lifecycle-bulk";
 import { usePathname } from "next/navigation";
 
 
@@ -31,6 +31,9 @@ type Props = {
     has_next: boolean;
     has_previous: boolean;
   };
+  onNavigate: (href: string) => void;
+  onEdit?: (itemId: string) => void;
+  onRefresh?: () => Promise<boolean>;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -45,7 +48,7 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   return queryString ? `?${queryString}` : "";
 }
 
-export function MovementQueue({ items, state, lifecycleStatusOptions, movementTypeOptions, lifecycleOwners, currentFilters, pagination }: Props) {
+export function MovementQueue({ items, state, lifecycleStatusOptions, movementTypeOptions, lifecycleOwners, currentFilters, pagination, onNavigate, onEdit, onRefresh }: Props) {
 
   const pathname = usePathname();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -61,6 +64,7 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [bulkOwner, setBulkOwner] = useState(currentFilters.owner || "");
   const [bulkStatus, setBulkStatus] = useState(lifecycleStatusOptions[0]?.value ?? "draft");
+  const navigate=onNavigate;
 
   useEffect(()=>{const restore=()=>{setSearch(currentFilters.q);setStatus(currentFilters.status||"all");setMovementType(currentFilters.movement_type||"all");setOwner(currentFilters.owner||"all");setPageSize(String(currentFilters.page_size));setSelectedIds([]);};window.addEventListener('pageshow',restore);window.addEventListener('popstate',restore);return()=>{window.removeEventListener('pageshow',restore);window.removeEventListener('popstate',restore);};},[currentFilters]);
   const allSelected = items.length > 0 && selectedIds.length === items.length;
@@ -74,8 +78,8 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
   }
 
   function goToPage(page: number,apply=false) {
-    if(!apply){lifecycleNavigate(queueHref({page}));return;}
-    lifecycleNavigate(`${pathname}${buildQueryString({
+    if(!apply){navigate(queueHref({page}));return;}
+    navigate(`${pathname}${buildQueryString({
       q: search.trim() || undefined,
       status: status !== "all" ? status : undefined,
       movement_type: movementType !== "all" ? movementType : undefined,
@@ -109,7 +113,7 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
     };
     try {
       const count=await postLifecycleBulk("/api/hr-admin/lifecycle-owner-bulk-actions",body);
-      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);setSelectedIds([]);
+      const refreshed=await onRefresh?.();setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated.${refreshed===false?" Queue refresh failed; the last confirmed rows remain visible.":" Queue rows are current."}`);setSelectedIds([]);
     } catch(error){setError(error instanceof Error?error.message:"Update outcome could not be confirmed. Reload before retrying.");}
     finally {pending.current=false;setIsSubmitting(false);}
   }
@@ -129,14 +133,14 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
     };
     try {
       const count=await postLifecycleBulk("/api/hr-admin/lifecycle-status-bulk-actions",body);
-      setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated. Reload the queue for current rows.`);setSelectedIds([]);
+      const refreshed=await onRefresh?.();setFeedback(`${count} of ${selectedIds.length} requested records confirmed updated.${refreshed===false?" Queue refresh failed; the last confirmed rows remain visible.":" Queue rows are current."}`);setSelectedIds([]);
     } catch(error){setError(error instanceof Error?error.message:"Update outcome could not be confirmed. Reload before retrying.");}
     finally {pending.current=false;setIsSubmitting(false);}
   }
 
   return (
     <section className="section queue-layout lifecycle-queue-layout"><fieldset className="lifecycle-fields" disabled={!ready||isSubmitting} data-hydrated={ready}>
-      {error||feedback?<div className="notice" role={error?"alert":"status"} tabIndex={-1} ref={noticeRef}>{error?<p>{error}</p>:null}{feedback?<p>{feedback}</p>:null}<a href={queueHref()}>Reload queue</a></div>:null}
+      {error||feedback?<div className="notice" role={error?"alert":"status"} tabIndex={-1} ref={noticeRef}>{error?<p>{error}</p>:null}{feedback?<p>{feedback}</p>:null}{onRefresh?<button className="button button--secondary button--compact" type="button" onClick={()=>void onRefresh()}>Reload queue</button>:<a href={queueHref()}>Reload queue</a>}</div>:null}
       <section className="queue-toolbar panel-card-soft lifecycle-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
@@ -188,7 +192,7 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
             setPageSize("25");
             setBulkOwner("");
             setBulkStatus(lifecycleStatusOptions[0]?.value ?? "draft");
-            lifecycleNavigate(pathname);
+            navigate(pathname);
           }} type="button">Clear filters</button>
           <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
             {allSelected ? "Clear selection" : "Select page"}
@@ -251,7 +255,7 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
 
       </section>
 
-      <WorkspaceDataTable ariaLabel="Movement records" className="lifecycle-table">
+      <WorkspaceDataTable ariaLabel="Movement records" scrollLabel="Scrollable movement records" className="lifecycle-table">
         <thead>
           <tr>
             <th><input aria-label="Select all movement records on this page" checked={allSelected} onChange={toggleAll} type="checkbox" /></th>
@@ -276,7 +280,7 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
               <td><strong>{item.from_department || "NA"}</strong><span>{item.from_designation || item.from_location || "Source unchanged"}</span></td>
               <td><strong>{item.to_department || "NA"}</strong><span>{item.to_designation || item.to_location || "Destination pending"}</span></td>
               <td><strong>{item.to_manager || "Unassigned"}</strong><span>{item.owner_value || "No manager change"}</span></td>
-              <td><a data-lifecycle-trigger={`edit-movement-${item.id}`} data-navigation-mode="document" aria-disabled={isSubmitting} onClick={event=>{if(isSubmitting)event.preventDefault();}} className="button button--secondary" href={queueHref({ editMovement: item.id })}>Edit</a></td>
+              <td><a data-lifecycle-trigger={`edit-movement-${item.id}`} data-navigation-mode={onEdit?"scoped":"document"} aria-disabled={isSubmitting} onClick={event=>{if(isSubmitting)event.preventDefault();else if(onEdit){event.preventDefault();onEdit(item.id);}}} className="button button--secondary" href={queueHref({ editMovement: item.id })}>Edit</a></td>
             </tr>
           );
         })}

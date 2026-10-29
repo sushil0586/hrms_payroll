@@ -28,6 +28,14 @@ type Props = {
   state: "live" | "demo";
   totalCount: number;
   totalPages: number;
+  pending?: boolean;
+  modalMode?: "" | "create" | "edit";
+  editAssignmentId?: string;
+  onQueryChange?: (updates: Record<string, string>) => void;
+  onOpenCreate?: () => void;
+  onOpenEdit?: (id: string) => void;
+  onCloseModal?: () => void;
+  onReconcile?: () => Promise<boolean> | boolean;
 };
 
 function normalizeParam(value: SearchParamValue) {
@@ -89,6 +97,14 @@ export function EmployeeShiftAssignmentsWorkbench({
   state,
   totalCount,
   totalPages,
+  pending,
+  modalMode,
+  editAssignmentId,
+  onQueryChange,
+  onOpenCreate,
+  onOpenEdit,
+  onCloseModal,
+  onReconcile,
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -97,8 +113,9 @@ export function EmployeeShiftAssignmentsWorkbench({
     () => items.find((item) => item.id === selectedItemId) ?? null,
     [items, selectedItemId],
   );
-  const createModalOpen = searchParams.get("assignmentModal") === "create";
-  const modalEditItem = canManagePolicies && editItem ? editItem : null;
+  const createModalOpen = modalMode !== undefined ? modalMode === "create" : searchParams.get("assignmentModal") === "create";
+  const controlledEditItem = editAssignmentId ? items.find((item) => item.id === editAssignmentId) ?? null : null;
+  const modalEditItem = canManagePolicies && (modalMode === "edit" || (modalMode === undefined && editItem)) ? controlledEditItem ?? editItem ?? null : null;
   const primaryCount = items.filter((item) => item.is_primary).length;
   const reviewCount = items.filter((item) => item.has_blocking_conflict || (item.conflict_count ?? 0) > 0).length;
   const uniqueEmployees = new Set(items.map((item) => item.employee_id)).size;
@@ -134,7 +151,7 @@ export function EmployeeShiftAssignmentsWorkbench({
             <span className="queue-summary-chip"><strong>{selectedItem ? "1" : "0"}</strong> selected</span>
           </div>
         </div>
-        <WorkspaceFilterForm key={JSON.stringify(currentParams)} action={pathname} label="Shift assignment filters" className="workspace-filter-form--block">
+        <WorkspaceFilterForm key={JSON.stringify(currentParams)} action={pathname} label="Shift assignment filters" className="workspace-filter-form--block" pending={pending} updateMode={onQueryChange ? "scoped" : "document"} onSubmit={onQueryChange ? (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onQueryChange({ q: String(data.get("q") || ""), kind: String(data.get("kind") || "all"), risk: String(data.get("risk") || "all"), primary: String(data.get("primary") || "all"), page: "1", page_size: String(pageSize) }); } : undefined}>
           <WorkspaceFilterBar className="attendance-record-filter-bar">
             <label className="form-field">
               <span className="muted">Search</span>
@@ -174,8 +191,8 @@ export function EmployeeShiftAssignmentsWorkbench({
           </WorkspaceFilterBar>
           <div className="queue-toolbar__actions attendance-toolbar-actions">
             <button className="button button--primary" type="submit">Apply filters</button>
-            <Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Clear filters</Link>
-            {canManagePolicies ? <Link className="button button--primary" href={queueHref({ assignmentModal: "create" })}>Create assignment</Link> : null}
+            {onQueryChange ? <button className="button button--secondary" onClick={() => onQueryChange({ q: "", kind: "all", risk: "all", primary: "all", page: "1", page_size: String(pageSize) })} type="button">Clear filters</button> : <Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Clear filters</Link>}
+            {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create assignment</button> : <Link className="button button--primary" href={queueHref({ assignmentModal: "create" })}>Create assignment</Link> : null}
           </div>
         </WorkspaceFilterForm>
       </section>
@@ -221,6 +238,12 @@ export function EmployeeShiftAssignmentsWorkbench({
           </WorkspaceTableScrollRegion>
           <div className="panel-card-soft attendance-pagination-panel">
             <PaginationBar
+              navigationMode={onQueryChange ? "scoped" : undefined}
+              pending={pending}
+              onFirst={onQueryChange ? () => onQueryChange({ page: "1" }) : undefined}
+              onPrevious={onQueryChange ? () => onQueryChange({ page: String(page - 1) }) : undefined}
+              onNext={onQueryChange ? () => onQueryChange({ page: String(page + 1) }) : undefined}
+              onLast={onQueryChange ? () => onQueryChange({ page: String(totalPages) }) : undefined}
               firstHref={buildHref(currentParams, { page: "1", page_size: String(pageSize) })}
               hasNext={page < totalPages}
               hasPrevious={page > 1}
@@ -231,7 +254,7 @@ export function EmployeeShiftAssignmentsWorkbench({
               previousHref={buildHref(currentParams, { page: String(page - 1), page_size: String(pageSize) })}
               totalCount={totalCount}
             />
-            <WorkspaceFilterForm key={`pagination-${JSON.stringify(currentParams)}`} action={pathname} label="Shift assignment pagination" className="attendance-pagination-panel__controls workspace-filter-form--inline">
+            <WorkspaceFilterForm key={`pagination-${JSON.stringify(currentParams)}`} action={pathname} label="Shift assignment pagination" className="attendance-pagination-panel__controls workspace-filter-form--inline" pending={pending} updateMode={onQueryChange ? "scoped" : "document"} onSubmit={onQueryChange ? (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onQueryChange({ page: "1", page_size: String(data.get("page_size") || pageSize) }); } : undefined}>
               {Object.entries(currentParams).map(([key, value]) => {
                 const normalized = normalizeParam(value);
                 if (!normalized || key === "page_size" || key === "page") return null;
@@ -267,7 +290,7 @@ export function EmployeeShiftAssignmentsWorkbench({
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                <Link className="button button--primary" href={queueHref({ editAssignment: selectedItem.id })}>Edit assignment</Link>
+                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit assignment</button> : <Link className="button button--primary" href={queueHref({ editAssignment: selectedItem.id })}>Edit assignment</Link>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit assignment</button>
               )}
@@ -303,7 +326,7 @@ export function EmployeeShiftAssignmentsWorkbench({
           description="Assign an employee to fixed, rotating, or temporary shift coverage."
           tabs={["Coverage", "Behavior", "Overlap"]}
         >
-          <EmployeeShiftAssignmentForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyEmployeeShiftAssignmentValue()} mode="create" options={options} />
+          <EmployeeShiftAssignmentForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyEmployeeShiftAssignmentValue()} mode="create" options={options} onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
       ) : null}
 
@@ -326,6 +349,8 @@ export function EmployeeShiftAssignmentsWorkbench({
             itemId={modalEditItem.id}
             mode="edit"
             options={options}
+            onCancel={onCloseModal}
+            onSaved={onReconcile}
           />
         </HrAdminActionModal>
       ) : null}

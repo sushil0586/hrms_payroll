@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server";
+import { getHrAdminOrganizationFormOptions, getHrAdminOrganizationSnapshot } from "@/lib/api";
+export async function GET(){try{const[snapshot,options]=await Promise.all([getHrAdminOrganizationSnapshot(),getHrAdminOrganizationFormOptions()]);if(snapshot.state!=="live"||options.state!=="live")return NextResponse.json({detail:"Live organization data could not be confirmed."},{status:503});return NextResponse.json({snapshot:snapshot.data,options:options.data});}catch{return NextResponse.json({detail:"Organization catalog could not be updated."},{status:503});}}

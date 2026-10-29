@@ -4,7 +4,6 @@ import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-rec
 
 import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 import { useMemo, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -35,6 +34,10 @@ type Props = {
   leaveTypeOptions: HrAdminOptionItem[];
   selectedItem?: LeaveRequestItem | null;
   canApproveLeaveRequests: boolean;
+  pending?: boolean;
+  onApplyFilters?: (filters: Props["currentFilters"]) => void;
+  onPage?: (page: number) => void;
+  onReview?: (item: LeaveRequestItem) => void;
 };
 
 const REQUEST_STATUS_OPTIONS = [
@@ -104,34 +107,14 @@ function collisionTone(item: LeaveRequestItem): "success" | "warning" | "danger"
   return "success";
 }
 
-export function LeaveRequestQueue({ items, currentFilters, pagination, statusCounts, leaveTypeOptions, selectedItem: initialSelectedItem, canApproveLeaveRequests }: Props) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+export function LeaveRequestQueue({ items, currentFilters, pagination, statusCounts, leaveTypeOptions, canApproveLeaveRequests, pending, onApplyFilters, onPage, onReview }: Props) {
   const [validationError, setValidationError] = useState("");
   const filterLeaveTypeOptions = useMemo(() => leaveTypeOptions.filter((item) => item.code).sort((a, b) => a.name.localeCompare(b.name)), [leaveTypeOptions]);
-  const selectedItem = useMemo(
-    () => initialSelectedItem ?? null,
-    [initialSelectedItem],
-  );
-
-  function selectedHref(itemId?: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (itemId) params.set("selectedLeave", itemId);
-    else params.delete("selectedLeave");
-    const query = params.toString();
-    return `${pathname}${query ? `?${query}` : ""}`;
-  }
-
-  function overrideHref(itemId: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("selectedLeave", itemId);
-    params.set("overrideLeave", itemId);
-    const query = params.toString();
-    return `${pathname}${query ? `?${query}` : ""}`;
-  }
+  const [selectedId, setSelectedId] = useState("");
+  const selectedItem = items.find(item => item.id === selectedId) ?? null;
 
   function pageHref(page: number) {
-    return `${pathname}${buildQueryString({ ...currentFilters, page })}`;
+    return `/hr-admin/leave-requests${buildQueryString({ ...currentFilters, page })}`;
   }
 
   return (
@@ -152,14 +135,15 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
           </div>
 
         </div>
-        <WorkspaceFilterForm key={JSON.stringify(currentFilters)} action={pathname} label="Leave request filters" className="workspace-filter-form--block" onSubmit={event => {
+        <WorkspaceFilterForm key={JSON.stringify(currentFilters)} action="/hr-admin/leave-requests" label="Leave request filters" className="workspace-filter-form--block" onSubmit={event => {
+          event.preventDefault();
           const data = new FormData(event.currentTarget);
           const from = String(data.get("from_date") || "");
           const to = String(data.get("to_date") || "");
           if (from && to && from > to) {
             event.preventDefault(); setValidationError("From date must be on or before to date.");
             event.currentTarget.querySelector<HTMLInputElement>('[name="to_date"]')?.focus();
-          } else setValidationError("");
+          } else { setValidationError(""); onApplyFilters?.({ q: String(data.get("q") || ""), status: String(data.get("status") || ""), leave_type_code: String(data.get("leave_type_code") || ""), from_date: from, to_date: to, page: 1, page_size: currentFilters.page_size }); }
         }}>
         <input type="hidden" name="page_size" value={currentFilters.page_size} />
         <div className="workspace-filter-bar attendance-record-filter-bar">
@@ -196,8 +180,8 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
           </details>
         </div>
         <div className="queue-toolbar__actions attendance-toolbar-actions">
-          <button className="button button--primary" type="submit">Apply filters</button>
-          <a data-navigation-mode="document" className="button button--ghost" href={pathname}>Clear filters</a>
+          <button className="button button--primary" disabled={pending} type="submit">Apply filters</button>
+          <button className="button button--ghost" type="button" onClick={() => onApplyFilters?.({ q: "", status: "", leave_type_code: "", from_date: "", to_date: "", page: 1, page_size: currentFilters.page_size })}>Clear filters</button>
           <button className="button button--secondary" onClick={() => window.print()} type="button">Print queue</button>
         </div>
         {validationError ? <p role="alert" className="notice notice--error">{validationError}</p> : null}
@@ -228,7 +212,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
                       <td><strong>{formatDate(item.start_date)}</strong><span>to {formatDate(item.end_date)}</span></td>
                       <td><strong>{getWaitingLabel(item)}</strong><span>{item.policy_name || "No policy linked"}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{titleCase(item.status)}</WorkspaceStatusBadge><span>{item.attendance_collision_summary?.collision_count ? `${item.attendance_collision_summary.collision_count} collision(s)` : "Collision clear"}</span></td>
-                      <td><a data-navigation-mode="document" className="button button--secondary button--compact" href={`${selectedHref(item.id)}#leave-request-detail`} aria-label={`Inspect leave request for ${item.employee_name || item.employee_code}`}>Inspect</a></td>
+                      <td><button className="button button--secondary button--compact" onClick={() => setSelectedId(item.id)} type="button" aria-label={`Inspect leave request for ${item.employee_name || item.employee_code}`}>Inspect</button></td>
                     </tr>
                   );
                 })}
@@ -245,12 +229,13 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
               firstHref={pageHref(1)}
               lastHref={pageHref(Math.max(1, Math.ceil(pagination.total_count / pagination.page_size)))}
               nextHref={pageHref(pagination.page + 1)}
-              previousHref={pageHref(pagination.page - 1)} navigationMode="document"
+              previousHref={pageHref(pagination.page - 1)} navigationMode="scoped"
+              onFirst={() => onPage?.(1)} onLast={() => onPage?.(Math.max(1, Math.ceil(pagination.total_count / pagination.page_size)))} onNext={() => onPage?.(pagination.page + 1)} onPrevious={() => onPage?.(pagination.page - 1)} pending={pending}
               page={pagination.page}
               pageSize={pagination.page_size}
               totalCount={pagination.total_count}
             />
-            <WorkspaceFilterForm key={`pagination:${JSON.stringify(currentFilters)}`} action={pathname} label="Leave request pagination" className="workspace-filter-form--inline">
+            <WorkspaceFilterForm key={`pagination:${JSON.stringify(currentFilters)}`} action="/hr-admin/leave-requests" label="Leave request pagination" className="workspace-filter-form--inline" onSubmit={(event) => { event.preventDefault(); const value = Number(new FormData(event.currentTarget).get("page_size")); onApplyFilters?.({ ...currentFilters, page: 1, page_size: value }); }}>
               {Object.entries(currentFilters).filter(([key]) => !["page", "page_size"].includes(key)).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)}
               <label className="form-field attendance-pagination-rows">
                 <span className="muted">Rows</span>
@@ -270,7 +255,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
                 <h2 className="section-heading-soft">Leave request detail</h2>
                 <p className="section-copy section-copy-soft">Focused policy, approval, collision, and balance context.</p>
               </div>
-              <a data-navigation-mode="document" className="button button--secondary button--compact" href={selectedHref()}>Close</a>
+              <button className="button button--secondary button--compact" onClick={() => setSelectedId("")} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">
@@ -287,7 +272,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
             </article>
             <div className="record-card__actions">
               {canApproveLeaveRequests && ["pending", "partially_approved"].includes(selectedItem.status) ? (
-                <a data-navigation-mode="document" data-leave-review-opener={selectedItem.id} className="button button--primary" href={overrideHref(selectedItem.id)}>Review</a>
+                <button data-leave-review-opener={selectedItem.id} className="button button--primary" onClick={() => onReview?.(selectedItem)} type="button">Review</button>
               ) : (
                 <button className="button button--secondary" disabled title="Requires leave.requests.approve and a pending request" type="button">Review</button>
               )}

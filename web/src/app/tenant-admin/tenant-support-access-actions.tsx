@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { performJsonMutation } from "@/lib/ui/json-mutation";
@@ -48,7 +47,6 @@ type Props = {
 const SUPPORT_GRANT_PAGE_SIZE = 5;
 
 export function TenantSupportAccessActions({ canApproveSupportAccess, canRequestSupportAccess, data }: Props) {
-  const router = useRouter();
   const scopes = data.support_access_management.scope_options;
   const defaultScope = scopes[0]?.value ?? "";
   const [supportAgentIdentifier, setSupportAgentIdentifier] = useState("");
@@ -166,7 +164,6 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
     }
     setSupportAgentIdentifier("");
     setReason("");
-    router.refresh();
   }
 
   async function runGrantAction(grantId: string, action: "approve" | "reject" | "start" | "end" | "revoke") {
@@ -194,7 +191,6 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
     if (result.support_access_grant) {
       upsertGrant(result.support_access_grant);
     }
-    router.refresh();
   }
 
   return (

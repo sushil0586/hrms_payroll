@@ -2,10 +2,10 @@
 
 import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -15,6 +15,10 @@ import { LeaveTypeActions } from "./leave-type-actions";
 type Props = {
   canManagePolicies: boolean;
   leaveTypes: HrAdminLeaveType[];
+  pending?: boolean;
+  onOpenCreate?: () => void;
+  onOpenEdit?: (id: string) => void;
+  onReconcile?: () => Promise<void> | void;
 };
 
 function normalize(value: string) {
@@ -25,15 +29,19 @@ function uniqueValues(values: string[]) {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
-export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes }: Props) {
-  const params = useSearchParams();
-  const query = params.get("q") ?? "";
-  function href(updates: Record<string,string | undefined>) { const next = new URLSearchParams(params.toString()); for (const [key,value] of Object.entries(updates)) { if(value) next.set(key,value); else next.delete(key); } return `/hr-admin/leave-types${next.size ? `?${next}` : ""}`; }
-  const status = params.get("status") ?? "all";
-  const category = params.get("category") ?? "all";
-  const selectedId = params.get("selected") ?? "";
+function allowedFilter(value: string | null, allowed: string[]) {
+  return value && allowed.includes(value) ? value : "all";
+}
+
+export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes, pending, onOpenCreate, onOpenEdit, onReconcile }: Props) {
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [rawStatus, setStatus] = useWorkspaceQueryFilter("status", "all");
+  const [selectedId, setSelectedId] = useState("");
+  const status = allowedFilter(rawStatus, ["all", "active", "inactive"]);
 
   const categories = useMemo(() => uniqueValues(leaveTypes.map((item) => item.category)), [leaveTypes]);
+  const [rawCategory, setCategory] = useWorkspaceQueryFilter("category", "all");
+  const category = allowedFilter(rawCategory, ["all", ...categories]);
   const filteredItems = useMemo(() => {
     const search = normalize(query);
     return leaveTypes.filter((item) => {
@@ -67,14 +75,14 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes }: Props) {
           </div>
           <span className="queue-summary-chip"><strong>{filteredItems.length}</strong> in this view</span>
         </div>
-        <WorkspaceFilterForm action="/hr-admin/leave-types" label="Leave type filters" className="workspace-filter-form--three">
+        <WorkspaceFilterForm action="/hr-admin/leave-types" label="Leave type filters" className="workspace-filter-form--three" onSubmit={(event) => event.preventDefault()}>
           <label className="form-field">
             <span>Search</span>
-            <input className="input-control" name="q" placeholder="Name, code, category" type="search" defaultValue={query} />
+            <input className="input-control" name="q" placeholder="Name, code, category" type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
           <label className="form-field">
             <span>Status</span>
-            <select className="input-control" name="status" defaultValue={status}>
+            <select className="input-control" name="status" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="all">All statuses</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
@@ -82,14 +90,15 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes }: Props) {
           </label>
           <label className="form-field">
             <span>Category</span>
-            <select className="input-control" name="category" defaultValue={category}>
+            <select className="input-control" name="category" value={category} onChange={(event) => setCategory(event.target.value)}>
               <option value="all">All categories</option>
               {categories.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
           <div className="workspace-filter-actions">
-            <button className="button button--primary" type="submit">Apply filters</button>
-            <a className="button button--secondary" href="/hr-admin/leave-types" data-navigation-mode="document">Clear filters</a>
+            <span className="muted" role="status">Filters update this catalog only.</span>
+            <button className="button button--secondary" onClick={() => { setQuery(""); setStatus("all"); setCategory("all"); }} type="button">Clear filters</button>
+            {canManagePolicies && onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create leave type</button> : null}
           </div>
         </WorkspaceFilterForm>
 
@@ -123,7 +132,7 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes }: Props) {
                         {item.is_approval_required ? "Approval" : "No approval"} · {item.requires_attachment ? "Attachment" : "No attachment"}
                       </span>
                     </td>
-                    <td><a className="button button--secondary" data-navigation-mode="document" href={`${href({selected:item.id})}#leave-setup-detail`}>Inspect</a></td>
+                    <td><button className="button button--secondary" onClick={() => setSelectedId(item.id)} type="button">Inspect</button></td>
                   </tr>
                 ))}
                 {filteredItems.length === 0 ? (
@@ -141,8 +150,8 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes }: Props) {
                   <p className="section-copy section-copy-soft">{selectedItem.code} · {selectedItem.category}</p>
                 </div>
                 <div className="record-card__actions">
-                  <a className="button button--secondary" data-navigation-mode="document" href={href({selected:undefined})}>Close</a>
-                  {canManagePolicies ? <a data-navigation-mode="document" className="button button--secondary" href={href({editLeaveType:selectedItem.id})}>Edit</a> : null}
+                  <button className="button button--secondary" onClick={() => setSelectedId("")} type="button">Close</button>
+                  {canManagePolicies && onOpenEdit ? <button className="button button--secondary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit</button> : null}
                 </div>
               </div>
               <div className="record-card__eyebrow">
@@ -158,7 +167,7 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes }: Props) {
                 <div className="detail-row detail-row--full"><span className="detail-label">Description</span><span className="detail-value">{selectedItem.description || "No description"}</span></div>
               </div>
               <PlatformGovernanceNotice item={selectedItem} />
-              {canManagePolicies ? <LeaveTypeActions key={selectedItem.id} isActive={selectedItem.is_active} leaveTypeId={selectedItem.id} leaveTypeName={selectedItem.name} /> : null}
+              {canManagePolicies ? <LeaveTypeActions key={selectedItem.id} isActive={selectedItem.is_active} leaveTypeId={selectedItem.id} leaveTypeName={selectedItem.name} onChanged={onReconcile} /> : null}
             </aside>
           ) : null}
         </div>

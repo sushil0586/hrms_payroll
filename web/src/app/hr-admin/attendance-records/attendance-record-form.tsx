@@ -16,7 +16,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
-  documentNavigation?: boolean;
+  onSaved?: () => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -34,7 +35,7 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
-export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref, successHref = "/hr-admin/attendance-records", compact = false, documentNavigation = false }: Props) {
+export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref, successHref = "/hr-admin/attendance-records", compact = false, onSaved, onCancel }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -77,13 +78,19 @@ export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref
       submittingRef.current = false;
       return;
     }
-    if (documentNavigation) { window.location.assign(successHref); return; }
+    if (onSaved) {
+      const reconciled = await onSaved();
+      if (!reconciled) {
+        setError("The change was accepted, but the updated attendance record could not be confirmed. Do not submit it again; retry the queue read.");
+        setIsSubmitting(false);
+      }
+      return;
+    }
     router.push(successHref);
-    router.refresh();
   }
 
   function handleCancel() {
-    if (compact && documentNavigation && cancelHref) { window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close")); return; }
+    if (onCancel) { onCancel(); return; }
     if (cancelHref) {
       router.push(cancelHref);
       return;

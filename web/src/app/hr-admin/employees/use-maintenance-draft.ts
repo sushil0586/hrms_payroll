@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 export type MaintenanceCallbacks = {
   onBusyChange?: (busy: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onCancel?: () => void;
 };
 const subscribe = () => () => {};
 
@@ -14,7 +15,7 @@ export function useMaintenanceDraft(value: unknown, busy: boolean, employeeId: s
   const [baseline, setBaseline] = useState(() => JSON.stringify(value));
   const dirty = JSON.stringify(value) !== baseline;
   const leaving = useRef(false);
-  const { onBusyChange, onDirtyChange } = callbacks;
+  const { onBusyChange, onDirtyChange, onCancel } = callbacks;
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => {
@@ -28,7 +29,8 @@ export function useMaintenanceDraft(value: unknown, busy: boolean, employeeId: s
   function confirmDiscard() { return !busy && (!dirty || window.confirm("Discard unsaved changes?")); }
   function cancel() {
     if (busy) return;
-    if (cancelHref) window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"));
+    if (onCancel && confirmDiscard()) onCancel();
+    else if (cancelHref) window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"));
     else if (confirmDiscard()) { leaving.current = true; window.location.assign(new URL(`/hr-admin/employees?employeeId=${encodeURIComponent(employeeId)}`, window.location.origin)); }
   }
   return { ready, dirty, cancel, confirmDiscard, markSaved: (next: unknown) => setBaseline(JSON.stringify(next)) };

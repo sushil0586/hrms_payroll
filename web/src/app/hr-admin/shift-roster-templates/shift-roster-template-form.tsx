@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { FormSection } from "@/components/patterns/form-section";
@@ -14,6 +15,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: () => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 function selectOptions(items: Array<{ id: string; name: string }>) {
@@ -33,6 +36,7 @@ function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save roster template.";
   for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
     if (Array.isArray(value) && value.length) return String(value[0]);
+    if (typeof value === "string" && value) return value;
   }
   return String((payload as Record<string, unknown>).detail || "Unable to save roster template.");
 }
@@ -61,10 +65,14 @@ export function ShiftRosterTemplateForm({
   cancelHref,
   successHref = "/hr-admin/shift-roster-templates",
   compact = false,
+  onSaved,
+  onCancel,
 }: Props) {
+  const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
   const submittingRef = useRef(false);
 
   function update<Key extends keyof HrAdminShiftRosterTemplateWriteInput>(key: Key, value: HrAdminShiftRosterTemplateWriteInput[Key]) {
@@ -145,7 +153,7 @@ export function ShiftRosterTemplateForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingRef.current) return;
+    if (submittingRef.current || acceptedUnconfirmed) return;
     submittingRef.current = true;
     setError("");
     setIsSubmitting(true);
@@ -169,7 +177,16 @@ export function ShiftRosterTemplateForm({
       submittingRef.current = false;
       return;
     }
-    window.location.assign(successHref);
+    if (onSaved) {
+      setAcceptedUnconfirmed(true);
+      const reconciled = await onSaved();
+      if (!reconciled) {
+        setError("The template was accepted, but the queue could not be confirmed. Do not submit it again; retry the queue read.");
+        setIsSubmitting(false);
+      }
+      return;
+    }
+    router.push(successHref);
   }
 
   return (
@@ -250,8 +267,8 @@ export function ShiftRosterTemplateForm({
         <div className="form-actions-bar">
           <span className="muted">Draft templates can be tested in rollout preview first. Published and locked templates are safer for operational rollout.</span>
           <div className="form-actions-bar__buttons">
-            <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Saving roster template" type="submit">{mode === "create" ? "Create template" : "Save changes"}</AsyncActionButton>
-            <button className="button button--secondary" onClick={() => (cancelHref ? window.location.assign(cancelHref) : window.history.back())} type="button">Cancel</button>
+            <AsyncActionButton className="button button--primary" disabled={acceptedUnconfirmed} pending={isSubmitting} pendingLabel="Saving roster template" type="submit">{acceptedUnconfirmed ? "Accepted; awaiting confirmation" : mode === "create" ? "Create template" : "Save changes"}</AsyncActionButton>
+            <button className="button button--secondary" onClick={() => onCancel ? onCancel() : (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>
       </section>

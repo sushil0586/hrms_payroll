@@ -1,13 +1,11 @@
 
-import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
-import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReadiness } from "@/lib/api";
 import type { HrAdminPayrollReadinessItem } from "@/lib/types";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
-import { PayrollReadinessFilterForm } from "./payroll-readiness-filter-form";
+import { PayrollReadinessEmployeesWorkspace } from "./payroll-readiness-employees-workspace";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -61,17 +59,6 @@ function buildHref(
 
   const queryString = params.toString();
   return queryString ? `${basePath}?${queryString}` : basePath;
-}
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "Not mapped";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
 }
 
 function titleCase(value: string) {
@@ -189,71 +176,6 @@ function buildIssueGroups(items: HrAdminPayrollReadinessItem[]) {
   });
 }
 
-function DetailPanel({ item }: { item: HrAdminPayrollReadinessItem | null }) {
-  if (!item) {
-    return (
-      <aside className="payroll-readiness-detail-panel">
-        <div className="payroll-readiness-detail-panel__header">
-          <span className="workspace-card__eyebrow">Employee trace</span>
-          <h2>No employee selected</h2>
-        </div>
-        <p className="section-copy section-copy-soft">Select a row to inspect readiness, source counts, and open issues.</p>
-      </aside>
-    );
-  }
-
-  const issueList = [...item.blockers, ...item.warnings];
-
-  return (
-    <aside className="payroll-readiness-detail-panel" aria-label={`${item.employee_name} readiness detail`}>
-      <div className="payroll-readiness-detail-panel__header">
-        <span className="workspace-card__eyebrow">Employee trace</span>
-        <div>
-          <h2>{item.employee_name}</h2>
-          <p className="section-copy section-copy-soft">{item.employee_code} - {item.work_email || "No email"}</p>
-        </div>
-        <ReadinessBadge status={item.readiness_status} />
-      </div>
-
-      <div className="detail-grid">
-        <DetailRow label="Legal entity" value={item.legal_entity || "Not mapped"} />
-        <DetailRow label="Branch" value={item.branch || "Not mapped"} />
-        <DetailRow label="Location" value={item.location || "Not mapped"} />
-        <DetailRow label="Department" value={item.department || "Not mapped"} />
-        <DetailRow label="Cost center" value={item.cost_center || "Not mapped"} />
-        <DetailRow label="Employment type" value={item.employment_type || "Not mapped"} />
-        <DetailRow label="Joining date" value={formatDate(item.date_of_joining)} />
-        <DetailRow label="Exit date" value={formatDate(item.exit_date)} />
-      </div>
-
-      <div className="payroll-source-grid">
-        <DetailRow label="Attendance records" value={item.source_counts.attendance_records ?? 0} />
-        <DetailRow label="Leave requests" value={item.source_counts.leave_requests ?? 0} />
-        <DetailRow label="Regularizations" value={item.source_counts.attendance_regularizations ?? 0} />
-        <DetailRow label="Lifecycle events" value={item.source_counts.lifecycle_events ?? 0} />
-        <DetailRow label="Documents" value={item.source_counts.documents ?? 0} />
-        <DetailRow label="Bank accounts" value={item.source_counts.bank_accounts ?? 0} />
-      </div>
-
-      <div className="payroll-issue-stack">
-        {issueList.length ? (
-          issueList.map((issue) => (
-            <div className="notice notice--compact" key={issue}>
-              <strong>{item.blockers.includes(issue) ? "Blocker" : "Warning"}</strong>
-              <span className="muted">{issue}</span>
-            </div>
-          ))
-        ) : (
-          <div className="notice notice--compact notice--success">
-            <strong>Ready</strong>
-            <span className="muted">No source-data issues for the selected profile.</span>
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-}
-
 export default async function HrAdminPayrollReadinessPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
   const activeTab = normalizeTab(currentParams.tab);
@@ -274,22 +196,12 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
     page_size: pageSize,
   });
   const readiness = readinessResult.data;
-  const selectedItem =
-    readiness.items.find((item) => item.id === selectedEmployeeId) ??
-    readiness.items[0] ??
-    null;
   const issueGroups = buildIssueGroups(readiness.items);
   const topBlockers = issueGroups.filter((issue) => issue.severity === "blocked").slice(0, 3);
   const readyPercent = readiness.summary.total_employees
     ? Math.round((readiness.summary.ready / readiness.summary.total_employees) * 100)
     : 0;
   const payrollStatus = readiness.summary.blocked ? "blocked" : readiness.summary.warnings ? "warning" : "ready";
-  const statusTabs = [
-    { value: "all", label: "All" },
-    { value: "ready", label: "Ready" },
-    { value: "warning", label: "Warning" },
-    { value: "blocked", label: "Blocked" },
-  ];
   const workspaceTabs: { value: PayrollReadinessTab; label: string; count?: number }[] = [
     { value: "summary", label: "Summary" },
     { value: "issues", label: "Issues", count: readiness.summary.blocked + readiness.summary.warnings },
@@ -520,102 +432,18 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
 
       {activeTab === "employees" ? (
         <section className="section section--tight">
-          <div className="payroll-readiness-workspace">
-            <div className="payroll-readiness-main-panel">
-              <div className="payroll-toolbar">
-                <div>
-                  <span className="workspace-card__eyebrow">Employee table</span>
-                  <h2>Payroll source review</h2>
-                </div>
-                <PayrollReadinessFilterForm
-                  pageSize={readiness.page_size}
-                  periodEnd={readiness.period.end}
-                  periodStart={readiness.period.start}
-                  q={q}
-                  status={status}
-                />
-              </div>
-
-              <div className="status-tab-row" aria-label="Readiness status filters">
-                {statusTabs.map((tab) => (
-                  <Link
-                    className={`status-tab ${status === tab.value ? "status-tab--active" : ""}`}
-                    href={buildHref("/hr-admin/payroll-readiness", currentParams, {
-                      tab: "employees",
-                      status: tab.value,
-                      employeeId: undefined,
-                      page: "1",
-                      page_size: String(readiness.page_size),
-                    })}
-                    key={tab.value}
-                  >
-                    <span>{tab.label}</span>
-                    <strong>{readiness.status_counts[tab.value] ?? 0}</strong>
-                  </Link>
-                ))}
-              </div>
-
-              <WorkspaceTableScrollRegion label="Payroll readiness table 1" className="payroll-table-scroll workspace-table-region">
-                <table className="payroll-readiness-table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Status</th>
-                      <th>Entity</th>
-                      <th>Cost Center</th>
-                      <th>Attendance</th>
-                      <th>Pending</th>
-                      <th>Bank</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {readiness.items.map((item) => (
-                      <tr className={selectedItem?.id === item.id ? "is-selected" : ""} key={item.id}>
-                        <td>
-                          <Link href={buildHref("/hr-admin/payroll-readiness", currentParams, { tab: "employees", employeeId: item.id })}>
-                            <strong>{item.employee_name}</strong>
-                            <span>{item.employee_code}</span>
-                          </Link>
-                        </td>
-                        <td><ReadinessBadge status={item.readiness_status} /></td>
-                        <td>{item.legal_entity || "Not mapped"}</td>
-                        <td>{item.cost_center || "Not mapped"}</td>
-                        <td>{item.attendance_record_days}/{item.working_days}</td>
-                        <td>{item.pending_leave_requests + item.pending_attendance_regularizations}</td>
-                        <td>{item.has_primary_bank_account ? "Ready" : "Missing"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </WorkspaceTableScrollRegion>
-
-              {!readiness.items.length ? (
-                <div className="notice notice--compact">
-                  <strong>No rows found.</strong>
-                  <span className="muted">Adjust the search or status filter.</span>
-                </div>
-              ) : null}
-
-              <PaginationBar
-                firstHref={buildHref("/hr-admin/payroll-readiness", currentParams, { tab: "employees", page: "1", page_size: String(readiness.page_size), employeeId: undefined })}
-                hasNext={readiness.has_next}
-                hasPrevious={readiness.has_previous}
-                lastHref={buildHref("/hr-admin/payroll-readiness", currentParams, {
-                  tab: "employees",
-                  page: String(Math.max(1, Math.ceil(readiness.total_count / Math.max(readiness.page_size, 1)))),
-                  page_size: String(readiness.page_size),
-                  employeeId: undefined,
-                })}
-                nextHref={buildHref("/hr-admin/payroll-readiness", currentParams, { tab: "employees", page: String(readiness.page + 1), page_size: String(readiness.page_size), employeeId: undefined })}
-                page={readiness.page}
-                pageSize={readiness.page_size}
-                previousHref={buildHref("/hr-admin/payroll-readiness", currentParams, { tab: "employees", page: String(readiness.page - 1), page_size: String(readiness.page_size), employeeId: undefined })}
-                totalCount={readiness.total_count}
-              />
-            </div>
-
-            <DetailPanel item={selectedItem} />
-          </div>
+          <PayrollReadinessEmployeesWorkspace
+            initialData={readiness}
+            initialEmployeeId={selectedEmployeeId}
+            initialFilters={{
+              q,
+              status,
+              period_start: readiness.period.start,
+              period_end: readiness.period.end,
+              page: readiness.page,
+              page_size: readiness.page_size,
+            }}
+          />
         </section>
       ) : null}
 

@@ -27,6 +27,7 @@ type Props<Row extends EmployeeImportRow> = {
   columns: { key: string; label: string }[];
   prepare: (text: string) => { rows: Row[]; error: string };
   request: (row: Row) => { url: string; method: "POST" | "PATCH"; body: unknown };
+  onCommitted?: () => Promise<void> | void;
 };
 
 /** One session's source, preview and receipts; no implicit mutation retry. */
@@ -127,6 +128,7 @@ export function EmployeeImportPanel<Row extends EmployeeImportRow>(props: Props<
       const unconfirmed = next.some(row => row.status === "unconfirmed");
       const saved = next.filter(row => row.status === "created").length;
       const rejected = next.filter(row => row.status === "failed" || row.status === "blocked").length;
+      if (saved) await props.onCommitted?.();
       setFeedback({ tone: unconfirmed || rejected ? "error" : "success", title: unconfirmed ? "Batch stopped — outcome unconfirmed" : rejected ? "Batch finished with rows needing attention" : "Import complete", text: `${saved} saved; ${rejected} blocked or rejected; ${next.filter(row => row.status === "ready").length} not attempted. ${unconfirmed ? "Check current records before another import. Remaining rows were not sent." : "Saved rows remain saved. Correct rejected rows and preview again; unchanged saved rows will not be submitted again in this session."}` });
       await audit(next, unconfirmed || rejected ? "partial" : "committed", csv);
     } finally { lock.current = false; setBusy(""); }

@@ -2,7 +2,7 @@
 
 import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 
-import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -13,12 +13,11 @@ type Props = {
   canManagePolicies: boolean;
   assignments: HrAdminScopedAssignment[];
   onChanged?: () => Promise<void>;
+  onOpenEdit?: (id: string) => void;
 };
 
-export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, onChanged }: Props) {
-  const params = useSearchParams();
-  const selectedId = params.get("selected") ?? "";
-  function href(updates: Record<string,string|undefined>) { const next=new URLSearchParams(params.toString()); for(const [key,value] of Object.entries(updates)){if(value)next.set(key,value);else next.delete(key);} return `/hr-admin/leave-policy-assignments${next.size ? `?${next}` : ""}`; }
+export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, onChanged, onOpenEdit }: Props) {
+  const [selectedId, setSelectedId] = useState("");
   const selected = assignments.find((item) => item.id === selectedId) ?? null;
 
   return (
@@ -57,7 +56,7 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, on
                     <WorkspaceStatusBadge tone="success">Clear</WorkspaceStatusBadge>
                   )}
                 </td>
-                <td><a className="button button--secondary" data-navigation-mode="document" href={`${href({selected:item.id})}#leave-assignment-detail`}>Inspect</a></td>
+                <td><button className="button button--secondary" onClick={() => setSelectedId(item.id)} type="button">Inspect</button></td>
               </tr>
             ))}
             {assignments.length === 0 ? (
@@ -75,8 +74,8 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, on
               <p className="section-copy section-copy-soft">{selected.leave_type_name || "All leave types"} · Priority {selected.priority}</p>
             </div>
             <div className="record-card__actions">
-              <a className="button button--secondary" data-navigation-mode="document" href={href({selected:undefined})}>Close</a>
-              {canManagePolicies ? <a data-navigation-mode="document" className="button button--secondary" href={href({editLeaveAssignment:selected.id})}>Edit</a> : null}
+              <button className="button button--secondary" onClick={() => setSelectedId("")} type="button">Close</button>
+              {canManagePolicies && onOpenEdit ? <button className="button button--secondary" onClick={() => onOpenEdit(selected.id)} type="button">Edit</button> : null}
             </div>
           </div>
           <div className="record-card__eyebrow">

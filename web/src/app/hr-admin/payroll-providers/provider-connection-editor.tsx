@@ -5,7 +5,6 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import type { FieldErrors } from "@/lib/ui/validation";
 import type { HrAdminEnumOption, HrAdminPayrollProviderConnection } from "@/lib/types";
@@ -207,7 +206,6 @@ function FieldError({ message }: { message?: string }) {
 
 
 export function ProviderConnectionEditor({ connection, providerKinds, connectionStatuses }: Props) {
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [formValue, setFormValue] = useState(() => initialValue(connection));
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<ProviderConnectionField>>({});
@@ -287,7 +285,7 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
     }
     setNotice(errorMessage(result, "Provider connection saved."));
     setIsOpen(false);
-    router.refresh();
+
   }
 
   return (

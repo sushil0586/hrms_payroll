@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import type { HrAdminSaasCommercialControl } from "@/lib/types";
 
@@ -21,7 +20,8 @@ type Props = {
 };
 
 export function CommercialLifecycleActions({ control }: Props) {
-  const router = useRouter();
+  const regionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (regionRef.current) regionRef.current.dataset.localUpdateHydrated = "true"; }, []);
   const [subscriptionPlan, setSubscriptionPlan] = useState(control.tenant.subscription_plan);
   const [subscriptionStatus, setSubscriptionStatus] = useState(control.subscription.status);
   const [billingProviderRef, setBillingProviderRef] = useState(control.subscription.billing_provider_ref);
@@ -33,29 +33,46 @@ export function CommercialLifecycleActions({ control }: Props) {
   async function saveCommercialState() {
     setIsSaving(true);
     setNotice("");
-    const response = await fetch("/api/hr-admin/saas-control-plane", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subscription_plan: subscriptionPlan,
-        status: subscriptionStatus,
-        billing_provider_ref: billingProviderRef,
-        billing_account_ref: billingAccountRef,
-        current_period_end: currentPeriodEnd,
-      }),
-    });
-    const result = await response.json().catch(() => ({}));
-    setIsSaving(false);
-    if (!response.ok) {
-      setNotice(apiErrorMessage(result, "Commercial state could not be updated."));
-      return;
+    try {
+      const response = await fetch("/api/hr-admin/saas-control-plane", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscription_plan: subscriptionPlan,
+          status: subscriptionStatus,
+          billing_provider_ref: billingProviderRef,
+          billing_account_ref: billingAccountRef,
+          current_period_end: currentPeriodEnd,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(apiErrorMessage(result, "Commercial state could not be updated."));
+        return;
+      }
+      const authoritative = result as Partial<HrAdminSaasCommercialControl> & {
+        subscription_plan?: string;
+        status?: string;
+        billing_provider_ref?: string;
+        billing_account_ref?: string;
+        current_period_end?: string;
+      };
+      const subscription = authoritative.subscription;
+      setSubscriptionPlan(authoritative.tenant?.subscription_plan ?? authoritative.subscription_plan ?? subscriptionPlan);
+      setSubscriptionStatus(subscription?.status ?? authoritative.status ?? subscriptionStatus);
+      setBillingProviderRef(subscription?.billing_provider_ref ?? authoritative.billing_provider_ref ?? billingProviderRef);
+      setBillingAccountRef(subscription?.billing_account_ref ?? authoritative.billing_account_ref ?? billingAccountRef);
+      setCurrentPeriodEnd(subscription?.current_period_end ?? authoritative.current_period_end ?? currentPeriodEnd);
+      setNotice("Commercial state updated.");
+    } catch {
+      setNotice("The commercial update could not be confirmed. Your entered values are still available; verify the current state before retrying.");
+    } finally {
+      setIsSaving(false);
     }
-    setNotice("Commercial state updated.");
-    router.refresh();
   }
 
   return (
-    <div className="saas-lifecycle-actions">
+    <div className="saas-lifecycle-actions" data-local-update-hydrated="false" ref={regionRef}>
       <label>
         <span>Plan</span>
         <select value={subscriptionPlan} onChange={(event) => setSubscriptionPlan(event.target.value)}>

@@ -17,6 +17,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: () => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -43,11 +45,14 @@ export function HolidayCalendarForm({
   cancelHref,
   successHref = "/hr-admin/holiday-calendars",
   compact = false,
+  onSaved,
+  onCancel,
 }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
   const yearLocked = isGovernanceFieldLocked(item, "year");
@@ -86,6 +91,7 @@ export function HolidayCalendarForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (acceptedUnconfirmed) return;
     if (mode === "edit" && item && item.can_edit_directly === false) {
       setError("This record cannot be edited directly in its current governance state.");
       return;
@@ -104,8 +110,16 @@ export function HolidayCalendarForm({
         setIsSubmitting(false);
         return;
       }
+      if (onSaved) {
+        setAcceptedUnconfirmed(true);
+        const reconciled = await onSaved();
+        if (!reconciled) {
+          setError("The calendar was accepted, but the catalog could not be confirmed. Do not submit it again; retry the catalog read.");
+          setIsSubmitting(false);
+        }
+        return;
+      }
       router.push(successHref);
-      router.refresh();
     } catch {
       setError("Unable to save holiday calendar. Check your connection and try again.");
       setIsSubmitting(false);
@@ -127,7 +141,7 @@ export function HolidayCalendarForm({
         </div>
 
         <div className="form-shell-card__grid">
-          {mode === "edit" && item ? <PlatformGovernanceFormBanner detachPath={`/api/hr-admin/holiday-calendars/${itemId}/detach`} item={item} /> : null}
+          {mode === "edit" && item ? <PlatformGovernanceFormBanner detachPath={`/api/hr-admin/holiday-calendars/${itemId}/detach`} item={item} onDetached={onSaved} /> : null}
           <FormSection title="Calendar identity and scope" description="Set the base calendar record and the branch, location, or legal scope it belongs to.">
             <div className="form-grid">
               <label className="form-field"><span className="muted">Code</span><input className="input-control" disabled={codeLocked} required value={formValue.code} onChange={(e) => update("code", e.target.value)} /><GovernanceLockHint fieldPath="code" item={item} /></label>
@@ -183,8 +197,8 @@ export function HolidayCalendarForm({
         <div className="form-actions-bar">
           <span className="muted">Calendar changes save directly back into attendance operations and policy references.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create holiday calendar" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
+            <button className="button button--primary" disabled={isSubmitting || acceptedUnconfirmed || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{acceptedUnconfirmed ? "Accepted; awaiting confirmation" : isSubmitting ? "Saving..." : mode === "create" ? "Create holiday calendar" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
+            <button className="button button--secondary" onClick={() => onCancel ? onCancel() : (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>
       </section>

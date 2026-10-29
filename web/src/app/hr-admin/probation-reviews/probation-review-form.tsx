@@ -14,6 +14,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: (itemId: string) => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -32,7 +34,7 @@ function ownerOptions(items: Array<{ value: string; label: string }>) {
   return [<option key="blank" value="">Select an owner</option>, ...items.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)];
 }
 
-export function ProbationReviewForm({ initialValue, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
+export function ProbationReviewForm({ initialValue, mode, options, itemId, cancelHref, successHref, compact = false, onSaved, onCancel }: Props) {
 
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -66,6 +68,7 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId, cance
       return;
     }
     if(typeof payload?.id!=="string" || !payload.id || (itemId&&payload.id!==itemId)) {setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");return;}
+    if(onSaved){if(!await onSaved(payload.id))setError("Record saved, but the queue could not be refreshed. Retry the queue update before another change.");return;}
     const destination=new URL(successHref??"/hr-admin/probation-reviews",window.location.origin);
     destination.searchParams.set(destination.pathname==='/hr-admin/lifecycle'?'record':'recordLoaded',destination.pathname==='/hr-admin/lifecycle'?`probation:${payload.id}`:payload.id);
     navigation.complete(destination.href);
@@ -73,7 +76,7 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId, cance
     finally {pending.current=false;setIsSubmitting(false);}
   }
 
-  function handleCancel() {navigation.cancel();}
+  function handleCancel() {if(onCancel){if(JSON.stringify(formValue)===JSON.stringify(initialValue)||window.confirm("Discard unsaved changes?"))onCancel();}else navigation.cancel();}
 
   return (
     <form id={formId}

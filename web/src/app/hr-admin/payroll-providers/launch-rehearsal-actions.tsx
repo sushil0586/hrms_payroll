@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object") {
@@ -15,7 +14,6 @@ function apiErrorMessage(payload: unknown, fallback: string) {
 }
 
 export function LaunchRehearsalActions() {
-  const router = useRouter();
   const [isRunning, setIsRunning] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -38,7 +36,7 @@ export function LaunchRehearsalActions() {
         return;
       }
       setNotice("Launch rehearsal recorded.");
-      router.refresh();
+
     } catch {
       setNotice("The rehearsal outcome could not be confirmed. Verify launch readiness before retrying.");
     } finally {

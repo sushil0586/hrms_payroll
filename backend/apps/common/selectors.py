@@ -1342,6 +1342,7 @@ def _tenant_admin_role_payload(role: Role) -> dict:
         "is_active": role.is_active,
         "active_membership_count": active_membership_count,
         "permission_keys": [item.permission_key for item in role.permissions.order_by("permission_key")],
+        "updated_at": role.updated_at.isoformat(),
     }
 
 
@@ -1596,9 +1597,12 @@ def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict, in
 
 
 def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
-    role = Role.objects.filter(tenant=tenant, id=role_id).prefetch_related("permissions").first()
+    role = Role.objects.select_for_update().filter(tenant=tenant, id=role_id).prefetch_related("permissions").first()
     if not role:
         raise ValueError("Role not found.")
+    expected_updated_at = payload.get("expected_updated_at")
+    if expected_updated_at and role.updated_at != expected_updated_at:
+        raise ValueError("This role changed after you opened it. Refresh the role list and retry your update.")
     if "permission_keys" in payload:
         _validate_tenant_admin_role_permission_keys(tenant, payload.get("permission_keys", []))
     previous_role_payload = _tenant_admin_role_payload(role)

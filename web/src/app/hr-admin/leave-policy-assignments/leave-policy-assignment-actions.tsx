@@ -9,7 +9,6 @@ import { useEffect, useState } from "react";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 type Props = {
   assignmentId: string;
@@ -23,7 +22,6 @@ function getErrorMessage(payload: unknown, status: number) {
 }
 
 export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyName, onChanged }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -31,7 +29,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   function closeDialog() {
-    if (isSubmitting || isRefreshing) return;
+    if (isSubmitting) return;
     setDialogOpen(false);
     setError("");
   }
@@ -62,7 +60,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
       setSuccessMessage(message);
       setToast({ title: "Assignment updated.", message, tone: "success" });
       setDialogOpen(false);
-      if (onChanged) void onChanged(); else refresh();
+      await onChanged?.();
     } catch {
       const message = networkMutationMessage;
       setError(message);
@@ -109,8 +107,8 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
             <div className="form-actions-bar">
               <span className="muted">This action does not delete leave requests, balances, or the leave policy itself.</span>
               <div className="form-actions-bar__buttons">
-                <AsyncActionButton className="button button--secondary" disabled={!isActive} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing assignments" : "Deactivating assignment"} onClick={() => submit("deactivate")} type="button">Deactivate</AsyncActionButton>
-                <AsyncActionButton className="button button--primary" pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing assignments" : "Deleting assignment"} onClick={() => submit("delete")} type="button">Delete assignment</AsyncActionButton>
+                <AsyncActionButton className="button button--secondary" disabled={!isActive} pending={isSubmitting} pendingLabel="Deactivating assignment" onClick={() => submit("deactivate")} type="button">Deactivate</AsyncActionButton>
+                <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Deleting assignment" onClick={() => submit("delete")} type="button">Delete assignment</AsyncActionButton>
               </div>
             </div>
         </HrAdminActionModal>

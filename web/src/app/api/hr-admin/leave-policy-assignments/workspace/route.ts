@@ -1,0 +1,3 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getHrAdminLeavePolicyAssignments } from "@/lib/api";
+export async function GET(request: NextRequest) { try { const p = request.nextUrl.searchParams; const result = await getHrAdminLeavePolicyAssignments({ q: p.get("q") || "", status: p.get("status") || "all", scope: p.get("scope") || "all", risk: p.get("risk") || "all", page: Number(p.get("page")) || 1, page_size: Number(p.get("page_size")) || 10 }); return NextResponse.json(result.data); } catch { return NextResponse.json({ detail: "Leave assignments could not be updated." }, { status: 503 }); } }

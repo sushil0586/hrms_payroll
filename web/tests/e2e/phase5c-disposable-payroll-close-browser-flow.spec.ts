@@ -51,6 +51,12 @@ async function selectOptionContaining(select: Locator, text: string) {
   await select.selectOption(value);
 }
 
+async function clickActionTab(navigation: Locator | Page, name: RegExp) {
+  const button = navigation.getByRole("button", { name });
+  await expect.poll(() => button.evaluate((element) => Object.keys(element).some((key) => key.startsWith("__reactProps")))).toBeTruthy();
+  await button.click();
+}
+
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => routePattern.test(item.url()) && item.request().method() === method, { timeout: 30000 }),
@@ -65,9 +71,12 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 
 async function waitForPayrollJob(page: Page, statusUrl: string) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const response = await page.request.get(statusUrl);
-    expect(response.ok()).toBeTruthy();
-    const responsePayload = await response.json() as { job?: {
+    const response = await page.evaluate(async (url) => {
+      const result = await fetch(url, { credentials: "include", cache: "no-store" });
+      return { ok: result.ok, status: result.status, body: await result.text() };
+    }, statusUrl);
+    expect(response.ok, `Payroll job status request failed (${response.status}): ${response.body}`).toBeTruthy();
+    const responsePayload = JSON.parse(response.body) as { job?: {
       status: string;
       error?: { message?: string } | null;
       result?: Record<string, unknown>;
@@ -97,7 +106,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     const mark = (phase: string) => console.log(`[P3-0634] ${phase}: ${Date.now() - startedAt}ms`);
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions", hrAdmin);
     await expectPageReady(page, "Payroll Statutory");
-    await page.getByRole("button", { name: /^Catalog\b/ }).click();
+    await clickActionTab(page, /^Catalog\b/);
 
     const statutoryPackForm = form(page, "statutory-pack-form");
     const statutoryComponentForm = form(page, "statutory-component-form");
@@ -153,7 +162,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(statutoryComponentResult.ok).toBeTruthy();
 
-    await page.getByRole("button", { name: /^Compliance\b/ }).click();
+    await clickActionTab(page, /^Compliance\b/);
 
     const statutoryRegistrationResult = await submitAndCapture<{ id: string; registration_number: string }>(
       page,
@@ -218,9 +227,9 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     const ruleDefinitionForm = form(page, "payroll-rule-definition-form");
     const ruleVersionForm = form(page, "payroll-rule-version-form");
     const ruleActionTabs = page.getByRole("navigation", { name: "Payroll rule action groups" });
-    await ruleActionTabs.getByRole("button", { name: /^Definitions\b/ }).click();
+    await clickActionTab(ruleActionTabs, /^Definitions\b/);
     await expectFields(ruleDefinitionForm, ["Code", "Name", "Rule type", "Description", "Tags JSON", "Config profile reference"]);
-    await ruleActionTabs.getByRole("button", { name: /^Versions\b/ }).click();
+    await clickActionTab(ruleActionTabs, /^Versions\b/);
     await expectFields(ruleVersionForm, [
       "Rule",
       "Version",
@@ -236,7 +245,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     ]);
 
     const ruleCode = uniqueCode("BASIC_RULE");
-    await ruleActionTabs.getByRole("button", { name: /^Definitions\b/ }).click();
+    await clickActionTab(ruleActionTabs, /^Definitions\b/);
     await ruleDefinitionForm.getByRole("button", { name: "New" }).click();
     const ruleResult = await submitAndCapture<{ id: string; code: string }>(
       page,
@@ -255,7 +264,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(ruleResult.ok).toBeTruthy();
     await expect(page.getByText(ruleCode).first()).toBeVisible();
 
-    await ruleActionTabs.getByRole("button", { name: /^Versions\b/ }).click();
+    await clickActionTab(ruleActionTabs, /^Versions\b/);
     await ruleVersionForm.getByRole("button", { name: "New" }).click();
     const ruleVersionResult = await submitAndCapture<{ id: string; status: string }>(
       page,
@@ -286,7 +295,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     mark("rules complete");
     await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
 
-    await ruleActionTabs.getByRole("button", { name: /^Definitions\b/ }).click();
+    await clickActionTab(ruleActionTabs, /^Definitions\b/);
     await ruleDefinitionForm.getByRole("button", { name: "New" }).click();
     const taxRuleCode = uniqueCode("TDS_RULE");
     const taxRuleResult = await submitAndCapture<{ id: string; code: string }>(
@@ -306,7 +315,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(taxRuleResult.ok).toBeTruthy();
     await expect(page.getByText(taxRuleCode).first()).toBeVisible();
 
-    await ruleActionTabs.getByRole("button", { name: /^Versions\b/ }).click();
+    await clickActionTab(ruleActionTabs, /^Versions\b/);
     await ruleVersionForm.getByRole("button", { name: "New" }).click();
     const taxRuleVersionResult = await submitAndCapture<{ id: string; status: string }>(
       page,
@@ -353,7 +362,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     const calendarCode = uniqueCode("PAY_CAL");
     const periodCode = uniqueCode("PAY_PERIOD");
 
-    await setupActionTabs.getByRole("button", { name: /^Calendars\b/ }).click();
+    await clickActionTab(setupActionTabs, /^Calendars\b/);
     const calendarResult = await submitAndCapture<{ id: string; code: string }>(
       page,
       /\/api\/hr-admin\/payroll-calendars\/?$/,
@@ -372,7 +381,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(calendarResult.ok, JSON.stringify(calendarResult.payload)).toBeTruthy();
 
-    await setupActionTabs.getByRole("button", { name: /^Periods\b/ }).click();
+    await clickActionTab(setupActionTabs, /^Periods\b/);
     const periodResult = await submitAndCapture<{ id: string; code: string }>(
       page,
       /\/api\/hr-admin\/payroll-periods\/?$/,
@@ -391,7 +400,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(periodResult.ok).toBeTruthy();
 
-    await setupActionTabs.getByRole("button", { name: /^Pay groups\b/ }).click();
+    await clickActionTab(setupActionTabs, /^Pay groups\b/);
     const payGroupCode = uniqueCode("PAY_GROUP");
     const payGroupResult = await submitAndCapture<{ id: string; code: string }>(
       page,
@@ -423,7 +432,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     const inputOperationSteps = page.getByRole("navigation", { name: "Payroll input operation steps" });
     await expect(inputOperationSteps).toBeVisible();
 
-    await inputOperationSteps.getByRole("button", { name: /Payroll run\b/ }).click();
+    await clickActionTab(inputOperationSteps, /Payroll run\b/);
     await expectFields(runForm, ["Period", "Pay group", "Code", "Name", "Status", "Input profile ref", "Snapshot schema ref", "Config profile reference"]);
     await expectSelectOptions(runForm, "Period");
     await expectSelectOptions(runForm, "Status");
@@ -450,7 +459,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(runResult.ok, `${runResult.status}: ${JSON.stringify(runResult.payload)}`).toBeTruthy();
 
-    await inputOperationSteps.getByRole("button", { name: /Input snapshot\b/ }).click();
+    await clickActionTab(inputOperationSteps, /Input snapshot\b/);
     await expectFields(snapshotForm, [
       "Payroll run",
       "Employee",
@@ -490,7 +499,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(snapshotResult.ok).toBeTruthy();
     await expect(page.getByText("Payroll input snapshot saved.").first()).toBeVisible();
-    await inputOperationSteps.getByRole("button", { name: /Input snapshot\b/ }).click();
+    await clickActionTab(inputOperationSteps, /Input snapshot\b/);
     await expect(snapshotForm).toBeVisible();
 
     const updateResult = await submitAndCapture<{ id: string; snapshot_status: string }>(
@@ -508,7 +517,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
 
     await page.goto(`/hr-admin/payroll-inputs?tab=actions&runId=${runResult.payload.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Inputs");
-    await inputOperationSteps.getByRole("button", { name: /Lock gate\b/ }).click();
+    await clickActionTab(inputOperationSteps, /Lock gate\b/);
     await expect(lockForm.getByRole("heading", { name: "Input lock" })).toBeVisible();
     await expect(lockForm.getByRole("button", { name: "Lock selected run inputs" })).toBeEnabled();
     const lockResult = await submitAndCapture<{ detail: string; locked_count: number }>(
@@ -534,10 +543,13 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       "POST",
       async () => {
         const profile = calculationControls.getByLabel("Calculation profile ref");
+        await expect.poll(() => profile.evaluate((element) => Object.keys(element).some((key) => key.startsWith("__reactProps")))).toBeTruthy();
         await profile.fill("tenant.payroll.calc.phase5c.v1");
         await profile.blur();
         await expect(profile).toHaveValue("tenant.payroll.calc.phase5c.v1");
-        await calculationControls.getByRole("button", { name: "Calculate draft" }).click();
+        const calculateButton = calculationControls.getByRole("button", { name: "Calculate draft" });
+        await expect.poll(() => calculateButton.evaluate((element) => Object.keys(element).some((key) => key.startsWith("__reactProps")))).toBeTruthy();
+        await calculateButton.click();
       },
     );
     expect(calculateResponse.ok).toBeTruthy();

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminWorkflowTemplateAssignments } from "@/lib/api";
@@ -57,18 +58,18 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage({ searchPar
         <section className="card panel queue-toolbar panel-card-soft workflow-filter-panel" aria-labelledby="workflow-assignment-catalog-heading">
           <div className="queue-toolbar__header">
             <div><h2 className="section-heading-soft" id="workflow-assignment-catalog-heading">Assignment catalog</h2><p className="section-copy section-copy-soft">Find rollout rules by template, module, trigger or organization scope.</p></div>
-            <div className="queue-toolbar__meta"><span className="queue-summary-chip"><strong>{filteredAssignments.length}</strong> shown</span><span className="queue-summary-chip"><strong>{result.data.length}</strong> loaded</span></div>
+            <div className="queue-toolbar__meta"><span className="queue-summary-chip"><strong data-workflow-assignment-count>{filteredAssignments.length}</strong> shown</span><span className="queue-summary-chip"><strong>{result.data.length}</strong> loaded</span></div>
           </div>
-          <form className="queue-toolbar__grid" method="get">
+          <LocalCatalogFilterForm className="queue-toolbar__grid" pathname="/hr-admin/workflow-template-assignments" itemSelector="[data-workflow-assignment]" emptySelector="[data-workflow-assignment-empty]" countSelector="[data-workflow-assignment-count]" mode="workflow-assignments">
             <label className="form-field"><span className="muted">Search assignments</span><input className="input-control" defaultValue={q} name="q" placeholder="Template, trigger, or org scope" type="search" /></label>
             <label className="form-field"><span className="muted">Module</span><select className="input-control" defaultValue={moduleFilter} name="module"><option value="all">All modules</option>{modules.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
             <label className="form-field"><span className="muted">State</span><select className="input-control" defaultValue={stateFilter} name="state"><option value="all">Active and inactive</option><option value="active">Active only</option><option value="inactive">Inactive only</option></select></label>
-            <div className="queue-toolbar__actions"><button className="button button--primary" type="submit">Apply filters</button><Link className="button button--ghost" href="/hr-admin/workflow-template-assignments">Clear filters</Link></div>
-          </form>
+            <div className="queue-toolbar__actions"><button className="button button--primary" type="submit">Apply filters</button></div>
+          </LocalCatalogFilterForm>
         </section>
         <div className="queue-list workflow-catalog-list">
-          {filteredAssignments.map((item) => (
-            <article className="record-card workflow-catalog-card" key={item.id}>
+          {result.data.map((item) => (
+            <article className="record-card workflow-catalog-card" key={item.id} hidden={!filteredAssignments.some((entry) => entry.id === item.id)} data-workflow-assignment data-filter-search={`${item.template_name} ${item.trigger_key} ${item.legal_entity} ${item.branch} ${item.department} ${item.business_unit} ${item.grade}`} data-filter-module={item.module} data-filter-state={item.is_active ? "active" : "inactive"}>
               <div className="record-card__header">
                 <div className="record-card__title-block">
                   <h3>{item.template_name}</h3>
@@ -89,8 +90,8 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage({ searchPar
               </div>
             </article>
           ))}
-          {filteredAssignments.length === 0 ? (
-            <section className="card panel panel-card-soft workflow-empty-state">
+
+            <section className="card panel panel-card-soft workflow-empty-state" data-workflow-assignment-empty hidden={filteredAssignments.length !== 0}>
               <div>
                 <span className="eyebrow">{hasFilters ? "No matching assignments" : "No workflow assignments"}</span>
                 <h2 className="section-heading-soft">{hasFilters ? "No assignments match the current filters." : "Assign a template to an org scope."}</h2>
@@ -100,7 +101,6 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage({ searchPar
               </div>
               <Link className={`button ${hasFilters ? "button--secondary" : "button--primary"}`} href={hasFilters ? "/hr-admin/workflow-template-assignments" : "/hr-admin/workflow-template-assignments/new"}>{hasFilters ? "Clear filters" : "Create workflow assignment"}</Link>
             </section>
-          ) : null}
         </div>
       </section>
     </main>

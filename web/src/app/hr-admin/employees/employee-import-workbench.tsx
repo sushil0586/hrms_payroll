@@ -244,6 +244,14 @@ function buildPayload(
 
 function sampleCsv(options: HrAdminEmployeeFormOptions, suffix: string) {
   const manager = options.managers[0]?.employee_code ?? "";
+  const branch = options.branches[0];
+  const legalEntity = options.legal_entities.find((item) => item.id === branch?.legal_entity_id) ?? options.legal_entities[0];
+  const location = options.locations.find((item) => item.id === branch?.location_id) ?? options.locations[0];
+  const costCenter = options.cost_centers.find((item) => item.legal_entity_id === legalEntity?.id) ?? options.cost_centers[0];
+  const department = options.departments[0];
+  const businessUnit = options.business_units.find((item) => item.id === department?.business_unit_id) ?? options.business_units[0];
+  const designation = options.designations[0];
+  const grade = options.grades.find((item) => item.id === designation?.grade_id) ?? options.grades[0];
   const values = [
     `BULK-${suffix}-001`,
     "Aditi",
@@ -258,21 +266,21 @@ function sampleCsv(options: HrAdminEmployeeFormOptions, suffix: string) {
     "2026-04-01",
     "2026-09-30",
     "",
-    options.legal_entities[0]?.name ?? "",
-    options.branches[0]?.name ?? "",
-    options.locations[0]?.name ?? "",
-    options.business_units[0]?.name ?? "",
-    options.departments[0]?.name ?? "",
-    options.cost_centers[0]?.name ?? "",
-    options.designations[0]?.name ?? "",
-    options.grades[0]?.name ?? "",
+    legalEntity?.name ?? "",
+    branch?.name ?? "",
+    location?.name ?? "",
+    businessUnit?.name ?? "",
+    department?.name ?? "",
+    costCenter?.name ?? "",
+    designation?.name ?? "",
+    grade?.name ?? "",
     options.employment_types[0]?.name ?? "",
     manager,
   ];
   return `${headers.join(",")}\n${values.map((value) => (value.includes(",") ? `"${value}"` : value)).join(",")}`;
 }
 
-export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWorkbenchProps) {
+export function EmployeeImportWorkbench({ employees, options, onCommitted }: EmployeeImportWorkbenchProps & {onCommitted?:()=>Promise<void>|void}) {
   const existingCodes = useMemo(() => new Set(employees.map(employee => employee.employee_code.toLowerCase())), [employees]);
   return <EmployeeImportPanel<ImportRow>
     testId="employee-import-workbench" title="Employee import" description="Create employee records from CSV."
@@ -290,5 +298,6 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
       })};
     }}
     request={row => ({url:"/api/hr-admin/employees",method:"POST",body:row.payload})}
+    onCommitted={onCommitted}
   />;
 }

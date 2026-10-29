@@ -170,7 +170,7 @@ function sampleCsv(employees: HrAdminEmployeeListItem[], suffix: string) {
   return `${headers.join(",")}\n${rows.map((row) => row.map((value) => (value.includes(",") ? `"${value}"` : value)).join(",")).join("\n")}`;
 }
 
-export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWorkbenchProps) {
+export function EmployeeBankImportWorkbench({ employees, onCommitted }: EmployeeBankImportWorkbenchProps & {onCommitted?:()=>Promise<void>|void}) {
   const employeesByCode=useMemo(() => new Map(employees.map(employee => [employee.employee_code.toLowerCase(),employee])),[employees]);
   return <EmployeeImportPanel<ImportRow>
     testId="employee-bank-import-workbench" title="Bank account import" description="Add payout accounts to existing employees."
@@ -187,5 +187,6 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
       })};
     }}
     request={row => ({url:`/api/hr-admin/employees/${row.employeeId}/bank-accounts`,method:"POST",body:row.payload})}
+    onCommitted={onCommitted}
   />;
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import type { FieldErrors } from "@/lib/ui/validation";
@@ -188,7 +187,6 @@ export function PayrollInputOperationsPanel({
   canManageInputs: boolean;
   canLockInputs: boolean;
 }) {
-  const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
   const [runForm, setRunForm] = useState(() => selectedRun ? runToForm(selectedRun) : emptyRunForm(initialSetup));
   const [snapshotForm, setSnapshotForm] = useState(() => snapshotToForm(selectedSnapshot, selectedRun?.id ?? ""));
@@ -384,7 +382,7 @@ export function PayrollInputOperationsPanel({
     setSnapshotForm((current) => ({ ...current, payroll_run_id: run.id }));
     setFeedback({ tone: "success", message: "Payroll run saved." });
     setActiveOperation("snapshot");
-    router.refresh();
+
   }
 
   async function saveSnapshot() {
@@ -417,7 +415,7 @@ export function PayrollInputOperationsPanel({
     setSnapshotForm(snapshotToForm(snapshot));
     setFeedback({ tone: "success", message: "Payroll input snapshot saved." });
     selectOperation("lock");
-    router.refresh();
+
   }
 
   async function lockInputs() {
@@ -439,7 +437,7 @@ export function PayrollInputOperationsPanel({
       return;
     }
     setFeedback({ tone: "success", message: String((payload as { detail?: string }).detail ?? "Payroll inputs locked.") });
-    router.refresh();
+
   }
 
   function parseBulkRows() {
@@ -499,7 +497,7 @@ export function PayrollInputOperationsPanel({
     }
     setFeedback({ tone: payload.failed_count ? "error" : "success", message: `${payload.created_count ?? 0} payroll input snapshots imported; ${payload.failed_count ?? 0} blocked.` });
     selectOperation("lock");
-    router.refresh();
+
   }
 
   return (

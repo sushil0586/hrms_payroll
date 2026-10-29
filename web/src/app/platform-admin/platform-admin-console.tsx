@@ -552,8 +552,13 @@ function leadDomainSuggestion(lead: PlatformPublicLead) {
   return "";
 }
 
-export function PlatformAdminConsole({ initialPanel, initialMessage = "", initialEventQuery = "", initialEventType = "all", leads, tenants, selectedTenant, onboarding, policyPacks, summary }: Props) {
+export function PlatformAdminConsole({ initialPanel, initialMessage = "", initialEventQuery = "", initialEventType = "all", leads: initialLeads, tenants: initialTenants, selectedTenant: initialSelectedTenant, onboarding: initialOnboarding, policyPacks: initialPolicyPacks, summary }: Props) {
   const router = useRouter();
+  const [leads, setLeads] = useState(initialLeads);
+  const [tenants, setTenants] = useState(initialTenants);
+  const [selectedTenant, setSelectedTenant] = useState(initialSelectedTenant);
+  const [onboarding, setOnboarding] = useState(initialOnboarding);
+  const [policyPacks, setPolicyPacks] = useState(initialPolicyPacks);
   const createTenantFirstFieldRef = useRef<HTMLInputElement>(null);
   const addContactFirstFieldRef = useRef<HTMLInputElement>(null);
   const [busyRef, setBusyRef] = useState("");
@@ -838,6 +843,42 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", initia
     }
   }, [showAddContactModal, showCreateTenantModal]);
 
+  function reconcileMutation(path: string, method: MutationMethod, payload: unknown) {
+    if (!payload || typeof payload !== "object") return;
+    const record = payload as Record<string, unknown>;
+    const lead = (record.lead ?? (/\/leads\//.test(path) && !path.endsWith("/convert") ? record : null)) as PlatformPublicLead | null;
+    if (lead?.id) setLeads((current) => current.some((item) => item.id === lead.id) ? current.map((item) => item.id === lead.id ? lead : item) : [lead, ...current]);
+
+    const tenant = (record.tenant ?? (path.startsWith("/api/platform/tenants") && !path.includes("/onboarding") && !path.includes("/admin-contacts") ? record : null)) as PlatformTenantListItem | null;
+    if (tenant?.id) {
+      setTenants((current) => current.some((item) => item.id === tenant.id) ? current.map((item) => item.id === tenant.id ? tenant : item) : [tenant, ...current]);
+      setSelectedTenant((current) => current?.id === tenant.id ? tenant : current);
+    }
+
+    const onboardingRecord = (record.onboarding ?? (path.endsWith("/onboarding") ? record : null)) as PlatformTenantOnboarding | null;
+    if (onboardingRecord?.tenant_id || (onboardingRecord && "admin_contacts" in onboardingRecord)) setOnboarding(onboardingRecord);
+
+    const contact = (record.admin_contact ?? record.contact ?? (path.includes("admin-contacts") && !path.endsWith("/provision-user") ? record : null)) as PlatformOnboardingAdminContact | null;
+    if (contact?.id) setOnboarding((current) => current ? { ...current, admin_contacts: current.admin_contacts.some((item) => item.id === contact.id) ? current.admin_contacts.map((item) => item.id === contact.id ? contact : item) : [contact, ...current.admin_contacts] } : current);
+
+    const pack = (record.policy_pack ?? (path.startsWith("/api/platform-policy-packs") && !path.includes("/items") && !path.includes("adoption-") && !path.includes("upgrade-") && !path.includes("adopt-for-tenant") ? record : null)) as PlatformPolicyPackListItem | null;
+    if (pack?.id) setPolicyPacks((current) => current.some((item) => item.id === pack.id) ? current.map((item) => item.id === pack.id ? pack : item) : [pack, ...current]);
+
+    const itemMatch = path.match(/platform-policy-packs\/([^/]+)\/items(?:\/([^/]+))?/);
+    if (itemMatch) {
+      const [, packId, itemId] = itemMatch;
+      const returnedItem = (record.item ?? record.policy_pack_item ?? record) as PlatformPolicyPackItem;
+      setPolicyPacks((current) => current.map((entry) => {
+        if (entry.id !== packId) return entry;
+        const items = entry.items ?? [];
+        if (method === "DELETE") return { ...entry, items: items.filter((item) => item.id !== itemId), item_count: Math.max(0, entry.item_count - 1) };
+        if (!returnedItem?.id) return entry;
+        const exists = items.some((item) => item.id === returnedItem.id);
+        return { ...entry, items: exists ? items.map((item) => item.id === returnedItem.id ? returnedItem : item) : [...items, returnedItem], item_count: exists ? entry.item_count : entry.item_count + 1 };
+      }));
+    }
+  }
+
 
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
@@ -856,7 +897,7 @@ export function PlatformAdminConsole({ initialPanel, initialMessage = "", initia
         throw new Error(apiErrorMessage(payload, "Platform action failed."));
       }
       setMessage(successMessage);
-      router.refresh();
+      reconcileMutation(path, method, payload);
       return payload as T;
     } finally {
       setBusyRef("");

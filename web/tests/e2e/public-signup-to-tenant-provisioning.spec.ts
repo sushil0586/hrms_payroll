@@ -30,7 +30,7 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     const adminPassword = process.env.PLAYWRIGHT_PLATFORM_ADMIN_PROVISIONED_PASSWORD ?? "Password@123";
 
     await page.goto("/", { waitUntil: "networkidle" });
-    await expectPageReady(page, "Run payroll, compliance, and employee operations");
+    await expectPageReady(page, "One clear operating flow for HR and payroll");
 
     const signup = page.locator("#signup");
     await signup.getByLabel("Company name").fill(companyName);

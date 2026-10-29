@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceFilterBar, WorkspaceStatusBadge, WorkspaceStandardHeader, WorkspaceDataTable } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateUploadFile } from "@/lib/ui/validation";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import { ScopedResourceError, useScopedWorkspaceResource } from "@/lib/ui/use-scoped-workspace-resource";
 import { essDocumentDate, essMoney, maskEmployeeIdentifier } from "@/lib/ui/employee-document-format";
 import type {
   EssStatutoryDeclaration,
@@ -30,6 +31,11 @@ type Props = {
   isDemo: boolean;
   selectedDeclarationId?: string;
 };
+
+type StatutoryQuery = Props["filters"] & { declarationId: string };
+const subscribe = () => () => undefined;
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
 
 type ModalState = "declaration" | "proof" | "submit" | "proofDetail" | null;
 type NoticeTone = "success" | "error" | "info";
@@ -120,10 +126,12 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 function TaxYearRail({
   declarations,
   filters,
+  onSelect,
   selectedDeclaration,
 }: {
   declarations: EssStatutoryDeclaration[];
   filters: Props["filters"];
+  onSelect: (id: string) => void;
   selectedDeclaration: EssStatutoryDeclaration | null;
 }) {
   return (
@@ -138,6 +146,7 @@ function TaxYearRail({
       <div className="ess-tax-year-list">
         {declarations.map((declaration) => (
           <Link
+            data-navigation-mode="local"
             prefetch={false}
             className={`ess-tax-year-card ${selectedDeclaration?.id === declaration.id ? "is-selected" : ""}`}
             href={`/ess/statutory-declarations${buildQueryString({
@@ -148,6 +157,11 @@ function TaxYearRail({
               status: filters.status,
             })}`}
             key={declaration.id}
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              onSelect(declaration.id);
+            }}
           >
             <span>
               <strong>{declaration.financial_year_code}</strong>
@@ -428,9 +442,34 @@ function NextActionPanel({
   );
 }
 
-export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedDeclarationId }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
-  const selectedDeclaration = data.items.find((item) => item.id === selectedDeclarationId) ?? data.items[0] ?? null;
+export function StatutoryDeclarationWorkspace({ data: initialData, filters: initialFilters, isDemo, selectedDeclarationId }: Props) {
+  const hydrated = useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot);
+  const request = useCallback(async (query: StatutoryQuery, signal: AbortSignal) => {
+    const read = async (value: StatutoryQuery) => {
+      const params = new URLSearchParams({ q: value.q, status: value.status, financial_year: value.financial_year, page: String(value.page), page_size: String(value.page_size) });
+      const response = await fetch(`/api/me/statutory-declarations?${params}`, { cache: "no-store", signal });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 401) throw new ScopedResourceError("Your session has expired.", 401);
+      if (!response.ok || !payload || typeof payload !== "object" || !Array.isArray(payload.items)) throw new ScopedResourceError(typeof payload.detail === "string" ? payload.detail : "Statutory declarations could not be updated.", response.status);
+      return payload as EssStatutoryDeclarationListResponse;
+    };
+    const data = await read(query);
+    const last = Math.max(1, Math.ceil(data.total_count / data.page_size));
+    return query.page > last ? read({ ...query, page: last }) : data;
+  }, []);
+  const historyHref = useCallback((query: StatutoryQuery) => `/ess/statutory-declarations${buildQueryString({ declarationId: query.declarationId || undefined, financial_year: query.financial_year, page: query.page, page_size: query.page_size, q: query.q, status: query.status })}`, []);
+  const readHistoryQuery = useCallback((): StatutoryQuery => {
+    const params = new URLSearchParams(window.location.search);
+    const page = Number(params.get("page") || 1);
+    const pageSize = Number(params.get("page_size") || 10);
+    return { declarationId: params.get("declarationId") || "", financial_year: params.get("financial_year") || "", page: Number.isSafeInteger(page) && page > 0 ? page : 1, page_size: [5, 10, 25].includes(pageSize) ? pageSize : 10, q: params.get("q") || "", status: params.get("status") || "" };
+  }, []);
+  const resolve = useCallback((query: StatutoryQuery, data: EssStatutoryDeclarationListResponse) => ({ ...query, page: data.page, page_size: data.page_size, declarationId: data.items.some((item) => item.id === query.declarationId) ? query.declarationId : data.items[0]?.id || "" }), []);
+  const resource = useScopedWorkspaceResource({ initialData, initialQuery: { ...initialFilters, declarationId: selectedDeclarationId || "" }, request, resolveQuery: resolve, historyHref, readHistoryQuery, fallbackError: "Statutory declarations could not be updated. The last confirmed workspace is still shown." });
+  const data = resource.data;
+  const filters = resource.query;
+  const isRefreshing = resource.isPending;
+  const selectedDeclaration = data.items.find((item) => item.id === filters.declarationId) ?? data.items[0] ?? null;
   const editableDeclaration = isEditable(selectedDeclaration) ? selectedDeclaration : null;
   const readOnlySetup = Boolean(selectedDeclaration && !editableDeclaration);
   const [activeModal, setActiveModal] = useState<ModalState>(null);
@@ -479,6 +518,14 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   function openProofDetail(item: EssStatutoryDeclarationItem) {
     setSelectedProof(item);
     setActiveModal("proofDetail");
+  }
+
+  function openDeclaration() {
+    setFinancialYearCode(selectedDeclaration?.financial_year_code ?? defaultFinancialYear);
+    setTaxRegime(selectedDeclaration?.tax_regime ?? data.profile?.tax_regime ?? "not_declared");
+    setDeclarationProfileRef(selectedDeclaration?.declaration_profile_ref ?? "");
+    setProofWindowRef(selectedDeclaration?.proof_window_ref ?? defaultProofWindow);
+    setActiveModal("declaration");
   }
 
   function setNoticeMessage(message: string, tone: NoticeTone = "info") {
@@ -538,9 +585,14 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
         setNoticeMessage(apiErrorMessage(result, "Declaration could not be saved."), "error");
         return;
       }
+      const savedId = result && typeof result === "object" && typeof result.id === "string" ? result.id : filters.declarationId;
+      const reconciled = await resource.load({ ...filters, declarationId: savedId }, savedId ? "replace" : "none");
+      if (!reconciled.ok) {
+        setNoticeMessage("The declaration was accepted, but the workspace could not verify it. Do not submit it again; retry the workspace read.", "error");
+        return;
+      }
       setNoticeMessage("Declaration saved.", "success");
       setActiveModal(null);
-      refresh();
     } catch {
       setNoticeMessage("Unable to reach the server. Check your connection and try again.", "error");
     } finally {
@@ -615,6 +667,11 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
         setNoticeMessage(apiErrorMessage(result, "Proof item could not be saved."), "error");
         return;
       }
+      const reconciled = await resource.load(filters, "none");
+      if (!reconciled.ok) {
+        setNoticeMessage("The proof was accepted, but the workspace could not verify it. Do not upload it again; retry the workspace read.", "error");
+        return;
+      }
       setItemName("");
       setDeclaredAmount("");
       setProofDocumentRef("");
@@ -622,7 +679,6 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
       setProofFileInputKey((current) => current + 1);
       setNoticeMessage(proofFile ? "Proof file uploaded and linked." : "Proof item saved.", "success");
       setActiveModal(null);
-      refresh();
     } catch {
       setNoticeMessage("Unable to reach the server. Check your connection and try again.", "error");
     } finally {
@@ -645,9 +701,13 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
         setNoticeMessage(apiErrorMessage(result, "Declaration could not be submitted."), "error");
         return;
       }
+      const reconciled = await resource.load(filters, "none");
+      if (!reconciled.ok) {
+        setNoticeMessage("Submission was accepted, but the workspace could not verify it. Do not submit again; retry the workspace read.", "error");
+        return;
+      }
       setNoticeMessage("Declaration submitted.", "success");
       setActiveModal(null);
-      refresh();
     } catch {
       setNoticeMessage("Unable to reach the server. Check your connection and try again.", "error");
     } finally {
@@ -662,7 +722,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   }, [toast]);
 
   return (
-    <main className="shell shell--workspace shell--ess-tax ess-compact accerio-page">
+    <main className="shell shell--workspace shell--ess-tax ess-compact accerio-page" data-hydrated={hydrated}>
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <WorkspaceStandardHeader eyebrow={isDemo ? "Demo employee services" : "Employee services"} title="Statutory Declarations"
         description="Review your tax declaration, provide evidence and follow HR verification."
@@ -679,19 +739,19 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
       <section className="workspace-section">
         <div className="ess-tax-workspace">
-          <TaxYearRail declarations={data.items} filters={filters} selectedDeclaration={selectedDeclaration} />
+          <TaxYearRail declarations={data.items} filters={filters} selectedDeclaration={selectedDeclaration} onSelect={(declarationId) => void resource.load({ ...filters, declarationId })} />
 
           <NextActionPanel
             declaration={selectedDeclaration}
             onAddProof={() => setActiveModal("proof")}
-            onStartDeclaration={() => setActiveModal("declaration")}
+            onStartDeclaration={openDeclaration}
             onSubmit={() => setActiveModal("submit")}
             profile={data.profile}
           />
 
           <section className="workspace-data-panel ess-tax-main" aria-label="Tax declaration workspace">
             <div className="ess-tax-toolbar">
-              <form action="/ess/statutory-declarations">
+              <WorkspaceFilterForm key={JSON.stringify(filters)} action="/ess/statutory-declarations" pending={resource.isPending} updateMode="scoped" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void resource.load({ declarationId: "", financial_year: String(form.get("financial_year") || ""), page: 1, page_size: Number(form.get("page_size") || 10), q: String(form.get("q") || ""), status: String(form.get("status") || "") }); }}>
                 <WorkspaceFilterBar>
                   <label className="form-field">
                     <span>Search</span>
@@ -731,7 +791,8 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
                     Apply
                   </button>
                 </WorkspaceFilterBar>
-              </form>
+              </WorkspaceFilterForm>
+              {resource.error ? <div className="notice notice--error" role="alert"><p>{resource.error}</p><button className="button button--secondary" disabled={resource.isPending} onClick={() => void resource.load(filters, "none")} type="button">Retry declarations</button></div> : null}
               {notice ? <div className={`notice notice--${noticeTone}`} role={noticeTone === "error" ? "alert" : "status"}>{notice}</div> : null}
             </div>
 
@@ -745,6 +806,8 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
             {data.total_count > data.page_size ? (
               <PaginationBar
+                navigationMode="scoped"
+                pending={resource.isPending}
                 firstHref={`/ess/statutory-declarations${buildQueryString({ ...sharedParams, page: 1 })}`}
                 hasNext={Boolean(data.has_next)}
                 hasPrevious={Boolean(data.has_previous)}
@@ -754,6 +817,10 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
                 pageSize={data.page_size}
                 previousHref={`/ess/statutory-declarations${buildQueryString({ ...sharedParams, page: data.page - 1 })}`}
                 totalCount={data.total_count}
+                onFirst={() => void resource.load({ ...filters, page: 1 })}
+                onLast={() => void resource.load({ ...filters, page: totalPages })}
+                onNext={() => void resource.load({ ...filters, page: data.page + 1 })}
+                onPrevious={() => void resource.load({ ...filters, page: Math.max(1, data.page - 1) })}
               />
             ) : null}
           </section>

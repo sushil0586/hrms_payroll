@@ -29,7 +29,11 @@ async function createDocumentCategory(page: Page, prefix: string) {
       metadata_schema: { source: "playwright" },
     },
   });
-  expect(response.ok()).toBeTruthy();
+  const payload = await response.json().catch(() => ({}));
+  expect(
+    response.ok(),
+    `Document category create failed with status ${response.status()}: ${JSON.stringify(payload)}`,
+  ).toBeTruthy();
   return code;
 }
 
@@ -97,8 +101,8 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 
 async function expectDocumentUploadPageCertified(page: Page) {
   await expectPageReady(page, "Upload employee document");
-  await expect(page.getByRole("heading", { name: "Employee document upload" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Upload details" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upload employee document" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Employee and evidence" })).toBeVisible();
   for (const label of ["Employee", "Category", "Title", "Document number", "Issued on", "Expires on", "File"]) {
     await expect(field(page, label), `${label} should be visible`).toBeVisible();
   }
@@ -113,7 +117,7 @@ async function expectDocumentUploadPageCertified(page: Page) {
 async function expectDocumentsQueueCertified(page: Page, title?: string) {
   await expectPageReady(page, /Employee document review/);
   await expect(page.getByLabel("Document review summary").or(page.locator(".hr-employee-summary-strip")).first()).toBeVisible();
-  for (const metric of [/documents/i, /categories/i, /pending review/i]) {
+  for (const metric of [/documents/i, /categories/i, /pending (review|on page)/i]) {
     await expect(page.locator("main").getByText(metric).first()).toBeVisible();
   }
   await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
@@ -121,7 +125,9 @@ async function expectDocumentsQueueCertified(page: Page, title?: string) {
     await expect(field(page, label), `${label} queue filter should be visible`).toBeVisible();
   }
   await expect(page.getByRole("combobox", { name: /Rows|Rows per page/i })).toBeVisible();
-  await page.getByText("More filters").click();
+  if (!await field(page, "Expiry focus").isVisible().catch(() => false)) {
+    await page.getByText("More filters", { exact: true }).click();
+  }
   for (const label of ["Category", "Expiry focus"]) {
     await expect(field(page, label), `${label} queue filter should be present`).toBeAttached();
   }
@@ -337,16 +343,20 @@ test.describe("Phase 3B employee documents and onboarding certification", () => 
     const result = await submitAndCapture<{ id: string }>(page, "employee-documents", "POST", async () => {
       await page.getByRole("button", { name: "Upload document" }).click();
     });
-    expect(result.ok).toBeTruthy();
+    expect(
+      result.ok,
+      `Document upload failed with status ${result.status}: ${JSON.stringify(result.payload)}`,
+    ).toBeTruthy();
+    await expect(page.getByRole("heading", { name: "Document stored" })).toBeVisible();
+    await expect(page.getByText(title, { exact: false })).toBeVisible();
+    await page.getByRole("link", { name: "View document queue" }).click();
     await expect(page).toHaveURL(/\/hr-admin\/employee-documents$/);
 
     await field(page, "Search").fill(title);
-    await Promise.all([
-      page.waitForURL((url) => url.searchParams.get("q") === title),
-      page.getByRole("button", { name: "Apply filters" }).click(),
-    ]);
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(field(page, "Search")).toHaveValue(title);
     await expectDocumentsQueueCertified(page, title);
-    await field(page, "Expiry focus").selectOption("expiring");
+    await page.getByLabel("Expiry focus", { exact: true }).last().selectOption("expiring");
     await page.getByRole("button", { name: "Clear filters" }).click();
     await expect(page).toHaveURL(/\/hr-admin\/employee-documents$/);
     await expectDocumentsQueueCertified(page);

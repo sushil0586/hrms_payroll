@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import type { FieldErrors } from "@/lib/ui/validation";
 import type {
@@ -542,7 +541,6 @@ function FormHeader({ mode, title, onReset }: { mode: SaveMode; title: string; o
 }
 
 export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdminPayrollSetupResponse }) {
-  const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
   const [activeActionTab, setActiveActionTab] = useState<PayrollActionTab>("calendar");
   const [calendarForm, setCalendarForm] = useState<CalendarForm>(() => emptyCalendarForm(initialSetup));
@@ -753,7 +751,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
 
     apply(payload as Item);
     setFeedback({ family, tone: "success", message: `${familyLabels[family]} saved.` });
-    router.refresh();
+
   }
 
   function applyCalendar(item: HrAdminPayrollCalendar) {

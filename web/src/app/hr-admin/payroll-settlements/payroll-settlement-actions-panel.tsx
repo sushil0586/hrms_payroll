@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun, HrAdminPayrollSettlement, HrAdminPayrollSettlementSetupResponse } from "@/lib/types";
@@ -27,6 +27,12 @@ async function readPayload(response: Response) {
 
 export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSettlement }: Props) {
   const router = useRouter();
+  const regionRef = useRef<HTMLElement>(null);
+  useEffect(() => { if (regionRef.current) regionRef.current.dataset.localUpdateHydrated = "true"; }, []);
+  const [localStatus, setLocalStatus] = useState<HrAdminPayrollSettlement["status"] | null>(null);
+  const currentSettlement = selectedSettlement
+    ? { ...selectedSettlement, status: localStatus ?? selectedSettlement.status }
+    : null;
   const runSnapshots = useMemo(
     () => setup.snapshots.filter((snapshot) => snapshot.payroll_run_id === selectedRun?.id && snapshot.snapshot_status === "locked"),
     [selectedRun?.id, setup.snapshots],
@@ -67,7 +73,7 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
       }
       setNotice({ tone: "success", message: successMessage });
       if (options.refresh ?? true) {
-        router.refresh();
+
       }
       return payload;
     } catch {
@@ -156,26 +162,29 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
       "Settlement recovery line created.",
       { refresh: false },
     );
-    router.refresh();
+
     router.push(`/hr-admin/payroll-settlements?tab=detail&runId=${selectedRun.id}&settlementId=${settlement.id}`);
   }
 
   async function act(action: "submit" | "approve" | "reject" | "apply") {
-    if (!selectedSettlement) {
+    if (!currentSettlement) {
       setNotice({ tone: "error", message: "Select a settlement before running a lifecycle action." });
       return;
     }
-    await postJson(
-      `/api/hr-admin/payroll-settlements/${selectedSettlement.id}/${action}`,
+    const payload = await postJson(
+      `/api/hr-admin/payroll-settlements/${currentSettlement.id}/${action}`,
       action === "approve"
         ? { approval_profile_ref: "tenant.payroll.settlement.approval.pilot100.v1" }
         : action === "reject" ? { reason: rejectionReason } : {},
       `Settlement ${action} completed.`,
     );
+    if (payload?.status) {
+      setLocalStatus(payload.status as HrAdminPayrollSettlement["status"]);
+    }
   }
 
   return (
-    <section className="payroll-setup-assignment-panel" aria-label="Settlement actions">
+    <section className="payroll-setup-assignment-panel" aria-label="Settlement actions" data-local-update-hydrated="false" ref={regionRef}>
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
           <span className="workspace-card__eyebrow">Settlement actions</span>
@@ -224,16 +233,16 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
         <button className="button button--primary" disabled={Boolean(busyAction) || !selectedRun || !activeSnapshot} onClick={createSettlement} type="button">
           Create settlement
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "draft"} onClick={() => act("submit")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentSettlement?.status !== "draft"} onClick={() => act("submit")} type="button">
           Submit selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "submitted"} onClick={() => act("approve")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentSettlement?.status !== "submitted"} onClick={() => act("approve")} type="button">
           Approve selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "submitted" || !rejectionReason.trim()} onClick={() => act("reject")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentSettlement?.status !== "submitted" || !rejectionReason.trim()} onClick={() => act("reject")} type="button">
           Reject selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedSettlement?.status !== "approved"} onClick={() => act("apply")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentSettlement?.status !== "approved"} onClick={() => act("apply")} type="button">
           Apply selected
         </button>
       </div>
@@ -241,7 +250,7 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
         <span className="muted">Rejection reason</span>
         <textarea aria-label="Settlement rejection reason" onChange={(event) => setRejectionReason(event.target.value)} placeholder="Required only when rejecting" rows={2} value={rejectionReason} />
       </label>
-      {selectedSettlement ? <p className="section-copy section-copy-soft">Current state: {selectedSettlement.status.replaceAll("_", " ")}. The next eligible transition is enabled.</p> : null}
+      {currentSettlement ? <p className="section-copy section-copy-soft" aria-live="polite">Current state: {currentSettlement.status.replaceAll("_", " ")}. The next eligible transition is enabled.</p> : null}
       {notice ? (
         <p className={`form-status form-status--${notice.tone}`} role="alert">
           {notice.message}

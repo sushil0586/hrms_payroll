@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { WorkspaceCard } from "@/components/patterns/workspace-card";
+import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 import { getHrAdminWorkflowTemplateAssignments, getHrAdminWorkflowTemplates, getHrAdminWorkflowTraces } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
@@ -44,8 +45,15 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
   const [templatesResult, assignmentsResult, tracesResult] = await Promise.all([
     getHrAdminWorkflowTemplates(),
     getHrAdminWorkflowTemplateAssignments(),
-    getHrAdminWorkflowTraces({ module: moduleFilter, status: statusFilter, q, page: 1, page_size: 8 }),
+    getHrAdminWorkflowTraces({ page: 1, page_size: 100 }),
   ]);
+
+  const filteredTraces = tracesResult.data.items.filter((trace) => {
+    const search = q.trim().toLowerCase();
+    if (search && !`${trace.subject_label} ${trace.subject_identifier} ${trace.employee_code} ${trace.employee_name} ${trace.current_actor_summary} ${trace.trigger_key}`.toLowerCase().includes(search)) return false;
+    if (moduleFilter !== "all" && trace.module !== moduleFilter) return false;
+    return statusFilter === "all" || trace.status === statusFilter;
+  });
 
   const state = templatesResult.state === "live" && assignmentsResult.state === "live" && tracesResult.state === "live" ? "live" : "demo";
   const activeTraces = tracesResult.data.items.filter((item) => item.status === "pending" || item.status === "in_progress").length;
@@ -117,13 +125,13 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
               </p>
             </div>
             <div className="queue-toolbar__meta">
-              <span className="queue-summary-chip"><strong>{tracesResult.data.total_count}</strong> matching</span>
-              <span className="queue-summary-chip"><strong>{tracesResult.data.items.length}</strong> visible</span>
+              <span className="queue-summary-chip"><strong data-workflow-trace-count>{filteredTraces.length}</strong> matching</span>
+              <span className="queue-summary-chip"><strong data-workflow-trace-count>{filteredTraces.length}</strong> visible</span>
               <span className="queue-summary-chip"><strong>{tracesResult.data.status_counts.pending ?? 0}</strong> pending</span>
             </div>
           </div>
 
-          <form className="queue-toolbar__grid" method="get">
+          <LocalCatalogFilterForm className="queue-toolbar__grid" pathname="/hr-admin/workflows" itemSelector="[data-workflow-trace]" emptySelector="[data-workflow-trace-empty]" countSelector="[data-workflow-trace-count]" mode="workflow-traces">
             <label className="form-field">
               <span className="muted">Search</span>
               <input className="input-control" defaultValue={q} name="q" placeholder="Employee, subject, actor, or trigger" type="search" />
@@ -153,14 +161,13 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
             </label>
             <div className="queue-toolbar__actions">
               <button className="button button--primary" type="submit">Apply filters</button>
-              <Link className="button button--ghost" href="/hr-admin/workflows">Clear filters</Link>
             </div>
-          </form>
+          </LocalCatalogFilterForm>
         </section>
 
         <div className="queue-list workflow-trace-list">
           {tracesResult.data.items.map((trace) => (
-            <article className="card panel panel-card-soft workflow-trace-card" key={trace.id}>
+            <article className="card panel panel-card-soft workflow-trace-card" key={trace.id} hidden={!filteredTraces.some((entry) => entry.id === trace.id)} data-workflow-trace data-filter-search={`${trace.subject_label} ${trace.subject_identifier} ${trace.employee_code} ${trace.employee_name} ${trace.current_actor_summary} ${trace.trigger_key}`} data-filter-module={trace.module} data-filter-status={trace.status}>
               <div className="record-card__header">
                 <div>
                   <span className="eyebrow">{formatLabel(trace.module)} - {trace.trigger_key}</span>
@@ -213,12 +220,10 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
               </div>
             </article>
           ))}
-          {tracesResult.data.items.length === 0 ? (
-            <section className="card panel panel-card-soft workflow-empty-state">
+          <section className="card panel panel-card-soft workflow-empty-state" data-workflow-trace-empty hidden={filteredTraces.length !== 0}>
               <div><span className="eyebrow">No matching traces</span><h2 className="section-heading-soft">No workflow traces match the current filters.</h2><p className="section-copy section-copy-soft">Clear filters or broaden the search to review the runtime timeline.</p></div>
               <Link className="button button--secondary" href="/hr-admin/workflows">Clear filters</Link>
             </section>
-          ) : null}
         </div>
       </section>
     </main>

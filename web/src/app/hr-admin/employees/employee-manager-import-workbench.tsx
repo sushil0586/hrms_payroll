@@ -158,7 +158,7 @@ function buildImportRow(
   } satisfies ImportRow;
 }
 
-export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeManagerImportWorkbenchProps) {
+export function EmployeeManagerImportWorkbench({ employees, options, onCommitted }: EmployeeManagerImportWorkbenchProps & {onCommitted?:()=>Promise<void>|void}) {
   const employeesByCode=useMemo(() => new Map(employees.map(employee => [normalizeCode(employee.employee_code),employee])),[employees]);
   const managersByCode=useMemo(() => new Map(options.managers.map(manager => [normalizeCode(manager.employee_code),manager])),[options.managers]);
   const managersByName=useMemo(() => new Map(options.managers.filter(manager => options.managers.filter(item => normalizeCode(item.name) === normalizeCode(manager.name)).length === 1).map(manager => [normalizeCode(manager.name),manager])),[options.managers]);
@@ -174,5 +174,6 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
       return {error:parsed.error,rows:parsed.rows.map((row,index) => buildImportRow(row,index+1,employeesByCode,managersByCode,managersByName,batch))};
     }}
     request={row => ({url:`/api/hr-admin/employees/${row.employeeId}`,method:"PATCH",body:{reporting_manager_id:row.reportingManagerId}})}
+    onCommitted={onCommitted}
   />;
 }

@@ -1,12 +1,12 @@
 import {test,expect} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
-import {appendFileSync,readFileSync,writeFileSync} from 'node:fs';
+import {appendFileSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona,type IsolatedQaWorkspace} from '../helpers/isolated-qa-workspace';
 const repo=path.resolve(__dirname,'../../..');const root=process.env.QA_DOCUMENT_EVIDENCE_ROOT ? path.join(process.env.QA_DOCUMENT_EVIDENCE_ROOT,'phase5') : path.join(repo,'docs/qa/evidence/document-makeover-phase5-2026-10-23');let fixture:IsolatedQaWorkspace;let context:any;
 function script(cleanup=false){execFileSync(path.join(repo,'.venv/bin/python'),['backend/manage.py','shell','-c',"exec(open('web/tests/document-makeover/phase5-fixtures.py').read())"],{cwd:repo,env:{...process.env,QA_PHASE5_MANIFEST:fixture.manifestPath,QA_PHASE5_EVIDENCE:root,QA_PHASE5_CLEANUP:cleanup?'1':''}})}
-test.beforeAll(async({},info)=>{fixture=await provisionIsolatedQaWorkspace(info);script();context=JSON.parse(readFileSync(path.join(fixture.tempDir,'phase5-context.json'),'utf8'));appendFileSync(path.join(root,'fixtures.jsonl'),JSON.stringify({seedRef:fixture.seedRef,tenant:fixture.manifest.tenant,tempDir:fixture.tempDir})+'\n')});
+test.beforeAll(async({},info)=>{fixture=await provisionIsolatedQaWorkspace(info);mkdirSync(root,{recursive:true});script();context=JSON.parse(readFileSync(path.join(fixture.tempDir,'phase5-context.json'),'utf8'));appendFileSync(path.join(root,'fixtures.jsonl'),JSON.stringify({seedRef:fixture.seedRef,tenant:fixture.manifest.tenant,tempDir:fixture.tempDir})+'\n')});
 test.afterAll(async()=>{if(fixture)try{script(true)}finally{await cleanupIsolatedQaWorkspace(fixture)}});
 test.beforeEach(async({page})=>{const user=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);const cookie=(await page.context().cookies()).find(c=>c.name==='hrms_access_token');if(cookie)appendFileSync(path.join(root,'owned-audit-actors.jsonl'),JSON.stringify({tenant:fixture.manifest.tenant.code,hash:createHash('sha256').update(cookie.value).digest('hex').slice(0,24)})+'\n')});
 async function open(page:any,url:string){expect((await page.goto(url,{waitUntil:'domcontentloaded'}))?.status()).toBe(200);await expect(page.getByRole('heading',{level:1})).toBeVisible();const app=page.locator('[data-hydrated]');if(await app.count())await expect(app.last()).toHaveAttribute('data-hydrated','true')}

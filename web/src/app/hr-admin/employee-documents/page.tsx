@@ -1,9 +1,9 @@
 import Link from "next/link";
 
-import { EmployeeDocumentQueue } from "@/app/hr-admin/employee-documents/employee-document-queue";
+import { EmployeeDocumentWorkspace } from "@/app/hr-admin/employee-documents/employee-document-workspace";
 import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { DocumentAccessNotice } from "@/app/hr-admin/documents/document-access-notice";
-import { getHrAdminDocumentOptions, getHrAdminEmployeeDocument, getHrAdminEmployeeDocuments } from "@/lib/api";
+import { getHrAdminDocumentCategories, getHrAdminDocumentOptions, getHrAdminEmployeeDocument, getHrAdminEmployeeDocuments, getHrAdminEmployees } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type SearchParamValue = string | string[] | undefined;
@@ -34,8 +34,9 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
   const status = normalizeParam(currentParams.status) ?? "";
   const categoryId = normalizeParam(currentParams.category_id) ?? "";
   const expiryFilter = normalizeParam(currentParams.expiry_filter) ?? "";
-  const reviewSaved = normalizeParam(currentParams.review_saved) === "1";
   const reviewDocumentId = normalizeParam(currentParams.reviewDocument) ?? "";
+  const uploadDocument = normalizeParam(currentParams.uploadDocument) === "create" ? "create" : "";
+  const canUploadDocuments = canManageDocuments && sessionHasPermission(sessionUser, "employees.view");
 
   let [result, optionsResult] = await Promise.all([
     getHrAdminEmployeeDocuments({
@@ -51,9 +52,11 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
   ]);
   const lastPage = Math.max(1, Math.ceil(result.data.total_count / result.data.page_size));
   if (result.data.page > lastPage) result = await getHrAdminEmployeeDocuments({ page: lastPage, page_size: pageSize, q, verification_status: verificationStatus || undefined, status: status || undefined, category_id: categoryId || undefined, expiry_filter: expiryFilter || undefined });
-  const expiringOnPage = result.data.items.filter((item) => item.is_expiring_soon).length;
-  const expiredOnPage = result.data.items.filter((item) => item.is_expired).length;
-  const reviewDocumentResult = canVerifyDocuments && reviewDocumentId ? await getHrAdminEmployeeDocument(reviewDocumentId) : null;
+  const [reviewDocumentResult, employeesResult, uploadCategoriesResult] = await Promise.all([
+    canVerifyDocuments && reviewDocumentId ? getHrAdminEmployeeDocument(reviewDocumentId) : null,
+    canUploadDocuments && uploadDocument ? getHrAdminEmployees() : null,
+    canUploadDocuments && uploadDocument ? getHrAdminDocumentCategories() : null,
+  ]);
 
   return (
     <main className="shell hr-document-workbench accerio-page document-operations">
@@ -62,20 +65,21 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
         description="Triage uploads, verification outcomes, expiry risk, and reminder follow-up."
         actions={
           <>
-            {canManageDocuments && sessionHasPermission(sessionUser, "employees.view") ? <Link className="button button--primary" href="/hr-admin/employee-documents/new">Upload document</Link> : null}
             <Link className="button button--secondary" href="/hr-admin/documents">Documents</Link>
             <Link className="button button--ghost" href="/hr-admin/reports">Open reports</Link>
           </>
         }
 
       />
-      <EmployeeDocumentQueue
-        key={JSON.stringify([q, verificationStatus, status, categoryId, expiryFilter, result.data.page, pageSize])}
-        items={result.data.items}
-        verificationStatusOptions={optionsResult.data.verification_statuses}
-        recordStatusOptions={optionsResult.data.employee_document_statuses}
-        categories={optionsResult.data.categories}
-        currentFilters={{
+      <EmployeeDocumentWorkspace
+        initialData={{
+          ...result.data,
+          options: optionsResult.data,
+          reviewDocument: reviewDocumentResult?.data ?? null,
+          employees: employeesResult?.data ?? null,
+          uploadCategories: uploadCategoriesResult?.data ?? null,
+        }}
+        initialQuery={{
           q,
           verification_status: verificationStatus,
           status,
@@ -83,26 +87,13 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
           expiry_filter: expiryFilter,
           page: result.data.page,
           page_size: pageSize,
-        }}
-        pagination={{
-          total_count: result.data.total_count,
-          page: result.data.page,
-          page_size: result.data.page_size,
-          has_next: result.data.has_next,
-          has_previous: result.data.has_previous,
+          reviewDocument: reviewDocumentId,
+          uploadDocument,
         }}
         canExportDocuments={canExportDocuments}
         canManageDocuments={canManageDocuments}
         canVerifyDocuments={canVerifyDocuments}
-        documentOptions={optionsResult.data}
-        reviewDocument={reviewDocumentResult?.data ?? null}
-        initialActionNotice={reviewSaved ? "Document review updated." : ""}
-        initialActionNoticeTitle="Review action complete."
-        summary={{
-          categoriesConfigured: optionsResult.data.categories.length,
-          expiredOnPage,
-          expiringOnPage,
-        }}
+        canUploadDocuments={canUploadDocuments}
       />
     </main>
   );

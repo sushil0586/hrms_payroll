@@ -14,6 +14,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: (itemId: string) => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 type MovementField = "employee_id" | "effective_date" | "reason" | "owner_value" | "current_snapshot";
 
@@ -34,7 +36,7 @@ function ownerOptions(items: Array<{ value: string; label: string }>) {
   return [<option key="blank" value="">Select an owner</option>, ...items.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)];
 }
 
-export function MovementForm({ initialValue, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
+export function MovementForm({ initialValue, mode, options, itemId, cancelHref, successHref, compact = false, onSaved, onCancel }: Props) {
 
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -84,6 +86,7 @@ export function MovementForm({ initialValue, mode, options, itemId, cancelHref, 
       const payload=await response.json().catch(()=>null);
       if(!response.ok){setError(response.status>=500?"Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.":getErrorMessage(payload));return;}
       if(typeof payload?.id!=="string"||!payload.id||(itemId&&payload.id!==itemId)){setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");return;}
+      if(onSaved){if(!await onSaved(payload.id))setError("Record saved, but the queue could not be refreshed. Retry the queue update before another change.");return;}
       const destination=new URL(successHref??"/hr-admin/movements",window.location.origin);
       if(destination.pathname==="/hr-admin/movements")destination.searchParams.set("recordLoaded",payload.id);
       else if(destination.pathname==="/hr-admin/lifecycle")destination.searchParams.set("record",`movement:${payload.id}`);
@@ -91,7 +94,7 @@ export function MovementForm({ initialValue, mode, options, itemId, cancelHref, 
     } catch {setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");}
     finally {pending.current=false;setIsSubmitting(false);}
   }
-  function handleCancel(){navigation.cancel();}
+  function handleCancel(){if(onCancel){if(JSON.stringify(formValue)===JSON.stringify(initialValue)||window.confirm("Discard unsaved changes?"))onCancel();}else navigation.cancel();}
 
   return (
     <form id={formId} ref={formRef} data-hydrated={navigation.ready} aria-label="Movement event form" className={`section form-layout-modern lifecycle-phase3-form lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`} data-testid="movement-event-form" noValidate onSubmit={handleSubmit}>

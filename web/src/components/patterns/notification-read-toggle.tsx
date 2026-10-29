@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 
 type Props = {
   endpoint: string;
@@ -13,14 +12,13 @@ type Props = {
 };
 
 export function NotificationReadToggle({ endpoint, isRead, onSaved }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const inFlight = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   async function handleToggle() {
-    if (inFlight.current || isSubmitting || isRefreshing) return;
+    if (inFlight.current || isSubmitting) return;
     inFlight.current = true;
     setIsSubmitting(true);
     setError("");
@@ -67,7 +65,6 @@ export function NotificationReadToggle({ endpoint, isRead, onSaved }: Props) {
     onSaved?.(savedReadAt);
     inFlight.current = false;
     setIsSubmitting(false);
-    if (!onSaved) refresh();
   }
 
   useEffect(() => {
@@ -79,7 +76,7 @@ export function NotificationReadToggle({ endpoint, isRead, onSaved }: Props) {
   return (
     <div className="record-card__actions">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <AsyncActionButton preserveFocusWhenPending className="button button--secondary" pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification" : "Saving read state"} onClick={handleToggle} type="button">{isRead ? "Mark unread" : "Mark read"}</AsyncActionButton>
+      <AsyncActionButton preserveFocusWhenPending className="button button--secondary" pending={isSubmitting} pendingLabel="Saving read state" onClick={handleToggle} type="button">{isRead ? "Mark unread" : "Mark read"}</AsyncActionButton>
       {error ? <span role="alert" className="muted">{error}</span> : null}
     </div>
   );

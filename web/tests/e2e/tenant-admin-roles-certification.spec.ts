@@ -22,6 +22,7 @@ type TenantRole = {
   description: string;
   name: string;
   permission_keys: string[];
+  updated_at: string;
 };
 
 type TenantMembership = {
@@ -55,7 +56,10 @@ async function getCommercialControl(page: Page) {
 }
 
 async function patchCommercialControl(page: Page, payload: Record<string, string>) {
-  const response = await page.request.patch("/api/hr-admin/saas-control-plane", { data: payload });
+  const response = await page.request.patch(`${apiBaseUrl()}/hr-admin/saas-control-plane/`, {
+    data: payload,
+    headers: await authHeaders(page),
+  });
   expect(response.ok()).toBeTruthy();
   return (await response.json()) as CommercialControl;
 }
@@ -153,6 +157,7 @@ test.describe("Tenant admin roles certification", () => {
     await expect(page.locator(".tenant-role-row")).toContainText(`QA Reviewer ${suffix}`);
     await expect(page.locator(".tenant-role-row")).toContainText("Updated QA evidence owner.");
     await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle");
     await page.getByLabel("Search roles").fill(`qa-reviewer-${suffix}`);
     const reloadedRoleRow = page.locator(".tenant-role-row").filter({ hasText: `QA Reviewer ${suffix}` });
     await expect(reloadedRoleRow).toHaveCount(1);
@@ -160,6 +165,103 @@ test.describe("Tenant admin roles certification", () => {
 
     await page.getByLabel("Search roles").fill("zzzz-unmatched-999999");
     await expect(page.getByRole("status").filter({ hasText: "No roles match the current search." })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies role boundaries, cancel/reset, optional clearing, pending suppression, stale updates, and safe failures", async ({ page }) => {
+    await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
+    await expectPageReady(page, "Roles & Permissions");
+
+    const suffix = Date.now();
+    const addRole = page.getByRole("main").getByRole("button", { name: "Add role" });
+    await addRole.click();
+    let dialog = page.getByRole("dialog", { name: "Create tenant role" });
+    await dialog.getByLabel("Role name").fill(`Cancelled Role ${suffix}`);
+    await dialog.getByLabel("Description").fill("This draft must be discarded.");
+    page.once("dialog", (confirmation) => confirmation.accept());
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    await addRole.click();
+    dialog = page.getByRole("dialog", { name: "Create tenant role" });
+    await expect(dialog.getByLabel("Role name")).toHaveValue("");
+    await expect(dialog.getByLabel("Description")).toHaveValue("");
+
+    const roleName = `Boundary Role ${suffix}`;
+    const roleCode = `boundary-role-${suffix}`;
+    await dialog.getByLabel("Role name").fill(roleName);
+    await dialog.getByLabel("Role code").fill(roleCode);
+    await dialog.getByLabel("Description").fill("x".repeat(1201));
+    await dialog.getByRole("button", { name: "Create role" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("1200 characters");
+    await expect(dialog.getByLabel("Description")).toHaveValue("x".repeat(1201));
+
+    await dialog.getByLabel("Description").fill("x".repeat(1200));
+    let createRequests = 0;
+    await page.route("**/api/tenant-admin/roles", async (route) => {
+      if (route.request().method() === "POST") {
+        createRequests += 1;
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+      await route.continue();
+    });
+    const createButton = dialog.getByRole("button", { name: "Create role" });
+    await createButton.click();
+    await expect(dialog.getByRole("button", { name: "Creating role" })).toBeDisabled();
+    await dialog.getByRole("button", { name: "Creating role" }).dispatchEvent("click");
+    await expect(dialog).toHaveCount(0);
+    expect(createRequests).toBe(1);
+    await page.unroute("**/api/tenant-admin/roles");
+
+    const row = page.locator(".tenant-role-row").filter({ hasText: roleName });
+    await expect(row).toBeVisible();
+    const before = (await getTenantRoles(page)).find((role) => role.code === roleCode)!;
+
+    await row.getByRole("button", { name: "Edit" }).click();
+    let editDialog = page.getByRole("dialog", { name: "Update tenant role" });
+    await editDialog.getByLabel("Description").fill("");
+    let updateRequests = 0;
+    await page.route(`**/api/tenant-admin/roles/${before.id}`, async (route) => {
+      if (route.request().method() === "PATCH") {
+        updateRequests += 1;
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+      await route.continue();
+    });
+    await editDialog.getByRole("button", { name: "Update role" }).click();
+    await expect(editDialog.getByRole("button", { name: "Updating role" })).toBeDisabled();
+    await editDialog.getByRole("button", { name: "Updating role" }).dispatchEvent("click");
+    await expect(editDialog).toHaveCount(0);
+    expect(updateRequests).toBe(1);
+    await page.unroute(`**/api/tenant-admin/roles/${before.id}`);
+    const cleared = (await getTenantRoles(page)).find((role) => role.id === before.id)!;
+    expect(cleared.description).toBe("");
+
+    await page.getByLabel("Search roles").fill(roleCode);
+    await page.locator(".tenant-role-row").filter({ hasText: roleName }).getByRole("button", { name: "Edit" }).click();
+    editDialog = page.getByRole("dialog", { name: "Update tenant role" });
+    await editDialog.getByLabel("Description").fill("Recoverable browser draft");
+    await page.route(`**/api/tenant-admin/roles/${before.id}`, async (route) => {
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ detail: "Controlled role update rejection." }) });
+    });
+    await editDialog.getByRole("button", { name: "Update role" }).click();
+    await expect(editDialog.getByRole("alert")).toContainText("Controlled role update rejection.");
+    await expect(editDialog.getByLabel("Description")).toHaveValue("Recoverable browser draft");
+    await page.unroute(`**/api/tenant-admin/roles/${before.id}`);
+    expect((await getTenantRoles(page)).find((role) => role.id === before.id)?.description).toBe("");
+
+    const fresh = (await getTenantRoles(page)).find((role) => role.id === before.id)!;
+    const concurrent = await page.request.patch(`${apiBaseUrl()}/tenant-admin/roles/${fresh.id}/?compact=1`, {
+      headers: await authHeaders(page),
+      data: { ...fresh, description: "Concurrent server update", expected_updated_at: fresh.updated_at },
+    });
+    expect(concurrent.ok()).toBeTruthy();
+    await editDialog.getByLabel("Description").fill("Stale browser update");
+    await editDialog.getByRole("button", { name: "Update role" }).click();
+    await expect(editDialog.getByRole("alert")).toContainText("changed after you opened it");
+    await expect(editDialog.getByLabel("Description")).toHaveValue("Stale browser update");
+    expect((await getTenantRoles(page)).find((role) => role.id === before.id)?.description).toBe("Concurrent server update");
+    page.once("dialog", (confirmation) => confirmation.accept());
+    await editDialog.getByRole("button", { name: "Cancel" }).click();
     await expectNoHorizontalOverflow(page);
   });
 
@@ -204,7 +306,8 @@ test.describe("Tenant admin roles certification", () => {
     await expectPageReady(page, "Roles & Permissions");
 
     const suffix = Date.now();
-    const roleResponse = await page.request.post("/api/tenant-admin/roles", {
+    const roleResponse = await page.request.post(`${apiBaseUrl()}/tenant-admin/roles/`, {
+      headers: await authHeaders(page),
       data: {
         name: `QA Limited Tenant Viewer ${suffix}`,
         code: `qa-limited-tenant-viewer-${suffix}`,
@@ -218,7 +321,8 @@ test.describe("Tenant admin roles certification", () => {
     const roleId = rolePayload.role.id as string;
 
     const username = `qa.limited.${suffix}`;
-    const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+    const inviteResponse = await page.request.post(`${apiBaseUrl()}/tenant-admin/memberships/`, {
+      headers: await authHeaders(page),
       data: {
         username,
         email: `${username}@example.com`,
@@ -263,7 +367,8 @@ test.describe("Tenant admin roles certification", () => {
     await expect(page.getByText("Role changes require tenant.roles.manage.")).toBeVisible();
     await expect(page.locator(".tenant-role-row").first().getByRole("button", { name: "Edit" })).toBeDisabled();
 
-    const blockedRoleResponse = await page.request.post("/api/tenant-admin/roles", {
+    const blockedRoleResponse = await page.request.post(`${apiBaseUrl()}/tenant-admin/roles/`, {
+      headers: await authHeaders(page),
       data: {
         name: `Blocked Browser Role ${suffix}`,
         code: `blocked-browser-role-${suffix}`,
@@ -279,7 +384,8 @@ test.describe("Tenant admin roles certification", () => {
     await expect(page.getByText("User changes require tenant.users.manage.")).toBeVisible();
     await expect(page.getByRole("main").getByRole("button", { name: "Update roles" }).first()).toBeDisabled();
 
-    const blockedInviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+    const blockedInviteResponse = await page.request.post(`${apiBaseUrl()}/tenant-admin/memberships/`, {
+      headers: await authHeaders(page),
       data: {
         username: `blocked.member.${suffix}`,
         email: `blocked.member.${suffix}@example.com`,

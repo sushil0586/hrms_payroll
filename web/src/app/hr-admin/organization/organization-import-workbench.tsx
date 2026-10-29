@@ -275,7 +275,7 @@ function buildRows(csvText: string, snapshot: HrAdminOrganizationSnapshot): Impo
   });
 }
 
-export function OrganizationImportWorkbench({ snapshot, onStateChange }: { snapshot: HrAdminOrganizationSnapshot; onStateChange?: (state:OrganizationWorkflowState)=>void }) {
+export function OrganizationImportWorkbench({ snapshot, onStateChange, onCommitted }: { snapshot: HrAdminOrganizationSnapshot; onStateChange?: (state:OrganizationWorkflowState)=>void;onCommitted?:()=>Promise<void>|void }) {
   const [csvText, setCsvText] = useState(templateCsv());
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [isCommitting, setIsCommitting] = useState(false);
@@ -307,8 +307,8 @@ export function OrganizationImportWorkbench({ snapshot, onStateChange }: { snaps
       const uncertain=response.status===0 || response.status>=500 || (response.ok&&!confirmed);
       const message=confirmed?"Created in the submitted batch.":uncertain?"Outcome unconfirmed. Check the catalog before retrying.":JSON.stringify(response.payload?.rows??response.payload?.detail??"The submitted batch was rejected.");
       readyRows.forEach(row=>{row.status=confirmed?"created":uncertain?"unconfirmed":"failed";row.message=message;});
-      if(confirmed){setConfirmedText(csvText);setBaseline(csvText);}
-      setSummary(confirmed?"Submitted ready rows confirmed. Blocked rows were not submitted. Reload the catalog before another batch.":uncertain?"Import outcome could not be confirmed. The CSV is retained; check the catalog before retrying.":"The submitted batch was rejected. Review the messages and preview the retained CSV again.");
+      if(confirmed){setConfirmedText(csvText);setBaseline(csvText);await onCommitted?.();}
+      setSummary(confirmed?"Submitted ready rows confirmed. Blocked rows were not submitted, and the catalog is current.":uncertain?"Import outcome could not be confirmed. The CSV is retained; check the catalog before retrying.":"The submitted batch was rejected. Review the messages and preview the retained CSV again.");
     } finally { setRows(nextRows);pending.current=false;setIsCommitting(false); }
   }
 
@@ -366,7 +366,7 @@ export function OrganizationImportWorkbench({ snapshot, onStateChange }: { snaps
           </div>
         </div>
         {previewText && previewText!==csvText ? <p role="status">CSV changed. Preview again before committing.</p> : null}
-        {summary ? <div ref={feedback} tabIndex={-1} className="notice" role="status"><strong>{summary}</strong><a data-navigation-mode="document" href="/hr-admin/organization">Reload catalog</a></div> : null}
+        {summary ? <div ref={feedback} tabIndex={-1} className="notice" role="status"><strong>{summary}</strong></div> : null}
         {!rows.length ? <p>Preview CSV to review rows and batch totals.</p> : null}
         <WorkspaceTableScrollRegion label="Organization import table 1" className="responsive-table-wrap workspace-table-region">
           <table className="data-table">

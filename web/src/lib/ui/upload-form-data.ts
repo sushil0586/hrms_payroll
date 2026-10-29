@@ -12,12 +12,13 @@ export type UploadResult = {
 export function uploadFormData(
   url: string,
   body: FormData,
-  options: { onProgress?: (progress: UploadProgress) => void; signal?: AbortSignal } = {},
+  options: { onProgress?: (progress: UploadProgress) => void; signal?: AbortSignal; headers?: Record<string, string> } = {},
 ) {
   return new Promise<UploadResult>((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("POST", url);
     request.withCredentials = true;
+    Object.entries(options.headers ?? {}).forEach(([name, value]) => request.setRequestHeader(name, value));
     request.upload.addEventListener("progress", (event) => {
       options.onProgress?.({ loaded: event.loaded, total: event.lengthComputable ? event.total : null });
     });

@@ -29,6 +29,7 @@ export type IsolatedQaWorkspace = {
       employee_notification_id: string;
     };
     platform_admin: { username: string; platform_only: boolean };
+    platform_cleanup_admin: { username: string; platform_only: boolean };
     checks: Record<string, boolean>;
   };
 };
@@ -59,7 +60,17 @@ export async function loadIsolatedQaWorkspace(manifestPath: string, seedRef: str
 export async function cleanupIsolatedQaWorkspace(workspace: IsolatedQaWorkspace | undefined) {
   if (!workspace) return;
   try {
-    await runWorkspaceCommand(["--seed-ref", workspace.seedRef, "--cleanup", "--output-file", workspace.manifestPath]);
+    await runWorkspaceCommand(["--seed-ref", workspace.seedRef, "--cleanup", "--dry-run", "--output-file", workspace.manifestPath]);
+    const plan = JSON.parse(await readFile(workspace.manifestPath, "utf8"));
+    if (plan.action !== "cleanup_dry_run" || plan.tenant?.code !== workspace.manifest.tenant.code) {
+      throw new Error(`Workspace cleanup plan was not ownership verified: ${workspace.seedRef}`);
+    }
+    await runWorkspaceCommand([
+      "--seed-ref", workspace.seedRef,
+      "--cleanup",
+      "--confirm-private-file-delete",
+      "--output-file", workspace.manifestPath,
+    ]);
     const cleanup = JSON.parse(await readFile(workspace.manifestPath, "utf8"));
     if (!cleanup.verified_absent) throw new Error(`Workspace cleanup was not verified: ${workspace.seedRef}`);
   } finally {
@@ -73,6 +84,10 @@ export function workspacePersona(workspace: IsolatedQaWorkspace, role: "hr_admin
 
 export function workspacePlatformPersona(workspace: IsolatedQaWorkspace): Persona {
   return { username: workspace.manifest.platform_admin.username, password: "Password@123" };
+}
+
+export function workspaceCleanupPlatformPersona(workspace: IsolatedQaWorkspace): Persona {
+  return { username: workspace.manifest.platform_cleanup_admin.username, password: "Password@123" };
 }
 
 export async function resolveEmployeeById(

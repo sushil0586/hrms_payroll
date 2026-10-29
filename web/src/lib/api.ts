@@ -2250,6 +2250,7 @@ function getDemoData<T>(path: string): T {
       conflict_count: 0,
       has_blocking_conflict: false,
       conflict_summary: "No overlapping shift assignment detected for this employee and date window.",
+      updated_at: "2026-01-01T00:00:00Z",
     },
     {
       id: "esa-2",
@@ -2275,6 +2276,7 @@ function getDemoData<T>(path: string): T {
       conflict_count: 0,
       has_blocking_conflict: false,
       conflict_summary: "No overlapping shift assignment detected for this employee and date window.",
+      updated_at: "2026-01-01T00:00:00Z",
     },
   ];
 
@@ -2297,6 +2299,7 @@ function getDemoData<T>(path: string): T {
           ],
         },
       },
+      updated_at: "2026-01-01T00:00:00Z",
     },
     {
       id: "srt-2",
@@ -2313,6 +2316,7 @@ function getDemoData<T>(path: string): T {
           entries: [{ position: 0, shift_id: "shift-3", span_days: 5 }],
         },
       },
+      updated_at: "2026-01-01T00:00:00Z",
     },
   ];
 
@@ -12322,6 +12326,7 @@ function getDemoData<T>(path: string): T {
             is_active: true,
             active_membership_count: 1,
             permission_keys: ["tenant.users.manage", "tenant.settings.view", "tenant.roles.manage"],
+            updated_at: "2026-01-01T00:00:00Z",
           },
           {
             id: "role-hr-admin",
@@ -12332,6 +12337,7 @@ function getDemoData<T>(path: string): T {
             is_active: true,
             active_membership_count: 1,
             permission_keys: ["employees.view", "employees.create", "employees.edit", "payroll.inputs.manage"],
+            updated_at: "2026-01-01T00:00:00Z",
           },
           {
             id: "role-payroll-reviewer",
@@ -12342,6 +12348,7 @@ function getDemoData<T>(path: string): T {
             is_active: true,
             active_membership_count: 0,
             permission_keys: ["payroll.review"],
+            updated_at: "2026-01-01T00:00:00Z",
           },
         ],
         permission_catalog: [
@@ -13667,6 +13674,25 @@ function getDemoData<T>(path: string): T {
       return buildDemoSupportSessionDomainSnapshot() as T;
     case "/tenant-admin/console/":
       return buildDemoTenantAdminConsole() as T;
+    case "/tenant-admin/financial-calendars/":
+      return { calendars: [], fiscal_years: [], accounting_periods: [], legal_entities: [] } as T;
+    case "/tenant-admin/data-governance/":
+      return {
+        record_categories: ["employee_profile", "attendance_record", "payroll_output"],
+        policies: [], legal_holds: [], requests: [],
+        preview: {
+          destructive_execution_enabled: false,
+          categories: ["employee_profile", "attendance_record", "payroll_output"].map((record_category) => ({
+            record_category, record_count: 0, eligible_record_count: 0, retention_days: null,
+            legal_hold_count: 0, eligible: false, blockers: ["No approved retention policy"],
+          })),
+        },
+      } as T;
+    case "/platform/data-governance/":
+      return {
+        record_categories: ["employee_profile", "attendance_record", "payroll_output"],
+        policies: [], legal_holds: [], requests: [], preview: null,
+      } as T;
     case "/platform/permission-catalog/":
       return buildDemoTenantAdminConsole().role_management.permission_catalog.map((item) => ({
         key: item.key,

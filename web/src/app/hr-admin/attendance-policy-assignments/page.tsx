@@ -1,15 +1,15 @@
 import Link from "next/link";
 
 import { AttendancePolicyAssignmentGovernancePanel } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignment-governance-panel";
-import { AttendancePolicyAssignmentsWorkbench } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignments-workbench";
+import { AttendancePolicyAssignmentsWorkspace } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignments-workspace";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
-export default async function HrAdminAttendancePolicyAssignmentsPage() {
+export default async function HrAdminAttendancePolicyAssignmentsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/policy-assignments" });
-  const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
+  const canManagePolicies = !sessionUser || sessionHasPermission(sessionUser, "attendance.policies.manage");
   const [result, optionsResult] = await Promise.all([
     getHrAdminAttendancePolicyAssignments(),
     getHrAdminPolicyWorkbenchOptions({
@@ -44,11 +44,11 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
         secondaryMetricValue={activeCount}
       /></details>
 
-      <AttendancePolicyAssignmentsWorkbench
+      <AttendancePolicyAssignmentsWorkspace
         canManagePolicies={canManagePolicies}
-        items={result.data}
+        initialData={{ items: result.data, state: result.state === "live" ? "live" : "demo" }}
         options={optionsResult.data}
-        state={result.state === "live" && optionsResult.state === "live" ? "live" : "demo"}
+        initialModal={await (async () => { const params = (await searchParams) ?? {}; const first = (key: string) => Array.isArray(params[key]) ? params[key][0] : params[key]; const id = first("editAssignment") || ""; return id ? { mode: "edit" as const, id } : first("assignmentModal") === "create" ? { mode: "create" as const, id: "" } : { mode: "" as const, id: "" }; })()}
       />
 
       {canManagePolicies ? (

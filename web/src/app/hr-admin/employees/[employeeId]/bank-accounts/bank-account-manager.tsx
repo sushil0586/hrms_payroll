@@ -56,6 +56,7 @@ export function BankAccountManager({
   employeeName: string;
   initialAccounts: HrAdminEmployeeBankAccount[];
   cancelHref?: string;
+  onSaved?: () => Promise<void> | void;
 }) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [selectedId, setSelectedId] = useState<string | null>(initialAccounts[0]?.id ?? null);
@@ -157,6 +158,7 @@ export function BankAccountManager({
     setSelectedId(saved.id);
     setFormValue(toForm(saved));
     draft.markSaved(toForm(saved));
+    await callbacks.onSaved?.();
     setShowAccountNumber(false);
     setFeedback({ tone: "success", message: "Employee bank account saved." });
   }

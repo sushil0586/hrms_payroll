@@ -2,6 +2,7 @@ import type { HrAdminShiftRosterTemplate, HrAdminShiftRosterTemplateWriteInput }
 
 export function shiftRosterTemplateToFormValue(item: HrAdminShiftRosterTemplate): HrAdminShiftRosterTemplateWriteInput {
   return {
+    expected_updated_at: item.updated_at,
     code: item.code,
     name: item.name,
     description: item.description,

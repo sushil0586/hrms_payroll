@@ -18,7 +18,12 @@ export default async function HrAdminNewEmployeeShiftAssignmentPage() {
         description="Assign an operational shift to an employee over a governed date window."
         actions={<Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Back to shift assignments</Link>}
       />
-      <EmployeeShiftAssignmentForm initialValue={createEmptyEmployeeShiftAssignmentValue()} mode="create" options={optionsResult.data} />
+      <EmployeeShiftAssignmentForm
+        cancelHref="/hr-admin/employee-shift-assignments"
+        initialValue={createEmptyEmployeeShiftAssignmentValue()}
+        mode="create"
+        options={optionsResult.data}
+      />
     </main>
   );
 }

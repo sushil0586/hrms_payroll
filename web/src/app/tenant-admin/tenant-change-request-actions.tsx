@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { performJsonMutation } from "@/lib/ui/json-mutation";
@@ -56,7 +55,6 @@ export function TenantChangeRequestActions({
   initialTargetRef = "",
   initialTitle = "",
 }: Props) {
-  const router = useRouter();
   const requestTypes = data.change_request_management.request_type_options;
   const defaultType =
     requestTypes.find((item) => item.value === initialRequestType)?.value ?? requestTypes[0]?.value ?? "plan_change";
@@ -179,7 +177,6 @@ export function TenantChangeRequestActions({
     }
     setTitle("");
     setDescription("");
-    router.refresh();
   }
 
   async function runRequestAction(requestId: string, action: "approve" | "reject" | "cancel" | "apply") {
@@ -206,7 +203,6 @@ export function TenantChangeRequestActions({
     if (result.change_request) {
       upsertRequest(result.change_request);
     }
-    router.refresh();
   }
 
   return (

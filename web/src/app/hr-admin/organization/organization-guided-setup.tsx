@@ -128,7 +128,7 @@ function readinessCount(snapshot: HrAdminOrganizationSnapshot) {
   return checks.filter(Boolean).length;
 }
 
-export function OrganizationGuidedSetup({ snapshot, onStateChange }: GuidedSetupProps & {onStateChange?: (state:OrganizationWorkflowState)=>void}) {
+export function OrganizationGuidedSetup({ snapshot, onStateChange, onCommitted }: GuidedSetupProps & {onStateChange?: (state:OrganizationWorkflowState)=>void;onCommitted?:()=>Promise<void>|void}) {
   const [formValue, setFormValue] = useState<SetupFormValue>(initialFormValue);
   const [steps, setSteps] = useState<StepStatus[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -246,7 +246,8 @@ export function OrganizationGuidedSetup({ snapshot, onStateChange }: GuidedSetup
         is_active: true,
       });
 
-      setNotice("Setup steps confirmed. Review created and reused records; reload the catalog for current counts.");
+      await onCommitted?.();
+      setNotice("Setup steps confirmed. The organization catalog and counts are current.");
       setSavedKey(JSON.stringify(formValue));
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to complete organization setup.");
@@ -415,7 +416,7 @@ export function OrganizationGuidedSetup({ snapshot, onStateChange }: GuidedSetup
         ) : null}
         {notice ? (
           <div ref={feedback} tabIndex={-1} className="notice" role="status">
-            <strong>{notice}</strong><a data-navigation-mode="document" href="/hr-admin/organization">Reload catalog</a>
+            <strong>{notice}</strong>
           </div>
         ) : null}
 

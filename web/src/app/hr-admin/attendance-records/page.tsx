@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { attendanceDateError } from "./filter-contract";
 
-import { AttendanceRecordBulkManager } from "@/app/hr-admin/attendance-records/attendance-record-bulk-manager";
-import { AttendanceRecordImportWorkbench } from "@/app/hr-admin/attendance-records/attendance-record-import-workbench";
+import { AttendanceRecordsWorkspace, type AttendanceRecordsQuery } from "@/app/hr-admin/attendance-records/attendance-records-workspace";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceOperationOptions, getHrAdminAttendanceRecord, getHrAdminAttendanceRecords, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -19,7 +18,7 @@ function normalizeParam(value: SearchParamValue) {
 
 export default async function HrAdminAttendanceRecordsPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view"], fallbackPath: "/hr-admin" });
-  const canManageRecords = sessionHasPermission(sessionUser, "attendance.records.manage");
+  const canManageRecords = !sessionUser || sessionHasPermission(sessionUser, "attendance.records.manage");
   const currentParams = (await searchParams) ?? {};
   const requestedPage = Number(normalizeParam(currentParams.page));
   const page = Number.isFinite(requestedPage) ? Math.max(Math.floor(requestedPage) || 1, 1) : 1;
@@ -63,7 +62,6 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
     query.set("page_size", String(pageSize));
     redirect(`/hr-admin/attendance-records?${query}`);
   }
-  const records = result?.data.items ?? [];
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui accerio-page">
       <PageIntro
@@ -84,45 +82,16 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
         secondaryMetricValue={result?.data.page ?? page}
       />
       </details> : null}
-      <AttendanceRecordBulkManager
-        items={records}
-        state={result?.state ?? optionsResult.state}
-        statusOptions={optionsResult.data.attendance_statuses}
-        sourceOptions={optionsResult.data.attendance_sources}
-        shiftOptions={optionsResult.data.shifts}
+      <AttendanceRecordsWorkspace
+        initialData={{ ...(result?.data ?? { items: [], total_count: 0, page, page_size: pageSize, has_next: false, has_previous: false }), state: result?.state === "live" ? "live" : "demo", editRecord: editRecordResult?.data ?? null }}
+        initialQuery={{
+          q, status, source, shift_id: shiftId, lock_state: lockState, regularized_state: regularizedState,
+          from_date: fromDate, to_date: toDate, late_only: lateOnly, page, page_size: pageSize, editRecord: editRecordId,
+        } satisfies AttendanceRecordsQuery}
+        workbenchOptions={optionsResult.data}
         recordOptions={recordOptionsResult.data}
-        editRecord={editRecordResult?.data ?? null}
-        validationError={validationError}
-        currentFilters={{
-          q,
-          status,
-          source,
-          shift_id: shiftId,
-          lock_state: lockState,
-          regularized_state: regularizedState,
-          from_date: fromDate,
-          to_date: toDate,
-          late_only: lateOnly,
-          page,
-          page_size: pageSize,
-        }}
-        pagination={{
-          total_count: result?.data.total_count ?? 0,
-          page: result?.data.page ?? page,
-          page_size: result?.data.page_size ?? pageSize,
-          has_next: result?.data.has_next ?? false,
-          has_previous: result?.data.has_previous ?? false,
-        }}
         canManageRecords={canManageRecords}
       />
-      {!validationError ? <details className="workspace-context-disclosure"><summary>Attendance import tools</summary><AttendanceRecordImportWorkbench
-        records={records}
-        employees={optionsResult.data.employees}
-        shifts={optionsResult.data.shifts}
-        statusOptions={optionsResult.data.attendance_statuses}
-        sourceOptions={optionsResult.data.attendance_sources}
-        canManageRecords={canManageRecords}
-      /></details> : null}
     </main>
   );
 }

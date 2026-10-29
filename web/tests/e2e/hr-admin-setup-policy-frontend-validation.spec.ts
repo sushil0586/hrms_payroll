@@ -14,10 +14,10 @@ function field(scope: Page | Locator, label: string) {
 async function openFirstRemoveDialog(page: Page) {
   let removeButton = page.getByRole("button", { name: "Remove" }).first();
   if (!(await removeButton.isVisible().catch(() => false))) {
-    await page.getByRole("button", { name: "Inspect" }).first().click();
-    const detailDialog = page.getByRole("dialog").first();
-    await expect(detailDialog).toBeVisible();
-    removeButton = detailDialog.getByRole("button", { name: "Remove" }).first();
+    await page.getByRole("link", { name: "Inspect" }).first().click();
+    const detail = page.locator("#leave-setup-detail, #leave-assignment-detail").first();
+    await expect(detail).toBeVisible();
+    removeButton = detail.getByRole("button", { name: "Remove" }).first();
   }
   await expect(removeButton).toBeVisible();
   await removeButton.click();
@@ -160,6 +160,7 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await expect(field(filters, "Accrual frequency")).toBeVisible();
 
     await field(filters, "Search").fill("no-policy-should-match-this");
+    await filters.getByRole("button", { name: "Apply filters" }).click();
     await expect(page.getByText("No leave policies match the current filters.")).toBeVisible();
 
     await filters.getByRole("button", { name: /Clear filters|Clear/ }).click();
@@ -210,7 +211,7 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await form.getByRole("button", { name: "Apply template" }).click();
     await page.getByRole("button", { name: "Create leave policy" }).click();
 
-    await expect(form.getByRole("alert").filter({ hasText: "Save failed." })).toBeVisible();
+    await expect(form.getByRole("alert").filter({ hasText: "Save not confirmed." })).toBeVisible();
     await expect(form.getByText("Leave policy save service is temporarily unavailable.")).toBeVisible();
 
     await page.getByRole("button", { name: "Create leave policy" }).click();

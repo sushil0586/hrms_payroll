@@ -18,7 +18,12 @@ export default async function HrAdminNewShiftRosterTemplatePage() {
         description="Build a repeatable shift pattern that can be previewed and rolled out at employee scope later."
         actions={<Link className="button button--secondary" href="/hr-admin/shift-roster-templates">Back to roster templates</Link>}
       />
-      <ShiftRosterTemplateForm initialValue={createEmptyShiftRosterTemplateValue()} mode="create" options={optionsResult.data} />
+      <ShiftRosterTemplateForm
+        cancelHref="/hr-admin/shift-roster-templates"
+        initialValue={createEmptyShiftRosterTemplateValue()}
+        mode="create"
+        options={optionsResult.data}
+      />
     </main>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type {
@@ -93,7 +92,7 @@ function toFormValue(item: HrAdminNotificationChannelConfiguration): HrAdminNoti
 }
 
 export function NotificationDeliveryManager({ options }: Props) {
-  const router = useRouter();
+  const hydrated = useSyncExternalStore(() => () => undefined, () => true, () => false);
   const [formValues, setFormValues] = useState<Record<string, HrAdminNotificationChannelConfigurationWriteInput>>(
     Object.fromEntries(options.channel_configurations.map((item) => [item.id, toFormValue(item)])),
   );
@@ -254,11 +253,10 @@ export function NotificationDeliveryManager({ options }: Props) {
       ...current,
       [item.id]: { error: "", success: "Delivery settings saved.", isSubmitting: false },
     }));
-    router.refresh();
   }
 
   return (
-    <section className="section form-layout-modern">
+    <section className="section form-layout-modern" data-delivery-manager-hydrated={hydrated ? "true" : "false"}>
       {options.channel_configurations.map((item) => {
         const state = saveStates[item.id];
         const value = formValues[item.id];

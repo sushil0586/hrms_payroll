@@ -11,6 +11,7 @@ import { ComplianceEvidenceStrip } from "../compliance-evidence-strip";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
 import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
+import { ProviderDeliveryRetryActions } from "./provider-delivery-retry-actions";
 import type {
   HrAdminPayrollFinanceHandoff,
   HrAdminPayrollOutputArtifact,
@@ -676,14 +677,7 @@ function ArtifactDetail({
       {delivery && retryableDelivery ? (
         <section className="payroll-rule-source-card payroll-handoff-retry-command-card">
           <span className="workspace-card__eyebrow">Retry commands</span>
-          <div className="payroll-handoff-retry-command-strip">
-            <form action={`/api/hr-admin/payroll-provider-deliveries/${delivery.id}/schedule-retry`} method="post">
-              <button className="button" type="submit">Schedule retry</button>
-            </form>
-            <form action={`/api/hr-admin/payroll-provider-deliveries/${delivery.id}/requeue`} method="post">
-              <button className="button button--secondary" type="submit">Requeue delivery</button>
-            </form>
-          </div>
+          <ProviderDeliveryRetryActions initialDelivery={delivery} />
           <div className="detail-grid">
             <div className="detail-row"><span className="detail-label">Retry state</span><span className="detail-value">{titleCase(snapshotText(retryState, "state", "not scheduled"))}</span></div>
             <div className="detail-row"><span className="detail-label">Next attempt</span><span className="detail-value">{String(retryState.next_attempt_number ?? latestRetryEvent?.attempt_number ?? "Pending")}</span></div>

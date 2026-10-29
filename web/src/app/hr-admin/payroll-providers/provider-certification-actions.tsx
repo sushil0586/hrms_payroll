@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type Props = {
   connectionId: string;
@@ -20,7 +19,6 @@ function apiErrorMessage(payload: unknown, fallback: string) {
 }
 
 export function ProviderCertificationActions({ connectionId, disabled }: Props) {
-  const router = useRouter();
   const [isRunning, setIsRunning] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -43,7 +41,7 @@ export function ProviderCertificationActions({ connectionId, disabled }: Props) 
         return;
       }
       setNotice("Certification run completed.");
-      router.refresh();
+
     } catch {
       setNotice("The certification outcome could not be confirmed. Verify the connection before retrying.");
     } finally {

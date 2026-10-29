@@ -127,3 +127,201 @@ def test_attendance_family_employee_cannot_read_admin_catalogs(scope, resource):
     _, _, record, client = scope
     client.force_authenticate(record.employee.membership.user)
     assert client.get(f"/api/v1/hr-admin/{resource}/").status_code == 403
+
+
+def test_duplicate_roster_template_code_returns_validation_without_second_row(scope):
+    from apps.attendance.models import ShiftRosterTemplate
+
+    tenant, actor, _, client = scope
+    shift = tenant.shifts.first()
+    ShiftRosterTemplate.objects.create(tenant=tenant, code="duplicate-qa", name="Existing QA", shift=shift)
+    before = ShiftRosterTemplate.objects.filter(tenant=tenant, code="duplicate-qa").count()
+
+    response = client.post(
+        "/api/v1/hr-admin/shift-roster-templates/",
+        {
+            "code": "duplicate-qa",
+            "name": "Duplicate QA",
+            "status": "draft",
+            "shift_id": str(shift.id),
+            "assignment_kind": "fixed",
+            "config_snapshot": {},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "A roster template with this code already exists."
+    assert ShiftRosterTemplate.objects.filter(tenant=tenant, code="duplicate-qa").count() == before
+
+
+def test_weekly_roster_update_rejects_explicit_empty_rotation(scope):
+    from apps.attendance.models import ShiftRosterTemplate
+
+    tenant, _, _, client = scope
+    item = ShiftRosterTemplate.objects.create(tenant=tenant, code="rotation-qa", name="Rotation QA", shift=tenant.shifts.first())
+    response = client.patch(
+        f"/api/v1/hr-admin/shift-roster-templates/{item.id}/",
+        {"assignment_kind": "weekly_rotation", "config_snapshot": {"rotation": {"anchor_date": None, "entries": []}}},
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "at least one rotation step" in response.json()["config_snapshot"]
+    item.refresh_from_db()
+    assert item.assignment_kind == "fixed"
+
+
+def test_assignment_update_rejects_stale_revision_and_writes_one_audit(scope):
+    from apps.common.models import SaasCommercialAuditEvent
+
+    tenant, _, _, client = scope
+    item = tenant.employee_shift_assignments.select_related("employee", "shift").first()
+    revision = item.updated_at.isoformat().replace("+00:00", "Z")
+    url = f"/api/v1/hr-admin/employee-shift-assignments/{item.id}/"
+    accepted = client.patch(url, {"is_primary": False, "expected_updated_at": revision}, format="json")
+    stale = client.patch(url, {"is_primary": True, "expected_updated_at": revision}, format="json")
+
+    assert accepted.status_code == 200
+    assert stale.status_code == 409
+    item.refresh_from_db()
+    assert item.is_primary is False
+    events = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_shift_assignment_updated",
+        event_snapshot__assignment_id=str(item.id),
+    )
+    assert events.count() == 1
+    assert events.get().event_snapshot["changed_fields"] == ["is_primary"]
+
+
+def test_roster_update_rejects_stale_revision_and_writes_one_audit(scope):
+    from apps.attendance.models import ShiftRosterTemplate
+    from apps.common.models import SaasCommercialAuditEvent
+
+    tenant, _, _, client = scope
+    item = ShiftRosterTemplate.objects.create(tenant=tenant, code="stale-qa", name="Original", shift=tenant.shifts.first())
+    revision = item.updated_at.isoformat().replace("+00:00", "Z")
+    url = f"/api/v1/hr-admin/shift-roster-templates/{item.id}/"
+    accepted = client.patch(url, {"name": "Accepted", "expected_updated_at": revision}, format="json")
+    stale = client.patch(url, {"name": "Rejected", "expected_updated_at": revision}, format="json")
+
+    assert accepted.status_code == 200
+    assert stale.status_code == 409
+    item.refresh_from_db()
+    assert item.name == "Accepted"
+    events = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_shift_roster_template_updated",
+        event_snapshot__template_id=str(item.id),
+    )
+    assert events.count() == 1
+    assert events.get().event_snapshot["changed_fields"] == ["name"]
+
+
+def test_roster_create_writes_transactional_audit(scope):
+    from apps.common.models import SaasCommercialAuditEvent
+
+    tenant, _, _, client = scope
+    response = client.post(
+        "/api/v1/hr-admin/shift-roster-templates/",
+        {
+            "code": "wave14-audit",
+            "name": "Wave 14 audited roster",
+            "status": "draft",
+            "assignment_kind": "fixed",
+            "shift_id": str(tenant.shifts.first().id),
+            "config_snapshot": {},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert tenant.shift_roster_templates.filter(id=response.data["id"]).count() == 1
+    events = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_shift_roster_template_created",
+        event_snapshot__template_id=str(response.data["id"]),
+    )
+    assert events.count() == 1
+    assert events.get().event_snapshot["action"] == "created"
+
+
+def test_assignment_update_rejects_closed_attendance_history_without_audit(scope):
+    from apps.attendance.models import AttendancePeriodCloseStatus
+    from apps.common.models import SaasCommercialAuditEvent
+
+    tenant, actor, _, client = scope
+    item = tenant.employee_shift_assignments.select_related("employee", "shift").first()
+    item.effective_from = date(2033, 1, 1)
+    item.effective_to = date(2033, 1, 31)
+    item.save(update_fields=["effective_from", "effective_to", "updated_at"])
+    close = reconcile_attendance_period(
+        tenant=tenant,
+        legal_entity=item.employee.legal_entity,
+        period_start=date(2033, 1, 1),
+        period_end=date(2033, 1, 31),
+        actor=actor,
+        idempotency_key="wave13-closed-assignment",
+    )
+    for action in ("submit", "approve", "close"):
+        close = transition_attendance_close(close=close, actor=actor, action=action)
+    assert close.status == AttendancePeriodCloseStatus.CLOSED
+    before = (item.shift_id, item.effective_from, item.effective_to, item.updated_at)
+
+    response = client.patch(
+        f"/api/v1/hr-admin/employee-shift-assignments/{item.id}/",
+        {"is_primary": not item.is_primary, "expected_updated_at": item.updated_at.isoformat().replace("+00:00", "Z")},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "closed attendance period" in response.json()["detail"]
+    item.refresh_from_db()
+    assert (item.shift_id, item.effective_from, item.effective_to, item.updated_at) == before
+    assert not SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_shift_assignment_updated",
+        event_snapshot__assignment_id=str(item.id),
+    ).exists()
+
+
+def test_assignment_create_idempotency_replays_one_row_and_one_audit(scope):
+    from apps.common.models import MutationIdempotencyRecord, SaasCommercialAuditEvent
+
+    tenant, _, _, client = scope
+    target = tenant.employees.get(employee_code="QA-MGR-002")
+    payload = {
+        "employee_id": str(target.id),
+        "shift_id": str(tenant.shifts.first().id),
+        "effective_from": "2041-01-01",
+        "effective_to": "2041-01-31",
+        "is_primary": False,
+        "assignment_kind": "fixed",
+        "config_snapshot": {},
+    }
+    key = "wave13-assignment-replay-key"
+
+    first = client.post(
+        "/api/v1/hr-admin/employee-shift-assignments/",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=key,
+    )
+    replay = client.post(
+        "/api/v1/hr-admin/employee-shift-assignments/",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=key,
+    )
+
+    assert first.status_code == 201 and replay.status_code == 201
+    assert first.data["id"] == replay.data["id"]
+    assert first["Idempotency-Replayed"] == "false"
+    assert replay["Idempotency-Replayed"] == "true"
+    assert tenant.employee_shift_assignments.filter(id=first.data["id"]).count() == 1
+    assert MutationIdempotencyRecord.objects.filter(tenant=tenant, idempotency_key=key).count() == 1
+    assert SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_shift_assignment_created",
+        event_snapshot__assignment_id=str(first.data["id"]),
+    ).count() == 1

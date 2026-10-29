@@ -207,7 +207,14 @@ export default async function HrAdminSaasControlPlanePage() {
                   </div>
                   <span className={statusBadgeClass(item.status)}>{titleCase(item.status)}</span>
                 </div>
-                <div className="saas-usage-card__meter" aria-label={`${item.label} usage`}>
+                <div
+                  className="saas-usage-card__meter"
+                  aria-label={`${item.label} usage`}
+                  aria-valuemax={Math.max(item.limit_value, 1)}
+                  aria-valuemin={0}
+                  aria-valuenow={Math.min(item.current_value, Math.max(item.limit_value, 1))}
+                  role="progressbar"
+                >
                   <span style={{ width: `${usageProgress(item)}%` }} />
                 </div>
                 <div className="saas-usage-card__numbers">

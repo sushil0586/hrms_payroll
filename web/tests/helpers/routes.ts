@@ -4,7 +4,7 @@ export type RouteExpectation = {
 };
 
 export const tierZeroRoutes: RouteExpectation[] = [
-  { path: "/", heading: /Run payroll, compliance, and employee operations/ },
+  { path: "/", heading: /One clear operating flow for HR and payroll/ },
   { path: "/login", heading: "Sign in" },
   { path: "/platform-admin", heading: "Platform Admin Dashboard" },
   { path: "/hr-admin", heading: "HR Control Center" },

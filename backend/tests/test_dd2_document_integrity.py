@@ -58,7 +58,7 @@ def test_concurrent_single_file_uploads_create_one_active_version(tmp_path, sett
                     "title": f"Concurrent {suffix}",
                     "file": SimpleUploadedFile(
                         f"concurrent-{suffix}.pdf",
-                        f"content-{suffix}".encode(),
+                        f"%PDF-1.4\nconcurrent-{suffix}\n%%EOF".encode(),
                         content_type="application/pdf",
                     ),
                     "document_number": suffix,

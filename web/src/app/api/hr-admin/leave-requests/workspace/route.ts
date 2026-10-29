@@ -1,0 +1,3 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getHrAdminLeaveRequests } from "@/lib/api";
+export async function GET(request: NextRequest) { try { const p=request.nextUrl.searchParams; const result=await getHrAdminLeaveRequests({q:p.get("q")||"",status:p.get("status")||undefined,leave_type_code:p.get("leave_type_code")||undefined,from_date:p.get("from_date")||undefined,to_date:p.get("to_date")||undefined,page:Number(p.get("page"))||1,page_size:Number(p.get("page_size"))||25}); return NextResponse.json(result.data); } catch { return NextResponse.json({detail:"Leave requests could not be updated."},{status:503}); } }

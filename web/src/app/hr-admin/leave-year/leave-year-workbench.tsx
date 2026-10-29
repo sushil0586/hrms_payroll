@@ -2,7 +2,7 @@
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { WorkspaceFormControls } from "@/components/patterns/workspace-form-controls";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
@@ -29,8 +29,10 @@ type Preview = {
   totals: Record<string, string>;
   confirmation_phrase: string;
 };
+const subscribe = () => () => undefined;
 
 export function LeaveYearWorkbench({ portal, periods: initialPeriods, runs: initialRuns, classification, options, canManage, canClose, canReopen }: Props) {
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
   const [periodSnapshot, setPeriodSnapshot] = useState<{base: LeavePolicyPeriod[]; items: LeavePolicyPeriod[]} | null>(null);
   const [runSnapshot, setRunSnapshot] = useState<{base: LeaveYearCloseRun[]; items: LeaveYearCloseRun[]} | null>(null);
   const periods = periodSnapshot?.base === initialPeriods ? periodSnapshot.items : initialPeriods;
@@ -189,7 +191,7 @@ export function LeaveYearWorkbench({ portal, periods: initialPeriods, runs: init
   }
 
   return (
-    <div aria-busy={Boolean(busy)} className="queue-layout">
+    <div data-local-update-hydrated={hydrated ? "true" : "false"} aria-busy={Boolean(busy)} className="queue-layout">
       <div aria-live="polite" className="sr-only">{busy ? "Leave-year operation in progress." : message || error}</div>
       {error ? <div className="notice notice--danger" role="alert"><strong>Action required.</strong><span>{error}</span></div> : null}
       {message ? <div className="notice notice--success" role="status"><strong>Updated.</strong><span>{message}</span></div> : null}
@@ -237,7 +239,7 @@ export function LeaveYearWorkbench({ portal, periods: initialPeriods, runs: init
       {pollError ? <div className="notice notice--warning" role="alert"><span>{pollError}</span><button type="button" className="button button--secondary" onClick={() => setPollRetry(value => value + 1)}>Retry status refresh</button></div> : null}
       <section className="section panel-card-soft workspace-operation-card" aria-labelledby="close-runs-title"><div className="section-heading-row"><div><h2 className="section-heading-soft" id="close-runs-title">Year-close status</h2><p className="section-copy-soft">Queued and running job statuses refresh automatically; completed results remain durable after navigation or connection loss.</p></div></div><WorkspaceTableScrollRegion className="table-scroll workspace-table-region" label="Leave-year close runs table scroll"><table aria-label="Leave-year close runs" className="data-table workspace-data-table"><thead><tr><th scope="col">Policy</th><th scope="col">Status</th><th scope="col">Schedule</th><th scope="col">Processed</th><th scope="col">Attempts</th></tr></thead><tbody>{runs.map((run) => <tr key={run.id}><td>{run.leave_policy_name}</td><td><WorkspaceStatusBadge tone={run.status === "failed" ? "danger" : run.status === "succeeded" ? "success" : "neutral"}>{run.status}</WorkspaceStatusBadge></td><td>{run.scheduled_for ? formatWorkspaceDateTime(run.scheduled_for) + " (Asia/Kolkata)" : "Immediate"}</td><td>{run.processed_count} succeeded / {run.failed_count} failed</td><td>{run.attempt_count}</td></tr>)}{!runs.length ? <tr><td colSpan={5}>No leave-year close runs have been requested.</td></tr> : null}</tbody></table></WorkspaceTableScrollRegion></section>
 
-      <section className="section panel-card-soft workspace-operation-card" aria-labelledby="history-title"><div className="section-heading-row"><div><h2 className="section-heading-soft" id="history-title">Historical classification</h2><p className="section-copy-soft">Read-only analysis only. No historical balance or ledger transaction is changed automatically.</p></div></div><div className="workspace-metric-grid" role="group" aria-label="Historical classification summary"><MetricTile label="Unclassified balances" value={classification.balance_counts.unclassified ?? 0} /><MetricTile label="Balance candidates" value={classification.balance_counts.unambiguous_candidate ?? 0} /><MetricTile label="Unclassified transactions" value={classification.transaction_counts.unclassified ?? 0} /><MetricTile label="Ambiguous transactions" value={classification.transaction_counts.ambiguous ?? 0} /></div></section>
+      <section className="section panel-card-soft workspace-operation-card" aria-labelledby="history-title"><div className="section-heading-row"><div><h2 className="section-heading-soft" id="history-title">Historical classification</h2><p className="section-copy-soft">Read-only analysis only. No historical balance or ledger transaction is changed automatically.</p></div></div><div className="workspace-metric-grid" role="group" aria-label="Historical classification summary"><MetricTile label="Unclassified balances" value={classification.balance_counts?.unclassified ?? 0} /><MetricTile label="Balance candidates" value={classification.balance_counts?.unambiguous_candidate ?? 0} /><MetricTile label="Unclassified transactions" value={classification.transaction_counts?.unclassified ?? 0} /><MetricTile label="Ambiguous transactions" value={classification.transaction_counts?.ambiguous ?? 0} /></div></section>
 
       <section className="section panel-card-soft workspace-operation-card" aria-labelledby="policy-decisions-title"><div className="section-heading-row"><div><h2 className="section-heading-soft" id="policy-decisions-title">Lifecycle decisions awaiting approval</h2><p className="section-copy-soft">No implicit rule is applied for these cases.</p></div></div><ul><li>Cross-entity transfer: preserve, convert, encash, or forfeit entitlement.</li><li>Rehire and anniversary-cycle proration.</li><li>Post-expiry cancellation: re-expire, restore, or create a controlled correction.</li></ul></section>
       {transitionInput ? <HrAdminActionModal closeHref={`/${portal}/leave-year`} labelledBy="period-transition-title" title={transitionInput.action === "close" ? "Close leave period" : transitionInput.action === "lock" ? "Lock leave period" : "Reopen leave period"} description={`${transitionInput.period.code}: this changes the governed period state. Enter the actual authorization or correction reason for the audit trail.`} onClose={() => { if (!inFlight.current) setTransitionInput(null); }} explicitTabOrder>

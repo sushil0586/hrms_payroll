@@ -1,0 +1,3 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getHrAdminLeaveBalances, getHrAdminLeaveBalanceTransactions } from "@/lib/api";
+export async function GET(request: NextRequest) { try { const p=request.nextUrl.searchParams; const common={q:p.get("q")||undefined,employee_id:p.get("employee_id")||undefined,leave_policy_id:p.get("leave_policy_id")||undefined,page:Number(p.get("page"))||1,page_size:Number(p.get("page_size"))||12}; const result=p.get("kind")==="transactions"?await getHrAdminLeaveBalanceTransactions({...common,status:p.get("status")||undefined}):await getHrAdminLeaveBalances(common); return NextResponse.json(result.data); } catch { return NextResponse.json({detail:"Leave balance ledger could not be updated."},{status:503}); } }

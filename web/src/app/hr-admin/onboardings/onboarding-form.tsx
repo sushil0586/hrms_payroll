@@ -24,6 +24,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: (itemId: string) => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -106,7 +108,7 @@ function getReadinessPreview(formValue: HrAdminOnboardingWriteInput) {
   }
 }
 
-export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
+export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, options, itemId, cancelHref, successHref, compact = false, onSaved, onCancel }: Props) {
 
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -155,6 +157,7 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
       return;
     }
     if(typeof payload?.id!=="string" || !payload.id || (itemId&&payload.id!==itemId)) {setError("Save outcome could not be confirmed. Check the queue before retrying; your draft is retained.");return;}
+    if(onSaved){if(!await onSaved(payload.id))setError("Record saved, but the queue could not be refreshed. Retry the queue update before another change.");return;}
     const destination=new URL(successHref??"/hr-admin/onboardings",window.location.origin);
     destination.searchParams.set(destination.pathname==='/hr-admin/lifecycle'?'record':'recordLoaded',destination.pathname==='/hr-admin/lifecycle'?`onboarding:${payload.id}`:payload.id);
     navigation.complete(destination.href);
@@ -162,7 +165,7 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
     finally {pending.current=false;setIsSubmitting(false);}
   }
 
-  function handleCancel() {navigation.cancel();}
+  function handleCancel() {if(onCancel){if(JSON.stringify(formValue)===JSON.stringify(initialValue)||window.confirm("Discard unsaved changes?"))onCancel();}else navigation.cancel();}
 
   return (
     <form id={formId} ref={formRef} data-hydrated={navigation.ready} className={`section form-layout-modern lifecycle-phase3-form lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`} onSubmit={handleSubmit}>

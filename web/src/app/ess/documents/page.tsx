@@ -49,7 +49,7 @@ export default async function EssDocumentsPage({ searchParams }: PageProps) {
         const id = normalizeParam(currentParams.uploaded_document) ?? "";
         const status = normalizeParam(currentParams.upload_result);
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) && (status === "pending" || status === "verified") ? { id, status } : undefined;
-      })()} key={JSON.stringify([q, verificationStatus, categoryId, expiryFilter, result.data.page, pageSize])}
+      })()}
         currentFilters={{
           q,
           verification_status: verificationStatus,

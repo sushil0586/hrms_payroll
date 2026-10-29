@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 import type { HrAdminPayrollCalculationLineListItem, HrAdminPayrollRunException } from "@/lib/types";
 
@@ -34,7 +33,6 @@ function isMeaningfulText(value: string, minLength = 5) {
 }
 
 export function PayrollReviewExceptionActions({ reviewId, selectedException, lines, severityOptions, canManageExceptions }: Props) {
-  const router = useRouter();
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [category, setCategory] = useState("manual_review");
@@ -96,7 +94,7 @@ export function PayrollReviewExceptionActions({ reviewId, selectedException, lin
       setNotice("Exception created.");
       setTitle("");
       setDetail("");
-      router.refresh();
+
     } catch {
       setError("Network connection failed while creating the exception. Please retry.");
     } finally {
@@ -131,7 +129,7 @@ export function PayrollReviewExceptionActions({ reviewId, selectedException, lin
         return;
       }
       setNotice("Exception decision saved.");
-      router.refresh();
+
     } catch {
       setError("Network connection failed while saving the exception decision. Please retry.");
     } finally {

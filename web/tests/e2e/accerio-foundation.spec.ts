@@ -1,5 +1,5 @@
 import path from "node:path";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import { provisionIsolatedQaWorkspace, cleanupIsolatedQaWorkspace, workspacePersona, type IsolatedQaWorkspace } from "../helpers/isolated-qa-workspace";
 import { gotoAuthenticated } from "../helpers/staging-auth";
@@ -21,6 +21,7 @@ async function expectMenuInViewport(page: Page) {
 let workspace: IsolatedQaWorkspace;
 test.beforeAll(async ({}, info) => {
   if (process.env.POSTGRES_DB !== "hrms_ess2" || process.env.POSTGRES_HOST !== "127.0.0.1") throw new Error("Dedicated loopback QA database required");
+  await mkdir(evidence, { recursive: true });
   workspace = await provisionIsolatedQaWorkspace(info);
 });
 test.afterAll(async ({}, info) => {

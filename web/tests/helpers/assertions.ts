@@ -87,6 +87,7 @@ export async function fetchBrowserPath(page: Page, path: string) {
 
 export async function suppressBrowserTestNoise(page: Page) {
   try {
+    await page.waitForFunction(() => Boolean(document.head), undefined, { timeout: 10_000 });
     await page.addStyleTag({
       content: `
         nextjs-portal,
@@ -100,7 +101,8 @@ export async function suppressBrowserTestNoise(page: Page) {
       `,
     });
   } catch (error) {
-    if (!String(error).includes("Execution context was destroyed")) {
+    const message = String(error);
+    if (!message.includes("Execution context was destroyed") && !message.includes("Target page, context or browser has been closed")) {
       throw error;
     }
   }

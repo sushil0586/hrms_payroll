@@ -16,6 +16,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: () => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 const DAYS = [
@@ -36,11 +38,12 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to save shift.");
 }
 
-export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, successHref = "/hr-admin/shifts", compact = false }: Props) {
+export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, successHref = "/hr-admin/shifts", compact = false, onSaved, onCancel }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
   const startLocked = isGovernanceFieldLocked(item, "start_time");
@@ -69,28 +72,48 @@ export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, succes
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (acceptedUnconfirmed) return;
     if (mode === "edit" && item && item.can_edit_directly === false) {
       setError("This record cannot be edited directly in its current governance state.");
       return;
     }
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(mode === "create" ? "/api/hr-admin/shifts" : `/api/hr-admin/shifts/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/shifts" : `/api/hr-admin/shifts/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. The shift was not confirmed; keep this form open and retry after checking the connection.");
+      setIsSubmitting(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
       return;
     }
+    if (onSaved) {
+      setAcceptedUnconfirmed(true);
+      const reconciled = await onSaved();
+      if (!reconciled) {
+        setError("The shift was accepted, but the catalog could not be confirmed. Do not submit it again; retry the catalog read.");
+        setIsSubmitting(false);
+      }
+      return;
+    }
     router.push(successHref);
-    router.refresh();
   }
 
   function handleCancel() {
+    if (onCancel) {
+      onCancel();
+      return;
+    }
     if (cancelHref) {
       router.push(cancelHref);
       return;
@@ -113,7 +136,7 @@ export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, succes
         </div>
 
         <div className="form-shell-card__grid">
-          {mode === "edit" && item ? <PlatformGovernanceFormBanner detachPath={`/api/hr-admin/shifts/${itemId}/detach`} item={item} /> : null}
+          {mode === "edit" && item ? <PlatformGovernanceFormBanner detachPath={`/api/hr-admin/shifts/${itemId}/detach`} item={item} onDetached={onSaved} /> : null}
           <FormSection title="Shift timing" description="Set the core start, end, duration, and grace values that control attendance interpretation.">
             <div className="form-grid">
               <label className="form-field"><span className="muted">Code</span><input className="input-control" disabled={codeLocked} required value={formValue.code} onChange={(e) => update("code", e.target.value)} /><GovernanceLockHint fieldPath="code" item={item} /></label>
@@ -154,7 +177,7 @@ export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, succes
         <div className="form-actions-bar">
           <span className="muted">Shift changes save back into attendance operations immediately.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create shift" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
+            <button className="button button--primary" disabled={isSubmitting || acceptedUnconfirmed || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{acceptedUnconfirmed ? "Accepted; awaiting confirmation" : isSubmitting ? "Saving..." : mode === "create" ? "Create shift" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
             <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>

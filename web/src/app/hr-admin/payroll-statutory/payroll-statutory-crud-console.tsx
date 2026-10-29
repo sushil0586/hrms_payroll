@@ -4,7 +4,6 @@ import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-tabl
 
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import type { FieldErrors } from "@/lib/ui/validation";
 import type {
@@ -1060,7 +1059,6 @@ export function PayrollStatutoryCrudConsole({
   canManageSetup: boolean;
   initialSetup: HrAdminPayrollStatutorySetupResponse;
 }) {
-  const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
   const [activeActionTab, setActiveActionTab] = useState<StatutoryActionTab>("import");
   const [packForm, setPackForm] = useState<PackForm>(() => emptyPack(initialSetup));
@@ -1123,7 +1121,7 @@ export function PayrollStatutoryCrudConsole({
     }
     apply(payload as Item);
     setFeedback({ tone: "success", message: `${familyLabels[family]} saved.` });
-    router.refresh();
+
   }
 
   async function postAction<Item extends ApiItem>(label: string, path: string, body: Record<string, unknown>, apply: (item: Item) => void) {
@@ -1143,7 +1141,7 @@ export function PayrollStatutoryCrudConsole({
     }
     apply(payload as Item);
     setFeedback({ tone: "success", message: `${label} completed.` });
-    router.refresh();
+
   }
 
   function applyPack(item: HrAdminPayrollStatutoryPack) {

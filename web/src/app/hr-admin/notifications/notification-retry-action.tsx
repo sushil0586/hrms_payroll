@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
+import type { HrAdminNotification } from "@/lib/types";
 
 type Props = {
   itemId: string;
   canRetry?: boolean;
   retryLimitReached?: boolean;
   compact?: boolean;
+  onCommitted?: (item: HrAdminNotification) => void | Promise<void>;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -21,15 +22,14 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to retry notification delivery.");
 }
 
-export function NotificationRetryAction({ itemId, canRetry = true, retryLimitReached = false, compact = false }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
+export function NotificationRetryAction({ itemId, canRetry = true, retryLimitReached = false, compact = false, onCommitted }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   async function handleRetry() {
-    if (!canRetry || isSubmitting || isRefreshing) {
+    if (!canRetry || isSubmitting) {
       return;
     }
     setError("");
@@ -65,11 +65,11 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
       return;
     }
     const currentStatus = typeof (payload as { status?: unknown }).status === "string" ? (payload as { status: string }).status : "unknown";
-    const message = `Retry request completed. Current status: ${currentStatus}. Review the delivery log for provider evidence.`;
+    const message = `Notification delivery retried. Current status: ${currentStatus}. Review the delivery log for provider evidence.`;
     setSuccessMessage(message);
     setToast({ title: "Action saved.", message, tone: "success" });
     setIsSubmitting(false);
-    refresh();
+    await onCommitted?.(payload as HrAdminNotification);
   }
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
   return (
     <div className={compact ? "inline-retry-action" : "stack-list"}>
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <AsyncActionButton className="button button--secondary" disabled={!canRetry} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification" : "Retrying delivery"} onClick={handleRetry} type="button">{retryLimitReached ? "Retry limit reached" : "Retry delivery"}</AsyncActionButton>
+      <AsyncActionButton className="button button--secondary" disabled={!canRetry} pending={isSubmitting} pendingLabel="Retrying delivery" onClick={handleRetry} type="button">{retryLimitReached ? "Retry limit reached" : "Retry delivery"}</AsyncActionButton>
       {!canRetry && retryLimitReached ? (
         <div className="notice">
           <strong>Retry capped.</strong>

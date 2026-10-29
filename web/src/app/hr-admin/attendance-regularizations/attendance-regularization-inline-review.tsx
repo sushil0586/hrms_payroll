@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import type { AttendanceRegularizationItem } from "@/lib/types";
@@ -9,6 +7,8 @@ import type { AttendanceRegularizationItem } from "@/lib/types";
 type Props = {
   item: AttendanceRegularizationItem;
   reviewHref: string;
+  onOpenReview?: () => void;
+  onReconcile?: () => Promise<boolean>;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -19,8 +19,7 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to update attendance regularization.");
 }
 
-export function AttendanceRegularizationInlineReview({ item, reviewHref }: Props) {
-  const router = useRouter();
+export function AttendanceRegularizationInlineReview({ item, reviewHref, onOpenReview, onReconcile }: Props) {
   const [comment, setComment] = useState(item.status === "approved" ? item.manager_comment || "" : item.rejection_reason || item.manager_comment || "");
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -55,10 +54,14 @@ export function AttendanceRegularizationInlineReview({ item, reviewHref }: Props
       submittingRef.current = false;
       return;
     }
+    const reconciled = onReconcile ? await onReconcile() : true;
+    if (!reconciled) {
+      setError("The decision was accepted, but the queue could not be confirmed. Do not submit it again; retry the queue read.");
+      setIsSubmitting(false);
+      return;
+    }
     setSuccessMessage(action === "approve" ? "Regularization approved." : "Regularization rejected.");
-    setIsSubmitting(false);
-    submittingRef.current = false;
-    router.refresh();
+    setIsSubmitting(false); submittingRef.current = false;
   }
 
   return (
@@ -68,9 +71,7 @@ export function AttendanceRegularizationInlineReview({ item, reviewHref }: Props
           <h3>Quick review</h3>
           <p className="section-copy section-copy-soft">Approve or reject in queue, or open the full review screen.</p>
         </div>
-        <Link className="button button--secondary" href={reviewHref}>
-          Full review
-        </Link>
+        {onOpenReview ? <button className="button button--secondary" onClick={onOpenReview} type="button">Full review</button> : <a className="button button--secondary" href={reviewHref}>Full review</a>}
       </div>
       <label className="form-field">
         <span className="muted">Decision note</span>

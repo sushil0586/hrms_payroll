@@ -1,13 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { NotificationInlineReview } from "@/app/hr-admin/notifications/notification-inline-review";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
 import type { HrAdminEnumOption, HrAdminNotification } from "@/lib/types";
@@ -40,6 +38,9 @@ type Props = {
     has_next: boolean;
     has_previous: boolean;
   };
+  pending?: boolean;
+  onApplyFilters?: (filters: Props["currentFilters"]) => void;
+  onCommitted?: () => void | Promise<void>;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -65,10 +66,11 @@ export function NotificationQueue({
   subjectTypeOptions,
   currentFilters,
   pagination,
+  pending = false,
+  onApplyFilters,
+  onCommitted,
 }: Props) {
-  const router = useRouter();
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
-  const pathname = usePathname();
+  const pathname = "/hr-admin/notifications";
   const actionableItems = items.filter((item) => item.can_retry);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -107,24 +109,22 @@ export function NotificationQueue({
   }
 
   function goToPage(page: number) {
-    router.push(
-      `${pathname}${buildQueryString({
-        q: search.trim() || undefined,
-        status: status !== "all" ? status : undefined,
-        channel: channel !== "all" ? channel : undefined,
-        priority: priority !== "all" ? priority : undefined,
-        retry_state: retryState !== "all" ? retryState : undefined,
-        audience_type: audienceType !== "all" ? audienceType : undefined,
-        module: module !== "all" ? module : undefined,
-        subject_type: subjectType !== "all" ? subjectType : undefined,
-        page,
-        page_size: Number(pageSize) || currentFilters.page_size,
-      })}`,
-    );
+    onApplyFilters?.({
+      q: search.trim(),
+      status: status !== "all" ? status : "",
+      channel: channel !== "all" ? channel : "",
+      priority: priority !== "all" ? priority : "",
+      retry_state: retryState !== "all" ? retryState : "",
+      audience_type: audienceType !== "all" ? audienceType : "",
+      module: module !== "all" ? module : "",
+      subject_type: subjectType !== "all" ? subjectType : "",
+      page,
+      page_size: Number(pageSize) || currentFilters.page_size,
+    });
   }
 
   async function handleBulkRetry() {
-    if (isSubmittingBulk || isRefreshing) return;
+    if (isSubmittingBulk || pending) return;
     setError("");
     setIsSubmittingBulk(true);
     let response: Response;
@@ -163,7 +163,7 @@ export function NotificationQueue({
     const skippedCount = Math.max(actionableSelectedIds.length - retryCount, 0);
     const message = `Retry processed for ${retryCount} notification(s)${skippedCount ? `; ${skippedCount} skipped or capped` : ""}. Check refreshed delivery status and attempts for the outcome.`;
     setToast({ title: "Action saved.", message, tone: "success" });
-    refresh();
+    await onCommitted?.();
   }
 
   useEffect(() => {
@@ -293,7 +293,7 @@ export function NotificationQueue({
         </form>
 
         <div className="queue-toolbar__actions">
-          <AsyncActionButton className="button button--secondary" disabled={selectedActionableCount === 0} pending={isSubmittingBulk || isRefreshing} pendingLabel={isRefreshing ? "Refreshing notification queue" : "Retrying selected notifications"} onClick={handleBulkRetry} type="button">{`Retry selected (${selectedActionableCount || 0})`}</AsyncActionButton>
+          <AsyncActionButton className="button button--secondary" disabled={selectedActionableCount === 0} pending={isSubmittingBulk || pending} pendingLabel={pending ? "Updating notification queue" : "Retrying selected notifications"} onClick={handleBulkRetry} type="button">{`Retry selected (${selectedActionableCount || 0})`}</AsyncActionButton>
           <button className="button button--primary" onClick={() => goToPage(1)} type="button">
             Apply filters
           </button>
@@ -309,7 +309,7 @@ export function NotificationQueue({
               setModule("all");
               setSubjectType("all");
               setPageSize("25");
-              router.push(pathname);
+              onApplyFilters?.({ q: "", status: "", channel: "", priority: "", retry_state: "", audience_type: "", module: "", subject_type: "", page: 1, page_size: 25 });
             }}
             type="button"
           >
@@ -427,6 +427,7 @@ export function NotificationQueue({
                   notificationPriorityOptions={notificationPriorityOptions}
                   notificationStatusOptions={notificationStatusOptions}
                   returnHref={committedQueueHref}
+                  onCommitted={async () => { await onCommitted?.(); }}
                 />
               </details>
             </article>

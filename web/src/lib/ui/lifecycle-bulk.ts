@@ -10,4 +10,3 @@ export async function postLifecycleBulk(url:string,body:{record_ids:string[];[ke
  return payload.updated_count as number;
 }
 /** These queue changes deliberately load a fresh server document and committed query. */
-export function lifecycleNavigate(href:string) {window.location.assign(new URL(href,window.location.origin));}

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { NotificationQueue } from "@/app/hr-admin/notifications/notification-queue";
+import { NotificationsWorkspace } from "@/app/hr-admin/notifications/notifications-workspace";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminNotificationOptions, getHrAdminNotifications } from "@/lib/api";
 import { buildNotificationChannelSummaries } from "@/lib/notification-observability";
@@ -75,9 +75,8 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
           <span><strong>{optionsResult.data.notification_channels.length}</strong> Channels</span>
         </div>
       </section>
-      <NotificationQueue
-        key={JSON.stringify({ q, status, channel, priority, audienceType, moduleFilter, subjectType, retryState, page, pageSize })}
-        items={result.data.items}
+      <NotificationsWorkspace
+        initialData={result.data}
         notificationStatusOptions={optionsResult.data.notification_statuses}
         notificationChannelOptions={optionsResult.data.notification_channels}
         notificationPriorityOptions={optionsResult.data.notification_priorities}
@@ -85,7 +84,7 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
         audienceTypeOptions={optionsResult.data.notification_audience_types}
         moduleOptions={optionsResult.data.workflow_modules}
         subjectTypeOptions={optionsResult.data.notification_subject_types}
-        currentFilters={{
+        initialQuery={{
           q,
           status,
           channel,
@@ -96,13 +95,6 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
           retry_state: retryState,
           page,
           page_size: pageSize,
-        }}
-        pagination={{
-          total_count: result.data.total_count,
-          page: result.data.page,
-          page_size: result.data.page_size,
-          has_next: result.data.has_next,
-          has_previous: result.data.has_previous,
         }}
       />
     </main>

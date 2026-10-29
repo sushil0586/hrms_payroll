@@ -4,19 +4,24 @@ import { apiFieldErrors, mutationErrorMessage, networkMutationMessage } from "@/
 
 import { useEffect, useRef, useState } from "react";
 
-import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { hasFieldErrors, requireText, validateUploadFile, type FieldErrors } from "@/lib/ui/validation";
 import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
 import { useValidationFocus } from "@/lib/ui/use-validation-focus";
 import type { LeaveRequestItem } from "@/lib/types";
 
+function formatFileSize(fileSizeBytes: number) {
+  if (fileSizeBytes === 0) return "0 B";
+  if (fileSizeBytes < 1024) return `${fileSizeBytes} B`;
+  if (fileSizeBytes < 1024 * 1024) return `${(fileSizeBytes / 1024).toFixed(1)} KB`;
+  return `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 type Props = {
   item: LeaveRequestItem;
   isDemo: boolean;
-  onCompleted?: () => void;
+  onCompleted?: () => void | Promise<void>;
 };
 
 function getErrorMessage(payload: unknown, status: number) {
@@ -24,7 +29,6 @@ function getErrorMessage(payload: unknown, status: number) {
 }
 
 export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
   const [reason, setReason] = useState("");
   const [attachmentReference, setAttachmentReference] = useState("");
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -32,12 +36,23 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
   const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<"withdraw" | "cancel" | null>(null);
   const isSubmittingRef = useRef(false);
+  const idempotencyKeys = useRef({
+    withdraw: `leave-withdraw:${crypto.randomUUID()}`,
+    cancel: `leave-cancel:${crypto.randomUUID()}`,
+  });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<"attachment_file" | "attachment_reference">>({});
   const panelRef = useValidationFocus<"attachment_file" | "attachment_reference", HTMLElement>(fieldErrors);
   const feedbackRef = useFeedbackFocus(error, Boolean(isSubmitting), hasFieldErrors(fieldErrors));
 
+  function resetIdempotencyKeys() {
+    idempotencyKeys.current = {
+      withdraw: `leave-withdraw:${crypto.randomUUID()}`,
+      cancel: `leave-cancel:${crypto.randomUUID()}`,
+    };
+  }
+
   async function runAction(action: "withdraw" | "cancel") {
-    if (isSubmittingRef.current || isRefreshing) {
+    if (isSubmittingRef.current) {
       return;
     }
     isSubmittingRef.current = true;
@@ -72,6 +87,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
     try {
       response = await fetch(`/api/me/leave-requests/${item.id}/${action}/`, {
         method: "POST",
+        headers: { "Idempotency-Key": idempotencyKeys.current[action] },
         body,
       });
     } catch {
@@ -98,18 +114,20 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
       tone: "success",
     });
     if (onCompleted) {
-      const destination = new URL(window.location.href);
-      destination.searchParams.delete("requestId");
-      rememberActionSuccess(destination.pathname + destination.search, item.id,
-        action === "withdraw" ? "Leave request withdrawn." : item.cancel_requires_reapproval ? "Cancellation request submitted." : "Approved leave cancelled.",
-        action === "cancel" && item.cancel_requires_reapproval ? "Follow the cancellation approval status in your request history." : "Review the updated status in your request history.");
-      // Keep the submission locked until the successful POST's read navigation completes.
-      onCompleted();
+      try {
+        await onCompleted();
+        resetIdempotencyKeys();
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : "The action was saved, but updated leave data could not be loaded. Do not submit it again.";
+        setError(message);
+        setToast({ title: "Refresh needed.", message, tone: "error" });
+      }
+      setIsSubmitting(null);
+      isSubmittingRef.current = false;
       return;
     }
     setIsSubmitting(null);
     isSubmittingRef.current = false;
-    refresh();
   }
 
   useEffect(() => {
@@ -136,7 +154,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
       <div className="leave-lifecycle-panel__form">
         <label className="form-field">
           <span className="muted">Reason</span>
-          <input className="input-control" value={reason} onChange={(event) => setReason(event.target.value)} />
+          <input className="input-control" value={reason} onChange={(event) => { setReason(event.target.value); resetIdempotencyKeys(); }} />
         </label>
 
         {needsAttachment ? (
@@ -146,7 +164,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
               {item.can_withdraw && item.withdraw_requires_attachment ? ` (${item.withdraw_attachment_label})` : ""}
               {item.can_cancel && item.cancel_requires_attachment ? ` (${item.cancel_attachment_label})` : ""}
             </span>
-            <input className="input-control" aria-invalid={Boolean(fieldErrors.attachment_reference)} aria-describedby={fieldErrors.attachment_reference ? `lifecycle-${item.id}-reference-error` : undefined} value={attachmentReference} onChange={(event) => { setAttachmentReference(event.target.value); setError(""); setToast(null); setFieldErrors(current => ({...current, attachment_reference: undefined})); }} />
+            <input className="input-control" aria-invalid={Boolean(fieldErrors.attachment_reference)} aria-describedby={fieldErrors.attachment_reference ? `lifecycle-${item.id}-reference-error` : undefined} value={attachmentReference} onChange={(event) => { setAttachmentReference(event.target.value); resetIdempotencyKeys(); setError(""); setToast(null); setFieldErrors(current => ({...current, attachment_reference: undefined})); }} />
             {fieldErrors.attachment_reference ? <span className="field-error-text" id={`lifecycle-${item.id}-reference-error`}>{fieldErrors.attachment_reference}</span> : null}
           </label>
         ) : null}
@@ -154,15 +172,25 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
         {needsAttachment ? (
           <label className="form-field">
             <span className="muted">Evidence file</span>
-            <input className="input-control" aria-invalid={Boolean(fieldErrors.attachment_file)} aria-describedby={fieldErrors.attachment_file ? `lifecycle-${item.id}-file-error` : undefined} onChange={(event) => { setAttachmentFile(event.target.files?.[0] ?? null); setError(""); setToast(null); setFieldErrors({}); }} type="file" />
+            <input className="input-control" aria-invalid={Boolean(fieldErrors.attachment_file)} aria-describedby={fieldErrors.attachment_file ? `lifecycle-${item.id}-file-error` : undefined} onChange={(event) => { setAttachmentFile(event.target.files?.[0] ?? null); resetIdempotencyKeys(); setError(""); setToast(null); setFieldErrors({}); }} type="file" />
             {fieldErrors.attachment_file ? <span className="field-error-text" id={`lifecycle-${item.id}-file-error`}>{fieldErrors.attachment_file}</span> : null}
           </label>
+        ) : null}
+
+        {attachmentFile ? (
+          <div className="leave-file-preview form-field--full" role="status" aria-live="polite">
+            <span>
+              <strong>{attachmentFile.name}</strong>
+              <small>{formatFileSize(attachmentFile.size)} • Ready to upload</small>
+            </span>
+            <span className="queue-summary-chip">Evidence selected</span>
+          </div>
         ) : null}
       </div>
 
       <div className="leave-lifecycle-panel__actions">
         {item.can_withdraw ? (
-          <AsyncActionButton className="button button--secondary" disabled={Boolean(isSubmitting && isSubmitting !== "withdraw")} pending={isSubmitting === "withdraw" || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave request" : "Withdrawing request"} onClick={() => runAction("withdraw")} type="button">Withdraw request</AsyncActionButton>
+          <AsyncActionButton className="button button--secondary" disabled={Boolean(isSubmitting && isSubmitting !== "withdraw")} pending={isSubmitting === "withdraw"} pendingLabel="Withdrawing request" onClick={() => runAction("withdraw")} type="button">Withdraw request</AsyncActionButton>
         ) : item.withdraw_block_reason ? (
           <div className="notice">
             <strong>Withdraw unavailable.</strong>
@@ -171,7 +199,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
         ) : null}
 
         {item.can_cancel ? (
-          <AsyncActionButton className="button button--secondary" disabled={Boolean(isSubmitting && isSubmitting !== "cancel")} pending={isSubmitting === "cancel" || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave request" : "Saving cancellation"} onClick={() => runAction("cancel")} type="button">{cancelLabel}</AsyncActionButton>
+          <AsyncActionButton className="button button--secondary" disabled={Boolean(isSubmitting && isSubmitting !== "cancel")} pending={isSubmitting === "cancel"} pendingLabel="Saving cancellation" onClick={() => runAction("cancel")} type="button">{cancelLabel}</AsyncActionButton>
         ) : item.cancel_block_reason ? (
           <div className="notice">
             <strong>Cancel unavailable.</strong>

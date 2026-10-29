@@ -391,6 +391,34 @@ async function auditLinkedTimeLeavePolicyRoute(
 }
 
 test.describe("HR Admin time, leave, and policy UI audit", () => {
+  test("leave setup disclosure has a keyboard-operable minimum hit target", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/leave-types");
+    await suppressBrowserTestNoise(page);
+
+    const disclosure = page.locator("details.workspace-context-disclosure").first();
+    const summary = disclosure.locator("summary");
+    await expect(summary).toHaveText("Leave navigation and summary");
+
+    const dimensions = await summary.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { height: rect.height, width: rect.width };
+    });
+    expect(dimensions.height).toBeGreaterThanOrEqual(24);
+    expect(dimensions.width).toBeGreaterThanOrEqual(24);
+
+    await summary.focus();
+    await expect(summary).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(disclosure).toHaveAttribute("open", "");
+    await page.keyboard.press("Space");
+    await expect(disclosure).not.toHaveAttribute("open", "");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoHorizontalOverflow(page);
+    const mobileBox = await summary.boundingBox();
+    expect(mobileBox?.height).toBeGreaterThanOrEqual(24);
+  });
+
   for (const routeGroup of timeLeavePolicyRouteGroups) {
     test(`certifies ${routeGroup.name} page layout, controls, and internal links`, async ({ page }) => {
       test.setTimeout(360_000);

@@ -6,7 +6,7 @@ import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal"
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import type { HrAdminLaunchRemediationAssignment } from "@/lib/types";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object") {
@@ -25,6 +25,7 @@ type Props = {
   defaultAssignee: string;
   defaultDueAt: string | null;
   defaultEscalationOwnerRoleRef: string;
+  onCommitted?: (assignment: HrAdminLaunchRemediationAssignment) => void;
 };
 
 function toDateTimeLocal(value: string | null) {
@@ -45,8 +46,8 @@ export function LaunchRemediationActions({
   defaultAssignee,
   defaultDueAt,
   defaultEscalationOwnerRoleRef,
+  onCommitted,
 }: Props) {
-  const router = useRouter();
   const [ownerRoleRef, setOwnerRoleRef] = useState(defaultOwnerRoleRef);
   const [assignee, setAssignee] = useState(defaultAssignee);
   const [dueAt, setDueAt] = useState(toDateTimeLocal(defaultDueAt));
@@ -80,7 +81,7 @@ export function LaunchRemediationActions({
     }
     setNotice("Assignment updated.");
     setIsOpen(false);
-    router.refresh();
+    onCommitted?.(result as HrAdminLaunchRemediationAssignment);
   }
 
   const dialog = isOpen ? (

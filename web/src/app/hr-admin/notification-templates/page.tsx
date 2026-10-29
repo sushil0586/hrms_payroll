@@ -1,4 +1,5 @@
 
+import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
@@ -86,13 +87,13 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
               </p>
             </div>
             <div className="queue-toolbar__meta">
-              <span className="queue-summary-chip"><strong>{filteredTemplates.length}</strong> matching</span>
+              <span className="queue-summary-chip"><strong data-notification-template-count>{filteredTemplates.length}</strong> matching</span>
               <span className="queue-summary-chip"><strong>{activeInView}</strong> active in view</span>
               <span className="queue-summary-chip"><strong>{seededInView}</strong> system seeded</span>
             </div>
           </div>
 
-          <form className="queue-toolbar__grid" method="get">
+          <LocalCatalogFilterForm className="queue-toolbar__grid" pathname="/hr-admin/notification-templates" itemSelector="[data-notification-template]" emptySelector="[data-notification-template-empty]" countSelector="[data-notification-template-count]" mode="notification-templates">
             <label className="form-field">
               <span className="muted">Search</span>
               <input className="input-control" defaultValue={normalizeParam(currentParams.q) ?? ""} name="q" placeholder="Template name or code" />
@@ -130,11 +131,8 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
               <button className="button button--primary" type="submit">
                 Apply filters
               </button>
-              <Link className="button button--ghost" href="/hr-admin/notification-templates">
-                Clear filters
-              </Link>
             </div>
-          </form>
+          </LocalCatalogFilterForm>
         </section>
       </section>
 
@@ -146,10 +144,10 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
               <p className="section-copy-soft">Edit content or jump to matching queue activity from one compact register.</p>
             </div>
             <span className="queue-summary-chip">
-              <strong>{filteredTemplates.length}</strong> shown
+              <strong data-notification-template-count>{filteredTemplates.length}</strong> shown
             </span>
           </div>
-          {filteredTemplates.length ? (
+
             <WorkspaceTableScrollRegion label="Notification templates table 1" className="notification-table-scroll workspace-table-region">
               <table className="notification-catalog-table">
                 <thead>
@@ -162,8 +160,8 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTemplates.map((item) => (
-                    <tr key={item.id}>
+                  {result.data.map((item) => (
+                    <tr key={item.id} hidden={!filteredTemplates.some((entry) => entry.id === item.id)} data-notification-template data-filter-search={`${item.name} ${item.code}`} data-filter-status={item.status} data-filter-channel={item.channel} data-filter-source={item.is_system_seeded ? "system" : "custom"}>
                       <td data-label="Template">
                         <strong>{item.name}</strong>
                         <span>{item.code}</span>
@@ -190,13 +188,11 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
                 </tbody>
               </table>
             </WorkspaceTableScrollRegion>
-          ) : null}
-          {filteredTemplates.length === 0 ? (
-            <div className="card panel panel-card-soft">
+
+            <div className="card panel panel-card-soft" data-notification-template-empty hidden={filteredTemplates.length !== 0}>
               <strong>No templates match the current filters.</strong>
               <p className="muted">Try clearing one or more filters to widen the template catalog view.</p>
             </div>
-          ) : null}
         </div>
       </section>
     </main>

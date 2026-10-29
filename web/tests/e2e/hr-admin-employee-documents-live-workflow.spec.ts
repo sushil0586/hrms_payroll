@@ -194,8 +194,8 @@ test.describe("HR Admin employee document live browser workflow", () => {
     const reviewPayload = await reviewResponse.json().catch(() => ({}));
     expect(reviewResponse.ok(), `Document review failed: ${reviewResponse.status()} ${JSON.stringify(reviewPayload)}`).toBeTruthy();
 
-    await expect(page).toHaveURL(/\/hr-admin\/employee-documents.*review_saved=1/);
-    await expect(page.getByText("Review action complete.")).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.has("reviewDocument")).toBe(false);
+    await expect(page.getByText("Document action complete.")).toBeVisible();
     await expect(page.getByText("Document review updated.")).toBeVisible();
     await expect(page.getByRole("table").first()).toContainText(title);
 
@@ -256,7 +256,7 @@ test.describe("HR Admin employee document live browser workflow", () => {
       rejectedDialog.getByRole("button", { name: "Save review" }).click(),
     ]);
     expect(rejectedReviewResponse.ok(), `Document rejection failed: ${rejectedReviewResponse.status()}`).toBeTruthy();
-    await expect(page.getByText("Review action complete.")).toBeVisible();
+    await expect(page.getByText("Document action complete.")).toBeVisible();
     const rejectedStatePayload = apiData(await getAuthenticatedJson<{
       items: Array<{ id: string; rejection_reason: string; verification_status: string }>;
     } | { data: { items: Array<{ id: string; rejection_reason: string; verification_status: string }> } }>(

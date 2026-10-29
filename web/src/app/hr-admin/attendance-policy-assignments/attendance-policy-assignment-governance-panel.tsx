@@ -14,7 +14,6 @@ export function AttendancePolicyAssignmentGovernancePanel() {
   async function handleInspect(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setResult(null);
     if (!employeeId) {
       setError("Choose an employee to inspect attendance policy resolution.");
       return;

@@ -27,6 +27,7 @@ function apiErrorMessage(payload: unknown, fallback: string) {
 type Props = {
   permission: PlatformPermissionCatalogItem;
   moduleOptions: string[];
+  onSaved: (permission: PlatformPermissionCatalogItem) => void;
 };
 
 type FormState = {
@@ -53,7 +54,7 @@ function buildFormState(permission: PlatformPermissionCatalogItem): FormState {
   };
 }
 
-export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
+export function PermissionCatalogActions({ permission, moduleOptions, onSaved }: Props) {
   const labelRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<PlatformPermissionCatalogItem | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -131,9 +132,10 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
       setFormError(apiErrorMessage(payload, "Permission could not be updated."));
       return;
     }
+    const updated = ((payload as { permission?: PlatformPermissionCatalogItem }).permission ?? payload) as PlatformPermissionCatalogItem;
+    if (updated && updated.key === editing.key) onSaved(updated);
     setNotice(`${editing.key} updated.`);
     closeDialog();
-    window.location.reload();
   }
 
   return (

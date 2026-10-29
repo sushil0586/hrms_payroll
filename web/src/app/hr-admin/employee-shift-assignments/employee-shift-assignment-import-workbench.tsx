@@ -267,7 +267,7 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
     setIsCommitting(false);
     setMessage(nextRows.some((row) => row.status === "failed")
       ? "Some shift rows failed. Review the row messages, then preview the preserved CSV again."
-      : "Commit complete. Refresh shift assignments or Time to Payroll to verify roster coverage.");
+      : "Commit complete. The confirmed shift assignment queue is updating now.");
     await recordImportBatchAudit({
       import_type: "employee_shift_assignments",
       status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
@@ -282,6 +282,7 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
       evidence_snapshot: { headers, ui: "employee-shift-assignment-import-workbench" },
       row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
     });
+    if (nextRows.some((row) => row.status === "created")) window.dispatchEvent(new Event("hrms:employee-shift-assignments-changed"));
   }
 
   return (

@@ -20,7 +20,7 @@ type PerformanceSample = {
 };
 
 const launchRoutes: RouteExpectation[] = [
-  { path: "/", heading: /Run payroll, compliance, and employee operations/i },
+  { path: "/", heading: /One clear operating flow for HR and payroll/i },
   { path: "/hr-admin", heading: "Control center" },
   { path: "/hr-admin/payroll-readiness", heading: "Payroll Readiness" },
   { path: "/hr-admin/payroll-inputs", heading: "Payroll Inputs" },

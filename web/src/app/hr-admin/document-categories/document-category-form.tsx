@@ -14,6 +14,8 @@ type Props = {
   itemId?: string;
   compact?: boolean;
   returnPath?: string;
+  onSaved?: (itemId:string)=>Promise<boolean>|boolean;
+  onCancel?: ()=>void;
 };
 
 type DocumentCategoryField = "code" | "name" | "visibility_rules";
@@ -36,12 +38,12 @@ function categoryOutcomeLabel(formValue: HrAdminDocumentCategoryWriteInput) {
   return outcomes.join(" • ");
 }
 
-export function DocumentCategoryForm({ initialValue, mode, options, itemId, compact = false, returnPath = "/hr-admin/document-categories" }: Props) {
+export function DocumentCategoryForm({ initialValue, mode, options, itemId, compact = false, returnPath = "/hr-admin/document-categories",onSaved,onCancel }: Props) {
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<DocumentCategoryField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const draft = useDocumentSetupDraft(formValue, isSubmitting, compact, returnPath);
+  const draft = useDocumentSetupDraft(formValue, isSubmitting, compact, returnPath,onCancel,onSaved);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (compact && draft.ready) formRef.current?.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled)")?.focus(); }, [compact, draft.ready]);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -99,7 +101,8 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId, comp
       return;
     }
 
-    draft.saved();
+    if(typeof payload?.id!=="string"||!payload.id||(itemId&&payload.id!==itemId)){setError("Save outcome could not be confirmed. Check the list before retrying; your draft is retained.");draft.endSubmit();setIsSubmitting(false);return;}
+    if(!await draft.saved(payload.id)){setError("Category saved, but the register could not be refreshed. Retry the register update before another change.");draft.endSubmit();setIsSubmitting(false);return;}
   }
 
   return (

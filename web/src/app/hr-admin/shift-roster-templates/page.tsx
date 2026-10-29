@@ -1,7 +1,6 @@
 import Link from "next/link";
 
-import { ShiftRosterRolloutPanel } from "@/app/hr-admin/shift-roster-templates/shift-roster-rollout-panel";
-import { ShiftRosterTemplatesWorkbench } from "@/app/hr-admin/shift-roster-templates/shift-roster-templates-workbench";
+import { ShiftRosterTemplatesWorkspace } from "@/app/hr-admin/shift-roster-templates/shift-roster-templates-workspace";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyWorkbenchOptions, getHrAdminShiftRosterRollouts, getHrAdminShiftRosterTemplate, getHrAdminShiftRosterTemplates } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -56,9 +55,8 @@ export default async function HrAdminShiftRosterTemplatesPage({ searchParams }: 
   ]);
   const pageItems = result.data.items;
   const editRosterId = normalizeParam(currentParams.editRoster) ?? "";
-  const editItem = canManagePolicies && editRosterId
-    ? pageItems.find((item) => item.id === editRosterId) ?? (await getHrAdminShiftRosterTemplate(editRosterId)).data
-    : null;
+  const initialModal = editRosterId ? { mode: "edit" as const, id: editRosterId } : normalizeParam(currentParams.rosterModal) === "create" ? { mode: "create" as const, id: "" } : { mode: "" as const, id: "" };
+  const initialEditItem = canManagePolicies && editRosterId ? pageItems.find((item) => item.id === editRosterId) ?? (await getHrAdminShiftRosterTemplate(editRosterId)).data : null;
   const totalCount = result.data.total_count;
   const totalPages = result.data.total_pages ?? Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(result.data.page, totalPages);
@@ -91,37 +89,20 @@ export default async function HrAdminShiftRosterTemplatesPage({ searchParams }: 
         secondaryMetricValue={publishedCount}
       /></details>
 
-      <ShiftRosterTemplatesWorkbench
+      <ShiftRosterTemplatesWorkspace
         canManagePolicies={canManagePolicies}
-        currentParams={currentParams}
-        editItem={editItem}
-        items={pageItems}
+        initialData={{ ...result.data, page: safePage, page_size: pageSize, state: result.state === "live" ? "live" : "demo" }}
+        initialQuery={{ ...filters, page: safePage, page_size: pageSize }}
+        initialModal={initialModal}
+        initialEditItem={initialEditItem}
+        initialRolloutData={{ ...rolloutsResult.data, page: safeRolloutPage, page_size: rolloutPageSize }}
+        initialRolloutQuery={{ page: safeRolloutPage, page_size: rolloutPageSize }}
         options={optionsResult.data}
-        page={safePage}
-        pageSize={pageSize}
-        state={result.state}
-        totalCount={totalCount}
-        totalPages={totalPages}
       />
 
-      {canManagePolicies ? (
-        <ShiftRosterRolloutPanel
-          firstRolloutHref={buildHref(currentParams, { rollout_page: "1", rollout_page_size: String(rolloutPageSize) })}
-          hasNextRollout={safeRolloutPage < rolloutTotalPages}
-          hasPreviousRollout={safeRolloutPage > 1}
-          lastRolloutHref={buildHref(currentParams, { rollout_page: String(rolloutTotalPages), rollout_page_size: String(rolloutPageSize) })}
-          nextRolloutHref={buildHref(currentParams, { rollout_page: String(safeRolloutPage + 1), rollout_page_size: String(rolloutPageSize) })}
-          options={optionsResult.data}
-          previousRolloutHref={buildHref(currentParams, { rollout_page: String(safeRolloutPage - 1), rollout_page_size: String(rolloutPageSize) })}
-          rolloutPage={safeRolloutPage}
-          rolloutPageSize={rolloutPageSize}
-          rolloutTotalCount={rolloutTotalCount}
-          rollouts={rolloutsResult.data.items}
-          templates={pageItems}
-        />
-      ) : (
+      {!canManagePolicies ? (
         <section className="section"><div className="notice"><strong>Read-only roster template view.</strong><span className="muted">Template rollout requires attendance policy management permission.</span></div></section>
-      )}
+      ) : null}
     </main>
   );
 }

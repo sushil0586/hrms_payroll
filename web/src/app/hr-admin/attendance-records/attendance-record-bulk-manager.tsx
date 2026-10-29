@@ -3,7 +3,6 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 
 import { useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
 
 import { attendanceRecordToFormValue } from "@/app/hr-admin/attendance-records/form-values";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
@@ -18,7 +17,6 @@ import type {
   HrAdminEnumOption,
   HrAdminOptionItem,
 } from "@/lib/types";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { AttendanceRecordForm } from "./attendance-record-form";
 
 type Props = {
@@ -39,6 +37,11 @@ type Props = {
     has_previous: boolean;
   };
   canManageRecords?: boolean;
+  pending?: boolean;
+  onQuery: (query: Partial<AttendanceRecordFilters>) => void;
+  onReconcile: () => Promise<boolean>;
+  onOpenEdit: (id: string) => void;
+  onCloseEdit: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -98,10 +101,13 @@ export function AttendanceRecordBulkManager({
   validationError = "",
   pagination,
   canManageRecords = true,
+  pending = false,
+  onQuery,
+  onReconcile,
+  onOpenEdit,
+  onCloseEdit,
 }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const isRefreshing = pending;
   const scope = JSON.stringify(currentFilters);
   const [selection, setSelection] = useState<{scope: string; ids: string[]}>({scope, ids: []});
   const [inspection, setInspection] = useState({scope, id: ""});
@@ -120,7 +126,7 @@ export function AttendanceRecordBulkManager({
     });
   }
   function setSelectedItemId(id: string) { setInspection({scope, id}); }
-  const editRecordId = searchParams.get("editRecord") ?? "";
+  const editRecordId = editRecord?.id ?? "";
   const modalEditRecord = canManageRecords && editRecordId ? editRecord : null;
   const lateOnPage = items.filter((item) => item.late_minutes > 0).length;
   const lockedOnPage = items.filter((item) => item.is_locked).length;
@@ -128,9 +134,9 @@ export function AttendanceRecordBulkManager({
   const totalPages = Math.max(1, Math.ceil(pagination.total_count / pagination.page_size));
 
   function queueHref(overrides: Record<string, string | number | boolean | undefined> = {}) {
-    return attendanceQueueHref(pathname, currentFilters, overrides);
+    return attendanceQueueHref("/hr-admin/attendance-records", currentFilters, overrides);
   }
-  function goToPage(page: number) { window.location.assign(queueHref({page})); }
+  function goToPage(page: number) { onQuery({ page }); }
   function toggleOne(itemId: string) {
     setSelectedIds((current) => (current.includes(itemId) ? current.filter((value) => value !== itemId) : [...current, itemId]));
   }
@@ -181,11 +187,15 @@ export function AttendanceRecordBulkManager({
       submittingRef.current = false;
       return;
     }
-    setSuccess(`${Number(payload.updated_count) || 0} attendance records updated. Refreshing this view.`);
-    setSelectedIds([]);
-    setIsSubmitting(false);
-    submittingRef.current = false;
-    refresh();
+    const updatedCount = Number(payload.updated_count) || 0;
+    const reconciled = await onReconcile();
+    if (!reconciled) {
+      setError(`${updatedCount} attendance records were accepted, but the updated queue could not be confirmed. Do not repeat the action; retry the queue read.`);
+      setIsSubmitting(false);
+      return;
+    }
+    setSuccess(`${updatedCount} attendance records updated.`);
+    setSelectedIds([]); setIsSubmitting(false); submittingRef.current = false;
   }
 
   return (
@@ -209,7 +219,10 @@ export function AttendanceRecordBulkManager({
             <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
           </div> : null}
         </div>
-        <AttendanceRecordFilterForm key={scope} filters={currentFilters} statusOptions={statusOptions} sourceOptions={sourceOptions} shiftOptions={shiftOptions} />
+        <AttendanceRecordFilterForm key={scope} filters={currentFilters} statusOptions={statusOptions} sourceOptions={sourceOptions} shiftOptions={shiftOptions} pending={pending}
+          onApply={(next) => onQuery(next)}
+          onClear={() => onQuery({ q:"", status:"", source:"", shift_id:"", lock_state:"", regularized_state:"", from_date:"", to_date:"", late_only:false, page:1 })}
+        />
         {validationError ? <div className="notice notice--error" role="alert">{validationError}</div> : null}
         <div className="queue-toolbar__actions attendance-toolbar-actions">
           {canManageRecords ? (
@@ -341,7 +354,7 @@ export function AttendanceRecordBulkManager({
             </article>
             <div className="record-card__actions">
               {canManageRecords ? (
-                <a data-navigation-mode="document" className="button button--primary" href={queueHref({ editRecord: selectedItem.id })}>Edit record</a>
+                <button className="button button--primary" onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit record</button>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.records.manage permission." type="button">Edit record</button>
               )}
@@ -372,7 +385,7 @@ export function AttendanceRecordBulkManager({
       {!validationError ? <div className="panel-card-soft attendance-pagination-panel workspace-pagination">
         <span className="queue-summary-chip"><strong>{pagination.total_count ? ((pagination.page - 1) * pagination.page_size) + 1 : 0}-{Math.min(pagination.page * pagination.page_size, pagination.total_count)}</strong> of {pagination.total_count} records</span>
         <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> of {totalPages}</span>
-        <form key={scope} action={pathname} method="get" data-navigation-mode="document" aria-label="Attendance pagination" className="workspace-page-size-form">
+        <form key={scope} action="/hr-admin/attendance-records" method="get" data-navigation-mode="local" aria-label="Attendance pagination" className="workspace-page-size-form" onSubmit={(event) => { event.preventDefault(); const data=new FormData(event.currentTarget); onQuery({page:1,page_size:Number(data.get("page_size"))}); }}>
           {Object.entries(currentFilters).filter(([key,value]) => key !== "page" && key !== "page_size" && value !== "" && value !== false).map(([key,value]) => <input key={key} type="hidden" name={key} value={String(value)}/>)}
           <input type="hidden" name="page" value="1"/>
           <label className="form-field attendance-pagination-rows"><span className="muted">Rows</span><select className="input-control" name="page_size" defaultValue={String(currentFilters.page_size)}>{[10,25,50,100].map(value=><option key={value} value={value}>{value}</option>)}</select></label>
@@ -390,22 +403,23 @@ export function AttendanceRecordBulkManager({
 
       {modalEditRecord ? (
         <HrAdminActionModal
-          documentNavigation
           className="attendance-record-edit-modal"
           closeHref={queueHref({ editRecord: undefined })}
           eyebrow="Attendance record"
           labelledBy="attendance-record-edit-modal-title"
           title={`Edit ${modalEditRecord.employee_name}`}
           description="Update record interpretation, timing and lock state."
+          onClose={onCloseEdit}
         >
           <AttendanceRecordForm
-            documentNavigation
             compact
             cancelHref={queueHref({ editRecord: undefined })}
             successHref={queueHref({ editRecord: undefined })}
             initialValue={attendanceRecordToFormValue(modalEditRecord)}
             itemId={modalEditRecord.id}
             options={recordOptions}
+            onSaved={async () => { const ok=await onReconcile(); if(ok) onCloseEdit(); return ok; }}
+            onCancel={onCloseEdit}
           />
         </HrAdminActionModal>
       ) : null}

@@ -160,6 +160,8 @@ test.describe("DB-6.10/11 browser-first payroll processing and outputs", () => {
 
     await page.goto(`/hr-admin/payroll-review?reviewId=${openReview.payload.review.id}`, { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Payroll Review");
+    await page.getByRole("navigation", { name: "Payroll review workspace sections" }).getByRole("link", { name: /Actions/ }).click();
+    await expect(page).toHaveURL(/tab=actions/);
     const review = page.getByLabel("Review controls");
     await expectReactHandler(review.getByRole("button", { name: "Submit review" }));
     expect((await submitAndCapture(page, new RegExp(`/api/hr-admin/payroll-reviews/${openReview.payload.review.id}/submit$`), () => review.getByRole("button", { name: "Submit review" }).click())).ok).toBeTruthy();
@@ -200,6 +202,8 @@ test.describe("DB-6.10/11 browser-first payroll processing and outputs", () => {
     expect(batchId).toBeTruthy();
     await batchLink.click();
     await expect(page).toHaveURL(new RegExp(`batchId=${batchId}`));
+    await page.getByRole("navigation", { name: "Payroll output sections" }).getByRole("link", { name: /Actions/ }).click();
+    await expect(page).toHaveURL(/tab=actions/);
     const outputControls = page.getByRole("region", { name: "Output controls" });
     const publishButton = outputControls.getByRole("button", { name: "Publish outputs" });
     await expectReactHandler(publishButton);

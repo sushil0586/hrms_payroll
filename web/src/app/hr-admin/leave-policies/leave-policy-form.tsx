@@ -32,6 +32,7 @@ type Props = {
   itemId?: string;
   item?: HrAdminLeavePolicy;
   returnPath?: string;
+  onSaved?: () => Promise<boolean> | boolean;
 };
 
 type LeavePolicyField =
@@ -364,7 +365,7 @@ function normalizedLabel(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-export function LeavePolicyForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-policies" }: Props) {
+export function LeavePolicyForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-policies", onSaved }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -624,7 +625,8 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     rememberActionSuccess(returnPath, typeof payload.id === "string" ? payload.id : itemId ?? "", "Leave policy saved.", mode === "create" ? "Leave policy created and available in this list." : "Your changes to this leave policy were saved.");
-    window.location.assign(returnPath);
+    if (onSaved) await onSaved();
+    else window.location.assign(returnPath);
   }
 
   async function handlePreview() {

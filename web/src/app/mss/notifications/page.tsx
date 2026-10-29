@@ -1,74 +1,17 @@
-import Link from "next/link";
-
-import { UserNotificationCenter } from "@/components/patterns/user-notification-center";
 import { getMssNotifications } from "@/lib/api";
 
-type SearchParamValue = string | string[] | undefined;
-type PageProps = {
-  searchParams?: Promise<Record<string, SearchParamValue>>;
-};
+import { MssNotificationsWorkspace, type MssNotificationQuery } from "./notifications-workspace";
 
-function normalizeParam(value: SearchParamValue) {
-  return Array.isArray(value) ? value[0] : value;
-}
+type Params = Record<string, string | string[] | undefined>;
 
-export default async function MssNotificationsPage({ searchParams }: PageProps) {
-  const rawParams = (await searchParams) ?? {};
-  const rawPage = Number(normalizeParam(rawParams.page));
-  const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
-  const requestedSize = Number(normalizeParam(rawParams.page_size));
-  const pageSize = [10, 25, 50].includes(requestedSize) ? requestedSize : 10;
-  const option = (key: string, allowed: string[]) => {
-    const value = normalizeParam(rawParams[key]) ?? "";
-    return allowed.includes(value) ? value : "";
-  };
-  const q = normalizeParam(rawParams.q) ?? "";
-  const status = option("status", ["pending", "sent", "delivered", "read", "failed"]);
-  const channel = option("channel", ["in_app", "email", "sms", "push", "whatsapp"]);
-  const priority = option("priority", ["low", "normal", "high", "critical"]);
-  const subjectType = option("subject_type", ["leave_request", "attendance_regularization", "employee_document", "employee_onboarding", "payroll_payslip"]);
-  const query = { page, page_size: pageSize, q, status, channel, priority, subject_type: subjectType };
+export default async function MssNotificationsPage({ searchParams }: { searchParams?: Promise<Params> }) {
+  const params = (await searchParams) ?? {};
+  const first = (key: string) => Array.isArray(params[key]) ? params[key][0] : params[key];
+  const positive = (key: string, fallback: number) => { const value = Number(first(key)); return Number.isSafeInteger(value) && value > 0 ? value : fallback; };
+  const requestedSize = positive("page_size", 10);
+  const query: MssNotificationQuery = { page: positive("page", 1), page_size: [10, 25, 50].includes(requestedSize) ? requestedSize : 10, q: first("q") || "", status: first("status") || "", channel: first("channel") || "", priority: first("priority") || "", subject_type: first("subject_type") || "" };
   let result = await getMssNotifications(query);
   const lastPage = Math.max(1, Math.ceil(result.data.total_count / result.data.page_size));
-  if (page > lastPage) result = await getMssNotifications({ ...query, page: lastPage });
-  const currentParams: Record<string, string> = {
-    page: String(result.data.page),
-    page_size: String(pageSize),
-  };
-  Object.entries({ q, status, channel, priority, subject_type: subjectType }).forEach(([key, value]) => {
-    if (value) currentParams[key] = value;
-  });
-
-  return (
-    <UserNotificationCenter
-      actions={
-        <>
-          <Link className="button button--primary" href="/mss/approvals">
-            Approvals
-          </Link>
-          <Link className="button button--ghost" href="/ess/notifications">
-            ESS inbox
-          </Link>
-        </>
-      }
-      apiEndpointBase="/api/manager/notifications"
-      basePath="/mss/notifications"
-      crossWorkspaceHref="/mss/approvals"
-      crossWorkspaceLabel="Approvals"
-      currentParams={currentParams}
-      data={result.data}
-      actionDescription="Use notifications as signals. Open the source approval or delivery detail before taking a decision."
-      actionEyebrow="Manager triage"
-      actionTitle="Open the source workflow before deciding"
-      description="Triage team alerts, failed delivery, and approval follow-up without mixing personal ESS messages."
-      filterDescription="Find team alerts by status, channel, priority, or source workflow."
-      filterTitle="Alert filters"
-      listDescription="Review one manager alert at a time, then open the source workflow when needed."
-      listTitle="Team alert list"
-      state={result.state}
-      title="Manager notifications"
-      workspace="mss"
-      workspacePill="Manager alerts"
-    />
-  );
+  if (query.page > lastPage) { query.page = lastPage; result = await getMssNotifications(query); }
+  return <MssNotificationsWorkspace initialData={result.data} initialQuery={query} state={result.state === "live" ? "live" : "demo"} />;
 }

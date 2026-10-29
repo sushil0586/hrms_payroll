@@ -169,7 +169,6 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
       return;
     }
     router.push("/hr-admin/workflow-template-assignments");
-    router.refresh();
   }
 
   return (

@@ -272,7 +272,6 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
     }
 
     router.push("/hr-admin/workflow-templates");
-    router.refresh();
   }
 
   return (

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from pathlib import Path
 
 from django.core.files.uploadedfile import UploadedFile
 
@@ -13,6 +14,25 @@ from apps.tenants.models import Tenant
 
 
 DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+BLOCKED_DOCUMENT_EXTENSIONS = {
+    ".bat",
+    ".cmd",
+    ".com",
+    ".exe",
+    ".js",
+    ".msi",
+    ".ps1",
+    ".sh",
+}
+BLOCKED_DOCUMENT_SIGNATURES = (b"MZ", b"\x7fELF", b"#!")
+DOCUMENT_SIGNATURES = {
+    ".pdf": (b"%PDF-",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".doc": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
+    ".docx": (b"PK\x03\x04",),
+}
 
 
 def get_document_upload_max_bytes() -> int:
@@ -40,6 +60,21 @@ def validate_uploaded_document_file(uploaded_file: UploadedFile, *, accepted_mim
         raise ValueError("Uploaded file is empty.")
     if file_size > max_upload_bytes:
         raise ValueError(f"Uploaded file exceeds the {max_upload_bytes} byte limit.")
+
+    filename = str(getattr(uploaded_file, "name", "") or "")
+    extension = Path(filename).suffix.lower()
+    if extension in BLOCKED_DOCUMENT_EXTENSIONS:
+        raise ValueError("Executable or script files are not allowed.")
+
+    original_position = uploaded_file.tell() if hasattr(uploaded_file, "tell") else None
+    header = uploaded_file.read(8)
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(original_position or 0)
+    if any(header.startswith(signature) for signature in BLOCKED_DOCUMENT_SIGNATURES):
+        raise ValueError("Executable or script file content is not allowed.")
+    expected_signatures = DOCUMENT_SIGNATURES.get(extension)
+    if expected_signatures and not any(header.startswith(signature) for signature in expected_signatures):
+        raise ValueError("Uploaded file content does not match its filename.")
 
     if accepted_mime_types:
         normalized = [value.strip().lower() for value in accepted_mime_types if value and value.strip()]

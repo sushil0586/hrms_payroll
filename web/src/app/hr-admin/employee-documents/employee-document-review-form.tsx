@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminDocumentOptions, HrAdminEmployeeDocument, HrAdminEmployeeDocumentWriteInput } from "@/lib/types";
@@ -15,13 +14,14 @@ type Props = {
   compact?: boolean;
   canDownload?: boolean;
   onStateChange?: (state: { busy: boolean; dirty: boolean }) => void;
+  onCancel?: () => void;
+  onSaved?: (itemId: string) => Promise<boolean> | boolean;
 };
 function humanize(value: string) { return value.replaceAll("_", " "); }
 function tone(status: string) { return status === "verified" ? "success" : status === "pending" ? "warning" : status === "rejected" || status === "expired" ? "danger" : "neutral"; }
 function snapshot(form: HTMLFormElement) { return JSON.stringify(Array.from(new FormData(form).entries()).sort(([a], [b]) => a.localeCompare(b))); }
 
-export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId, cancelHref = "/hr-admin/employee-documents", successHref = "/hr-admin/employee-documents?review_saved=1", compact = false, canDownload = false, onStateChange }: Props) {
-  const router = useRouter();
+export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId, cancelHref = "/hr-admin/employee-documents", successHref = "/hr-admin/employee-documents?review_saved=1", compact = false, canDownload = false, onStateChange, onCancel, onSaved }: Props) {
   const form = useRef<HTMLFormElement>(null);
   const original = useRef("");
   const submitting = useRef(false);
@@ -63,7 +63,8 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
 
   function cancel() {
     if (submitting.current || (dirty && !window.confirm("Discard unsaved changes?"))) return;
-    router.push(cancelHref);
+    if (onCancel) onCancel();
+    else window.location.assign(cancelHref);
   }
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,7 +82,13 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       setFieldErrors(errors); setError(response.status >= 500 ? "The review outcome could not be confirmed. Check the queue before trying again." : payload?.detail || "Review was not saved. Check the highlighted fields and try again."); submitting.current = false; setBusy(false); return;
     }
     setDirty(false); onStateChange?.({ busy: true, dirty: false });
-    // A fresh document navigation avoids competing push/refresh updates retaining the saved dialog.
+    if (onSaved) {
+      const refreshed = await onSaved(itemId);
+      submitting.current = false;
+      setBusy(false);
+      if (!refreshed) setError("Review was saved, but the queue could not be refreshed. Retry the queue update before continuing.");
+      return;
+    }
     leaving.current = true;
     window.location.assign(new URL(successHref, window.location.origin));
   }

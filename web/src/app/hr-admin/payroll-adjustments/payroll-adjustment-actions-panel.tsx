@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { HrAdminPayrollAdjustment, HrAdminPayrollAdjustmentSetupResponse, HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun } from "@/lib/types";
@@ -27,6 +27,12 @@ async function readPayload(response: Response) {
 
 export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdjustment }: Props) {
   const router = useRouter();
+  const regionRef = useRef<HTMLElement>(null);
+  useEffect(() => { if (regionRef.current) regionRef.current.dataset.localUpdateHydrated = "true"; }, []);
+  const [localStatus, setLocalStatus] = useState<HrAdminPayrollAdjustment["status"] | null>(null);
+  const currentAdjustment = selectedAdjustment
+    ? { ...selectedAdjustment, status: localStatus ?? selectedAdjustment.status }
+    : null;
   const runSnapshots = useMemo(
     () => setup.snapshots.filter((snapshot) => snapshot.payroll_run_id === selectedRun?.id && snapshot.snapshot_status === "locked"),
     [selectedRun?.id, setup.snapshots],
@@ -65,7 +71,7 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         return payload;
       }
       setNotice({ tone: "success", message: successMessage });
-      router.refresh();
+
       return payload;
     } catch {
       setNotice({ tone: "error", message: "The adjustment action could not be confirmed. Your entered values are still available; verify the record before retrying." });
@@ -124,21 +130,24 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
   }
 
   async function act(action: "submit" | "approve" | "reject" | "apply") {
-    if (!selectedAdjustment) {
+    if (!currentAdjustment) {
       setNotice({ tone: "error", message: "Select an adjustment before running a lifecycle action." });
       return;
     }
-    await postJson(
-      `/api/hr-admin/payroll-adjustments/${selectedAdjustment.id}/${action}`,
+    const payload = await postJson(
+      `/api/hr-admin/payroll-adjustments/${currentAdjustment.id}/${action}`,
       action === "approve"
         ? { approval_profile_ref: "tenant.payroll.adjustment.approval.pilot100.v1" }
         : action === "reject" ? { reason: rejectionReason } : {},
       `Adjustment ${action} completed.`,
     );
+    if (payload?.status) {
+      setLocalStatus(payload.status as HrAdminPayrollAdjustment["status"]);
+    }
   }
 
   return (
-    <section className="payroll-setup-assignment-panel" aria-label="Adjustment actions">
+    <section className="payroll-setup-assignment-panel" aria-label="Adjustment actions" data-local-update-hydrated="false" ref={regionRef}>
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
           <span className="workspace-card__eyebrow">Adjustment actions</span>
@@ -195,16 +204,16 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         <button className="button button--primary" disabled={Boolean(busyAction) || !selectedRun || !activeSnapshot} onClick={createAdjustment} type="button">
           Create adjustment
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "draft"} onClick={() => act("submit")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentAdjustment?.status !== "draft"} onClick={() => act("submit")} type="button">
           Submit selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "submitted"} onClick={() => act("approve")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentAdjustment?.status !== "submitted"} onClick={() => act("approve")} type="button">
           Approve selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "submitted" || !rejectionReason.trim()} onClick={() => act("reject")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentAdjustment?.status !== "submitted" || !rejectionReason.trim()} onClick={() => act("reject")} type="button">
           Reject selected
         </button>
-        <button className="button button--secondary" disabled={Boolean(busyAction) || selectedAdjustment?.status !== "approved"} onClick={() => act("apply")} type="button">
+        <button className="button button--secondary" disabled={Boolean(busyAction) || currentAdjustment?.status !== "approved"} onClick={() => act("apply")} type="button">
           Apply selected
         </button>
       </div>
@@ -212,7 +221,7 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         <span className="muted">Rejection reason</span>
         <textarea aria-label="Adjustment rejection reason" onChange={(event) => setRejectionReason(event.target.value)} placeholder="Required only when rejecting" rows={2} value={rejectionReason} />
       </label>
-      {selectedAdjustment ? <p className="section-copy section-copy-soft">Current state: {selectedAdjustment.status.replaceAll("_", " ")}. The next eligible transition is enabled.</p> : null}
+      {currentAdjustment ? <p className="section-copy section-copy-soft" aria-live="polite">Current state: {currentAdjustment.status.replaceAll("_", " ")}. The next eligible transition is enabled.</p> : null}
       {notice ? (
         <p className={`form-status form-status--${notice.tone}`} role="alert">
           {notice.message}

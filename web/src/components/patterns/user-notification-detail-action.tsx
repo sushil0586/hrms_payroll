@@ -5,7 +5,6 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -18,6 +17,7 @@ type Props = {
   closeHref: string;
   sourceHref: string;
   variant?: "primary" | "secondary" | "ghost";
+  onReadSaved?: (readAt: string | null) => void;
 };
 
 function titleCase(value: string) {
@@ -47,8 +47,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 
-export function UserNotificationDetailAction({ closeHref, endpoint, item, sourceHref, variant = "secondary" }: Props) {
-  const router = useRouter();
+export function UserNotificationDetailAction({ closeHref, endpoint, item, sourceHref, variant = "secondary", onReadSaved }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [readAt, setReadAt] = useState(item.read_at);
 
@@ -57,7 +56,7 @@ export function UserNotificationDetailAction({ closeHref, endpoint, item, source
   const attempts = `${item.attempt_count}/${item.max_attempts}`;
   const modal = isOpen && typeof document !== "undefined"
     ? createPortal(
-        <HrAdminActionModal closeHref={closeHref} labelledBy="workspace-user-notification-detail-action" title={`Notification detail for ${title}`} onClose={() => { setIsOpen(false); router.refresh(); }} busy={false} className="modal user-notification-modal">
+        <HrAdminActionModal closeHref={closeHref} labelledBy="workspace-user-notification-detail-action" title={`Notification detail for ${title}`} onClose={() => setIsOpen(false)} busy={false} className="modal user-notification-modal">
 <p className="section-copy section-copy-soft">
                   {titleCase(item.channel)} / {titleCase(item.priority)} / {titleCase(item.status)}
                 </p>
@@ -80,7 +79,7 @@ export function UserNotificationDetailAction({ closeHref, endpoint, item, source
               </div>
 
               <div className="user-notification-modal-actions">
-                <NotificationReadToggle endpoint={endpoint} isRead={Boolean(readAt)} onSaved={setReadAt} />
+                <NotificationReadToggle endpoint={endpoint} isRead={Boolean(readAt)} onSaved={(nextReadAt) => { setReadAt(nextReadAt); onReadSaved?.(nextReadAt); }} />
                 {sourceHref ? (
                   <Link className="button button--primary" href={sourceHref}>
                     Open source

@@ -4,7 +4,6 @@ import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-tabl
 
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 
 import type {
   HrAdminEmployeeSalaryAssignment,
@@ -715,7 +714,6 @@ function FormHeader({ mode, title, onReset }: { mode: SaveMode; title: string; o
 }
 
 export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdminSalarySetupResponse }) {
-  const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
   const [activeActionTab, setActiveActionTab] = useState<SalaryActionTab>("import");
   const [componentForm, setComponentForm] = useState<ComponentForm>(() => emptyComponentForm(initialSetup));
@@ -986,7 +984,7 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     setIsAssignmentImportCommitting(false);
     setAssignmentImportTone("success");
     setAssignmentImportMessage("Commit complete. Review employee salary coverage for created assignments.");
-    router.refresh();
+
   }
 
   async function save<Item extends ApiItem>(
@@ -1021,7 +1019,7 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
 
     apply(payload as Item);
     setFeedback({ family, tone: "success", message: `${familyLabels[family]} saved.` });
-    router.refresh();
+
   }
 
   function applyComponent(item: HrAdminSalaryComponent) {

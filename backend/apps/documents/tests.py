@@ -14,13 +14,14 @@ from apps.common.api_views import (
     save_hr_admin_employee_document,
 )
 from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentVerificationLog, EmployeeDocument, EmployeeDocumentStatus, VerificationStatus
+from apps.documents.services import validate_uploaded_document_file
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
 from apps.notifications.models import Notification
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
 
 
-def _upload(name="proof.pdf", content=b"document-bytes", content_type="application/pdf"):
+def _upload(name="proof.pdf", content=b"%PDF-1.4\ndocument-bytes\n%%EOF", content_type="application/pdf"):
     return SimpleUploadedFile(name, content, content_type=content_type)
 
 
@@ -182,7 +183,7 @@ class EmployeeDocumentWorkflowTests(TestCase):
             {
                 "category_id": self.category.id,
                 "title": "PAN replacement",
-                "file": _upload(name="replacement.pdf", content=b"replacement"),
+                "file": _upload(name="replacement.pdf", content=b"%PDF-1.4\nreplacement\n%%EOF"),
                 "document_number": "ABCDE1234F",
                 "issued_on": None,
                 "expires_on": None,
@@ -282,7 +283,7 @@ class EmployeeDocumentWorkflowTests(TestCase):
                         {
                             "category_id": self.category.id,
                             "title": "Failed upload",
-                            "file": _upload(name="failed.pdf", content=b"failed-content"),
+                            "file": _upload(name="failed.pdf", content=b"%PDF-1.4\nfailed-content\n%%EOF"),
                             "document_number": "FAILED-1",
                             "issued_on": None,
                             "expires_on": None,
@@ -314,3 +315,51 @@ class EmployeeDocumentWorkflowTests(TestCase):
                     "expires_on": None,
                 },
             )
+
+    def test_server_rejects_executable_extension_even_with_allowed_pdf_mime(self):
+        uploaded_file = _upload(name="misleading.exe", content=b"%PDF-1.4\nsynthetic", content_type="application/pdf")
+
+        with self.assertRaisesMessage(ValueError, "Executable or script files are not allowed"):
+            validate_uploaded_document_file(uploaded_file, accepted_mime_types=["application/pdf"])
+
+    def test_server_rejects_executable_signature_even_with_pdf_name_and_mime(self):
+        uploaded_file = _upload(name="misleading.pdf", content=b"MZsynthetic-executable", content_type="application/pdf")
+
+        with self.assertRaisesMessage(ValueError, "Executable or script file content is not allowed"):
+            validate_uploaded_document_file(uploaded_file, accepted_mime_types=["application/pdf"])
+
+        self.assertEqual(uploaded_file.tell(), 0)
+
+    def test_server_enforces_empty_and_configured_size_boundaries(self):
+        with self.assertRaisesMessage(ValueError, "Uploaded file is empty"):
+            validate_uploaded_document_file(_upload(content=b""))
+
+        with patch.dict("os.environ", {"HRMS_DOCUMENT_UPLOAD_MAX_BYTES": "16"}):
+            validate_uploaded_document_file(_upload(content=b"%PDF-" + b"x" * 11))
+            with self.assertRaisesMessage(ValueError, "exceeds the 16 byte limit"):
+                validate_uploaded_document_file(_upload(content=b"%PDF-" + b"x" * 12))
+
+    def test_server_enforces_default_maximum_size_boundaries(self):
+        maximum = 10 * 1024 * 1024
+        validate_uploaded_document_file(_upload(content=b"%PDF-" + b"x" * (maximum - 6)))
+        validate_uploaded_document_file(_upload(content=b"%PDF-" + b"x" * (maximum - 5)))
+        with self.assertRaisesMessage(ValueError, f"exceeds the {maximum} byte limit"):
+            validate_uploaded_document_file(_upload(content=b"%PDF-" + b"x" * (maximum - 4)))
+
+    def test_server_rejects_corrupt_known_document_content(self):
+        with self.assertRaisesMessage(ValueError, "content does not match its filename"):
+            validate_uploaded_document_file(_upload(name="corrupt.pdf", content=b"not-a-pdf", content_type="application/pdf"))
+
+        with self.assertRaisesMessage(ValueError, "content does not match its filename"):
+            validate_uploaded_document_file(_upload(name="corrupt.png", content=b"not-a-png", content_type="image/png"))
+
+    def test_server_accepts_supported_document_signatures(self):
+        samples = [
+            ("valid.pdf", "application/pdf", b"%PDF-1.7\n%%EOF"),
+            ("valid.png", "image/png", b"\x89PNG\r\n\x1a\ncontent"),
+            ("valid.jpg", "image/jpeg", b"\xff\xd8\xffcontent"),
+            ("valid.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", b"PK\x03\x04content"),
+        ]
+        for name, content_type, content in samples:
+            with self.subTest(name=name):
+                validate_uploaded_document_file(_upload(name=name, content=content, content_type=content_type))

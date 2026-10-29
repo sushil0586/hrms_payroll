@@ -16,6 +16,7 @@ type Props =
       kind: "leave";
       state: "live" | "demo";
       variant?: "primary" | "secondary" | "ghost";
+      onReconcile?: () => Promise<boolean>;
     }
   | {
       canDecide: boolean;
@@ -23,6 +24,7 @@ type Props =
       kind: "attendance";
       state: "live" | "demo";
       variant?: "primary" | "secondary" | "ghost";
+      onReconcile?: () => Promise<boolean>;
     };
 
 function formatDate(value: string | null) {
@@ -135,11 +137,13 @@ function LeaveReviewModal({
   item,
   onClose,
   state,
+  onReconcile,
 }: {
   canDecide: boolean;
   item: LeaveRequestItem;
   onClose: () => void;
   state: "live" | "demo";
+  onReconcile?: () => Promise<boolean>;
 }) {
   const isCancellationRequest = item.request_action === "cancellation_request";
 
@@ -209,7 +213,7 @@ function LeaveReviewModal({
             employeeReason={item.reason}
             itemId={item.id}
             kind="leave"
-            onCompleted={onClose}
+            onCompleted={async () => { const confirmed = await onReconcile?.(); if (confirmed !== false) onClose(); return confirmed; }}
             requestAction={item.request_action}
             state={state}
             status={item.status}
@@ -224,11 +228,13 @@ function AttendanceReviewModal({
   item,
   onClose,
   state,
+  onReconcile,
 }: {
   canDecide: boolean;
   item: AttendanceRegularizationItem;
   onClose: () => void;
   state: "live" | "demo";
+  onReconcile?: () => Promise<boolean>;
 }) {
   return (
     <HrAdminActionModal
@@ -283,7 +289,7 @@ function AttendanceReviewModal({
             employeeReason={item.reason}
             itemId={item.id}
             kind="attendance"
-            onCompleted={onClose}
+            onCompleted={async () => { const confirmed = await onReconcile?.(); if (confirmed !== false) onClose(); return confirmed; }}
             state={state}
             status={item.status}
             title="Regularization decision"
@@ -302,9 +308,9 @@ export function ManagerApprovalReviewAction(props: Props) {
   const modal = isOpen && typeof document !== "undefined"
     ? createPortal(
         props.kind === "leave" ? (
-          <LeaveReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} state={props.state} />
+          <LeaveReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} onReconcile={props.onReconcile} state={props.state} />
         ) : (
-          <AttendanceReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} state={props.state} />
+          <AttendanceReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} onReconcile={props.onReconcile} state={props.state} />
         ),
         document.body,
       )

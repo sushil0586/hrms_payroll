@@ -15,6 +15,7 @@ type Props = {
   requests: LeaveRequestItem[];
   employees: HrAdminOptionItem[];
   leaveTypes: HrAdminOptionItem[];
+  onCommitted?: () => Promise<void> | void;
 };
 
 type ImportStatus = "ready" | "blocked" | "created" | "failed";
@@ -164,7 +165,7 @@ function sampleCsv(employees: HrAdminOptionItem[], leaveTypes: HrAdminOptionItem
   return `${headers.join(",")}\n${rows.map((row) => row.join(",")).join("\n")}`;
 }
 
-export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }: Props) {
+export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes, onCommitted }: Props) {
   const resolveLatestEmployeesByCode = useLatestEmployeeCodeResolution();
   const [csvText, setCsvText] = useState(templateCsv());
   const [rows, setRows] = useState<ImportRow[]>([]);
@@ -279,6 +280,7 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes }:
       evidence_snapshot: { headers, ui: "leave-request-import-workbench" },
       row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
     });
+    if (nextRows.some((row) => row.status === "created")) await onCommitted?.();
   }
 
   return (

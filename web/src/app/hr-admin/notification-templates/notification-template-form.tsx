@@ -153,7 +153,6 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
     }
 
     router.push("/hr-admin/notification-templates");
-    router.refresh();
   }
 
   return (

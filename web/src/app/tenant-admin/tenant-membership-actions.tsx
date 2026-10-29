@@ -5,7 +5,6 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import type { TenantAdminConsole, TenantAdminMembershipMutationResult } from "@/lib/types";
@@ -63,7 +62,6 @@ type Confirmation = {
 const PAGE_SIZE = 8;
 
 export function TenantMembershipActions({ canManageUsers, data }: Props) {
-  const router = useRouter();
   const roleOptions = data.membership_management.role_options;
   const activeStatusOptions = useMemo(
     () => data.membership_management.status_options.filter((item) => item.value === "invited" || item.value === "active"),
@@ -248,7 +246,6 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
         setPageIndex(0);
       }
       closeInviteDialog();
-      router.refresh();
     } catch {
       setFormError("The invite outcome is unconfirmed. Your details were preserved; check the directory or audit before retrying.");
     } finally {
@@ -297,7 +294,6 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       }
       setEditingMember(null);
       closeConfirmation();
-      router.refresh();
     } catch {
       setFormError("The access-change outcome is unconfirmed. Your changes were preserved; check the member or audit before retrying.");
     } finally {
@@ -357,7 +353,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       </div>
 
       <div className="tenant-membership-actions__members tenant-directory-table">
-        <div className="tenant-directory-header" role="row">
+        <div className="tenant-directory-header">
           <span>User</span>
           <span>Email</span>
           <span>Roles</span>

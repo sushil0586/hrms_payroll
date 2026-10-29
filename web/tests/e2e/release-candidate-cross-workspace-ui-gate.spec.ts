@@ -17,7 +17,7 @@ const viewports = [
 ] as const;
 
 const releaseCandidateRoutes: RcRoute[] = [
-  { path: "/", heading: /Run payroll, compliance, and employee operations/i, label: "public-home" },
+  { path: "/", heading: /One clear operating flow for HR and payroll/i, label: "public-home" },
   { path: "/login", heading: "Sign in", label: "login" },
   { path: "/platform-admin", heading: "Platform Admin Dashboard", label: "platform-dashboard", persona: platformAdmin },
   { path: "/platform-admin/leads", heading: "Leads", label: "platform-leads", persona: platformAdmin },

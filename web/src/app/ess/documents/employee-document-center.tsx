@@ -4,11 +4,12 @@ import { storedEmployeeDocument } from "@/lib/ui/document-upload-result";
 import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -20,6 +21,7 @@ import { WorkspaceInformation } from "@/components/patterns/workspace-informatio
 import { essDocumentDate } from "@/lib/ui/employee-document-format";
 import type { EssDocumentCenterResponse, EssDocumentRequirementItem, HrAdminEmployeeDocument } from "@/lib/types";
 import { uploadFormData, type UploadProgress } from "@/lib/ui/upload-form-data";
+import { ScopedResourceError, useScopedWorkspaceResource } from "@/lib/ui/use-scoped-workspace-resource";
 import {
   hasFieldErrors,
   requireText,
@@ -43,6 +45,8 @@ type Props = {
     page_size: number;
   };
 };
+
+type DocumentCenterFilters = Props["currentFilters"];
 
 type UploadFormValue = {
   category_id: string;
@@ -81,6 +85,34 @@ function buildQueryString(params: Record<string, string | number | undefined>) {
   return queryString ? `?${queryString}` : "";
 }
 
+function filtersFromSearchParams(params: URLSearchParams, fallback: DocumentCenterFilters): DocumentCenterFilters {
+  const requestedPage = Number(params.get("page") || "1");
+  const requestedSize = Number(params.get("page_size") || String(fallback.page_size));
+  const verificationStatus = params.get("verification_status") || "";
+  const categoryId = params.get("category_id") || "";
+  const expiryFilter = params.get("expiry_filter") || "";
+  return {
+    q: params.get("q") || "",
+    verification_status: ["pending", "verified", "rejected", "expired"].includes(verificationStatus) ? verificationStatus : "",
+    category_id: /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|dc-\d+)$/i.test(categoryId) ? categoryId : "",
+    expiry_filter: ["expired", "expiring", "missing_expiry"].includes(expiryFilter) ? expiryFilter : "",
+    page: Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+    page_size: [5, 10, 25].includes(requestedSize) ? requestedSize : fallback.page_size,
+  };
+}
+
+function documentCenterQuery(filters: DocumentCenterFilters) {
+  return buildQueryString({
+    ...filters,
+    page: filters.page === 1 ? undefined : filters.page,
+    page_size: filters.page_size === 10 ? undefined : filters.page_size,
+  });
+}
+
+function documentCenterHref(filters: DocumentCenterFilters) {
+  return `/ess/documents${documentCenterQuery(filters)}`;
+}
+
 function formatFileSize(fileSizeBytes: number) {
   if (fileSizeBytes <= 0) {
     return "Not available";
@@ -106,6 +138,13 @@ function extractError(payload: unknown) {
     }
   }
   return "Unable to upload employee document.";
+}
+
+function documentCenterError(payload: unknown) {
+  if (payload && typeof payload === "object" && typeof (payload as { detail?: unknown }).detail === "string") {
+    return String((payload as { detail: string }).detail);
+  }
+  return "Document history could not be updated. Your current results are still available.";
 }
 
 function validateUploadForm(
@@ -490,23 +529,69 @@ function RequirementDetailModal({
   );
 }
 
-export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: Props) {
-  const pathname = usePathname();
+export function EmployeeDocumentCenter({ data: initialData, currentFilters, uploadReceipt }: Props) {
+  const router = useRouter();
+  const initialFilters = useRef(currentFilters);
   const [search, setSearch] = useState(currentFilters.q);
   const [verificationStatus, setVerificationStatus] = useState(currentFilters.verification_status || "all");
   const [categoryId, setCategoryId] = useState(currentFilters.category_id || "all");
   const [expiryFilter, setExpiryFilter] = useState(currentFilters.expiry_filter || "all");
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
+  const requestDocumentCenter = useCallback(async (filters: DocumentCenterFilters, signal: AbortSignal) => {
+    const response = await fetch(`/api/me/document-center${documentCenterQuery(filters)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) throw new ScopedResourceError("Your session has expired.", 401);
+    if (!response.ok || !payload || typeof payload !== "object" || !Array.isArray((payload as EssDocumentCenterResponse).items)) {
+      throw new ScopedResourceError(documentCenterError(payload), response.status);
+    }
+    return payload as EssDocumentCenterResponse;
+  }, []);
+  const historyHref = useCallback((filters: DocumentCenterFilters) => `${window.location.pathname}${documentCenterQuery(filters)}`, []);
+  const readHistoryQuery = useCallback(() => filtersFromSearchParams(new URLSearchParams(window.location.search), initialFilters.current), []);
+  const resolveDocumentCenterQuery = useCallback((filters: DocumentCenterFilters, data: EssDocumentCenterResponse) => ({
+    ...filters,
+    page: data.page,
+    page_size: data.page_size,
+  }), []);
+  const syncFilterControls = useCallback((filters: DocumentCenterFilters) => {
+    setSearch(filters.q);
+    setVerificationStatus(filters.verification_status || "all");
+    setCategoryId(filters.category_id || "all");
+    setExpiryFilter(filters.expiry_filter || "all");
+    setPageSize(String(filters.page_size));
+  }, []);
+  const onUnauthorized = useCallback(() => router.replace("/login"), [router]);
+  const {
+    data: centerData,
+    query: appliedFilters,
+    isPending: isFiltering,
+    error: filterError,
+    load: loadDocumentCenter,
+  } = useScopedWorkspaceResource({
+    initialData,
+    initialQuery: currentFilters,
+    request: requestDocumentCenter,
+    resolveQuery: resolveDocumentCenterQuery,
+    historyHref,
+    readHistoryQuery,
+    onApplied: syncFilterControls,
+    onUnauthorized,
+    fallbackError: "Document history could not be updated. Your current results are still available.",
+  });
   const [formValue, setFormValue] = useState<UploadFormValue>({
     ...INITIAL_UPLOAD_VALUE,
-    category_id: data.uploadable_categories[0]?.id ?? "",
+    category_id: initialData.uploadable_categories[0]?.id ?? "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [feedback, setFeedback] = useState<UploadFeedback | null>(null);
   const [pageFeedback, setPageFeedback] = useState<UploadFeedback | null>(() => {
     if (!uploadReceipt) return null;
-    const saved = data.items.find((item) => item.id === uploadReceipt.id);
+    const saved = initialData.items.find((item) => item.id === uploadReceipt.id);
     const status = saved?.verification_status ?? uploadReceipt.status;
     return { tone: "success", message: `${saved ? `${saved.file_name} · v${saved.version_number}. ` : "Document stored. History follows the current filters. "}${status === "verified" ? "Accepted automatically by the category policy." : "Submitted for HR verification."}` };
   });
@@ -515,21 +600,22 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [uploadBaseline, setUploadBaseline] = useState("");
   const uploadDirty = isUploadOpen && documentUploadSnapshot(formValue) !== uploadBaseline;
-  const uploadGuard = useDocumentUploadDraft(uploadDirty, isSubmitting);
+  useDocumentUploadDraft(uploadDirty, isSubmitting);
   const receiptRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (pageFeedback?.tone === "success") receiptRef.current?.focus(); }, [pageFeedback]);
   const [selectedDocument, setSelectedDocument] = useState<HrAdminEmployeeDocument | null>(null);
   const [selectedRequirementDetail, setSelectedRequirementDetail] = useState<EssDocumentRequirementItem | null>(null);
-  const selectedRequirement = data.requirement_items.find((item) => item.category_id === formValue.category_id);
-  const reuploadItems = data.requirement_items.filter((item) => item.current_rejection_reason && !item.is_compliant);
+  const selectedRequirement = centerData.requirement_items.find((item) => item.category_id === formValue.category_id);
+  const reuploadItems = centerData.requirement_items.filter((item) => item.current_rejection_reason && !item.is_compliant);
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const uploadInFlight = useRef(false);
+  const uploadIdempotencyKey = useRef(`ess-document-upload:${crypto.randomUUID()}`);
   const modal = mounted
     ? (
         <>
           {isUploadOpen ? createPortal(
             <UploadDocumentModal
-              data={data}
+              data={centerData}
               feedback={feedback}
               fieldErrors={fieldErrors}
               formValue={formValue}
@@ -551,7 +637,7 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
 
           {selectedRequirementDetail ? createPortal(
             <RequirementDetailModal
-              currentDocument={data.items.find((item) => item.id === selectedRequirementDetail.current_document_id)}
+              currentDocument={centerData.items.find((item) => item.id === selectedRequirementDetail.current_document_id)}
               item={selectedRequirementDetail}
               onClose={() => setSelectedRequirementDetail(null)}
               onUpload={() => {
@@ -571,7 +657,7 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
     setFieldErrors({});
     const initial = {
       ...INITIAL_UPLOAD_VALUE,
-      category_id: requirement?.category_id ?? data.uploadable_categories[0]?.id ?? "",
+      category_id: requirement?.category_id ?? centerData.uploadable_categories[0]?.id ?? "",
       title: requirement?.current_document_title || requirement?.category_name || "",
     };
     setFormValue(initial);
@@ -579,16 +665,24 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
     setIsUploadOpen(true);
   }
 
-  function goToPage(page: number, apply = false) {
-    const filters = apply ? {
-      q: search.trim(), verification_status: verificationStatus !== "all" ? verificationStatus : "",
-      category_id: categoryId !== "all" ? categoryId : "", expiry_filter: expiryFilter !== "all" ? expiryFilter : "",
-      page_size: Number(pageSize) || currentFilters.page_size,
-    } : currentFilters;
-    window.location.assign(new URL(`${pathname}${buildQueryString({ ...filters, page })}`, window.location.origin));
+  function draftFilters(page = 1): DocumentCenterFilters {
+    return {
+      q: search.trim(),
+      verification_status: verificationStatus !== "all" ? verificationStatus : "",
+      category_id: categoryId !== "all" ? categoryId : "",
+      expiry_filter: expiryFilter !== "all" ? expiryFilter : "",
+      page_size: Number(pageSize) || appliedFilters.page_size,
+      page,
+    };
+  }
+
+  function goToPage(page: number) {
+    if (isFiltering) return;
+    void loadDocumentCenter({ ...appliedFilters, page });
   }
 
   function updateUploadField<Key extends keyof UploadFormValue>(key: Key, value: UploadFormValue[Key]) {
+    uploadIdempotencyKey.current = `ess-document-upload:${crypto.randomUUID()}`;
     setFeedback(null);
     setFieldErrors((current) => ({ ...current, [key]: undefined }));
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -600,7 +694,7 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
     setFeedback(null);
     setPageFeedback(null);
 
-    const nextFieldErrors = validateUploadForm(formValue, selectedRequirement, data.max_upload_size_bytes);
+    const nextFieldErrors = validateUploadForm(formValue, selectedRequirement, centerData.max_upload_size_bytes);
     if (hasFieldErrors(nextFieldErrors)) {
       const message = "Review the highlighted document fields and try again.";
       setFieldErrors(nextFieldErrors);
@@ -627,7 +721,10 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
 
     let storedDocument: HrAdminEmployeeDocument | null = null;
     try {
-      const response = await uploadFormData("/api/me/employee-documents", body, { onProgress: setUploadProgress });
+      const response = await uploadFormData("/api/me/employee-documents", body, {
+        onProgress: setUploadProgress,
+        headers: { "Idempotency-Key": uploadIdempotencyKey.current },
+      });
       if (!response.ok) {
         const message = response.status >= 500 ? "Upload outcome could not be confirmed. Check document history before retrying; your draft is retained." : extractError(response.payload);
         const fields: UploadFieldErrors = {};
@@ -654,17 +751,18 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
 
     setFormValue({
       ...INITIAL_UPLOAD_VALUE,
-      category_id: data.uploadable_categories[0]?.id ?? "",
+      category_id: centerData.uploadable_categories[0]?.id ?? "",
     });
     setIsUploadOpen(false);
     setFeedback(null);
     const message = `${storedDocument?.file_name || "Document"} · v${storedDocument?.version_number ?? 1}. ${storedDocument?.verification_status === "verified" ? "Accepted automatically by the category policy." : "Submitted for HR verification."}`;
     setPageFeedback({ tone: "success", message });
     setToast({ title: "Document uploaded successfully.", message, tone: "success" });
-    const query = new URLSearchParams(window.location.search);
+    const query = new URLSearchParams(documentCenterQuery(appliedFilters).replace(/^\?/, ""));
     query.set("uploaded_document", storedDocument!.id);
     query.set("upload_result", storedDocument!.verification_status);
-    uploadGuard.complete(`${pathname}?${query.toString()}`);
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}?${query.toString()}`);
+    await loadDocumentCenter(appliedFilters, "none");
   }
 
   useEffect(() => {
@@ -676,9 +774,9 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
   return (
     <fieldset className="queue-list ess-document-center" disabled={!mounted} data-hydrated={mounted} aria-label="Employee documents">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <WorkspaceStandardPanel title="Document status" description="Track your assigned requirements and HR review." actions={<button className="button button--primary" disabled={data.uploadable_categories.length === 0} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openUpload(); }} type="button">Upload document</button>}>
+      <WorkspaceStandardPanel title="Document status" description="Track your assigned requirements and HR review." actions={<button className="button button--primary" disabled={centerData.uploadable_categories.length === 0} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openUpload(); }} type="button">Upload document</button>}>
         <div>
-        {data.uploadable_categories.length === 0 ? <p className="ess-section-note">Employee uploads are unavailable for your assigned categories.</p> : null}
+        {centerData.uploadable_categories.length === 0 ? <p className="ess-section-note">Employee uploads are unavailable for your assigned categories.</p> : null}
         {pageFeedback ? (
           <div ref={receiptRef} tabIndex={-1} className={`notice ${pageFeedback.tone === "success" ? "notice--success" : "notice--error"}`} role={pageFeedback.tone === "success" ? "status" : "alert"}>
             <strong>{pageFeedback.tone === "success" ? "Document uploaded successfully." : "Document upload failed."}</strong>
@@ -686,16 +784,16 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
           </div>
         ) : null}
         <div className="attendance-summary-strip" aria-label="All your documents">
-          <span><strong>{data.summary.missing_required_document_count}</strong> missing required</span>
-          <span><strong>{data.summary.pending_documents}</strong> pending review</span>
-          <span><strong>{data.summary.expired_documents}</strong> expired</span>
-          <span><strong>{data.summary.total_documents}</strong> uploaded in total</span>
+          <span><strong>{centerData.summary.missing_required_document_count}</strong> missing required</span>
+          <span><strong>{centerData.summary.pending_documents}</strong> pending review</span>
+          <span><strong>{centerData.summary.expired_documents}</strong> expired</span>
+          <span><strong>{centerData.summary.total_documents}</strong> uploaded in total</span>
         </div>
         </div>
       </WorkspaceStandardPanel>
 
       <WorkspaceStandardPanel title="Required documents" description="Review each assigned requirement and upload where permitted.">
-          {data.requirement_items.length === 0 ? <p className="ess-empty">No document requirements are assigned.</p> : null}
+          {centerData.requirement_items.length === 0 ? <p className="ess-empty">No document requirements are assigned.</p> : null}
           {reuploadItems.length > 0 ? (
             <div className="notice">
               <strong>Re-upload requested.</strong>
@@ -718,7 +816,7 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
                   </tr>
                 </thead>
                 <tbody>
-                  {data.requirement_items.map((item) => (
+                  {centerData.requirement_items.map((item) => (
                     <tr key={item.rule_id}>
                       <td className="workspace-table__primary-cell">
                         <div>
@@ -755,35 +853,47 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
             </WorkspaceTableScrollRegion>
       </WorkspaceStandardPanel>
 
-      <section className="queue-list">
+      <section className="queue-list" aria-busy={isFiltering} data-updating={isFiltering}>
         <WorkspaceStandardPanel title="Document history" description="Search submitted files, download copies and review HR comments.">
-          <p className="section-copy">{data.total_count} matching documents · {data.items.length} on this page. Filters apply to history; requirements and summary cover your assigned documents.</p>
-          <WorkspaceFilterBar >
+          <p className="section-copy" aria-live="polite">{centerData.total_count} matching documents · {centerData.items.length} on this page. Filters apply to history; requirements and summary cover your assigned documents.</p>
+          {isFiltering ? <div className="notice notice--quiet" role="status"><strong>Updating document history…</strong><span className="muted">The rest of the Documents workspace remains available.</span></div> : null}
+          {filterError ? <div className="notice notice--error" role="alert"><strong>Document history was not updated.</strong><span>{filterError}</span></div> : null}
+          <WorkspaceFilterForm
+            action="/ess/documents"
+            label="Document history filters"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadDocumentCenter(draftFilters(1));
+            }}
+            pending={isFiltering}
+            updateMode="scoped"
+          >
+            <WorkspaceFilterBar>
               <label className="form-field">
                 <span className="muted">Search</span>
-                <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Category, title, file, note" value={search} />
+                <input className="input-control" disabled={isFiltering} name="q" onChange={(event) => setSearch(event.target.value)} placeholder="Category, title, file, note" value={search} />
               </label>
               <label className="form-field">
                 <span className="muted">Verification</span>
-                <select className="input-control" onChange={(event) => setVerificationStatus(event.target.value)} value={verificationStatus}>
+                <select className="input-control" disabled={isFiltering} name="verification_status" onChange={(event) => setVerificationStatus(event.target.value)} value={verificationStatus}>
                   <option value="all">All verification states</option>
-                  {data.verification_statuses.map((option) => (
+                  {centerData.verification_statuses.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
               </label>
               <label className="form-field">
                 <span className="muted">Category</span>
-                <select className="input-control" onChange={(event) => setCategoryId(event.target.value)} value={categoryId}>
+                <select className="input-control" disabled={isFiltering} name="category_id" onChange={(event) => setCategoryId(event.target.value)} value={categoryId}>
                   <option value="all">All categories</option>
-                  {data.categories.map((option) => (
+                  {centerData.categories.map((option) => (
                     <option key={option.id} value={option.id}>{option.name}</option>
                   ))}
                 </select>
               </label>
               <label className="form-field">
                 <span className="muted">Expiry focus</span>
-                <select className="input-control" onChange={(event) => setExpiryFilter(event.target.value)} value={expiryFilter}>
+                <select className="input-control" disabled={isFiltering} name="expiry_filter" onChange={(event) => setExpiryFilter(event.target.value)} value={expiryFilter}>
                   <option value="all">All documents</option>
                   <option value="expiring">Expiring soon</option>
                   <option value="expired">Expired</option>
@@ -792,28 +902,30 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
               </label>
               <label className="form-field">
                 <span className="muted">Rows per page</span>
-                <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+                <select className="input-control" disabled={isFiltering} name="page_size" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
                   {[5, 10, 25].map((value) => (
                     <option key={value} value={String(value)}>{value}</option>
                   ))}
                 </select>
               </label>
-              <button className="button button--primary" onClick={() => goToPage(1, true)} type="button">Apply filters</button>
+              <button className="button button--primary" disabled={isFiltering} type="submit">{isFiltering ? "Applying…" : "Apply filters"}</button>
               <button
                 className="button button--ghost"
+                disabled={isFiltering}
                 onClick={() => {
                   setSearch("");
                   setVerificationStatus("all");
                   setCategoryId("all");
                   setExpiryFilter("all");
                   setPageSize("10");
-                  window.location.assign(pathname);
+                  void loadDocumentCenter({ q: "", verification_status: "", category_id: "", expiry_filter: "", page: 1, page_size: 10 });
                 }}
                 type="button"
               >
                 Clear filters
               </button>
-          </WorkspaceFilterBar>
+            </WorkspaceFilterBar>
+          </WorkspaceFilterForm>
 
           <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Document records table">
             <table className="workspace-table " aria-label="Document history">
@@ -828,7 +940,7 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((item) => (
+                {centerData.items.map((item) => (
                   <tr key={item.id}>
                     <td className="workspace-table__primary-cell">
                       <div>
@@ -860,24 +972,30 @@ export function EmployeeDocumentCenter({ data, currentFilters, uploadReceipt }: 
               </tbody>
             </table>
           </WorkspaceTableScrollRegion>
-          {data.items.length === 0 ? (
+          {centerData.items.length === 0 ? (
               <div className="notice workspace-empty-state">
-                <strong>{currentFilters.q || currentFilters.verification_status || currentFilters.category_id || currentFilters.expiry_filter ? "No documents match the current filters." : "No documents uploaded yet."}</strong>
-                <span className="muted">{currentFilters.q || currentFilters.verification_status || currentFilters.category_id || currentFilters.expiry_filter ? "Clear one or more filters to review the full submission history." : "Check your requirements and upload where permitted."}</span>
+                <strong>{appliedFilters.q || appliedFilters.verification_status || appliedFilters.category_id || appliedFilters.expiry_filter ? "No documents match the current filters." : "No documents uploaded yet."}</strong>
+                <span className="muted">{appliedFilters.q || appliedFilters.verification_status || appliedFilters.category_id || appliedFilters.expiry_filter ? "Clear one or more filters to review the full submission history." : "Check your requirements and upload where permitted."}</span>
               </div>
             ) : null}
         </WorkspaceStandardPanel>
 
         <PaginationBar
-          hasNext={data.has_next}
-          hasPrevious={data.has_previous}
+          hasNext={!isFiltering && centerData.has_next}
+          hasPrevious={!isFiltering && centerData.has_previous}
+          firstHref={documentCenterHref({ ...appliedFilters, page: 1 })}
+          lastHref={documentCenterHref({ ...appliedFilters, page: Math.max(1, Math.ceil(centerData.total_count / centerData.page_size)) })}
+          navigationMode="scoped"
+          nextHref={documentCenterHref({ ...appliedFilters, page: centerData.page + 1 })}
           onFirst={() => goToPage(1)}
-          onLast={() => goToPage(Math.max(1, Math.ceil(data.total_count / data.page_size)))}
-          onNext={() => goToPage(data.page + 1)}
-          onPrevious={() => goToPage(data.page - 1)}
-          page={data.page}
-          pageSize={data.page_size}
-          totalCount={data.total_count}
+          onLast={() => goToPage(Math.max(1, Math.ceil(centerData.total_count / centerData.page_size)))}
+          onNext={() => goToPage(centerData.page + 1)}
+          onPrevious={() => goToPage(centerData.page - 1)}
+          page={centerData.page}
+          pageSize={centerData.page_size}
+          pending={isFiltering}
+          previousHref={documentCenterHref({ ...appliedFilters, page: centerData.page - 1 })}
+          totalCount={centerData.total_count}
         />
       </section>
 

@@ -6,7 +6,7 @@ import { useDocumentSetupState } from "./document-setup-dialog";
 const subscribe = () => () => {};
 
 /** One draft contract for standalone and modal category/requirement editors. */
-export function useDocumentSetupDraft(value: unknown, busy: boolean, compact: boolean, returnPath: string) {
+export function useDocumentSetupDraft(value: unknown, busy: boolean, compact: boolean, returnPath: string, onCancel?:()=>void, onSaved?:(itemId:string)=>Promise<boolean>|boolean) {
   const ready = useSyncExternalStore(subscribe, () => true, () => false);
   const state = useDocumentSetupState();
   const setBusy = state?.setBusy;
@@ -35,9 +35,10 @@ export function useDocumentSetupDraft(value: unknown, busy: boolean, compact: bo
   }, [busy, dirty]);
   function cancel() {
     if (busy || submitting.current) return;
-    if (compact) window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"));
+    if(onCancel){if(!dirty||window.confirm("Discard unsaved changes?"))onCancel();}
+    else if (compact) window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"));
     else if (!dirty || window.confirm("Discard unsaved changes?")) { leaving.current = true; window.location.assign(new URL(returnPath, window.location.origin)); }
   }
-  function saved() { leaving.current = true; window.location.assign(new URL(`${returnPath}${returnPath.includes("?") ? "&" : "?"}setup_saved=1`, window.location.origin)); }
+  async function saved(itemId:string) {if(onSaved)return onSaved(itemId);leaving.current = true; window.location.assign(new URL(`${returnPath}${returnPath.includes("?") ? "&" : "?"}setup_saved=1`, window.location.origin));return true;}
   return { ready, cancel, saved, beginSubmit: () => { if (submitting.current) return false; submitting.current = true; return true; }, endSubmit: () => { submitting.current = false; } };
 }

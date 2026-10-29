@@ -151,7 +151,7 @@ async function createPublicLeadFromHome(page: Page, data: {
   phone: string;
 }) {
   await page.goto("/", { waitUntil: "networkidle" });
-  await expectPageReady(page, "Run payroll, compliance, and employee operations");
+  await expectPageReady(page, "One clear operating flow for HR and payroll");
   const signup = page.locator("#signup");
   await signup.getByLabel("Company name").fill(data.companyName);
   await signup.getByLabel("Your name").fill(data.contactName);

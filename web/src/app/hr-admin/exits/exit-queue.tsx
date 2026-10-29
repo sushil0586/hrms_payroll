@@ -1,6 +1,5 @@
 "use client";
 
-import {lifecycleNavigate} from "@/lib/ui/lifecycle-bulk";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useSyncExternalStore } from "react";
 
@@ -25,6 +24,8 @@ type Props = {
     has_next: boolean;
     has_previous: boolean;
   };
+  onNavigate: (href: string) => void;
+  onEdit?: (itemId: string) => void;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -39,7 +40,7 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   return queryString ? `?${queryString}` : "";
 }
 
-export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination }: Props) {
+export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination, onNavigate, onEdit }: Props) {
 
   const pathname = usePathname();
   const [search, setSearch] = useState(currentFilters.q);
@@ -48,10 +49,11 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
 
   const ready=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
+  const navigate=onNavigate;
   useEffect(()=>{const restore=()=>{setSearch(currentFilters.q);setStatus(currentFilters.status||"all");setRehireEligible(currentFilters.rehire_eligible||"all");setPageSize(String(currentFilters.page_size));};window.addEventListener('pageshow',restore);window.addEventListener('popstate',restore);return()=>{window.removeEventListener('pageshow',restore);window.removeEventListener('popstate',restore);};},[currentFilters]);
   function goToPage(page: number,apply=false) {
-    if(!apply){lifecycleNavigate(queueHref({page}));return;}
-    lifecycleNavigate(
+    if(!apply){navigate(queueHref({page}));return;}
+    navigate(
       `${pathname}${buildQueryString({
         q: search.trim() || undefined,
         status: status !== "all" ? status : undefined,
@@ -131,7 +133,7 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
               setStatus("all");
               setRehireEligible("all");
               setPageSize("25");
-              lifecycleNavigate(pathname);
+            navigate(pathname);
             }}
             type="button"
           >
@@ -144,7 +146,7 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
         </div>
       </section>
 
-      <WorkspaceDataTable ariaLabel="Exit records" className="lifecycle-table">
+      <WorkspaceDataTable ariaLabel="Exit records" scrollLabel="Scrollable exit records" className="lifecycle-table">
         <thead>
           <tr>
             <th>Employee</th>
@@ -167,7 +169,7 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
             <td><strong>{item.clearance_completed_count}/{item.clearance_total_count}</strong><span>{item.clearance_open_count} open, {item.clearance_overdue_count} overdue</span></td>
             <td><WorkspaceStatusBadge tone={item.rehire_eligible ? "success" : "neutral"}>{item.rehire_eligible ? "Eligible" : "No rehire"}</WorkspaceStatusBadge></td>
             <td><strong>{item.attention_state?.replaceAll("_", " ") || "On track"}</strong><span>{item.attention_summary || "Exit work is on track."}</span></td>
-            <td><a data-lifecycle-trigger={`edit-exit-${item.id}`} data-navigation-mode="document" className="button button--secondary" href={queueHref({ editExit: item.id })}>Edit</a></td>
+            <td><a data-lifecycle-trigger={`edit-exit-${item.id}`} data-navigation-mode={onEdit?"scoped":"document"} className="button button--secondary" href={queueHref({ editExit: item.id })} onClick={event=>{if(onEdit){event.preventDefault();onEdit(item.id);}}}>Edit</a></td>
           </tr>
         ))}
         </tbody>

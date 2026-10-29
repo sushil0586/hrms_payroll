@@ -21,6 +21,13 @@ type Props = {
   items: HrAdminHolidayCalendar[];
   options: HrAdminAttendanceOperationOptions;
   state: "live" | "demo";
+  modalMode?: "" | "create" | "edit";
+  editCalendarId?: string;
+  pending?: boolean;
+  onOpenCreate?: () => void;
+  onOpenEdit?: (id: string) => void;
+  onCloseModal?: () => void;
+  onReconcile?: () => Promise<boolean> | boolean;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -41,15 +48,16 @@ function statusTone(item: HrAdminHolidayCalendar): "success" | "neutral" {
   return item.is_active ? "success" : "neutral";
 }
 
-export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, options, state }: Props) {
+export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, options, state, modalMode, editCalendarId, pending, onOpenCreate, onOpenEdit, onCloseModal, onReconcile }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useWorkspaceQueryFilter("q", "");
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [year, setYear] = useWorkspaceQueryFilter("year", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
-  const createModalOpen = searchParams.get("calendarModal") === "create";
-  const modalEditItem = canManagePolicies && editItem ? editItem : null;
+  const createModalOpen = modalMode !== undefined ? modalMode === "create" : searchParams.get("calendarModal") === "create";
+  const controlledEditItem = editCalendarId ? items.find((item) => item.id === editCalendarId) ?? null : null;
+  const modalEditItem = canManagePolicies && (modalMode === "edit" || (modalMode === undefined && editItem)) ? controlledEditItem ?? editItem ?? null : null;
   const yearOptions = Array.from(new Set(items.map((item) => String(item.year)))).sort();
 
   const filteredItems = useMemo(() => {
@@ -133,7 +141,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
             setStatus("all");
             setYear("all");
           }} type="button">Clear filters</button>
-          {canManagePolicies ? <Link className="button button--primary" href={queueHref({ calendarModal: "create" })}>Create calendar</Link> : null}
+          {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create calendar</button> : <Link className="button button--primary" href={queueHref({ calendarModal: "create" })}>Create calendar</Link> : null}
         </div>
       </section>
 
@@ -201,7 +209,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                <Link className="button button--primary" href={queueHref({ editCalendar: selectedItem.id })}>Edit calendar</Link>
+                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit calendar</button> : <Link className="button button--primary" href={queueHref({ editCalendar: selectedItem.id })}>Edit calendar</Link>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit calendar</button>
               )}
@@ -243,7 +251,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
           description="Define the calendar year, scope, and holiday rows."
           tabs={["Scope", "Holiday rows", "Review"]}
         >
-          <HolidayCalendarForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyHolidayCalendarValue()} mode="create" options={options} />
+          <HolidayCalendarForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyHolidayCalendarValue()} mode="create" options={options} onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
       ) : null}
 
@@ -257,7 +265,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
           description="Update scope, year, and holiday definitions."
           tabs={["Scope", "Holiday rows", "Review"]}
         >
-          <HolidayCalendarForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={holidayCalendarToFormValue(modalEditItem)} item={modalEditItem} itemId={modalEditItem.id} mode="edit" options={options} />
+          <HolidayCalendarForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={holidayCalendarToFormValue(modalEditItem)} item={modalEditItem} itemId={modalEditItem.id} mode="edit" options={options} onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
       ) : null}
     </section>

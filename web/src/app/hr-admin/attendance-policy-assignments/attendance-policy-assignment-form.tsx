@@ -25,6 +25,8 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
+  onSaved?: () => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 type AttendancePolicyAssignmentField = "attendance_policy_id" | "priority";
@@ -60,7 +62,7 @@ function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string
   return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
 }
 
-export function AttendancePolicyAssignmentForm({ initialValue, mode, options, itemId, cancelHref, successHref = "/hr-admin/attendance-policy-assignments", compact = false }: Props) {
+export function AttendancePolicyAssignmentForm({ initialValue, mode, options, itemId, cancelHref, successHref = "/hr-admin/attendance-policy-assignments", compact = false, onSaved, onCancel }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -209,11 +211,19 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
       submittingRef.current = false;
       return;
     }
+    if (onSaved) {
+      const reconciled = await onSaved();
+      if (!reconciled) {
+        setError("The assignment was accepted, but the catalog could not be confirmed. Do not submit it again; retry the catalog read.");
+        setIsSubmitting(false);
+      }
+      return;
+    }
     router.push(successHref);
-    router.refresh();
   }
 
   function handleCancel() {
+    if (onCancel) { onCancel(); return; }
     if (cancelHref) {
       router.push(cancelHref);
       return;

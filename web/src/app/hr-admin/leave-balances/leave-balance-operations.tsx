@@ -5,8 +5,7 @@ import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error
 import { unambiguousNameIndex } from "@/lib/ui/unambiguous-name-index";
 import { useLatestEmployeeCodeResolution } from "@/lib/ui/use-latest-employee-code-resolution";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -56,6 +55,7 @@ type LeaveBalanceImportRow = {
 
 const BALANCE_PAGE_SIZE = 12;
 const TRANSACTION_PAGE_SIZE = 8;
+const subscribe = () => () => undefined;
 
 const leaveBalanceImportHeaders = [
   "employee_code",
@@ -472,14 +472,14 @@ function BalanceEmployeeFilter({ initialValue, employees }: { initialValue: stri
   return <><input type="hidden" name="employee_id" value={value}/><EmployeeSearchSelect label="Employee filter" hint="Search authorized employees; blank includes all employees." initialOptions={employees} selectedLabel="Selected employee" value={value} onChange={setValue}/></>;
 }
 
-function LeaveBalanceFilters({ filters, policies, employees }: { filters: Props["initialFilters"]; policies: Array<{id:string;name:string}>; employees: Array<{id:string;name:string;employee_code:string}> }) {
-  return <WorkspaceFilterForm action="/hr-admin/leave-balances" label="Leave balance filters" className="workspace-filter-form--three workspace-filter-form--employee">
+function LeaveBalanceFilters({ filters, policies, employees, pending, onApply }: { filters: Props["initialFilters"]; policies: Array<{id:string;name:string}>; employees: Array<{id:string;name:string;employee_code:string}>; pending: boolean; onApply: (filters: NonNullable<Props["initialFilters"]>) => void }) {
+  return <WorkspaceFilterForm action="/hr-admin/leave-balances" label="Leave balance filters" className="workspace-filter-form--three workspace-filter-form--employee" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onApply({ ...filters, query:String(data.get("q")||""), employeeId:String(data.get("employee_id")||""), policyId:String(data.get("leave_policy_id")||""), transactionStatus:String(data.get("transaction_status")||""), balancePage:1, transactionPage:1, pageSize:Number(data.get("page_size"))||12 }); }}>
     <input type="hidden" name="page_size" value={filters?.pageSize ?? 12}/>
     <label className="form-field"><span>Search</span><input className="input-control" name="q" defaultValue={filters?.query ?? ""} placeholder="Employee, code or policy; transaction reason"/></label>
     <BalanceEmployeeFilter initialValue={filters?.employeeId ?? ""} employees={employees}/>
     <label className="form-field"><span>Policy filter</span><select className="input-control" name="leave_policy_id" defaultValue={filters?.policyId ?? ""}>{selectOptions(policies,"All leave policies")}</select></label>
     <label className="form-field"><span>Transaction status</span><select className="input-control" name="transaction_status" defaultValue={filters?.transactionStatus ?? ""}><option value="">All statuses</option><option value="pending">Pending review</option><option value="applied">Applied</option><option value="rejected">Rejected</option></select></label>
-    <div className="workspace-filter-actions"><button className="button button--primary" type="submit">Apply filters</button><a className="button button--secondary" data-navigation-mode="document" href="/hr-admin/leave-balances">Clear filters</a></div>
+    <div className="workspace-filter-actions"><button className="button button--primary" disabled={pending} type="submit">Apply filters</button><button className="button button--secondary" type="button" onClick={() => onApply({ query:"",employeeId:"",policyId:"",transactionStatus:"",balancePage:1,transactionPage:1,pageSize:filters?.pageSize??12,selectedBalanceId:"",selectedTransactionId:"" })}>Clear filters</button></div>
   </WorkspaceFilterForm>;
 }
 
@@ -490,7 +490,8 @@ export function LeaveBalanceOperations({
   canManageBalances = false,
   initialFilters,
 }: Props) {
-  const searchParams = useSearchParams();
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  const [filters, setFilters] = useState<NonNullable<Props["initialFilters"]>>({ query:"",employeeId:"",policyId:"",transactionStatus:"",balancePage:1,transactionPage:1,pageSize:12,selectedBalanceId:"",selectedTransactionId:"", ...initialFilters });
   const [refreshed, setRefreshed] = useState<{
     sourceBalances: HrAdminLeaveBalanceListResponse;
     sourceTransactions: HrAdminLeaveBalanceTransactionListResponse;
@@ -516,9 +517,9 @@ export function LeaveBalanceOperations({
   const [reviewReasonById, setReviewReasonById] = useState<Record<string, string>>({});
   const [reviewingTransactionId, setReviewingTransactionId] = useState<string | null>(null);
   const reviewingTransactionRef = useRef<string | null>(null);
-  const selectedBalanceId = searchParams.get("selectedBalance") ?? "";
-  const selectedTransactionId = searchParams.get("selectedTransaction") ?? "";
-  const pageSize = initialFilters?.pageSize ?? balancesPage.page_size;
+  const [selectedBalanceId, setSelectedBalanceId] = useState(initialFilters?.selectedBalanceId ?? "");
+  const [selectedTransactionId, setSelectedTransactionId] = useState(initialFilters?.selectedTransactionId ?? "");
+  const pageSize = filters.pageSize ?? balancesPage.page_size;
   const safeBalancePage = Math.min(balancesPage.page, balancesPage.total_pages ?? Math.max(1, Math.ceil(balancesPage.total_count / balancesPage.page_size)));
   const safeTransactionPage = Math.min(transactionsPage.page, transactionsPage.total_pages ?? Math.max(1, Math.ceil(transactionsPage.total_count / transactionsPage.page_size)));
   const balanceEmployeeOptions = Array.from(new Map(balances.map((item) => [item.employee_id, ({
@@ -529,7 +530,7 @@ export function LeaveBalanceOperations({
   const selectedBalance = balances.find((item) => item.id === selectedBalanceId) ?? null;
   const selectedTransaction = transactions.find((item) => item.id === selectedTransactionId) ?? null;
 
-  async function refreshLedger() {
+  async function refreshLedger(nextFilters = filters, requestedBalancePage = safeBalancePage, requestedTransactionPage = safeTransactionPage, commitHistory = false) {
     const sourceUrl = window.location.href;
     const sequence = ++refreshSequence.current;
     refreshAbort.current?.abort();
@@ -538,16 +539,16 @@ export function LeaveBalanceOperations({
     setRefreshError("");
     setIsRefreshing(true);
     const filters = new URLSearchParams();
-    if (initialFilters?.query) filters.set("q", initialFilters.query);
-    if (initialFilters?.employeeId) filters.set("employee_id", initialFilters.employeeId);
-    if (initialFilters?.policyId) filters.set("leave_policy_id", initialFilters.policyId);
+    if (nextFilters.query) filters.set("q", nextFilters.query);
+    if (nextFilters.employeeId) filters.set("employee_id", nextFilters.employeeId);
+    if (nextFilters.policyId) filters.set("leave_policy_id", nextFilters.policyId);
     filters.set("page_size", String(pageSize));
     async function readPage<T extends { total_count: number; total_pages?: number; page_size: number }>(path: string, page: number, status?: string): Promise<T> {
       const query = new URLSearchParams(filters);
       query.set("page", String(page));
       if (status) query.set("status", status);
       const read = async () => {
-        const response = await fetch(`${path}?${query}`, { cache: "no-store", signal: controller.signal });
+        const response = await fetch(`${path}${path.includes("?") ? "&" : "?"}${query}`, { cache: "no-store", signal: controller.signal });
         const payload = await response.json();
         if (!response.ok) throw new Error(getErrorMessage(payload, response.status));
         return payload as T;
@@ -560,12 +561,14 @@ export function LeaveBalanceOperations({
     }
     try {
       const [nextBalances, nextTransactions] = await Promise.all([
-        readPage<HrAdminLeaveBalanceListResponse>("/api/hr-admin/leave-balances", safeBalancePage),
-        readPage<HrAdminLeaveBalanceTransactionListResponse>("/api/hr-admin/leave-balances/transactions", safeTransactionPage, initialFilters?.transactionStatus),
+        readPage<HrAdminLeaveBalanceListResponse>("/api/hr-admin/leave-balances/workspace", requestedBalancePage),
+        readPage<HrAdminLeaveBalanceTransactionListResponse>("/api/hr-admin/leave-balances/workspace?kind=transactions", requestedTransactionPage, nextFilters.transactionStatus),
       ]);
       if (sequence !== refreshSequence.current || window.location.href !== sourceUrl) return;
       setRefreshed({ sourceBalances: serverBalancesPage, sourceTransactions: serverTransactionsPage, balances: nextBalances, transactions: nextTransactions });
-      if (nextBalances.page !== safeBalancePage || nextTransactions.page !== safeTransactionPage) {
+      setFilters({ ...nextFilters, balancePage: nextBalances.page, transactionPage: nextTransactions.page, pageSize });
+      if (commitHistory) window.history.pushState(window.history.state, "", buildLeaveBalanceHref({ q:nextFilters.query||undefined, employee_id:nextFilters.employeeId||undefined, leave_policy_id:nextFilters.policyId||undefined, transaction_status:nextFilters.transactionStatus||undefined, page_size:String(pageSize), balance_page:String(nextBalances.page), transaction_page:String(nextTransactions.page) }));
+      if (!commitHistory && (nextBalances.page !== requestedBalancePage || nextTransactions.page !== requestedTransactionPage)) {
         const canonical = new URL(sourceUrl);
         canonical.searchParams.set("balance_page", String(nextBalances.page));
         canonical.searchParams.set("transaction_page", String(nextTransactions.page));
@@ -580,10 +583,10 @@ export function LeaveBalanceOperations({
 
   function pageHref(updates: Record<string, string | undefined>) {
     return buildLeaveBalanceHref({
-      q: initialFilters?.query || undefined,
-      employee_id: initialFilters?.employeeId || undefined,
-      leave_policy_id: initialFilters?.policyId || undefined,
-      transaction_status: initialFilters?.transactionStatus || undefined,
+      q: filters.query || undefined,
+      employee_id: filters.employeeId || undefined,
+      leave_policy_id: filters.policyId || undefined,
+      transaction_status: filters.transactionStatus || undefined,
       page_size: String(pageSize),
       balance_page: String(balancesPage.page),
       transaction_page: String(transactionsPage.page),
@@ -690,14 +693,14 @@ export function LeaveBalanceOperations({
 
   const feedback = <>{error ? <div role="alert" className="notice notice--error">{error}</div> : null}{successMessage ? <div role="status" className="notice notice--success">{successMessage}</div> : null}{isRefreshing ? <div role="status" className="notice">Refreshing the ledger…</div> : null}{refreshError ? <div role="alert" className="notice notice--error">{refreshError} <button className="button button--secondary" disabled={isRefreshing} onClick={() => void refreshLedger()} type="button">Retry ledger refresh</button></div> : null}</>;
   return (
-    <>
+    <div data-local-update-hydrated={hydrated ? "true" : "false"}>
       {feedbackContext === "review" && !selectedTransaction ? feedback : null}
       <div className="attendance-summary-strip" role="group" aria-label="Leave balance summary">
         <span><strong>{balancesPage.total_count}</strong> matching balances</span>
         <span><strong>{transactionsPage.total_count}</strong> matching transactions</span>
         <span><strong>{transactions.filter(item=>item.status==="pending").length}</strong> pending reviews on this transaction page</span>
       </div>
-      <LeaveBalanceFilters key={JSON.stringify(initialFilters)} filters={initialFilters} policies={options.leave_policies} employees={balanceEmployeeOptions} />
+      <LeaveBalanceFilters key={JSON.stringify(filters)} filters={filters} policies={options.leave_policies} employees={balanceEmployeeOptions} pending={isRefreshing} onApply={(next) => { setSelectedBalanceId(""); setSelectedTransactionId(""); void refreshLedger(next, 1, 1, true); }} />
 
       <section className="section queue-layout">
         <div className="queue-toolbar__header">
@@ -740,7 +743,7 @@ export function LeaveBalanceOperations({
                         <td><strong>{item.closing_balance}</strong><span>{item.opening_balance} opening</span></td>
                         <td><strong>{item.consumed_amount}</strong><span>{item.accrued_amount} accrued</span></td>
                         <td><strong>{item.reserved_amount}</strong><span>{item.encashed_amount} encashed</span></td>
-                        <td><a data-navigation-mode="document" className="button button--secondary button--compact" aria-label={`Inspect balance for ${item.employee_name}`} href={`${pageHref({selectedBalance: item.id})}#balance-detail`}>Inspect</a></td>
+                        <td><button className="button button--secondary button--compact" aria-label={`Inspect balance for ${item.employee_name}`} onClick={() => setSelectedBalanceId(item.id)} type="button">Inspect</button></td>
                       </tr>
                     );
                   })}
@@ -751,7 +754,7 @@ export function LeaveBalanceOperations({
               </table>
             </WorkspaceTableScrollRegion>
             <div className="panel-card-soft attendance-pagination-panel">
-              <PaginationBar navigationMode="document"
+              <PaginationBar navigationMode="scoped"
                 firstHref={pageHref({ balance_page: "1", transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
                 hasNext={balancesPage.has_next}
                 hasPrevious={balancesPage.has_previous}
@@ -761,8 +764,9 @@ export function LeaveBalanceOperations({
                 pageSize={balancesPage.page_size}
                 previousHref={pageHref({ balance_page: String(safeBalancePage - 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
                 totalCount={balancesPage.total_count}
+                pending={isRefreshing} onFirst={() => void refreshLedger(filters, 1, safeTransactionPage, true)} onLast={() => void refreshLedger(filters, balancesPage.total_pages ?? 1, safeTransactionPage, true)} onNext={() => void refreshLedger(filters, safeBalancePage + 1, safeTransactionPage, true)} onPrevious={() => void refreshLedger(filters, safeBalancePage - 1, safeTransactionPage, true)}
               />
-              <WorkspaceFilterForm action="/hr-admin/leave-balances" label="Ledger page size" className="workspace-filter-form--inline">
+              <WorkspaceFilterForm action="/hr-admin/leave-balances" label="Ledger page size" className="workspace-filter-form--inline" onSubmit={(event) => { event.preventDefault(); const size=Number(new FormData(event.currentTarget).get("page_size"))||12; void refreshLedger({...filters,pageSize:size},1,1,true); }}>
                 {Object.entries({q:initialFilters?.query,employee_id:initialFilters?.employeeId,leave_policy_id:initialFilters?.policyId,transaction_status:initialFilters?.transactionStatus}).map(([name,value])=><input key={name} type="hidden" name={name} value={value ?? ""}/>)}
                 <label className="form-field"><span>Rows</span><select className="input-control" name="page_size" defaultValue={pageSize}>{Array.from(new Set([12,25,50,pageSize])).sort((a,b)=>a-b).map(size=><option key={size} value={size}>{size}</option>)}</select></label><button className="button button--secondary" type="submit">Apply page size</button>
               </WorkspaceFilterForm>
@@ -775,7 +779,7 @@ export function LeaveBalanceOperations({
                   <h2 className="section-heading-soft">Balance detail</h2>
                   <p className="section-copy section-copy-soft">Focused employee-policy ledger context.</p>
                 </div>
-                <a className="button button--secondary button--compact" href={pageHref({})} data-navigation-mode="document">Close</a>
+                <button className="button button--secondary button--compact" onClick={() => setSelectedBalanceId("")} type="button">Close</button>
               </div>
               <article className="record-card record-card--compact">
                 <div className="record-card__header">
@@ -847,7 +851,7 @@ export function LeaveBalanceOperations({
                         <td><strong>{item.units}</strong><span>{item.leave_policy_name}</span></td>
                         <td><WorkspaceStatusBadge tone={tone}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge><span>{item.can_current_actor_review ? "Reviewable" : "Not reviewable by you"}</span></td>
                         <td><strong>{item.closing_balance_before} to {item.closing_balance_after}</strong><span>{item.reason || "No reason"}</span></td>
-                        <td><a data-navigation-mode="document" className="button button--secondary button--compact" aria-label={`Inspect transaction for ${item.employee_name}`} href={`${pageHref({selectedTransaction: item.id})}#transaction-detail`}>Inspect</a></td>
+                        <td><button className="button button--secondary button--compact" aria-label={`Inspect transaction for ${item.employee_name}`} onClick={() => setSelectedTransactionId(item.id)} type="button">Inspect</button></td>
                       </tr>
                     );
                   })}
@@ -858,7 +862,7 @@ export function LeaveBalanceOperations({
               </table>
             </WorkspaceTableScrollRegion>
             <div className="panel-card-soft attendance-pagination-panel">
-              <PaginationBar navigationMode="document"
+              <PaginationBar navigationMode="scoped"
                 firstHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: "1", page_size: String(pageSize) })}
                 hasNext={transactionsPage.has_next}
                 hasPrevious={transactionsPage.has_previous}
@@ -868,6 +872,7 @@ export function LeaveBalanceOperations({
                 pageSize={transactionsPage.page_size}
                 previousHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(safeTransactionPage - 1), page_size: String(pageSize) })}
                 totalCount={transactionsPage.total_count}
+                pending={isRefreshing} onFirst={() => void refreshLedger(filters, safeBalancePage, 1, true)} onLast={() => void refreshLedger(filters, safeBalancePage, transactionsPage.total_pages ?? 1, true)} onNext={() => void refreshLedger(filters, safeBalancePage, safeTransactionPage + 1, true)} onPrevious={() => void refreshLedger(filters, safeBalancePage, safeTransactionPage - 1, true)}
               />
             </div>
           </section>
@@ -878,7 +883,7 @@ export function LeaveBalanceOperations({
                   <h2 className="section-heading-soft">Transaction detail</h2>
                   <p className="section-copy section-copy-soft">Review evidence and maker-checker state.</p>
                 </div>
-                <a className="button button--secondary button--compact" href={pageHref({})} data-navigation-mode="document">Close</a>
+                <button className="button button--secondary button--compact" onClick={() => setSelectedTransactionId("")} type="button">Close</button>
               </div>
               <article className="record-card record-card--compact">
                 <div className="record-card__header">
@@ -996,6 +1001,6 @@ export function LeaveBalanceOperations({
         </div>
       </details>
 
-    </>
+    </div>
   );
 }

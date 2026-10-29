@@ -16,6 +16,8 @@ type OrganizationFormProps = {
   options: HrAdminOrganizationFormOptions;
   itemId?: string;
   currentItem?: HrAdminOrganizationItem;
+  onSaved?: (item: HrAdminOrganizationItem) => Promise<boolean> | boolean;
+  onCancel?: () => void;
 };
 
 type OrganizationFieldErrors = Partial<Record<keyof HrAdminOrganizationWriteInput, string>>;
@@ -125,7 +127,7 @@ function FieldError({ message }: { message?: string }) {
   return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
-export function OrganizationForm({ initialValue, mode, section, options, itemId, currentItem, returnHref }: OrganizationFormProps) {
+export function OrganizationForm({ initialValue, mode, section, options, itemId, currentItem, returnHref, onSaved, onCancel }: OrganizationFormProps) {
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<OrganizationFieldErrors>({});
@@ -185,8 +187,13 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
     if (typeof payload?.id !== "string" || (itemId && payload.id !== itemId) || typeof payload.code !== "string" || typeof payload.name !== "string") {
       setError("Save outcome could not be confirmed. Check the catalog before retrying; your draft is retained.");setIsSubmitting(false);isSubmittingRef.current=false;return;
     }
-    const destination = new URL(returnHref, window.location.origin);destination.searchParams.set("itemId",payload.id);destination.searchParams.set("saved","1");
-    navigation.complete(destination.pathname+destination.search);
+    if (onSaved) {
+      const confirmed = await onSaved(payload as HrAdminOrganizationItem);
+      if (!confirmed) { setError("The record was saved, but the catalog confirmation failed. Keep this dialog open and refresh the catalog without submitting again."); setIsSubmitting(false); return; }
+    } else {
+      const destination = new URL(returnHref, window.location.origin);destination.searchParams.set("itemId",payload.id);destination.searchParams.set("saved","1");
+      navigation.complete(destination.pathname+destination.search);
+    }
   }
 
   return (
@@ -429,7 +436,7 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? `Create ${sectionMeta.singular.toLowerCase()}` : "Save changes"}
             </button>
-            <button className="button button--secondary" disabled={isSubmitting} onClick={() => navigation.cancel(returnHref)} type="button">
+            <button className="button button--secondary" disabled={isSubmitting} onClick={() => onCancel ? window.dispatchEvent(new Event("hr-admin-modal:request-close")) : navigation.cancel(returnHref)} type="button">
               Cancel
             </button>
           </div>

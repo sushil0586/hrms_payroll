@@ -64,7 +64,14 @@ def test_stale_manager_decision_is_validation_error_and_preserves_withdrawal(act
     item = LeaveRequest.objects.get(employee=employee, status="pending")
     client = APIClient()
     client.force_authenticate(employee.membership.user)
-    assert client.post(f"/api/v1/me/leave-requests/{item.id}/withdraw/", {"reason": "Synthetic withdrawal"}, format="json").status_code == 200
+    assert client.post(
+        f"/api/v1/me/leave-requests/{item.id}/withdraw/",
+        {
+            "reason": "Synthetic withdrawal",
+            "attachment_reference": "synthetic-withdrawal-evidence.pdf",
+        },
+        format="json",
+    ).status_code == 200
     balance = employee.leave_balances.get(leave_policy=item.leave_policy)
     balance.refresh_from_db()
     before = (balance.reserved_amount, balance.consumed_amount, balance.closing_balance, balance.transactions.count())

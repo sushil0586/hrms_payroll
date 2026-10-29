@@ -14,13 +14,14 @@ import type { LeaveRequestItem } from "@/lib/types";
 type Props = {
   closeHref: string;
   item: LeaveRequestItem;
+  onDecided?: () => Promise<void> | void;
 };
 
 function getErrorMessage(payload: unknown, status: number) {
   return mutationErrorMessage(payload, status, 'Unable to record the HR decision. Refresh the request and review its current approval step.');
 }
 
-export function LeaveRequestOverrideForm({ closeHref, item }: Props) {
+export function LeaveRequestOverrideForm({ closeHref, item, onDecided }: Props) {
   const [comment, setComment] = useState(item.manager_comment || item.rejection_reason || "");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState<"approve" | "reject" | "">("");
@@ -65,7 +66,8 @@ export function LeaveRequestOverrideForm({ closeHref, item }: Props) {
     // A fresh document commits both the decision and its filtered return scope.
     // push + refresh can refresh the old override URL before navigation commits.
     rememberActionSuccess(closeHref, item.id, "HR decision recorded.", leaveDecisionMessage(payload, action, item.request_action === "cancellation_request"));
-    window.location.assign(closeHref);
+    if (onDecided) await onDecided();
+    else window.location.assign(closeHref);
   }
 
   return (
@@ -125,7 +127,7 @@ export function LeaveRequestOverrideForm({ closeHref, item }: Props) {
 }
 
 /** URL-owned presentation; opening/authorization still comes from the server page. */
-export function LeaveRequestReviewDialog({ closeHref, item }: Props) {
+export function LeaveRequestReviewDialog({ closeHref, item, onDecided }: Props) {
   const params = useSearchParams();
   const open = params.get("overrideLeave") === item.id;
   const wasOpen = useRef(open);
@@ -150,5 +152,5 @@ export function LeaveRequestReviewDialog({ closeHref, item }: Props) {
     eyebrow="HR override"
     labelledBy="leave-request-override-title"
     title="Review leave request"
-  ><LeaveRequestOverrideForm closeHref={closeHref} item={item} /></HrAdminActionModal>;
+  ><LeaveRequestOverrideForm closeHref={closeHref} item={item} onDecided={onDecided} /></HrAdminActionModal>;
 }

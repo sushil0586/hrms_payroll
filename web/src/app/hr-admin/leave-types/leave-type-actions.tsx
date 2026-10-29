@@ -9,21 +9,20 @@ import { useEffect, useState } from "react";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import type { HrAdminLeaveTypeImpact } from "@/lib/types";
 
 type Props = {
   isActive: boolean;
   leaveTypeId: string;
   leaveTypeName: string;
+  onChanged?: () => Promise<void> | void;
 };
 
 function errorMessage(payload: unknown, status: number) {
   return mutationErrorMessage(payload, status, 'Unable to update this leave type. Refresh and review its linked records.');
 }
 
-export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
+export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName, onChanged }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [impact, setImpact] = useState<HrAdminLeaveTypeImpact | null>(null);
   const [isLoadingImpact, setIsLoadingImpact] = useState(false);
@@ -58,7 +57,7 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
   }
 
   function closeDialog() {
-    if (isSubmitting || isRefreshing) return;
+    if (isSubmitting) return;
     setDialogOpen(false);
     setImpact(null);
     setError("");
@@ -90,7 +89,7 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
       setToast({ title: "Leave type updated.", message, tone: "success" });
       setDialogOpen(false);
       setImpact(null);
-      refresh();
+      await onChanged?.();
     } catch {
       const message = networkMutationMessage;
       setError(message);
@@ -137,8 +136,8 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
             <div className="form-actions-bar">
               <span className="muted">Deactivate hides this leave type from new use while keeping linked history intact.</span>
               <div className="form-actions-bar__buttons">
-                <AsyncActionButton className="button button--secondary" disabled={!impact?.can_deactivate || !isActive} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave types" : "Deactivating leave type"} onClick={() => submit("deactivate")} type="button">Deactivate</AsyncActionButton>
-                <AsyncActionButton className="button button--primary" disabled={!impact?.can_delete} pending={isSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing leave types" : "Deleting leave type"} onClick={() => submit("delete")} type="button">Delete permanently</AsyncActionButton>
+                <AsyncActionButton className="button button--secondary" disabled={!impact?.can_deactivate || !isActive} pending={isSubmitting} pendingLabel="Deactivating leave type" onClick={() => submit("deactivate")} type="button">Deactivate</AsyncActionButton>
+                <AsyncActionButton className="button button--primary" disabled={!impact?.can_delete} pending={isSubmitting} pendingLabel="Deleting leave type" onClick={() => submit("delete")} type="button">Delete permanently</AsyncActionButton>
               </div>
             </div>
         </HrAdminActionModal>

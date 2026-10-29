@@ -17,11 +17,15 @@ export async function POST(request: NextRequest) {
     method: "POST",
     headers: {
       Authorization: `Token ${token}`,
+      "Idempotency-Key": request.headers.get("idempotency-key") ?? "",
     },
     body: formData,
     cache: "no-store",
   });
 
   const payload = await upstreamResponse.json().catch(() => ({}));
-  return NextResponse.json(payload, { status: upstreamResponse.status });
+  const result = NextResponse.json(payload, { status: upstreamResponse.status });
+  const replayed = upstreamResponse.headers.get("idempotency-replayed");
+  if (replayed) result.headers.set("Idempotency-Replayed", replayed);
+  return result;
 }

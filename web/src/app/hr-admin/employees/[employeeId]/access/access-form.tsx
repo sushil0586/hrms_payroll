@@ -24,6 +24,7 @@ type AccessFormProps = MaintenanceCallbacks & {
   existingAccess: boolean;
   employeeStatus: string;
   cancelHref?: string;
+  onSaved?: () => Promise<void> | void;
 };
 
 type AccessFieldErrors = Partial<Record<keyof HrAdminEmployeeAccessWriteInput, string>>;
@@ -32,7 +33,7 @@ function FieldError({ message, field }: { message?: string; field: string }) {
   return message ? <span id={`access-error-${field}`} className="field-error-text">{message}</span> : null;
 }
 
-export function EmployeeAccessForm({ employeeId, initialValue, options, existingAccess, employeeStatus, cancelHref, ...callbacks }: AccessFormProps) {
+export function EmployeeAccessForm({ employeeId, initialValue, options, existingAccess, employeeStatus, cancelHref, onSaved, ...callbacks }: AccessFormProps) {
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<AccessFieldErrors>({});
@@ -146,6 +147,7 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
     setFormValue(nextValue);
     draft.markSaved(nextValue);
     setHasAccess(true);
+    await onSaved?.();
     setIsSubmitting(false);
     isSubmittingRef.current = false;
   }

@@ -1,23 +1,16 @@
 import { Suspense } from "react";
 
+import { PublicAuthFrame } from "@/app/components/public-auth-frame";
 import { ResetPasswordForm } from "@/app/reset-password/reset-password-form";
 
 export default function ResetPasswordPage() {
   return (
-    <main className="login-page auth-page">
-      <section className="auth-panel">
-        <div className="auth-panel__brand">
-          <span className="workspace-logo">HR</span>
-          <div>
-            <p className="workspace-card__eyebrow">Account Recovery</p>
-            <h1>Accerio HRMS</h1>
-            <p className="section-copy">Set a secure password for your workspace access.</p>
-          </div>
-        </div>
+    <PublicAuthFrame eyebrow="Secure account recovery" title="Set your password, then return to work." description="Your password protects one tenant-scoped identity across every workspace assigned by your organization.">
+      <div className="auth-panel public-access-card public-access-card--recovery">
         <Suspense fallback={<div className="form-shell-card auth-form-shell"><p className="section-copy">Loading secure setup link...</p></div>}>
           <ResetPasswordForm />
         </Suspense>
-      </section>
-    </main>
+      </div>
+    </PublicAuthFrame>
   );
 }

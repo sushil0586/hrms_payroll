@@ -4,7 +4,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +14,6 @@ import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { performJsonMutation } from "@/lib/ui/json-mutation";
-import { useRefreshAfterMutation } from "@/lib/ui/use-refresh-after-mutation";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminLeavePolicy, HrAdminLeavePolicyImpact } from "@/lib/types";
@@ -22,6 +21,10 @@ import type { HrAdminLeavePolicy, HrAdminLeavePolicyImpact } from "@/lib/types";
 type Props = {
   canManagePolicies: boolean;
   policies: HrAdminLeavePolicy[];
+  pending?: boolean;
+  onOpenCreate?: () => void;
+  onOpenEdit?: (id: string) => void;
+  onReconcile?: () => Promise<void> | void;
 };
 
 function normalized(value: string) {
@@ -32,15 +35,12 @@ function uniqueValues(items: string[]) {
   return [...new Set(items.filter(Boolean))].sort((first, second) => first.localeCompare(second));
 }
 
-export function LeavePolicyList({ canManagePolicies, policies }: Props) {
-  const { isRefreshing, refresh } = useRefreshAfterMutation();
-  const params = useSearchParams();
-  const query = params.get("q") ?? "";
-  function href(updates: Record<string,string | undefined>) { const next = new URLSearchParams(params.toString()); for (const [key,value] of Object.entries(updates)) { if(value) next.set(key,value); else next.delete(key); } return `/hr-admin/leave-policies${next.size ? `?${next}` : ""}`; }
-  const status = params.get("status") ?? "";
-  const leaveType = params.get("leave_type") ?? "";
-  const accrualFrequency = params.get("accrual") ?? "";
-  const selectedPolicyId = params.get("selected") ?? "";
+export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCreate, onOpenEdit, onReconcile }: Props) {
+  const [query, setQuery] = useWorkspaceQueryFilter("q", "");
+  const [status, setStatus] = useWorkspaceQueryFilter("status", "");
+  const [leaveType, setLeaveType] = useWorkspaceQueryFilter("leave_type", "");
+  const [accrualFrequency, setAccrualFrequency] = useWorkspaceQueryFilter("accrual", "");
+  const [selectedPolicyId, setSelectedPolicyId] = useState("");
   const [selectedPolicy, setSelectedPolicy] = useState<HrAdminLeavePolicy | null>(null);
   const impactRequest = useRef(0);
   const [impact, setImpact] = useState<HrAdminLeavePolicyImpact | null>(null);
@@ -106,7 +106,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
   }, [toast]);
 
   async function submitPolicyRemoval(action: "archive" | "delete") {
-    if (!selectedPolicy || isActionSubmitting || isRefreshing) return;
+    if (!selectedPolicy || isActionSubmitting || pending) return;
     setIsActionSubmitting(true);
     setActionError("");
     const response = await performJsonMutation<HrAdminLeavePolicyImpact>(`/api/hr-admin/leave-policies/${selectedPolicy.id}/${action}`, {
@@ -127,7 +127,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
     setIsActionSubmitting(false);
     setSelectedPolicy(null);
     setImpact(null);
-    refresh();
+    if (onReconcile) await onReconcile();
   }
 
   return (
@@ -148,21 +148,21 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
           </div>
           <span className="queue-summary-chip"><strong>{filteredPolicies.length}</strong> shown</span>
         </div>
-        <WorkspaceFilterForm action="/hr-admin/leave-policies" label="Leave policy filters" className="workspace-filter-form--three">
+        <WorkspaceFilterForm action="/hr-admin/leave-policies" label="Leave policy filters" className="workspace-filter-form--three" onSubmit={(event) => event.preventDefault()}>
           <label className="form-field">
             <span>Search</span>
-            <input className="input-control" name="q" placeholder="Policy name, code, type, status" defaultValue={query} />
+            <input className="input-control" name="q" placeholder="Policy name, code, type, status" value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
           <label className="form-field">
             <span>Status</span>
-            <select className="input-control" name="status" defaultValue={status}>
+            <select className="input-control" name="status" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">All statuses</option>
               {statusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
           <label className="form-field">
             <span>Leave type</span>
-            <select className="input-control" name="leave_type" defaultValue={leaveType}>
+            <select className="input-control" name="leave_type" value={leaveType} onChange={(event) => setLeaveType(event.target.value)}>
               <option value="">All leave types</option>
               {leaveTypeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
@@ -172,7 +172,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
             <div className="attendance-more-filters__content">
               <label className="form-field">
                 <span>Accrual frequency</span>
-                <select className="input-control" name="accrual" defaultValue={accrualFrequency}>
+                <select className="input-control" name="accrual" value={accrualFrequency} onChange={(event) => setAccrualFrequency(event.target.value)}>
                   <option value="">All accruals</option>
                   {accrualOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                 </select>
@@ -180,8 +180,9 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
             </div>
           </details>
           <div className="workspace-filter-actions">
-            <button className="button button--primary" type="submit">Apply filters</button>
-            <a className="button button--secondary" href="/hr-admin/leave-policies" data-navigation-mode="document">Clear filters</a>
+            <span className="muted" role="status">Filters update this catalog only.</span>
+            <button className="button button--secondary" onClick={() => { setQuery(""); setStatus(""); setLeaveType(""); setAccrualFrequency(""); }} type="button">Clear filters</button>
+            {canManagePolicies && onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create leave policy</button> : null}
           </div>
         </WorkspaceFilterForm>
 
@@ -218,7 +219,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
                     <td>{item.annual_entitlement} units</td>
                     <td>{item.accrual_frequency}</td>
                     <td><WorkspaceStatusBadge tone={normalized(item.status) === "active" ? "success" : "neutral"}>{item.status}</WorkspaceStatusBadge></td>
-                    <td><a className="button button--secondary" data-navigation-mode="document" href={`${href({selected:item.id})}#leave-setup-detail`}>Inspect</a></td>
+                    <td><button className="button button--secondary" onClick={() => setSelectedPolicyId(item.id)} type="button">Inspect</button></td>
                   </tr>
                 ))}
                 {filteredPolicies.length === 0 ? (
@@ -236,11 +237,9 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
                   <p className="section-copy section-copy-soft">{selectedDetail.code} · {selectedDetail.leave_type}</p>
                 </div>
                 <div className="record-card__actions">
-                  <a className="button button--secondary" data-navigation-mode="document" href={href({selected:undefined})}>Close</a>
+                  <button className="button button--secondary" onClick={() => setSelectedPolicyId("")} type="button">Close</button>
                   {canManagePolicies ? (
-                    <a data-navigation-mode="document" className="button button--secondary" href={href({editLeavePolicy:selectedDetail.id})}>
-                      Edit
-                    </a>
+                    <button className="button button--secondary" disabled={pending} onClick={() => onOpenEdit?.(selectedDetail.id)} type="button">Edit</button>
                   ) : null}
                   {canManagePolicies ? <button className="button button--ghost" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openRemoveDialog(selectedDetail); }} type="button">Remove</button> : null}
                 </div>
@@ -312,8 +311,8 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
             <div className="form-actions-bar">
               <span className="muted">Archive removes the policy from active use while preserving audit links. Delete is only available for unused policies.</span>
               <div className="form-actions-bar__buttons">
-                <AsyncActionButton className="button button--secondary" disabled={!impact?.can_archive} pending={isActionSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing policies" : "Archiving policy"} onClick={() => submitPolicyRemoval("archive")} type="button">Archive policy</AsyncActionButton>
-                <AsyncActionButton className="button button--primary" disabled={!impact?.can_delete} pending={isActionSubmitting || isRefreshing} pendingLabel={isRefreshing ? "Refreshing policies" : "Deleting policy"} onClick={() => submitPolicyRemoval("delete")} type="button">Delete permanently</AsyncActionButton>
+                <AsyncActionButton className="button button--secondary" disabled={!impact?.can_archive} pending={isActionSubmitting || pending} pendingLabel={pending ? "Refreshing policies" : "Archiving policy"} onClick={() => submitPolicyRemoval("archive")} type="button">Archive policy</AsyncActionButton>
+                <AsyncActionButton className="button button--primary" disabled={!impact?.can_delete} pending={isActionSubmitting || pending} pendingLabel={pending ? "Refreshing policies" : "Deleting policy"} onClick={() => submitPolicyRemoval("delete")} type="button">Delete permanently</AsyncActionButton>
               </div>
             </div>
         </HrAdminActionModal>

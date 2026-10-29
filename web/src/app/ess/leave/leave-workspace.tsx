@@ -3,7 +3,8 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
@@ -13,6 +14,7 @@ import { useValidationFocus } from "@/lib/ui/use-validation-focus";
 import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 import { ActionToast } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
@@ -22,6 +24,7 @@ import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceStatusBadge }
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
+import { ScopedResourceError, useScopedWorkspaceResource } from "@/lib/ui/use-scoped-workspace-resource";
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -38,6 +41,27 @@ type Props = {
 type Feedback = {
   tone: "success" | "error";
   message: string;
+};
+
+type LeaveWorkspaceData = {
+  balances: LeaveBalance[];
+  detail: LeaveRequestItem | null;
+  requests: EssLeaveRequestListResponse;
+  state: "demo" | "live";
+  types: EssLeaveTypeOption[];
+};
+
+type LeaveQuery = {
+  status: string;
+  page: number;
+  q: string;
+  leave_type: string;
+  period: string;
+  date_from: string;
+  date_to: string;
+  month: string;
+  day: string;
+  requestId: string;
 };
 
 type LeaveApplyField = "leave_type_id" | "start_date" | "end_date" | "attachment_file" | "attachment_reference" | "reason";
@@ -72,6 +96,40 @@ function statusTone(status: string): "success" | "warning" | "danger" | "info" |
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function leaveQueryFromParams(params: URLSearchParams, fallback?: LeaveQuery): LeaveQuery {
+  const status = params.get("status") || "all";
+  const requestedPage = Number(params.get("page") || "1");
+  return {
+    status: ["all", "pending", "partially_approved", "approved", "rejected", "withdrawn", "cancelled"].includes(status) ? status : "all",
+    page: Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+    q: (params.get("q") || "").slice(0, 200),
+    leave_type: (params.get("leave_type") || "").slice(0, 50),
+    period: ["upcoming", "past", "current", "this_year"].includes(params.get("period") || "") ? params.get("period")! : "",
+    date_from: params.get("date_from") || "",
+    date_to: params.get("date_to") || "",
+    month: params.get("month") || "",
+    day: params.get("day") || "",
+    requestId: params.get("requestId") || fallback?.requestId || "",
+  };
+}
+
+function leaveQueryParams(query: LeaveQuery) {
+  const params = new URLSearchParams();
+  if (query.status !== "all") params.set("status", query.status);
+  if (query.page > 1) params.set("page", String(query.page));
+  for (const key of ["q", "leave_type", "period", "date_from", "date_to", "month", "day", "requestId"] as const) {
+    if (query[key]) params.set(key, query[key]);
+  }
+  return params;
+}
+
+function leaveReadError(payload: unknown) {
+  if (payload && typeof payload === "object" && typeof (payload as { detail?: unknown }).detail === "string") {
+    return String((payload as { detail: string }).detail);
+  }
+  return "Leave history could not be updated. The last confirmed results are still shown.";
 }
 
 function buildHref(currentParams: Record<string, SearchParamValue>, updates: Record<string, string | undefined>) {
@@ -237,6 +295,7 @@ function useEscapeClose(onClose: () => void) {
 
 function LeaveEvidence({ item }: { item: LeaveRequestItem }) {
   const attachments = item.attachments ?? [];
+
   if (!attachments.length && !item.attachment_reference) {
     return (
       <div className="notice">
@@ -249,8 +308,9 @@ function LeaveEvidence({ item }: { item: LeaveRequestItem }) {
   return (
     <div className="leave-evidence-list">
       {attachments.map((attachment) => (
-        <a
+        <AsyncDownloadButton
           className="leave-evidence-item"
+          fileName={attachment.file_name}
           href={`/api/me/leave-requests/${item.id}/attachments/${attachment.id}/download`}
           key={attachment.id}
         >
@@ -259,7 +319,7 @@ function LeaveEvidence({ item }: { item: LeaveRequestItem }) {
             <small>{attachment.action.replaceAll("_", " ")} • {attachment.file_size_bytes ? `${Math.ceil(attachment.file_size_bytes / 1024)} KB` : "Size pending"}</small>
           </span>
           <span className="button button--secondary">Download</span>
-        </a>
+        </AsyncDownloadButton>
       ))}
       {!attachments.length && item.attachment_reference ? (
         <div className="leave-evidence-item leave-evidence-item--static">
@@ -361,7 +421,7 @@ function LeaveApplyModal({
   onClose,
   onSubmitted,
 }: {
-  onSubmitted: (requestId: string) => void;
+  onSubmitted: (requestId: string) => boolean | Promise<boolean>;
   balances: LeaveBalance[];
   isDemo: boolean;
   leaveRequests: LeaveRequestItem[];
@@ -487,13 +547,20 @@ function LeaveApplyModal({
       submittingRef.current = false;
       return;
     }
-    clearMutationIdempotencyKey(mutationScope);
     const message = "Leave request submitted. Refreshing your history.";
     setFeedback({ tone: "success", message });
     setToast({ title: "Submitted successfully.", message, tone: "success" });
+    const reconciled = await onSubmitted(typeof payload.id === "string" ? payload.id : "");
+    if (!reconciled) {
+      const refreshMessage = "The request was saved, but updated leave data could not be loaded. Do not submit it again; retry the workspace refresh.";
+      setFeedback({ tone: "error", message: refreshMessage });
+      setToast({ title: "Refresh needed.", message: refreshMessage, tone: "error" });
+      setSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
+    clearMutationIdempotencyKey(mutationScope);
     form.reset();
-    // Keep the submission locked until the fresh authorized history read completes.
-    onSubmitted(typeof payload.id === "string" ? payload.id : "");
   }
 
   useEffect(() => {
@@ -661,7 +728,7 @@ function LeaveApplyModal({
   );
 }
 
-function LeaveDetailModal({ isDemo, item, onClose, onCompleted }: { isDemo: boolean; item: LeaveRequestItem; onClose: () => void; onCompleted: () => void }) {
+function LeaveDetailModal({ isDemo, item, onClose, onCompleted }: { isDemo: boolean; item: LeaveRequestItem; onClose: () => void; onCompleted: () => void | Promise<void> }) {
   return (
     <HrAdminActionModal
       className="accerio-dialog"
@@ -701,21 +768,47 @@ function LeaveDetailModal({ isDemo, item, onClose, onCompleted }: { isDemo: bool
   );
 }
 
-export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, leaveRequests, leaveTypes, state }: Props) {
-  const [applyOpen, setApplyOpen] = useState(false);
-  const [submissionSaved] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      const id = sessionStorage.getItem("ess.leave.submitted-request");
-      return Boolean(id && leaveRequests.items.some(item => item.id === id));
-    } catch {
-      return false;
-    }
+export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initialDetail, currentParams, leaveRequests: initialRequests, leaveTypes: initialTypes, state: initialState }: Props) {
+  const router = useRouter();
+  const initialParams = new URLSearchParams();
+  Object.entries(currentParams).forEach(([key, value]) => {
+    const normalized = normalizeParam(value);
+    if (normalized) initialParams.set(key, normalized);
   });
-  useEffect(() => {
-    // Consume the verified one-shot flash; storage must not block the authoritative read.
-    try { sessionStorage.removeItem("ess.leave.submitted-request"); } catch { /* Storage unavailable. */ }
+  const initialQuery = leaveQueryFromParams(initialParams);
+  const requestLeaveWorkspace = useCallback(async (query: LeaveQuery, signal: AbortSignal) => {
+    const response = await fetch(`/api/me/leave-workspace?${leaveQueryParams(query)}`, { cache: "no-store", signal });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) throw new ScopedResourceError("Your session has expired.", 401);
+    if (!response.ok || !payload || typeof payload !== "object" || !Array.isArray((payload as LeaveWorkspaceData).requests?.items)) {
+      throw new ScopedResourceError(leaveReadError(payload), response.status);
+    }
+    return payload as LeaveWorkspaceData;
   }, []);
+  const historyHref = useCallback((query: LeaveQuery) => {
+    const params = leaveQueryParams(query);
+    const queryString = params.toString();
+    return queryString ? `/ess/leave?${queryString}` : "/ess/leave";
+  }, []);
+  const readHistoryQuery = useCallback(() => leaveQueryFromParams(new URLSearchParams(window.location.search)), []);
+  const onUnauthorized = useCallback(() => router.replace("/login"), [router]);
+  const resolveLeaveQuery = useCallback((query: LeaveQuery, data: LeaveWorkspaceData) => ({ ...query, page: data.requests.page }), []);
+  const leaveResource = useScopedWorkspaceResource({
+    initialData: { balances: initialBalances, detail: initialDetail, requests: initialRequests, state: initialState, types: initialTypes },
+    initialQuery,
+    request: requestLeaveWorkspace,
+    resolveQuery: resolveLeaveQuery,
+    historyHref,
+    readHistoryQuery,
+    onUnauthorized,
+    fallbackError: "Leave history could not be updated. The last confirmed results are still shown.",
+  });
+  const { balances, detail: linkedDetail, requests: leaveRequests, state, types: leaveTypes } = leaveResource.data;
+  const isDemo = state !== "live";
+  const appliedQuery = leaveResource.query;
+  const queryParams: Record<string, SearchParamValue> = { ...appliedQuery, page: String(appliedQuery.page) };
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [operationMessage, setOperationMessage] = useState("");
   useEffect(() => {
     function openLinkedAction() {
       if (window.location.hash !== "#apply-leave") return;
@@ -730,22 +823,22 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
   const [clickedRequest, setClickedRequest] = useState<LeaveRequestItem | null>(null);
   const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
   const [filterError, setFilterError] = useState("");
-  const status = normalizeParam(currentParams.status) ?? "all";
-  const selectedRequestId = normalizeParam(currentParams.requestId);
+  const status = appliedQuery.status;
+  const selectedRequestId = appliedQuery.requestId;
   const page = leaveRequests.page;
   const tabs = ["all", "pending", "partially_approved", "approved", "rejected", "withdrawn", "cancelled"];
   const totalPages = Math.max(1, Math.ceil(leaveRequests.total_count / leaveRequests.page_size));
   const leaveTypeOptions = leaveRequests.filter_types ?? [];
   const visibleRequests = leaveRequests.items;
-  const selectedDay = normalizeParam(currentParams.day) ?? "";
-  const calendarMonth = normalizeParam(currentParams.month) ?? "";
+  const selectedDay = appliedQuery.day;
+  const calendarMonth = appliedQuery.month;
   const calendarVisible = Boolean(calendarMonth);
   const monthStart = new Date(`${calendarMonth}-01T00:00:00Z`);
   const calendarDays = (leaveRequests.calendar_days ?? []).map(({ date, count }) => {
     return { date, number: Number(date.slice(-2)), label: `${date}: ${count} request${count === 1 ? "" : "s"}`,
       status: count ? `${count} request${count === 1 ? "" : "s"}` : "No requests",
       shortStatus: count ? String(count) : "—", finalized: false, selected: selectedDay === date,
-      href: buildHref(currentParams, { day: date, page: "1" }) };
+      href: buildHref(queryParams, { day: date, page: "1" }) };
   });
   const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
   const linkedRequest = selectedRequestId && selectedRequestId !== dismissedRequestId
@@ -757,18 +850,13 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
         <>
           {applyOpen ? createPortal(
             <LeaveApplyModal
-              onSubmitted={(requestId) => {
-                try {
-                  if (requestId) sessionStorage.setItem("ess.leave.submitted-request", requestId);
-                } catch {
-                  // The saved request still appears in the fresh history if storage is unavailable.
+              onSubmitted={async () => {
+                const result = await leaveResource.load({ ...appliedQuery, status: "all", page: 1, q: "", leave_type: "", period: "", date_from: "", date_to: "", day: "", requestId: "" }, "replace");
+                if (result.ok) {
+                  setApplyOpen(false);
+                  setOperationMessage("Leave request submitted. Review its status in your history.");
                 }
-                const destination = new URL(window.location.href);
-                destination.searchParams.set("status", "all");
-                destination.searchParams.set("page", "1");
-                for (const key of ["requestId", "q", "leave_type", "period", "date_from", "date_to", "day"]) destination.searchParams.delete(key);
-                destination.hash = "";
-                window.location.replace(destination.href);
+                return result.ok;
               }}
               balances={balances}
               isDemo={isDemo}
@@ -782,12 +870,12 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
             <LeaveDetailModal
               isDemo={isDemo}
               item={selectedRequest}
-              onCompleted={() => {
-                // Reconcile history and entitlement balances from one fresh SSR read.
-                // A completed POST must not depend on a dropped client refresh transition.
-                const destination = new URL(window.location.href);
-                destination.searchParams.delete("requestId");
-                window.location.replace(`${destination.pathname}${destination.search}${destination.hash}`);
+              onCompleted={async () => {
+                const result = await leaveResource.load({ ...appliedQuery, requestId: "" }, "replace");
+                if (!result.ok) throw new Error("The action was saved, but updated leave data could not be loaded. Do not submit it again; retry the workspace refresh.");
+                setOperationMessage("Leave request updated. History and entitlements now show the confirmed state.");
+                setDismissedRequestId(selectedRequest.id);
+                setClickedRequest(null);
               }}
               onClose={() => {
                 setDismissedRequestId(selectedRequest.id);
@@ -801,12 +889,12 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
     : null;
 
   return (
-    <main className="shell shell--workspace ess-experience-shell ess-compact accerio-page">
+    <main className="shell shell--workspace ess-experience-shell ess-compact accerio-page" data-hydrated={hydrated}>
       <ActionFeedbackReceipt recordIds={leaveRequests.items.map(item => item.id)} />
       <WorkspaceStandardHeader eyebrow={`${state === "live" ? "Employee" : "Demo"} / Time off`} title="Leave"
         description="Plan time away, check entitlements and follow your requests."
         actions={<><button className="button button--primary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setApplyOpen(true);  }} type="button">Apply leave</button><Link prefetch={false} className="button button--secondary" href="/ess">Overview</Link></>} />
-      {hydrated && submissionSaved ? <div className="notice notice--success" role="status">Leave request submitted. Review its status in your history.</div> : null}
+      {operationMessage ? <div className="notice notice--success" role="status">{operationMessage}</div> : null}
       <WorkspaceStandardPanel title="Your entitlements" description="Current policy balances. Contact HR for leave-year dates, expiry and applicable holidays.">
         <div className="workspace-summary-grid" role="group" aria-label="Leave balance cards">
           {balances.map((balance, index) => <article className="workspace-standard-panel workspace-summary-card" key={`${balance.leave_type}-${index}`}>
@@ -817,10 +905,11 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
         </div>
       </WorkspaceStandardPanel>
       <WorkspaceStandardPanel title="My leave requests" description="Search and filters cover your complete history. Calendar counts include every matching request; status totals cover all your requests.">
-        <div>
+        <div aria-busy={leaveResource.isPending}>
+          {leaveResource.error ? <div className="notice notice--error" role="alert"><strong>Leave history was not updated.</strong><span className="muted">{leaveResource.error}</span><button className="button button--secondary" disabled={leaveResource.isPending} onClick={() => void leaveResource.load(appliedQuery, "none")} type="button">Retry</button></div> : null}
           <div className="workspace-status-tabs">
             {tabs.map((tab) => (
-              <a data-navigation-mode="document" aria-current={status === tab ? "page" : undefined} className={`workspace-status-tab ${status === tab ? "workspace-status-tab--active" : ""}`} href={buildHref(currentParams, { status: tab, page: "1" })} key={tab}>
+              <a data-navigation-mode="local" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setOperationMessage(""); void leaveResource.load({ ...appliedQuery, status: tab, page: 1, requestId: "" }); }} aria-current={status === tab ? "page" : undefined} className={`workspace-status-tab ${status === tab ? "workspace-status-tab--active" : ""}`} href={buildHref(queryParams, { status: tab, page: "1" })} key={tab}>
                 <span>{tab.replace("_", " ")}</span>
                 <strong>{leaveRequests.status_counts[tab as keyof typeof leaveRequests.status_counts] ?? 0}</strong>
               </a>
@@ -830,40 +919,58 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
             <div className="queue-toolbar__header">
               <span className="queue-summary-chip"><strong>{leaveRequests.total_count}</strong> matching · {visibleRequests.length} shown</span>
             </div>
-            <WorkspaceFilterForm action="/ess/leave" label="Leave history filters" onSubmit={event => {
+            <WorkspaceFilterForm key={`history-${leaveQueryParams(appliedQuery)}`} action="/ess/leave" label="Leave history filters" pending={leaveResource.isPending} updateMode="scoped" onSubmit={event => {
+              event.preventDefault();
               const data = new FormData(event.currentTarget);
               if (String(data.get("date_from") || "") > String(data.get("date_to") || "") && data.get("date_to")) {
-                event.preventDefault(); setFilterError("End date cannot be earlier than start date.");
+                setFilterError("End date cannot be earlier than start date.");
                 event.currentTarget.querySelector<HTMLInputElement>('[name="date_to"]')?.focus();
+                return;
               }
+              setFilterError("");
+              setOperationMessage("");
+              void leaveResource.load({
+                ...appliedQuery,
+                q: String(data.get("q") || "").trim(),
+                leave_type: String(data.get("leave_type") || ""),
+                period: String(data.get("period") || "") === "all" ? "" : String(data.get("period") || ""),
+                date_from: String(data.get("date_from") || ""),
+                date_to: String(data.get("date_to") || ""),
+                page: 1,
+                requestId: "",
+              });
             }}>
               <input type="hidden" name="status" value={status} /><input type="hidden" name="page" value="1" />
               {calendarMonth ? <input type="hidden" name="month" value={calendarMonth} /> : null}
-              <label className="form-field"><span>Search leave history</span><input className="input-control" name="q" maxLength={200} defaultValue={normalizeParam(currentParams.q) ?? ""} placeholder="Type, policy, status, or reason" /></label>
-              <label className="form-field"><span>Type</span><select className="input-control" name="leave_type" defaultValue={normalizeParam(currentParams.leave_type) ?? ""}>
+              <label className="form-field"><span>Search leave history</span><input className="input-control" name="q" maxLength={200} defaultValue={appliedQuery.q} placeholder="Type, policy, status, or reason" /></label>
+              <label className="form-field"><span>Type</span><select className="input-control" name="leave_type" defaultValue={appliedQuery.leave_type}>
                 <option value="">All types</option>{leaveTypeOptions.map(type => <option key={type.code} value={type.code}>{type.name} ({type.code})</option>)}
               </select></label>
-              <label className="form-field"><span>Date period</span><select className="input-control" name="period" defaultValue={normalizeParam(currentParams.period) ?? "all"}>
+              <label className="form-field"><span>Date period</span><select className="input-control" name="period" defaultValue={appliedQuery.period || "all"}>
                 <option value="all">All periods</option><option value="upcoming">Upcoming (UTC)</option><option value="past">Past (UTC)</option><option value="current">In progress (UTC)</option><option value="this_year">Calendar year (UTC)</option>
               </select></label>
-              <label className="form-field"><span>From date</span><input className="input-control" type="date" name="date_from" defaultValue={normalizeParam(currentParams.date_from) ?? ""} onChange={() => setFilterError("")} /></label>
-              <label className="form-field"><span>Through date</span><input className="input-control" type="date" name="date_to" defaultValue={normalizeParam(currentParams.date_to) ?? ""} onChange={() => setFilterError("")} aria-invalid={Boolean(filterError)} aria-describedby={filterError ? "leave-filter-error" : undefined} />{filterError ? <span className="field-error-text" id="leave-filter-error" role="alert">{filterError}</span> : null}</label>
+              <label className="form-field"><span>From date</span><input className="input-control" type="date" name="date_from" defaultValue={appliedQuery.date_from} onChange={() => setFilterError("")} /></label>
+              <label className="form-field"><span>Through date</span><input className="input-control" type="date" name="date_to" defaultValue={appliedQuery.date_to} onChange={() => setFilterError("")} aria-invalid={Boolean(filterError)} aria-describedby={filterError ? "leave-filter-error" : undefined} />{filterError ? <span className="field-error-text" id="leave-filter-error" role="alert">{filterError}</span> : null}</label>
               <button className="button button--primary" type="submit">Apply filters</button>
-              <a className="button button--secondary" href={buildHref(currentParams, { q: undefined, leave_type: undefined, period: undefined, date_from: undefined, date_to: undefined, day: undefined, page: "1" })}>Clear filters</a>
+              <a data-navigation-mode="local" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setFilterError(""); setOperationMessage(""); void leaveResource.load({ ...appliedQuery, q: "", leave_type: "", period: "", date_from: "", date_to: "", day: "", page: 1, requestId: "" }); }} className="button button--secondary" href={buildHref(queryParams, { q: undefined, leave_type: undefined, period: undefined, date_from: undefined, date_to: undefined, day: undefined, page: "1" })}>Clear filters</a>
             </WorkspaceFilterForm>
           </div>
-          <button className="button button--secondary" type="button" disabled={!hydrated} onClick={() => window.location.assign(buildHref(currentParams, { month: calendarVisible ? undefined : new Date().toISOString().slice(0, 7), day: undefined, page: "1" }))}>{calendarVisible ? "Hide calendar" : "Show calendar"}</button>
+          <button className="button button--secondary" type="button" disabled={!hydrated || leaveResource.isPending} onClick={() => void leaveResource.load({ ...appliedQuery, month: calendarVisible ? "" : new Date().toISOString().slice(0, 7), day: "", page: 1, requestId: "" })}>{calendarVisible ? "Hide calendar" : "Show calendar"}</button>
           {calendarVisible ? <>
-            <WorkspaceFilterForm action="/ess/leave" label="Leave calendar month" className="workspace-filter-form--inline">
-              {(["status", "q", "leave_type", "period", "date_from", "date_to"] as const).map(key => <input key={key} type="hidden" name={key} value={normalizeParam(currentParams[key]) ?? ""} />)}
+            <WorkspaceFilterForm key={`calendar-${leaveQueryParams(appliedQuery)}`} action="/ess/leave" label="Leave calendar month" className="workspace-filter-form--inline" pending={leaveResource.isPending} updateMode="scoped" onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              void leaveResource.load({ ...appliedQuery, month: String(data.get("month") || ""), day: "", page: 1, requestId: "" });
+            }}>
+              {(["status", "q", "leave_type", "period", "date_from", "date_to"] as const).map(key => <input key={key} type="hidden" name={key} value={appliedQuery[key]} />)}
               <input type="hidden" name="page" value="1" />
               <label className="form-field"><span>Calendar month</span><input className="input-control" type="month" name="month" required defaultValue={calendarMonth} /></label>
               <button className="button button--secondary" type="submit">Apply month</button>
             </WorkspaceFilterForm>
             {leaveRequests.calendar_days ? <WorkspaceCalendar label="Leave request calendar" statusKey="Numbers count all requests matching the current filters, including withdrawn or cancelled requests. Dates do not indicate chargeable units or holiday entitlement."
-              offset={(monthStart.getUTCDay() + 6) % 7} days={calendarDays} onSelect={() => { /* The authorized document link owns navigation and keyboard behavior. */ }} /> : <div className="notice" role="status">Calendar counts are unavailable. <a href={buildHref(currentParams, {})}>Retry calendar</a></div>}
+              navigationMode="scoped" offset={(monthStart.getUTCDay() + 6) % 7} days={calendarDays} onSelect={(event, day) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void leaveResource.load({ ...appliedQuery, day, page: 1, requestId: "" }); }} /> : <div className="notice" role="status">Calendar counts are unavailable. <button className="button button--secondary" type="button" onClick={() => void leaveResource.load(appliedQuery, "none")}>Retry calendar</button></div>}
           </> : null}
-            {selectedDay ? <section id="leave-day-details" aria-label="Selected leave day"><h3>{formatDate(selectedDay)}</h3><p>{leaveRequests.total_count} matching request{leaveRequests.total_count === 1 ? "" : "s"}. Review the history below and use pagination for additional requests.</p><a className="button button--secondary" href={buildHref(currentParams, { day: undefined, page: "1" })}>Clear selected day</a></section> : null}
+            {selectedDay ? <section id="leave-day-details" aria-label="Selected leave day"><h3>{formatDate(selectedDay)}</h3><p>{leaveRequests.total_count} matching request{leaveRequests.total_count === 1 ? "" : "s"}. Review the history below and use pagination for additional requests.</p><a data-navigation-mode="local" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void leaveResource.load({ ...appliedQuery, day: "", page: 1, requestId: "" }); }} className="button button--secondary" href={buildHref(queryParams, { day: undefined, page: "1" })}>Clear selected day</a></section> : null}
           <div className="employee-directory-table-wrap" role="region" aria-label="Scrollable leave history" tabIndex={0}>
             <table className="workspace-table attendance-directory-table leave-request-table" aria-label="Leave request history">
               <thead>
@@ -934,15 +1041,20 @@ export function LeaveWorkspace({ balances, linkedDetail, currentParams, isDemo, 
           </div>
         </div>
         <PaginationBar
-          navigationMode="document"
-          firstHref={buildHref(currentParams, { page: "1" })}
+          navigationMode="scoped"
+          pending={leaveResource.isPending}
+          firstHref={buildHref(queryParams, { page: "1" })}
           hasNext={leaveRequests.has_next}
           hasPrevious={leaveRequests.has_previous}
-          lastHref={buildHref(currentParams, { page: String(totalPages) })}
-          nextHref={buildHref(currentParams, { page: String(page + 1) })}
+          lastHref={buildHref(queryParams, { page: String(totalPages) })}
+          nextHref={buildHref(queryParams, { page: String(page + 1) })}
+          onFirst={() => void leaveResource.load({ ...appliedQuery, page: 1, requestId: "" })}
+          onLast={() => void leaveResource.load({ ...appliedQuery, page: totalPages, requestId: "" })}
+          onNext={() => void leaveResource.load({ ...appliedQuery, page: page + 1, requestId: "" })}
+          onPrevious={() => void leaveResource.load({ ...appliedQuery, page: Math.max(1, page - 1), requestId: "" })}
           page={leaveRequests.page}
           pageSize={leaveRequests.page_size}
-          previousHref={buildHref(currentParams, { page: String(Math.max(1, page - 1)) })}
+          previousHref={buildHref(queryParams, { page: String(Math.max(1, page - 1)) })}
           totalCount={leaveRequests.total_count}
         />
       </WorkspaceStandardPanel>

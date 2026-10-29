@@ -9,6 +9,7 @@ export function DocumentSetupDialog(props: ComponentProps<typeof HrAdminActionMo
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   return <SetupState.Provider value={{ setBusy, setDirty }}><HrAdminActionModal {...props} className={`document-setup-dialog document-operations ${props.className ?? ""}`} busy={busy} dirty={dirty} onClose={() => {
+    if(props.onClose){props.onClose();return;}
     window.dispatchEvent(new Event("document-setup:leaving"));
     window.location.assign(new URL(props.closeHref, window.location.origin));
   }} /></SetupState.Provider>;

@@ -8,6 +8,7 @@ from datetime import date, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -27,6 +28,7 @@ from apps.attendance.models import (
     RegularizationStatus,
 )
 from apps.documents.models import (
+    DocumentArtifact,
     DocumentCategory,
     DocumentCategoryType,
     DocumentRequirementRule,
@@ -133,7 +135,7 @@ from apps.payroll.models import (
 )
 from apps.platform_policies.models import PlatformPolicyDomain, PlatformPolicyPack, PlatformPolicyPackStatus
 from apps.tenant_onboarding.models import TenantOnboarding, TenantOnboardingAdminContact
-from apps.tenants.models import SubscriptionPlan, Tenant, TenantOnboardingStatus, TenantStatus
+from apps.tenants.models import LegalHold, LegalHoldStatus, SubscriptionPlan, Tenant, TenantOnboardingStatus, TenantStatus
 from apps.tenants.retention import authorized_synthetic_tenant_teardown
 
 
@@ -151,9 +153,10 @@ class Command(BaseCommand):
         parser.add_argument("--output-file", default="")
         parser.add_argument("--audit", action="store_true")
         parser.add_argument("--cleanup", action="store_true")
+        parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--confirm-private-file-delete", action="store_true")
         parser.add_argument("--hydrate-existing", action="store_true")
 
-    @transaction.atomic
     def handle(self, *args, **options):
         modes = [options["audit"], options["cleanup"], options["hydrate_existing"]]
         if sum(bool(value) for value in modes) > 1:
@@ -163,25 +166,42 @@ class Command(BaseCommand):
         self._assert_safe_identity(seed_ref, tenant_code)
 
         tenant = Tenant.objects.filter(code=tenant_code).first()
+        prior_output = None
+        if options["cleanup"] and options["output_file"]:
+            output_path = Path(options["output_file"])
+            if output_path.exists():
+                try:
+                    prior_output = json.loads(output_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    prior_output = None
         if options["cleanup"]:
-            manifest = self._cleanup(tenant, seed_ref, tenant_code)
-        elif options["audit"]:
-            if tenant is None:
-                raise CommandError(f"Workspace does not exist: {tenant_code}")
-            self._assert_owned(tenant, seed_ref)
-            manifest = self._manifest(tenant, seed_ref, action="audit")
-        elif options["hydrate_existing"]:
-            if tenant is None:
-                raise CommandError(f"Workspace does not exist: {tenant_code}")
-            self._assert_owned(tenant, seed_ref)
-            tenant = self._hydrate_existing(tenant, seed_ref, options["password"])
-            manifest = self._manifest(tenant, seed_ref, action="hydrate")
+            manifest = self._cleanup(
+                tenant,
+                seed_ref,
+                tenant_code,
+                confirm_private_file_delete=options["confirm_private_file_delete"],
+                dry_run=options["dry_run"],
+                recovery_plan=prior_output,
+            )
         else:
-            if tenant is not None:
-                self._assert_owned(tenant, seed_ref)
-                raise CommandError("Owned workspace already exists; audit or clean it before reprovisioning.")
-            tenant = self._provision(seed_ref, tenant_code, options["password"])
-            manifest = self._manifest(tenant, seed_ref, action="provision")
+            with transaction.atomic():
+                if options["audit"]:
+                    if tenant is None:
+                        raise CommandError(f"Workspace does not exist: {tenant_code}")
+                    self._assert_owned(tenant, seed_ref)
+                    manifest = self._manifest(tenant, seed_ref, action="audit")
+                elif options["hydrate_existing"]:
+                    if tenant is None:
+                        raise CommandError(f"Workspace does not exist: {tenant_code}")
+                    self._assert_owned(tenant, seed_ref)
+                    tenant = self._hydrate_existing(tenant, seed_ref, options["password"])
+                    manifest = self._manifest(tenant, seed_ref, action="hydrate")
+                else:
+                    if tenant is not None:
+                        self._assert_owned(tenant, seed_ref)
+                        raise CommandError("Owned workspace already exists; audit or clean it before reprovisioning.")
+                    tenant = self._provision(seed_ref, tenant_code, options["password"])
+                    manifest = self._manifest(tenant, seed_ref, action="provision")
 
         payload = json.dumps(manifest, indent=2, sort_keys=True)
         if options["output_file"]:
@@ -224,6 +244,7 @@ class Command(BaseCommand):
         org = self._create_org(tenant)
         people = self._create_people(tenant, seed_ref, password, org)
         self._create_platform_admin(seed_ref, password)
+        self._create_platform_cleanup_admin(seed_ref, password)
         self._create_platform_fixture(tenant, seed_ref, people["tenant_admin"])
         self._create_document_fixture(tenant, people["employee"])
         self._create_payroll(tenant, people["employee"], org, marker)
@@ -240,6 +261,7 @@ class Command(BaseCommand):
         org = self._create_org(tenant)
         people = self._create_people(tenant, seed_ref, password, org)
         self._create_platform_admin(seed_ref, password)
+        self._create_platform_cleanup_admin(seed_ref, password)
         self._create_platform_fixture(tenant, seed_ref, people["tenant_admin"])
         self._create_document_fixture(tenant, people["employee"])
         self._create_payroll(tenant, people["employee"], org, marker)
@@ -340,6 +362,17 @@ class Command(BaseCommand):
             first_name="Priya",
             last_name="Platform",
             display_name="Priya Platform",
+        )
+
+    def _create_platform_cleanup_admin(self, seed_ref: str, password: str) -> User:
+        username = f"pw_{seed_ref.replace('-', '_')}_platform_cleanup"
+        return User.objects.create_superuser(
+            username=username,
+            email=f"{username}@{OWNER_EMAIL_DOMAIN}",
+            password=password,
+            first_name="Rhea",
+            last_name="Recovery",
+            display_name="Rhea Recovery",
         )
 
     def _create_manager_notification(self, tenant: Tenant, manager: Employee) -> None:
@@ -469,7 +502,14 @@ class Command(BaseCommand):
             tenant=tenant, leave_type=leave_type, code="qa-casual-2026", name="QA Casual 2026",
             status=LeavePolicyStatus.ACTIVE, effective_from=date(2026, 1, 1), effective_to=date(2026, 12, 31),
             accrual_frequency=AccrualFrequency.YEARLY, annual_entitlement=Decimal("12.00"), allow_half_day=True,
-            config_snapshot=marker,
+            config_snapshot={
+                **marker,
+                "lifecycle": {
+                    "allow_employee_withdraw_pending": True,
+                    "withdraw_requires_attachment": True,
+                    "withdraw_attachment_label": "synthetic withdrawal evidence",
+                },
+            },
         )
         LeavePolicyAssignment.objects.create(tenant=tenant, leave_policy=leave_policy, employee=employee, priority=1)
         policy_period = LeavePolicyPeriod.objects.create(
@@ -640,20 +680,74 @@ class Command(BaseCommand):
             },
             "checks": checks,
             "platform_admin": {"username": platform_admin.username, "platform_only": not platform_admin.tenant_memberships.exists()},
-            "counts": {"employees": tenant.employees.count(), "tenant_users": tenant.memberships.count(), "platform_users": 1},
+            "platform_cleanup_admin": {
+                "username": f"pw_{seed_ref.replace('-', '_')}_platform_cleanup",
+                "platform_only": True,
+            },
+            "counts": {"employees": tenant.employees.count(), "tenant_users": tenant.memberships.count(), "platform_users": 2},
         }
 
-    def _cleanup(self, tenant: Tenant | None, seed_ref: str, tenant_code: str) -> dict:
+    def _cleanup(
+        self,
+        tenant: Tenant | None,
+        seed_ref: str,
+        tenant_code: str,
+        *,
+        confirm_private_file_delete: bool,
+        dry_run: bool,
+        recovery_plan: dict | None,
+    ) -> dict:
         if tenant is None:
+            targets = self._validated_recovery_targets(recovery_plan, seed_ref, tenant_code)
+            if confirm_private_file_delete and targets:
+                deleted_files, failed_files = self._delete_private_targets(targets)
+                return {
+                    "action": "cleanup",
+                    "tenant": {"code": tenant_code},
+                    "ownership": {"seed_ref": seed_ref, "tenant_code": tenant_code},
+                    "deleted": False,
+                    "verified_absent": not failed_files,
+                    "private_file_cleanup": {"confirmed": True, "targets": targets, "deleted": deleted_files, "failed": failed_files},
+                }
             return {"action": "cleanup", "tenant": {"code": tenant_code}, "deleted": False, "verified_absent": True}
         self._assert_owned(tenant, seed_ref)
+        if LegalHold.objects.filter(tenant=tenant, status=LegalHoldStatus.ACTIVE).exists():
+            raise CommandError("Active legal hold prohibits synthetic tenant cleanup.")
+        artifacts = list(DocumentArtifact.objects.filter(tenant=tenant).select_related("tenant"))
+        file_targets = []
+        expected_prefix = f"document-artifacts/{tenant.code}/"
+        for artifact in artifacts:
+            key = str(artifact.stored_file.name or artifact.storage_key or "")
+            if not key:
+                continue
+            if artifact.storage_provider != "local":
+                raise CommandError("Synthetic cleanup does not support non-local private artifact deletion.")
+            normalized = Path(key)
+            if normalized.is_absolute() or ".." in normalized.parts or not normalized.as_posix().startswith(expected_prefix):
+                raise CommandError("Refusing private artifact cleanup for an unsafe or unowned storage key.")
+            file_targets.append({"artifact_id": str(artifact.id), "storage_key": key, "storage_provider": artifact.storage_provider})
+        cleanup_plan = {
+            "action": "cleanup_dry_run",
+            "tenant": {"id": str(tenant.id), "code": tenant_code},
+            "ownership": {"seed_ref": seed_ref, "tenant_code": tenant_code},
+            "deleted": False,
+            "verified_absent": False,
+            "private_file_cleanup": {"confirmed": False, "targets": file_targets, "deleted": [], "failed": []},
+        }
+        if dry_run:
+            return cleanup_plan
+        if file_targets and not confirm_private_file_delete:
+            raise CommandError(
+                f"Dry run: {len(file_targets)} owned private file(s) require deletion; rerun with --confirm-private-file-delete."
+            )
         usernames = list(tenant.memberships.values_list("user__username", flat=True))
         usernames.append(f"pw_{seed_ref.replace('-', '_')}_platform_admin")
+        usernames.append(f"pw_{seed_ref.replace('-', '_')}_platform_cleanup")
         platform_pack_code = f"pw-qa-{seed_ref}"
         tenant_id = str(tenant.id)
         # DB-4 retained rows are destructible only inside this ownership-
         # verified, transaction-scoped synthetic teardown capability.
-        with authorized_synthetic_tenant_teardown(tenant, expected_owner_email=self._owner_email(seed_ref)):
+        with transaction.atomic(), authorized_synthetic_tenant_teardown(tenant, expected_owner_email=self._owner_email(seed_ref)):
             # DB-3 leave history uses PROTECT deliberately. Synthetic teardown
             # must remove its graph explicitly from children to parents.
             LeaveRequestAllocation.objects.filter(tenant=tenant).delete()
@@ -720,9 +814,54 @@ class Command(BaseCommand):
             EmploymentAssignment.objects.filter(tenant=tenant).delete()
             EmploymentSpell.objects.filter(tenant=tenant).delete()
             tenant.delete()
+        deleted_files, failed_files = self._delete_private_targets(file_targets)
         PlatformPolicyPack.objects.filter(code=platform_pack_code, description=f"Playwright-owned fixture [{seed_ref}]").delete()
         User.objects.filter(username__in=usernames).delete()
         return {
-            "action": "cleanup", "tenant": {"id": tenant_id, "code": tenant_code}, "deleted": True,
-            "verified_absent": not Tenant.objects.filter(code=tenant_code).exists() and not User.objects.filter(username__in=usernames).exists(),
+            "action": "cleanup", "tenant": {"id": tenant_id, "code": tenant_code},
+            "ownership": {"seed_ref": seed_ref, "tenant_code": tenant_code}, "deleted": True,
+            "verified_absent": not Tenant.objects.filter(code=tenant_code).exists() and not User.objects.filter(username__in=usernames).exists() and not failed_files,
+            "private_file_cleanup": {"confirmed": confirm_private_file_delete, "targets": file_targets, "deleted": deleted_files, "failed": failed_files},
         }
+
+    def _validated_recovery_targets(self, plan: dict | None, seed_ref: str, tenant_code: str) -> list[dict]:
+        if not isinstance(plan, dict) or plan.get("action") not in {"cleanup", "cleanup_dry_run"}:
+            return []
+        ownership = plan.get("ownership") or {}
+        if ownership.get("seed_ref") != seed_ref or ownership.get("tenant_code") != tenant_code:
+            raise CommandError("Cleanup recovery plan ownership does not match the requested workspace.")
+        targets = (plan.get("private_file_cleanup") or {}).get("targets") or []
+        expected_prefix = f"document-artifacts/{tenant_code}/"
+        validated = []
+        for target in targets:
+            key = str(target.get("storage_key") or "")
+            normalized = Path(key)
+            if (
+                target.get("storage_provider") != "local"
+                or normalized.is_absolute()
+                or ".." in normalized.parts
+                or not normalized.as_posix().startswith(expected_prefix)
+            ):
+                raise CommandError("Cleanup recovery plan contains an unsafe or unowned storage key.")
+            validated.append({
+                "artifact_id": str(target.get("artifact_id") or ""),
+                "storage_key": key,
+                "storage_provider": "local",
+            })
+        return validated
+
+    def _delete_private_targets(self, targets: list[dict]) -> tuple[list[dict], list[dict]]:
+        deleted_files = []
+        failed_files = []
+        for target in targets:
+            artifact_id = target["artifact_id"]
+            key = target["storage_key"]
+            try:
+                default_storage.delete(key)
+                if default_storage.exists(key):
+                    failed_files.append({"artifact_id": artifact_id, "storage_key": key, "reason": "object still exists"})
+                else:
+                    deleted_files.append({"artifact_id": artifact_id, "storage_key": key})
+            except Exception as exc:
+                failed_files.append({"artifact_id": artifact_id, "storage_key": key, "reason": type(exc).__name__})
+        return deleted_files, failed_files

@@ -19,6 +19,13 @@ type Props = {
   items: HrAdminShift[];
   state: "live" | "demo";
   canManagePolicies: boolean;
+  modalMode?: "" | "create" | "edit";
+  editShiftId?: string;
+  pending?: boolean;
+  onOpenCreate?: () => void;
+  onOpenEdit?: (id: string) => void;
+  onCloseModal?: () => void;
+  onReconcile?: () => Promise<boolean> | boolean;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -45,15 +52,15 @@ function shiftTone(item: HrAdminShift): "success" | "warning" | "neutral" | "inf
   return "success";
 }
 
-export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
+export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: controlledModalMode, editShiftId: controlledEditShiftId, pending, onOpenCreate, onOpenEdit, onCloseModal, onReconcile }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useWorkspaceQueryFilter("q", "");
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [kind, setKind] = useWorkspaceQueryFilter("kind", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
-  const modalMode = searchParams.get("shiftModal") ?? "";
-  const editShiftId = searchParams.get("editShift") ?? "";
+  const modalMode = controlledModalMode ?? (searchParams.get("shiftModal") ?? "");
+  const editShiftId = controlledEditShiftId ?? (searchParams.get("editShift") ?? "");
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -130,7 +137,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
             setStatus("all");
             setKind("all");
           }} type="button">Clear filters</button>
-          {canManagePolicies ? <Link className="button button--primary" href={queueHref({ shiftModal: "create" })}>Create shift</Link> : null}
+          {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create shift</button> : <Link className="button button--primary" href={queueHref({ shiftModal: "create" })}>Create shift</Link> : null}
         </div>
       </section>
 
@@ -200,7 +207,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                <Link className="button button--primary" href={queueHref({ editShift: selectedItem.id })}>Edit shift</Link>
+                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit shift</button> : <Link className="button button--primary" href={queueHref({ editShift: selectedItem.id })}>Edit shift</Link>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit shift</button>
               )}
@@ -237,7 +244,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
           description="Define timing, grace handling, and weekly-off defaults."
           tabs={["Timing", "Behavior", "Weekly off"]}
         >
-          <ShiftForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyShiftValue()} mode="create" />
+          <ShiftForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyShiftValue()} mode="create" onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
       ) : null}
 
@@ -251,7 +258,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies }: Props) {
           description="Adjust timing, grace handling, and weekly-off defaults."
           tabs={["Timing", "Behavior", "Weekly off"]}
         >
-          <ShiftForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={shiftToFormValue(editItem)} item={editItem} itemId={editItem.id} mode="edit" />
+          <ShiftForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={shiftToFormValue(editItem)} item={editItem} itemId={editItem.id} mode="edit" onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
       ) : null}
     </section>
