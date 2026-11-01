@@ -2973,7 +2973,7 @@ select.input-control {
   gap: 10px;
 }
 
-.mss-history-filters {
+:is(.accerio-shell, .accerio-standalone) .accerio-page .workspace-filter-form.mss-history-filters {
   grid-template-columns:
     minmax(190px, 1.35fr)
     minmax(132px, 0.8fr)
@@ -2996,7 +2996,7 @@ select.input-control {
 }
 
 @media (max-width: 1400px) {
-  .mss-history-filters {
+  :is(.accerio-shell, .accerio-standalone) .accerio-page .workspace-filter-form.mss-history-filters {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -3007,7 +3007,7 @@ select.input-control {
 }
 
 @media (max-width: 760px) {
-  .mss-history-filters {
+  :is(.accerio-shell, .accerio-standalone) .accerio-page .workspace-filter-form.mss-history-filters {
     grid-template-columns: minmax(0, 1fr);
   }
 
