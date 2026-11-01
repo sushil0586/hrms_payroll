@@ -2984,6 +2984,22 @@ select.input-control {
   align-items: end;
 }
 
+.mss-history-filters > .workspace-filter-fields > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  align-content: end;
+}
+
+.mss-history-filters > .workspace-filter-fields > label > span {
+  line-height: 1.2;
+}
+
+.mss-history-filters > .workspace-filter-fields > label > :is(input, select) {
+  width: 100%;
+  min-width: 0;
+}
+
 .mss-history-filters > .form-actions-bar__buttons {
   align-self: end;
   justify-self: end;
@@ -3014,6 +3030,7 @@ select.input-control {
   .mss-history-filters > .form-actions-bar__buttons {
     grid-column: auto;
     justify-self: stretch;
+    flex-direction: column;
   }
 
   .mss-history-filters > .form-actions-bar__buttons,
