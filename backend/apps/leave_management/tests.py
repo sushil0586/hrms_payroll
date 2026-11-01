@@ -26,7 +26,7 @@ from apps.leave_management.services import apply_leave_balance_admin_action, can
 from apps.notifications.models import Notification
 from apps.organizations.models import Department, EmploymentType, Grade
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
-from apps.workflows.models import WorkflowAssignment
+from apps.workflows.models import WorkflowAction, WorkflowActionLog, WorkflowAssignment, WorkflowInstance
 
 
 class LeavePolicyAssignmentConflictTests(TestCase):
@@ -1059,6 +1059,20 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         self.assertEqual(employee_history[0]["status"], LeaveRequestStatus.PARTIALLY_APPROVED)
         self.assertEqual(employee_history[0]["approval_steps"][1]["manager_name"], "Rohan Director")
 
+        leave_request = resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.second_manager,
+            approve=False,
+            comment="Rejected by director",
+        )
+
+        manager_history = get_manager_leave_decision_history(self.manager)
+        director_history = get_manager_leave_decision_history(self.second_manager)
+        self.assertEqual(manager_history[0]["decision_action"], "approve")
+        self.assertEqual(manager_history[0]["status"], LeaveRequestStatus.REJECTED)
+        self.assertEqual(director_history[0]["decision_action"], "reject")
+        self.assertEqual(director_history[0]["status"], LeaveRequestStatus.REJECTED)
+
     def test_manager_history_contains_only_decisions_recorded_by_manager(self):
         monday = _next_weekday(0)
         leave_request = submit_leave_request(
@@ -1079,7 +1093,99 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         )
 
         self.assertEqual([item["id"] for item in get_manager_leave_decision_history(self.manager)], [leave_request.id])
+        self.assertEqual(get_manager_leave_decision_history(self.manager)[0]["decision_action"], "reject")
+        self.assertEqual(get_manager_leave_decision_history(self.manager, query=self.employee.employee_code)[0]["id"], leave_request.id)
+        self.assertEqual(get_manager_leave_decision_history(self.manager, decision_action="approve"), [])
+        self.assertEqual(get_manager_leave_decision_history(self.manager, decision_action="reject")[0]["id"], leave_request.id)
+        self.assertEqual(get_manager_leave_decision_history(self.manager, current_status=LeaveRequestStatus.APPROVED), [])
+        self.assertEqual(get_manager_leave_decision_history(self.manager, current_status=LeaveRequestStatus.REJECTED)[0]["id"], leave_request.id)
+        self.assertEqual(get_manager_leave_decision_history(self.manager, decided_from="2999-01-01"), [])
         self.assertEqual(get_manager_leave_decision_history(self.second_manager), [])
+
+    def test_manager_history_excludes_self_service_submit_without_manager_decision(self):
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Self-service history isolation",
+        )
+        workflow = WorkflowInstance.objects.get(id=leave_request.workflow_reference)
+        WorkflowActionLog.objects.create(
+            workflow_instance=workflow,
+            action=WorkflowAction.SUBMIT,
+            actor_identifier=str(self.manager.membership.user_id),
+        )
+
+        withdraw_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.employee,
+            reason="No longer required",
+        )
+
+        self.assertEqual(get_manager_leave_decision_history(self.manager), [])
+
+    def test_manager_history_follows_decision_actor_after_reporting_manager_change(self):
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Historical manager ownership",
+        )
+        resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.manager,
+            approve=False,
+            comment="Recorded by original manager",
+        )
+
+        self.employee.reporting_manager = self.second_manager
+        self.employee.save(update_fields=["reporting_manager", "updated_at"])
+
+        self.assertEqual(get_manager_leave_decision_history(self.manager)[0]["id"], leave_request.id)
+        self.assertEqual(get_manager_leave_decision_history(self.second_manager), [])
+
+    def test_manager_history_preserves_approval_after_later_cancellation(self):
+        self.leave_policy.config_snapshot = {
+            "approval": {"default_route": "manager_only"},
+            "lifecycle": {
+                "allow_employee_cancel_approved": True,
+                "cancel_approved_requires_reapproval": False,
+            },
+        }
+        self.leave_policy.save(update_fields=["config_snapshot", "updated_at"])
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Later lifecycle transition",
+        )
+        leave_request = resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.manager,
+            approve=True,
+            comment="Approved by manager",
+        )
+        cancel_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.employee,
+            reason="Plans changed",
+        )
+
+        manager_item = get_manager_leave_decision_history(self.manager)[0]
+        self.assertEqual(manager_item["decision_action"], "approve")
+        self.assertEqual(manager_item["status"], LeaveRequestStatus.CANCELLED)
 
     def test_active_leave_request_blocks_exact_day_and_range_overlap(self):
         monday = _next_weekday(0)

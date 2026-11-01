@@ -907,6 +907,7 @@ class AttendanceRegularizationApprovalTrackTests(TestCase):
         history = get_manager_attendance_decision_history(self.manager)
         self.assertEqual([item["id"] for item in history], [regularization.id])
         self.assertEqual(history[0]["status"], "approved")
+        self.assertEqual(history[0]["decision_action"], "approve")
 
     def test_legacy_regularization_without_assignment_still_shows_pending_manager(self):
         regularization = submit_regularization(

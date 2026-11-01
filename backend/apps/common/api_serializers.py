@@ -6113,6 +6113,8 @@ class ManagerLeaveApprovalItemSerializer(serializers.Serializer):
     leave_type_code = serializers.CharField()
     policy_name = serializers.CharField(allow_null=True)
     status = serializers.CharField()
+    decision_action = serializers.CharField(required=False)
+    decision_at = serializers.DateTimeField(required=False, allow_null=True)
     start_date = serializers.DateField()
     end_date = serializers.DateField()
     start_day_portion = serializers.CharField()
@@ -6155,6 +6157,8 @@ class ManagerAttendanceApprovalItemSerializer(serializers.Serializer):
     actual_check_in_at = serializers.DateTimeField(allow_null=True)
     actual_check_out_at = serializers.DateTimeField(allow_null=True)
     status = serializers.CharField()
+    decision_action = serializers.CharField(required=False)
+    decision_at = serializers.DateTimeField(required=False, allow_null=True)
     reason = serializers.CharField(allow_blank=True)
     manager_comment = serializers.CharField(required=False, allow_blank=True)
     rejection_reason = serializers.CharField(required=False, allow_blank=True)
@@ -6195,6 +6199,7 @@ class HrAdminAttendanceRegularizationListSerializer(serializers.Serializer):
 
 
 class ManagerTeamSummarySerializer(serializers.Serializer):
+    timezone = serializers.CharField()
     team_size = serializers.IntegerField()
     employees_on_leave_today = serializers.IntegerField()
     pending_leave_approvals_count = serializers.IntegerField()

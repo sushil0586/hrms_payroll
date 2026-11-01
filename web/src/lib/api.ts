@@ -370,6 +370,13 @@ export async function getMssApprovalInbox(params?: {
   leave_page_size?: number;
   regularization_page?: number;
   regularization_page_size?: number;
+  history_leave_page?: number;
+  history_attendance_page?: number;
+  history_query?: string;
+  history_decision?: string;
+  history_status?: string;
+  history_date_from?: string;
+  history_date_to?: string;
   include_leave?: boolean;
   include_regularizations?: boolean;
   include_history?: boolean;
@@ -409,10 +416,10 @@ export async function getMssApprovalInbox(params?: {
         })}`)
       : Promise.resolve({ data: emptyRegularizations, state: "live" as const }),
     includeHistory && includeLeave
-      ? apiGet<ManagerLeaveApprovalListResponse>(`/manager/leave-requests/history/${buildQueryString({ page: 1, page_size: 25 })}`)
+      ? apiGet<ManagerLeaveApprovalListResponse>(`/manager/leave-requests/history/${buildQueryString({ page: params?.history_leave_page ?? 1, page_size: 25, q: params?.history_query, decision: params?.history_decision, status: params?.history_status, date_from: params?.history_date_from, date_to: params?.history_date_to })}`)
       : Promise.resolve({ data: emptyLeave, state: "live" as const }),
     includeHistory && includeRegularizations
-      ? apiGet<ManagerAttendanceApprovalListResponse>(`/manager/attendance-regularizations/history/${buildQueryString({ page: 1, page_size: 25 })}`)
+      ? apiGet<ManagerAttendanceApprovalListResponse>(`/manager/attendance-regularizations/history/${buildQueryString({ page: params?.history_attendance_page ?? 1, page_size: 25, q: params?.history_query, decision: params?.history_decision, status: params?.history_status, date_from: params?.history_date_from, date_to: params?.history_date_to })}`)
       : Promise.resolve({ data: emptyRegularizations, state: "live" as const }),
   ]);
 
@@ -1481,6 +1488,7 @@ function getDemoData<T>(path: string): T {
   ];
 
   const demoManagerSummary: ManagerTeamSummary = {
+    timezone: "Asia/Kolkata",
     team_size: 8,
     employees_on_leave_today: 1,
     pending_leave_approvals_count: 2,

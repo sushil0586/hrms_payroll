@@ -21545,7 +21545,18 @@ class ManagerLeaveDecisionHistoryListView(EmployeeContextMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "leave.view")
         page, page_size = _get_page_params(request)
-        payload = _build_paginated_payload(get_manager_leave_decision_history(employee), page=page, page_size=page_size)
+        payload = _build_paginated_payload(
+            get_manager_leave_decision_history(
+                employee,
+                query=request.query_params.get("q", ""),
+                decision_action=request.query_params.get("decision", ""),
+                current_status=request.query_params.get("status", ""),
+                decided_from=request.query_params.get("date_from", ""),
+                decided_to=request.query_params.get("date_to", ""),
+            ),
+            page=page,
+            page_size=page_size,
+        )
         return response.Response(ManagerLeaveApprovalListSerializer(payload).data)
 
 
@@ -21672,7 +21683,18 @@ class ManagerAttendanceDecisionHistoryListView(EmployeeContextMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "attendance.view")
         page, page_size = _get_page_params(request)
-        payload = _build_paginated_payload(get_manager_attendance_decision_history(employee), page=page, page_size=page_size)
+        payload = _build_paginated_payload(
+            get_manager_attendance_decision_history(
+                employee,
+                query=request.query_params.get("q", ""),
+                decision_action=request.query_params.get("decision", ""),
+                current_status=request.query_params.get("status", ""),
+                decided_from=request.query_params.get("date_from", ""),
+                decided_to=request.query_params.get("date_to", ""),
+            ),
+            page=page,
+            page_size=page_size,
+        )
         return response.Response(HrAdminAttendanceRegularizationListSerializer(payload).data)
 
 

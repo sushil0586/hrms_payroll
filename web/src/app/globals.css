@@ -2949,6 +2949,10 @@ select.input-control {
   padding: 16px;
 }
 
+.mss-history-panel > .workspace-stack {
+  min-width: 0;
+}
+
 .mss-history-panel__header {
   display: flex;
   align-items: flex-start;

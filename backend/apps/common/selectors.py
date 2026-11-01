@@ -3633,19 +3633,39 @@ def _get_pending_workflow_instance_ids_for_actor(actor: Employee, *, subject_typ
     )
 
 
-def _get_responded_workflow_instance_ids_for_actor(actor: Employee, *, subject_type: str) -> list[str]:
-    """Returns workflows where this manager recorded a completed decision."""
+def _get_workflow_decisions_for_actor(
+    actor: Employee,
+    *,
+    subject_type: str,
+    decision_action: str = "",
+    decided_from: str = "",
+    decided_to: str = "",
+) -> dict[str, WorkflowActionLog]:
+    """Returns the latest approve/reject action recorded by this manager."""
 
     membership = getattr(actor, "membership", None)
     actor_identifiers = [str(actor.id)]
     if membership and membership.user_id:
         actor_identifiers.append(str(membership.user_id))
-    return list(
-        WorkflowActionLog.objects.filter(
-            workflow_instance__subject_type=subject_type,
-            actor_identifier__in=actor_identifiers,
-        ).values_list("workflow_instance_id", flat=True).distinct()
+    decisions = WorkflowActionLog.objects.filter(
+        workflow_instance__subject_type=subject_type,
+        actor_identifier__in=actor_identifiers,
+        action__in=["approve", "reject"],
     )
+    if decision_action in {"approve", "reject"}:
+        decisions = decisions.filter(action=decision_action)
+    if parse_date(decided_from):
+        decisions = decisions.filter(created_at__date__gte=parse_date(decided_from))
+    if parse_date(decided_to):
+        decisions = decisions.filter(created_at__date__lte=parse_date(decided_to))
+    decisions = decisions.order_by("workflow_instance_id", "-created_at")
+    return {str(item.workflow_instance_id): item for item in decisions}
+
+
+def _get_responded_workflow_instance_ids_for_actor(actor: Employee, *, subject_type: str) -> list[str]:
+    """Returns workflows where this manager recorded an approve/reject decision."""
+
+    return list(_get_workflow_decisions_for_actor(actor, subject_type=subject_type))
 
 
 def get_default_membership_for_user(user) -> TenantMembership | None:
@@ -3818,6 +3838,7 @@ def get_manager_team_summary(manager: Employee) -> dict:
     ).count()
 
     return {
+        "timezone": manager.tenant.timezone or "UTC",
         "team_size": team.count(),
         "employees_on_leave_today": employees_on_leave,
         "pending_leave_approvals_count": pending_leave_approvals,
@@ -6271,12 +6292,29 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
     ]
 
 
-def get_manager_leave_decision_history(manager: Employee, *, limit: int | None = None) -> list[dict]:
+def get_manager_leave_decision_history(
+    manager: Employee,
+    *,
+    query: str = "",
+    decision_action: str = "",
+    current_status: str = "",
+    decided_from: str = "",
+    decided_to: str = "",
+    limit: int | None = None,
+) -> list[dict]:
     """Returns resolved leave requests decided by this manager."""
 
-    workflow_ids = _get_responded_workflow_instance_ids_for_actor(manager, subject_type="leave_request")
+    decisions = _get_workflow_decisions_for_actor(
+        manager,
+        subject_type="leave_request",
+        decision_action=decision_action,
+        decided_from=decided_from,
+        decided_to=decided_to,
+    )
+    workflow_ids = list(decisions)
     scope = Q(workflow_reference__in=workflow_ids)
-    scope |= Q(employee__reporting_manager=manager, workflow_reference="")
+    if not decision_action and not decided_from and not decided_to:
+        scope |= Q(employee__reporting_manager=manager, workflow_reference="")
     queryset = (
         LeaveRequest.objects.filter(
             scope,
@@ -6290,10 +6328,27 @@ def get_manager_leave_decision_history(manager: Employee, *, limit: int | None =
         .select_related("employee__department", "employee__designation", "leave_type", "leave_policy")
         .order_by("-updated_at", "-created_at")
     )
+    normalized_query = query.strip()
+    if normalized_query:
+        queryset = queryset.filter(
+            Q(employee__employee_code__icontains=normalized_query)
+            | Q(employee__first_name__icontains=normalized_query)
+            | Q(employee__last_name__icontains=normalized_query)
+            | Q(leave_type__name__icontains=normalized_query)
+        )
+    if current_status in {
+        LeaveRequestStatus.APPROVED,
+        LeaveRequestStatus.REJECTED,
+        LeaveRequestStatus.CANCELLED,
+        LeaveRequestStatus.WITHDRAWN,
+    }:
+        queryset = queryset.filter(status=current_status)
     if limit:
         queryset = queryset[:limit]
-    return [
-        {
+    results = []
+    for item in queryset:
+        decision = decisions.get(str(item.workflow_reference))
+        results.append({
             "id": item.id,
             "request_action": str(item.metadata.get("request_action", "leave_request") or "leave_request"),
             "employee_id": item.employee.id,
@@ -6305,6 +6360,8 @@ def get_manager_leave_decision_history(manager: Employee, *, limit: int | None =
             "leave_type_code": item.leave_type.code,
             "policy_name": item.leave_policy.name if item.leave_policy else None,
             "status": item.status,
+            "decision_action": decision.action if decision else item.status,
+            "decision_at": decision.created_at if decision else item.updated_at,
             "start_date": item.start_date,
             "end_date": item.end_date,
             "start_day_portion": item.start_day_portion,
@@ -6321,9 +6378,8 @@ def get_manager_leave_decision_history(manager: Employee, *, limit: int | None =
             "cancelled_at": item.cancelled_at,
             "created_at": item.created_at,
             "updated_at": item.updated_at,
-        }
-        for item in queryset
-    ]
+        })
+    return results
 
 
 def get_manager_leave_request_detail(manager: Employee, request_id) -> dict | None:
@@ -6441,12 +6497,29 @@ def get_manager_pending_attendance_regularizations(manager: Employee, *, limit: 
     ]
 
 
-def get_manager_attendance_decision_history(manager: Employee, *, limit: int | None = None) -> list[dict]:
+def get_manager_attendance_decision_history(
+    manager: Employee,
+    *,
+    query: str = "",
+    decision_action: str = "",
+    current_status: str = "",
+    decided_from: str = "",
+    decided_to: str = "",
+    limit: int | None = None,
+) -> list[dict]:
     """Returns resolved attendance regularizations decided by this manager."""
 
-    workflow_ids = _get_responded_workflow_instance_ids_for_actor(manager, subject_type="attendance_regularization")
+    decisions = _get_workflow_decisions_for_actor(
+        manager,
+        subject_type="attendance_regularization",
+        decision_action=decision_action,
+        decided_from=decided_from,
+        decided_to=decided_to,
+    )
+    workflow_ids = list(decisions)
     scope = Q(workflow_reference__in=workflow_ids)
-    scope |= Q(employee__reporting_manager=manager, workflow_reference="")
+    if not decision_action and not decided_from and not decided_to:
+        scope |= Q(employee__reporting_manager=manager, workflow_reference="")
     queryset = (
         AttendanceRegularization.objects.filter(
             scope,
@@ -6455,10 +6528,25 @@ def get_manager_attendance_decision_history(manager: Employee, *, limit: int | N
         .select_related("employee__department", "employee__designation", "attendance_record", "attendance_record__shift")
         .order_by("-resolved_at", "-updated_at")
     )
+    normalized_query = query.strip()
+    if normalized_query:
+        queryset = queryset.filter(
+            Q(employee__employee_code__icontains=normalized_query)
+            | Q(employee__first_name__icontains=normalized_query)
+            | Q(employee__last_name__icontains=normalized_query)
+        )
+    if current_status in {
+        RegularizationStatus.APPROVED,
+        RegularizationStatus.REJECTED,
+        RegularizationStatus.CANCELLED,
+    }:
+        queryset = queryset.filter(status=current_status)
     if limit:
         queryset = queryset[:limit]
-    return [
-        {
+    results = []
+    for item in queryset:
+        decision = decisions.get(str(item.workflow_reference))
+        results.append({
             "id": item.id,
             "employee_id": item.employee.id,
             "employee_code": item.employee.employee_code,
@@ -6475,6 +6563,8 @@ def get_manager_attendance_decision_history(manager: Employee, *, limit: int | N
             "actual_check_in_at": item.attendance_record.check_in_at,
             "actual_check_out_at": item.attendance_record.check_out_at,
             "status": item.status,
+            "decision_action": decision.action if decision else item.status,
+            "decision_at": decision.created_at if decision else item.resolved_at or item.updated_at,
             "reason": item.reason,
             "manager_comment": item.manager_comment,
             "rejection_reason": item.rejection_reason,
@@ -6484,9 +6574,8 @@ def get_manager_attendance_decision_history(manager: Employee, *, limit: int | N
             "resolved_at": item.resolved_at,
             "created_at": item.created_at,
             "updated_at": item.updated_at,
-        }
-        for item in queryset
-    ]
+        })
+    return results
 
 
 def get_manager_attendance_regularization_detail(manager: Employee, regularization_id) -> dict | None:

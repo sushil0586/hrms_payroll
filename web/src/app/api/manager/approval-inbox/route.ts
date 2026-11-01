@@ -20,6 +20,13 @@ export async function GET(request: NextRequest) {
   const input = request.nextUrl.searchParams;
   const leavePage = positive(input.get("leavePage"), 1);
   const regPage = positive(input.get("regPage"), 1);
+  const historyLeavePage = positive(input.get("historyLeavePage"), 1);
+  const historyAttendancePage = positive(input.get("historyAttendancePage"), 1);
+  const historyQuery = (input.get("historyQuery") || "").trim();
+  const historyDecision = (input.get("historyDecision") || "").trim();
+  const historyStatus = (input.get("historyStatus") || "").trim();
+  const historyDateFrom = (input.get("historyDateFrom") || "").trim();
+  const historyDateTo = (input.get("historyDateTo") || "").trim();
   const includeLeave = enabled(input.get("include_leave"));
   const includeRegularizations = enabled(input.get("include_regularizations"));
   const includeHistory = enabled(input.get("include_history"));
@@ -32,6 +39,13 @@ export async function GET(request: NextRequest) {
       leave_page_size: 5,
       regularization_page: regPage,
       regularization_page_size: 5,
+      history_leave_page: historyLeavePage,
+      history_attendance_page: historyAttendancePage,
+      history_query: historyQuery,
+      history_decision: historyDecision,
+      history_status: historyStatus,
+      history_date_from: historyDateFrom,
+      history_date_to: historyDateTo,
       include_leave: includeLeave,
       include_regularizations: includeRegularizations,
       include_history: includeHistory,

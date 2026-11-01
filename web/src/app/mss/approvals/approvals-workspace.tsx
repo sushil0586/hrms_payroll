@@ -19,13 +19,13 @@ import { ScopedResourceError, useScopedWorkspaceResource } from "@/lib/ui/use-sc
 
 type SearchParamValue = string | string[] | undefined;
 type ApprovalQueue = "leave" | "attendance" | "history";
-export type ApprovalQuery = { queue: ApprovalQueue; leavePage: number; regPage: number; leaveId: string; regId: string };
+export type ApprovalQuery = { queue: ApprovalQueue; leavePage: number; regPage: number; historyLeavePage: number; historyAttendancePage: number; historyQuery: string; historyDecision: string; historyStatus: string; historyDateFrom: string; historyDateTo: string; leaveId: string; regId: string };
 type ApprovalPermissions = { canApproveLeave: boolean; canReviewAttendance: boolean };
 const subscribe = () => () => undefined;
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
 
-function formatDate(value: string | null) {
+function formatDate(value: string | null, timeZone: string) {
   if (!value) {
     return "Not available";
   }
@@ -34,10 +34,11 @@ function formatDate(value: string | null) {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone,
   }).format(new Date(value));
 }
 
-function formatDateTime(value: string | null | undefined) {
+function formatDateTime(value: string | null | undefined, timeZone: string) {
   if (!value) {
     return "Not available";
   }
@@ -48,6 +49,7 @@ function formatDateTime(value: string | null | undefined) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone,
   }).format(new Date(value));
 }
 
@@ -134,6 +136,7 @@ function QueueAccessNotice({
 
 function LeaveApprovalSection({
   currentParams,
+  timeZone,
   response,
   state,
   canApproveLeave,
@@ -141,6 +144,7 @@ function LeaveApprovalSection({
   onReconcile,
 }: {
   currentParams: Record<string, SearchParamValue>;
+  timeZone: string;
   response: ManagerLeaveApprovalListResponse;
   state: "live" | "demo";
   canApproveLeave: boolean;
@@ -200,8 +204,8 @@ function LeaveApprovalSection({
                       <span className="workspace-table__secondary">{requestActionLabel(request.request_action)} - {request.requested_units} units</span>
                     </td>
                     <td>
-                      <strong>{formatDate(request.start_date)}</strong>
-                      <span className="workspace-table__secondary">to {formatDate(request.end_date)}</span>
+                      <strong>{formatDate(request.start_date, timeZone)}</strong>
+                      <span className="workspace-table__secondary">to {formatDate(request.end_date, timeZone)}</span>
                     </td>
                     <td><WorkspaceStatusBadge tone={statusTone(request.status)}>{request.status.replace("_", " ")}</WorkspaceStatusBadge></td>
                     <td><span className="workspace-table__secondary">{request.reason || "No reason provided."}</span></td>
@@ -264,9 +268,9 @@ function LeaveApprovalSection({
               <DetailRow label="Department" value={selected.department || "Not mapped"} />
               <DetailRow label="Designation" value={selected.designation || "Not mapped"} />
               <DetailRow label="Leave Type" value={selected.leave_type} />
-              <DetailRow label="Date Range" value={`${formatDate(selected.start_date)} to ${formatDate(selected.end_date)}`} />
+              <DetailRow label="Date Range" value={`${formatDate(selected.start_date, timeZone)} to ${formatDate(selected.end_date, timeZone)}`} />
               <DetailRow label="Requested Units" value={selected.requested_units} />
-              <DetailRow label="Applied At" value={formatDateTime(selected.applied_at)} />
+              <DetailRow label="Applied At" value={formatDateTime(selected.applied_at, timeZone)} />
               <DetailRow
                 label={selected.request_action === "cancellation_request" ? "Cancellation reason" : "Reason"}
                 value={selected.reason || "No reason provided."}
@@ -313,6 +317,7 @@ function LeaveApprovalSection({
 
 function RegularizationApprovalSection({
   currentParams,
+  timeZone,
   response,
   state,
   canReviewAttendance,
@@ -320,6 +325,7 @@ function RegularizationApprovalSection({
   onReconcile,
 }: {
   currentParams: Record<string, SearchParamValue>;
+  timeZone: string;
   response: ManagerAttendanceApprovalListResponse;
   state: "live" | "demo";
   canReviewAttendance: boolean;
@@ -375,7 +381,7 @@ function RegularizationApprovalSection({
                       </div>
                     </td>
                     <td>
-                      <strong>{formatDate(item.attendance_date)}</strong>
+                      <strong>{formatDate(item.attendance_date, timeZone)}</strong>
                       <span className="workspace-table__secondary">{item.designation || "No designation"}</span>
                     </td>
                     <td>
@@ -439,12 +445,12 @@ function RegularizationApprovalSection({
             ) : null}
             <div className="detail-grid">
               <DetailRow label="Employee" value={`${selected.employee_name || "Unknown"} (${selected.employee_code || "N/A"})`} />
-              <DetailRow label="Attendance Date" value={formatDate(selected.attendance_date)} />
+              <DetailRow label="Attendance Date" value={formatDate(selected.attendance_date, timeZone)} />
               <DetailRow label="Current Status" value={selected.current_status.replace("_", " ")} />
               <DetailRow label="Requested Status" value={selected.requested_status.replace("_", " ")} />
-              <DetailRow label="Actual Check-In" value={formatDateTime(selected.actual_check_in_at)} />
-              <DetailRow label="Requested Check-In" value={formatDateTime(selected.requested_check_in_at)} />
-              <DetailRow label="Applied At" value={formatDateTime(selected.applied_at)} />
+              <DetailRow label="Actual Check-In" value={formatDateTime(selected.actual_check_in_at, timeZone)} />
+              <DetailRow label="Requested Check-In" value={formatDateTime(selected.requested_check_in_at, timeZone)} />
+              <DetailRow label="Applied At" value={formatDateTime(selected.applied_at, timeZone)} />
               <DetailRow label="Reason" value={selected.reason || "No reason provided."} />
             </div>
             <div className="mss-selected-review-band">
@@ -478,12 +484,14 @@ function RegularizationApprovalSection({
 
 function DecisionHistorySection({
   currentParams,
+  timeZone,
   canApproveLeave,
   canReviewAttendance,
   leaveHistory,
   regularizationHistory,
 }: {
   currentParams: Record<string, SearchParamValue>;
+  timeZone: string;
   canApproveLeave: boolean;
   canReviewAttendance: boolean;
   leaveHistory: ManagerLeaveApprovalListResponse;
@@ -530,18 +538,31 @@ function DecisionHistorySection({
             ) : null}
           </div>
         </div>
+        <form action="/mss/approvals" className="workspace-filter-form" method="get" aria-label="Decision history filters" data-navigation-mode="document">
+          <input name="queue" type="hidden" value="history" />
+          <div className="workspace-filter-fields">
+            <label><span>Employee</span><input defaultValue={normalizeParam(currentParams.historyQuery)} name="historyQuery" placeholder="Name or employee code" /></label>
+            <label><span>Your decision</span><select defaultValue={normalizeParam(currentParams.historyDecision)} name="historyDecision"><option value="">All decisions</option><option value="approve">Approved</option><option value="reject">Rejected</option></select></label>
+            <label><span>Current status</span><select defaultValue={normalizeParam(currentParams.historyStatus)} name="historyStatus"><option value="">All statuses</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option><option value="withdrawn">Withdrawn</option></select></label>
+            <label><span>From</span><input defaultValue={normalizeParam(currentParams.historyDateFrom)} name="historyDateFrom" type="date" /></label>
+            <label><span>To</span><input defaultValue={normalizeParam(currentParams.historyDateTo)} name="historyDateTo" type="date" /></label>
+          </div>
+          <div className="form-actions-bar__buttons"><button className="button button--primary" type="submit">Apply filters</button><a className="button button--secondary" data-navigation-mode="document" href="/mss/approvals?queue=history">Clear filters</a></div>
+        </form>
         {hasHistory ? (
           <div className="workspace-stack">
             {canApproveLeave ? <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Completed leave decisions">
-              <table className="workspace-table" aria-label="Completed leave decisions"><thead><tr><th>Employee</th><th>Leave</th><th>Period</th><th>Decision</th><th>Updated</th></tr></thead><tbody>
-                {leaveHistory.items.map((item) => <tr key={item.id}><td><strong>{item.employee_name}</strong><span className="workspace-table__secondary">{item.employee_code}</span></td><td>{item.leave_type}</td><td>{formatDate(item.start_date)} to {formatDate(item.end_date)}</td><td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge></td><td>{formatDateTime(item.updated_at)}</td></tr>)}
+              <table className="workspace-table" aria-label="Completed leave decisions"><thead><tr><th>Employee</th><th>Leave</th><th>Period</th><th>Your decision</th><th>Current status</th><th>Decided</th></tr></thead><tbody>
+                {leaveHistory.items.map((item) => <tr key={item.id}><td><strong>{item.employee_name}</strong><span className="workspace-table__secondary">{item.employee_code}</span></td><td>{item.leave_type}</td><td>{formatDate(item.start_date, timeZone)} to {formatDate(item.end_date, timeZone)}</td><td><WorkspaceStatusBadge tone={statusTone(item.decision_action || item.status)}>{(item.decision_action || item.status).replaceAll("_", " ")}</WorkspaceStatusBadge></td><td>{item.status.replaceAll("_", " ")}</td><td>{formatDateTime(item.decision_at || item.updated_at, timeZone)}</td></tr>)}
               </tbody></table>
             </WorkspaceTableScrollRegion> : null}
+            {canApproveLeave ? <PaginationBar navigationMode="document" page={leaveHistory.page} pageSize={leaveHistory.page_size} totalCount={leaveHistory.total_count} hasPrevious={leaveHistory.has_previous} hasNext={leaveHistory.has_next} firstHref={buildHref("/mss/approvals", currentParams, { historyLeavePage: "1" })} previousHref={buildHref("/mss/approvals", currentParams, { historyLeavePage: String(Math.max(1, leaveHistory.page - 1)) })} nextHref={buildHref("/mss/approvals", currentParams, { historyLeavePage: String(leaveHistory.page + 1) })} lastHref={buildHref("/mss/approvals", currentParams, { historyLeavePage: String(Math.max(1, Math.ceil(leaveHistory.total_count / leaveHistory.page_size))) })} /> : null}
             {canReviewAttendance ? <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Completed attendance decisions">
-              <table className="workspace-table" aria-label="Completed attendance decisions"><thead><tr><th>Employee</th><th>Attendance date</th><th>Requested status</th><th>Decision</th><th>Resolved</th></tr></thead><tbody>
-                {regularizationHistory.items.map((item) => <tr key={item.id}><td><strong>{item.employee_name}</strong><span className="workspace-table__secondary">{item.employee_code}</span></td><td>{formatDate(item.attendance_date)}</td><td>{item.requested_status.replaceAll("_", " ")}</td><td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge></td><td>{formatDateTime(item.resolved_at || item.updated_at)}</td></tr>)}
+              <table className="workspace-table" aria-label="Completed attendance decisions"><thead><tr><th>Employee</th><th>Attendance date</th><th>Requested status</th><th>Your decision</th><th>Current status</th><th>Decided</th></tr></thead><tbody>
+                {regularizationHistory.items.map((item) => <tr key={item.id}><td><strong>{item.employee_name}</strong><span className="workspace-table__secondary">{item.employee_code}</span></td><td>{formatDate(item.attendance_date, timeZone)}</td><td>{item.requested_status.replaceAll("_", " ")}</td><td><WorkspaceStatusBadge tone={statusTone(item.decision_action || item.status)}>{(item.decision_action || item.status).replaceAll("_", " ")}</WorkspaceStatusBadge></td><td>{item.status.replaceAll("_", " ")}</td><td>{formatDateTime(item.decision_at || item.resolved_at || item.updated_at, timeZone)}</td></tr>)}
               </tbody></table>
             </WorkspaceTableScrollRegion> : null}
+            {canReviewAttendance ? <PaginationBar navigationMode="document" page={regularizationHistory.page} pageSize={regularizationHistory.page_size} totalCount={regularizationHistory.total_count} hasPrevious={regularizationHistory.has_previous} hasNext={regularizationHistory.has_next} firstHref={buildHref("/mss/approvals", currentParams, { historyAttendancePage: "1" })} previousHref={buildHref("/mss/approvals", currentParams, { historyAttendancePage: String(Math.max(1, regularizationHistory.page - 1)) })} nextHref={buildHref("/mss/approvals", currentParams, { historyAttendancePage: String(regularizationHistory.page + 1) })} lastHref={buildHref("/mss/approvals", currentParams, { historyAttendancePage: String(Math.max(1, Math.ceil(regularizationHistory.total_count / regularizationHistory.page_size))) })} /> : null}
           </div>
         ) : <div className="mss-history-panel__empty"><strong>No completed manager decisions are available yet.</strong><span>Completed leave and attendance decisions will appear here.</span></div>}
       </div>
@@ -552,7 +573,7 @@ function DecisionHistorySection({
 function approvalQueryFromParams(params: URLSearchParams): ApprovalQuery {
   const requestedQueue = params.get("queue");
   const positive = (key: string) => { const value = Number(params.get(key)); return Number.isSafeInteger(value) && value > 0 ? value : 1; };
-  return { queue: requestedQueue === "attendance" || requestedQueue === "history" ? requestedQueue : "leave", leavePage: positive("leavePage"), regPage: positive("regPage"), leaveId: params.get("leaveId") || "", regId: params.get("regId") || "" };
+  return { queue: requestedQueue === "attendance" || requestedQueue === "history" ? requestedQueue : "leave", leavePage: positive("leavePage"), regPage: positive("regPage"), historyLeavePage: positive("historyLeavePage"), historyAttendancePage: positive("historyAttendancePage"), historyQuery: params.get("historyQuery") || "", historyDecision: params.get("historyDecision") || "", historyStatus: params.get("historyStatus") || "", historyDateFrom: params.get("historyDateFrom") || "", historyDateTo: params.get("historyDateTo") || "", leaveId: params.get("leaveId") || "", regId: params.get("regId") || "" };
 }
 
 function approvalQueryFromLocation() {
@@ -564,6 +585,13 @@ function approvalHref(query: ApprovalQuery) {
   if (query.queue !== "leave") params.set("queue", query.queue);
   if (query.leavePage !== 1) params.set("leavePage", String(query.leavePage));
   if (query.regPage !== 1) params.set("regPage", String(query.regPage));
+  if (query.historyLeavePage !== 1) params.set("historyLeavePage", String(query.historyLeavePage));
+  if (query.historyAttendancePage !== 1) params.set("historyAttendancePage", String(query.historyAttendancePage));
+  if (query.historyQuery) params.set("historyQuery", query.historyQuery);
+  if (query.historyDecision) params.set("historyDecision", query.historyDecision);
+  if (query.historyStatus) params.set("historyStatus", query.historyStatus);
+  if (query.historyDateFrom) params.set("historyDateFrom", query.historyDateFrom);
+  if (query.historyDateTo) params.set("historyDateTo", query.historyDateTo);
   if (query.leaveId) params.set("leaveId", query.leaveId);
   if (query.regId) params.set("regId", query.regId);
   return `/mss/approvals${params.size ? `?${params}` : ""}`;
@@ -584,7 +612,9 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
     const data = await read(query);
     const leaveLast = Math.max(1, Math.ceil(data.pendingLeave.total_count / data.pendingLeave.page_size));
     const regLast = Math.max(1, Math.ceil(data.pendingRegularizations.total_count / data.pendingRegularizations.page_size));
-    return query.leavePage > leaveLast || query.regPage > regLast ? read({ ...query, leavePage: Math.min(query.leavePage, leaveLast), regPage: Math.min(query.regPage, regLast) }) : data;
+    const historyLeaveLast = Math.max(1, Math.ceil(data.leaveHistory.total_count / data.leaveHistory.page_size));
+    const historyAttendanceLast = Math.max(1, Math.ceil(data.regularizationHistory.total_count / data.regularizationHistory.page_size));
+    return query.leavePage > leaveLast || query.regPage > regLast || query.historyLeavePage > historyLeaveLast || query.historyAttendancePage > historyAttendanceLast ? read({ ...query, leavePage: Math.min(query.leavePage, leaveLast), regPage: Math.min(query.regPage, regLast), historyLeavePage: Math.min(query.historyLeavePage, historyLeaveLast), historyAttendancePage: Math.min(query.historyAttendancePage, historyAttendanceLast) }) : data;
   }, [canApproveLeave, canReviewAttendance]);
   const resource = useScopedWorkspaceResource({
     initialData,
@@ -594,6 +624,8 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
       ...query,
       leavePage: data.pendingLeave.page,
       regPage: data.pendingRegularizations.page,
+      historyLeavePage: data.leaveHistory.page,
+      historyAttendancePage: data.regularizationHistory.page,
       leaveId: data.selectedLeaveDetail && ["pending", "partially_approved"].includes(data.selectedLeaveDetail.status) ? query.leaveId : "",
       regId: data.selectedRegularizationDetail && data.selectedRegularizationDetail.status === "pending" ? query.regId : "",
     }),
@@ -604,7 +636,7 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
   const { summary, pendingLeave, pendingRegularizations, leaveHistory, regularizationHistory, selectedLeaveDetail, selectedRegularizationDetail, state } = resource.data;
   const query = resource.query;
   const queue = query.queue;
-  const currentParams: Record<string, string> = { queue, leavePage: String(query.leavePage), regPage: String(query.regPage) };
+  const currentParams: Record<string, string> = { queue, leavePage: String(query.leavePage), regPage: String(query.regPage), historyLeavePage: String(query.historyLeavePage), historyAttendancePage: String(query.historyAttendancePage), historyQuery: query.historyQuery, historyDecision: query.historyDecision, historyStatus: query.historyStatus, historyDateFrom: query.historyDateFrom, historyDateTo: query.historyDateTo };
   if (query.leaveId) currentParams.leaveId = query.leaveId;
   if (query.regId) currentParams.regId = query.regId;
   const inboxState = state === "live" ? "live" : "demo";
@@ -698,11 +730,11 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
       </section>
 
       {queue === "history" ? (
-        <DecisionHistorySection currentParams={currentParams} canApproveLeave={canApproveLeave} canReviewAttendance={canReviewAttendance} leaveHistory={leaveHistory} regularizationHistory={regularizationHistory} />
+        <DecisionHistorySection currentParams={currentParams} timeZone={summary.timezone} canApproveLeave={canApproveLeave} canReviewAttendance={canReviewAttendance} leaveHistory={leaveHistory} regularizationHistory={regularizationHistory} />
       ) : queue === "attendance" ? (
-        <RegularizationApprovalSection currentParams={currentParams} response={pendingRegularizations} state={inboxState} canReviewAttendance={canReviewAttendance} selectedDetail={selectedRegularizationDetail} onReconcile={reconcile} />
+        <RegularizationApprovalSection currentParams={currentParams} timeZone={summary.timezone} response={pendingRegularizations} state={inboxState} canReviewAttendance={canReviewAttendance} selectedDetail={selectedRegularizationDetail} onReconcile={reconcile} />
       ) : (
-        <LeaveApprovalSection currentParams={currentParams} response={pendingLeave} state={inboxState} canApproveLeave={canApproveLeave} selectedDetail={selectedLeaveDetail} onReconcile={reconcile} />
+        <LeaveApprovalSection currentParams={currentParams} timeZone={summary.timezone} response={pendingLeave} state={inboxState} canApproveLeave={canApproveLeave} selectedDetail={selectedLeaveDetail} onReconcile={reconcile} />
       )}
 
       {inboxState === "demo" ? (

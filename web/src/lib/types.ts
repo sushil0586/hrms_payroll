@@ -5735,6 +5735,7 @@ export type EmployeeDashboard = {
 };
 
 export type ManagerTeamSummary = {
+  timezone: string;
   team_size: number;
   employees_on_leave_today: number;
   pending_leave_approvals_count: number;
@@ -5769,6 +5770,8 @@ export type LeaveRequestItem = {
   leave_type_code: string;
   policy_name: string | null;
   status: string;
+  decision_action?: string;
+  decision_at?: string | null;
   start_date: string;
   end_date: string;
   start_day_portion: string;
@@ -5882,6 +5885,8 @@ export type AttendanceRegularizationItem = {
   actual_check_in_at: string | null;
   actual_check_out_at: string | null;
   status: string;
+  decision_action?: string;
+  decision_at?: string | null;
   reason: string;
   manager_comment?: string;
   rejection_reason?: string;
