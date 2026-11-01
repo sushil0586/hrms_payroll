@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
   const regPage = positive(input.get("regPage"), 1);
   const includeLeave = enabled(input.get("include_leave"));
   const includeRegularizations = enabled(input.get("include_regularizations"));
+  const includeHistory = enabled(input.get("include_history"));
   const leaveId = (input.get("leaveId") || "").trim();
   const regId = (input.get("regId") || "").trim();
 
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
       regularization_page_size: 5,
       include_leave: includeLeave,
       include_regularizations: includeRegularizations,
+      include_history: includeHistory,
     });
     const [selectedLeaveDetail, selectedRegularizationDetail] = await Promise.all([
       leaveId && includeLeave

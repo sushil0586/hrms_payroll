@@ -6095,6 +6095,8 @@ export type MssApprovalInboxResponse = {
   summary: ManagerTeamSummary;
   pendingLeave: ManagerLeaveApprovalListResponse;
   pendingRegularizations: ManagerAttendanceApprovalListResponse;
+  leaveHistory: ManagerLeaveApprovalListResponse;
+  regularizationHistory: ManagerAttendanceApprovalListResponse;
   selectedLeaveDetail: LeaveRequestItem | null;
   selectedRegularizationDetail: AttendanceRegularizationItem | null;
   state: "live" | "demo";

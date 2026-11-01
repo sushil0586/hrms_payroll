@@ -31,9 +31,10 @@ from apps.attendance.services import (
     preview_attendance_policy_assignment_resolution,
     resolve_employee_work_day,
     resolve_employee_work_schedule,
+    resolve_regularization,
     submit_regularization,
 )
-from apps.common.selectors import get_employee_attendance_regularizations, get_manager_pending_attendance_regularizations
+from apps.common.selectors import get_employee_attendance_regularizations, get_manager_attendance_decision_history, get_manager_pending_attendance_regularizations
 from apps.common.api_views import save_hr_admin_attendance_policy, save_hr_admin_attendance_policy_assignment
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
@@ -887,6 +888,25 @@ class AttendanceRegularizationApprovalTrackTests(TestCase):
         self.assertTrue(employee_items[0]["approval_steps"][0]["is_current"])
         self.assertEqual([str(item["id"]) for item in manager_items], [str(regularization.id)])
         self.assertEqual(manager_items[0]["approval_steps"][0]["manager_email"], "attendance-manager@example.com")
+
+    def test_resolved_regularization_is_available_in_manager_history(self):
+        regularization = submit_regularization(
+            employee=self.employee,
+            attendance_record=self.attendance_record,
+            requested_status=AttendanceStatus.PRESENT,
+            reason="Manager history coverage",
+        )
+
+        resolve_regularization(
+            regularization=regularization,
+            actor_employee=self.manager,
+            approve=True,
+            comment="Approved for test coverage",
+        )
+
+        history = get_manager_attendance_decision_history(self.manager)
+        self.assertEqual([item["id"] for item in history], [regularization.id])
+        self.assertEqual(history[0]["status"], "approved")
 
     def test_legacy_regularization_without_assignment_still_shows_pending_manager(self):
         regularization = submit_regularization(

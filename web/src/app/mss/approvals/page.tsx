@@ -18,7 +18,7 @@ export default async function MssApprovalsPage({ searchParams }: { searchParams?
   let queue: ApprovalQuery["queue"] = requestedQueue === "attendance" || requestedQueue === "history" ? requestedQueue : "leave";
   if (queue === "leave" && !canApproveLeave && canReviewAttendance) queue = "attendance";
   const query: ApprovalQuery = { queue, leavePage: positive("leavePage"), regPage: positive("regPage"), leaveId: first("leaveId") || "", regId: first("regId") || "" };
-  const inbox = await getMssApprovalInbox({ leave_page: query.leavePage, leave_page_size: 5, regularization_page: query.regPage, regularization_page_size: 5, include_leave: canApproveLeave, include_regularizations: canReviewAttendance });
+  const inbox = await getMssApprovalInbox({ leave_page: query.leavePage, leave_page_size: 5, regularization_page: query.regPage, regularization_page_size: 5, include_leave: canApproveLeave, include_regularizations: canReviewAttendance, include_history: queue === "history" });
   const [selectedLeaveDetail, selectedRegularizationDetail] = await Promise.all([
     query.leaveId && canApproveLeave ? getMssLeaveRequestDetail(query.leaveId).then((result) => result.data).catch(() => null) : Promise.resolve(null),
     query.regId && canReviewAttendance ? getMssAttendanceRegularizationDetail(query.regId).then((result) => result.data).catch(() => null) : Promise.resolve(null),

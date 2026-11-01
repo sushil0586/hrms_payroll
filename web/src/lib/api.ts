@@ -372,9 +372,11 @@ export async function getMssApprovalInbox(params?: {
   regularization_page_size?: number;
   include_leave?: boolean;
   include_regularizations?: boolean;
+  include_history?: boolean;
 }) {
   const includeLeave = params?.include_leave ?? true;
   const includeRegularizations = params?.include_regularizations ?? true;
+  const includeHistory = params?.include_history ?? false;
   const emptyLeave: ManagerLeaveApprovalListResponse = {
     items: [],
     total_count: 0,
@@ -392,7 +394,7 @@ export async function getMssApprovalInbox(params?: {
     has_previous: false,
   };
 
-  const [summary, pendingLeave, pendingRegularizations] = await Promise.all([
+  const [summary, pendingLeave, pendingRegularizations, leaveHistory, regularizationHistory] = await Promise.all([
     apiGet<ManagerTeamSummary>("/manager/team-summary/"),
     includeLeave
       ? apiGet<ManagerLeaveApprovalListResponse>(`/manager/leave-requests/pending/${buildQueryString({
@@ -406,13 +408,21 @@ export async function getMssApprovalInbox(params?: {
           page_size: params?.regularization_page_size ?? 10,
         })}`)
       : Promise.resolve({ data: emptyRegularizations, state: "live" as const }),
+    includeHistory && includeLeave
+      ? apiGet<ManagerLeaveApprovalListResponse>(`/manager/leave-requests/history/${buildQueryString({ page: 1, page_size: 25 })}`)
+      : Promise.resolve({ data: emptyLeave, state: "live" as const }),
+    includeHistory && includeRegularizations
+      ? apiGet<ManagerAttendanceApprovalListResponse>(`/manager/attendance-regularizations/history/${buildQueryString({ page: 1, page_size: 25 })}`)
+      : Promise.resolve({ data: emptyRegularizations, state: "live" as const }),
   ]);
 
   return {
     summary: summary.data,
     pendingLeave: pendingLeave.data,
     pendingRegularizations: pendingRegularizations.data,
-    state: summary.state === "live" && pendingLeave.state === "live" && pendingRegularizations.state === "live" ? "live" : "demo",
+    leaveHistory: leaveHistory.data,
+    regularizationHistory: regularizationHistory.data,
+    state: summary.state === "live" && pendingLeave.state === "live" && pendingRegularizations.state === "live" && leaveHistory.state === "live" && regularizationHistory.state === "live" ? "live" : "demo",
   };
 }
 

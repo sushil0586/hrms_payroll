@@ -480,11 +480,16 @@ function DecisionHistorySection({
   currentParams,
   canApproveLeave,
   canReviewAttendance,
+  leaveHistory,
+  regularizationHistory,
 }: {
   currentParams: Record<string, SearchParamValue>;
   canApproveLeave: boolean;
   canReviewAttendance: boolean;
+  leaveHistory: ManagerLeaveApprovalListResponse;
+  regularizationHistory: ManagerAttendanceApprovalListResponse;
 }) {
+  const hasHistory = leaveHistory.items.length > 0 || regularizationHistory.items.length > 0;
   return (
     <section className="workspace-section">
       <div className="workspace-data-panel mss-history-panel">
@@ -493,7 +498,7 @@ function DecisionHistorySection({
             <span className="eyebrow">Read-only queue</span>
             <h2 className="section-heading-soft">Completed decisions</h2>
             <p className="section-copy section-copy-soft">
-              Completed-decision history is currently unavailable in this workspace.
+              Read-only leave and attendance decisions recorded for your manager identity.
             </p>
           </div>
           <div className="mss-history-panel__actions">
@@ -525,12 +530,20 @@ function DecisionHistorySection({
             ) : null}
           </div>
         </div>
-        <div className="mss-history-panel__empty">
-          <strong>No completed manager decisions are available yet.</strong>
-          <span>
-            Pending work remains in the Leave and Attendance queues. Contact HR if you need a completed decision record.
-          </span>
-        </div>
+        {hasHistory ? (
+          <div className="workspace-stack">
+            {canApproveLeave ? <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Completed leave decisions">
+              <table className="workspace-table" aria-label="Completed leave decisions"><thead><tr><th>Employee</th><th>Leave</th><th>Period</th><th>Decision</th><th>Updated</th></tr></thead><tbody>
+                {leaveHistory.items.map((item) => <tr key={item.id}><td><strong>{item.employee_name}</strong><span className="workspace-table__secondary">{item.employee_code}</span></td><td>{item.leave_type}</td><td>{formatDate(item.start_date)} to {formatDate(item.end_date)}</td><td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge></td><td>{formatDateTime(item.updated_at)}</td></tr>)}
+              </tbody></table>
+            </WorkspaceTableScrollRegion> : null}
+            {canReviewAttendance ? <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Completed attendance decisions">
+              <table className="workspace-table" aria-label="Completed attendance decisions"><thead><tr><th>Employee</th><th>Attendance date</th><th>Requested status</th><th>Decision</th><th>Resolved</th></tr></thead><tbody>
+                {regularizationHistory.items.map((item) => <tr key={item.id}><td><strong>{item.employee_name}</strong><span className="workspace-table__secondary">{item.employee_code}</span></td><td>{formatDate(item.attendance_date)}</td><td>{item.requested_status.replaceAll("_", " ")}</td><td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge></td><td>{formatDateTime(item.resolved_at || item.updated_at)}</td></tr>)}
+              </tbody></table>
+            </WorkspaceTableScrollRegion> : null}
+          </div>
+        ) : <div className="mss-history-panel__empty"><strong>No completed manager decisions are available yet.</strong><span>Completed leave and attendance decisions will appear here.</span></div>}
       </div>
     </section>
   );
@@ -561,7 +574,7 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
   const { canApproveLeave, canReviewAttendance } = permissions;
   const request = useCallback(async (query: ApprovalQuery, signal: AbortSignal) => {
     const read = async (value: ApprovalQuery) => {
-      const params = new URLSearchParams({ ...Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item)])), include_leave: canApproveLeave ? "1" : "0", include_regularizations: canReviewAttendance ? "1" : "0" });
+      const params = new URLSearchParams({ ...Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item)])), include_leave: canApproveLeave ? "1" : "0", include_regularizations: canReviewAttendance ? "1" : "0", include_history: value.queue === "history" ? "1" : "0" });
       const response = await fetch(`/api/manager/approval-inbox?${params}`, { cache: "no-store", signal });
       const payload = await response.json().catch(() => ({}));
       if (response.status === 401) throw new ScopedResourceError("Your session has expired.", 401);
@@ -588,7 +601,7 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
     readHistoryQuery: approvalQueryFromLocation,
     fallbackError: "Manager approvals could not be updated. The last confirmed queue is still shown.",
   });
-  const { summary, pendingLeave, pendingRegularizations, selectedLeaveDetail, selectedRegularizationDetail, state } = resource.data;
+  const { summary, pendingLeave, pendingRegularizations, leaveHistory, regularizationHistory, selectedLeaveDetail, selectedRegularizationDetail, state } = resource.data;
   const query = resource.query;
   const queue = query.queue;
   const currentParams: Record<string, string> = { queue, leavePage: String(query.leavePage), regPage: String(query.regPage) };
@@ -621,8 +634,8 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
     history: {
       eyebrow: "Manager audit",
       title: "Decision history",
-      description: "Completed-decision history is not available in this workspace.",
-      nextAction: "Use Leave or Attendance for pending work, or contact HR for a completed decision record.",
+      description: "Review completed leave and attendance decisions for your manager scope.",
+      nextAction: "Use this read-only record to confirm previous decisions and their resolution time.",
     },
   }[queue];
 
@@ -685,7 +698,7 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
       </section>
 
       {queue === "history" ? (
-        <DecisionHistorySection currentParams={currentParams} canApproveLeave={canApproveLeave} canReviewAttendance={canReviewAttendance} />
+        <DecisionHistorySection currentParams={currentParams} canApproveLeave={canApproveLeave} canReviewAttendance={canReviewAttendance} leaveHistory={leaveHistory} regularizationHistory={regularizationHistory} />
       ) : queue === "attendance" ? (
         <RegularizationApprovalSection currentParams={currentParams} response={pendingRegularizations} state={inboxState} canReviewAttendance={canReviewAttendance} selectedDetail={selectedRegularizationDetail} onReconcile={reconcile} />
       ) : (

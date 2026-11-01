@@ -482,8 +482,10 @@ from apps.common.selectors import (
     get_employee_leave_request_detail,
     get_employee_leave_requests,
     get_employee_leave_summary,
+    get_manager_attendance_decision_history,
     get_manager_attendance_regularization_detail,
     get_manager_pending_attendance_regularizations,
+    get_manager_leave_decision_history,
     get_manager_leave_request_detail,
     get_manager_pending_leave_requests,
     get_manager_team_summary,
@@ -21536,6 +21538,17 @@ class ManagerPendingLeaveRequestListView(EmployeeContextMixin, APIView):
         return response.Response(ManagerLeaveApprovalListSerializer(payload).data)
 
 
+class ManagerLeaveDecisionHistoryListView(EmployeeContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
+        page, page_size = _get_page_params(request)
+        payload = _build_paginated_payload(get_manager_leave_decision_history(employee), page=page, page_size=page_size)
+        return response.Response(ManagerLeaveApprovalListSerializer(payload).data)
+
+
 class ManagerLeaveRequestDetailView(EmployeeContextMixin, APIView):
     def get(self, request, request_id):
         employee = self.get_employee()
@@ -21649,6 +21662,17 @@ class ManagerPendingAttendanceRegularizationListView(EmployeeContextMixin, APIVi
         page, page_size = _get_page_params(request)
         items = get_manager_pending_attendance_regularizations(employee)
         payload = _build_paginated_payload(items, page=page, page_size=page_size)
+        return response.Response(HrAdminAttendanceRegularizationListSerializer(payload).data)
+
+
+class ManagerAttendanceDecisionHistoryListView(EmployeeContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
+        page, page_size = _get_page_params(request)
+        payload = _build_paginated_payload(get_manager_attendance_decision_history(employee), page=page, page_size=page_size)
         return response.Response(HrAdminAttendanceRegularizationListSerializer(payload).data)
 
 

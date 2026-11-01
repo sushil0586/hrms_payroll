@@ -76,7 +76,7 @@ from apps.payroll.models import (
 )
 from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
 from apps.tenants.models import Tenant, TenantStatus
-from apps.workflows.models import WorkflowAssignment, WorkflowInstance, WorkflowInstanceStatus, WorkflowStatus, WorkflowTemplate
+from apps.workflows.models import WorkflowActionLog, WorkflowAssignment, WorkflowInstance, WorkflowInstanceStatus, WorkflowStatus, WorkflowTemplate
 
 
 logger = logging.getLogger(__name__)
@@ -3633,6 +3633,21 @@ def _get_pending_workflow_instance_ids_for_actor(actor: Employee, *, subject_typ
     )
 
 
+def _get_responded_workflow_instance_ids_for_actor(actor: Employee, *, subject_type: str) -> list[str]:
+    """Returns workflows where this manager recorded a completed decision."""
+
+    membership = getattr(actor, "membership", None)
+    actor_identifiers = [str(actor.id)]
+    if membership and membership.user_id:
+        actor_identifiers.append(str(membership.user_id))
+    return list(
+        WorkflowActionLog.objects.filter(
+            workflow_instance__subject_type=subject_type,
+            actor_identifier__in=actor_identifiers,
+        ).values_list("workflow_instance_id", flat=True).distinct()
+    )
+
+
 def get_default_membership_for_user(user) -> TenantMembership | None:
     """Returns the user's preferred active tenant membership."""
 
@@ -6256,6 +6271,61 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
     ]
 
 
+def get_manager_leave_decision_history(manager: Employee, *, limit: int | None = None) -> list[dict]:
+    """Returns resolved leave requests decided by this manager."""
+
+    workflow_ids = _get_responded_workflow_instance_ids_for_actor(manager, subject_type="leave_request")
+    scope = Q(workflow_reference__in=workflow_ids)
+    scope |= Q(employee__reporting_manager=manager, workflow_reference="")
+    queryset = (
+        LeaveRequest.objects.filter(
+            scope,
+            status__in=[
+                LeaveRequestStatus.APPROVED,
+                LeaveRequestStatus.REJECTED,
+                LeaveRequestStatus.CANCELLED,
+                LeaveRequestStatus.WITHDRAWN,
+            ],
+        )
+        .select_related("employee__department", "employee__designation", "leave_type", "leave_policy")
+        .order_by("-updated_at", "-created_at")
+    )
+    if limit:
+        queryset = queryset[:limit]
+    return [
+        {
+            "id": item.id,
+            "request_action": str(item.metadata.get("request_action", "leave_request") or "leave_request"),
+            "employee_id": item.employee.id,
+            "employee_code": item.employee.employee_code,
+            "employee_name": _employee_display_name(item.employee),
+            "department": item.employee.department.name if item.employee.department else None,
+            "designation": item.employee.designation.name if item.employee.designation else None,
+            "leave_type": item.leave_type.name,
+            "leave_type_code": item.leave_type.code,
+            "policy_name": item.leave_policy.name if item.leave_policy else None,
+            "status": item.status,
+            "start_date": item.start_date,
+            "end_date": item.end_date,
+            "start_day_portion": item.start_day_portion,
+            "end_day_portion": item.end_day_portion,
+            "requested_units": item.requested_units,
+            "approved_units": item.approved_units,
+            "reason": item.reason,
+            "manager_comment": item.manager_comment,
+            "rejection_reason": item.rejection_reason,
+            "workflow_reference": item.workflow_reference,
+            "approval_steps": _leave_request_approval_track_payloads(item),
+            "applied_at": item.applied_at,
+            "approved_at": item.approved_at,
+            "cancelled_at": item.cancelled_at,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+        for item in queryset
+    ]
+
+
 def get_manager_leave_request_detail(manager: Employee, request_id) -> dict | None:
     """Returns a workflow-assigned leave approval detail payload."""
 
@@ -6368,6 +6438,54 @@ def get_manager_pending_attendance_regularizations(manager: Employee, *, limit: 
             "created_at": regularization.created_at,
         }
         for regularization in queryset
+    ]
+
+
+def get_manager_attendance_decision_history(manager: Employee, *, limit: int | None = None) -> list[dict]:
+    """Returns resolved attendance regularizations decided by this manager."""
+
+    workflow_ids = _get_responded_workflow_instance_ids_for_actor(manager, subject_type="attendance_regularization")
+    scope = Q(workflow_reference__in=workflow_ids)
+    scope |= Q(employee__reporting_manager=manager, workflow_reference="")
+    queryset = (
+        AttendanceRegularization.objects.filter(
+            scope,
+            status__in=[RegularizationStatus.APPROVED, RegularizationStatus.REJECTED, RegularizationStatus.CANCELLED],
+        )
+        .select_related("employee__department", "employee__designation", "attendance_record", "attendance_record__shift")
+        .order_by("-resolved_at", "-updated_at")
+    )
+    if limit:
+        queryset = queryset[:limit]
+    return [
+        {
+            "id": item.id,
+            "employee_id": item.employee.id,
+            "employee_code": item.employee.employee_code,
+            "employee_name": _employee_display_name(item.employee),
+            "department": item.employee.department.name if item.employee.department else None,
+            "designation": item.employee.designation.name if item.employee.designation else None,
+            "attendance_record_id": item.attendance_record.id,
+            "attendance_date": item.attendance_record.attendance_date,
+            "current_status": item.attendance_record.status,
+            "requested_status": item.requested_status,
+            "shift": item.attendance_record.shift.name if item.attendance_record.shift else None,
+            "requested_check_in_at": item.requested_check_in_at,
+            "requested_check_out_at": item.requested_check_out_at,
+            "actual_check_in_at": item.attendance_record.check_in_at,
+            "actual_check_out_at": item.attendance_record.check_out_at,
+            "status": item.status,
+            "reason": item.reason,
+            "manager_comment": item.manager_comment,
+            "rejection_reason": item.rejection_reason,
+            "workflow_reference": item.workflow_reference,
+            "approval_steps": _attendance_regularization_approval_track_payloads(item),
+            "applied_at": item.applied_at,
+            "resolved_at": item.resolved_at,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+        for item in queryset
     ]
 
 

@@ -18,7 +18,7 @@ from apps.attendance.models import (
     Shift,
 )
 from apps.common.api_views import save_hr_admin_leave_policy_assignment
-from apps.common.selectors import get_employee_leave_requests, get_manager_leave_request_detail, get_manager_pending_leave_requests
+from apps.common.selectors import get_employee_leave_requests, get_manager_leave_decision_history, get_manager_leave_request_detail, get_manager_pending_leave_requests
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
 from apps.leave_management.models import LeaveBalance, LeaveBalanceTransaction, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType, LeaveRequestStatus
@@ -1058,6 +1058,28 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         employee_history = get_employee_leave_requests(self.employee)
         self.assertEqual(employee_history[0]["status"], LeaveRequestStatus.PARTIALLY_APPROVED)
         self.assertEqual(employee_history[0]["approval_steps"][1]["manager_name"], "Rohan Director")
+
+    def test_manager_history_contains_only_decisions_recorded_by_manager(self):
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Manager history coverage",
+        )
+
+        resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.manager,
+            approve=False,
+            comment="Declined for test coverage",
+        )
+
+        self.assertEqual([item["id"] for item in get_manager_leave_decision_history(self.manager)], [leave_request.id])
+        self.assertEqual(get_manager_leave_decision_history(self.second_manager), [])
 
     def test_active_leave_request_blocks_exact_day_and_range_overlap(self):
         monday = _next_weekday(0)
