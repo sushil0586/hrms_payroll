@@ -11,10 +11,11 @@ PROTECTED_BACKEND = "apps.common.email_backends.StagingRecipientAllowlistEmailBa
 LOCMEM_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
 
-def _connection(*, allowed, fail_silently=False):
+def _connection(*, allowed, fail_silently=False, allow_registered_users=False):
     settings = override_settings(
         HRMS_ENVIRONMENT="staging",
         HRMS_STAGING_EMAIL_ALLOWED_RECIPIENTS=allowed,
+        HRMS_STAGING_EMAIL_ALLOW_REGISTERED_USERS=allow_registered_users,
         EMAIL_BACKEND=PROTECTED_BACKEND,
         EMAIL_TRANSPORT_BACKEND=LOCMEM_BACKEND,
     )
@@ -81,6 +82,42 @@ def test_staging_email_fail_silently_blocks_delivery():
             [EmailMessage(subject="Denied", body="Synthetic", to=["other@playwright.qa.invalid"])]
         ) == 0
         assert mail.outbox == []
+    finally:
+        override.disable()
+
+
+@pytest.mark.django_db
+def test_staging_email_allows_newly_registered_user_without_static_allowlist(django_user_model):
+    django_user_model.objects.create_user(
+        username="new-staging-user",
+        email="new.user@example.test",
+        password="not-used",
+    )
+    override, connection = _connection(allowed=[], allow_registered_users=True)
+    try:
+        mail.outbox = []
+        delivered = connection.send_messages(
+            [EmailMessage(subject="Allowed", body="Synthetic", to=["NEW.USER@example.test"])]
+        )
+        assert delivered == 1
+        assert len(mail.outbox) == 1
+    finally:
+        override.disable()
+
+
+@pytest.mark.django_db
+def test_staging_email_still_rejects_unregistered_recipient(django_user_model):
+    django_user_model.objects.create_user(
+        username="registered-staging-user",
+        email="registered.user@example.test",
+        password="not-used",
+    )
+    override, connection = _connection(allowed=[], allow_registered_users=True)
+    try:
+        with pytest.raises(PermissionError, match="unapproved recipient"):
+            connection.send_messages(
+                [EmailMessage(subject="Denied", body="Synthetic", to=["external@example.test"])]
+            )
     finally:
         override.disable()
 

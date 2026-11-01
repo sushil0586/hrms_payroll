@@ -7,8 +7,10 @@ import logging
 from email.utils import parseaddr
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.core.mail.backends.base import BaseEmailBackend
+from django.db import DatabaseError
 from django.utils.module_loading import import_string
 
 
@@ -24,7 +26,16 @@ def _allowed_recipients() -> set[str]:
     configured = getattr(settings, "HRMS_STAGING_EMAIL_ALLOWED_RECIPIENTS", ())
     normalized = {_normalize_address(value) for value in configured}
     if not normalized or "" in normalized or any("*" in value or "@" not in value for value in normalized):
-        return set()
+        normalized = set()
+
+    if getattr(settings, "HRMS_STAGING_EMAIL_ALLOW_REGISTERED_USERS", False):
+        try:
+            registered = get_user_model().objects.exclude(email="").values_list("email", flat=True)
+            normalized.update(_normalize_address(value) for value in registered)
+        except DatabaseError:
+            logger.exception("staging_email_registered_recipient_lookup_failed")
+
+    normalized.discard("")
     return normalized
 
 
