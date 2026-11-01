@@ -538,7 +538,7 @@ function DecisionHistorySection({
             ) : null}
           </div>
         </div>
-        <form action="/mss/approvals" className="workspace-filter-form" method="get" aria-label="Decision history filters" data-navigation-mode="document">
+        <form action="/mss/approvals" className="workspace-filter-form mss-history-filters" method="get" aria-label="Decision history filters" data-navigation-mode="document">
           <input name="queue" type="hidden" value="history" />
           <div className="workspace-filter-fields">
             <label><span>Employee</span><input defaultValue={normalizeParam(currentParams.historyQuery)} name="historyQuery" placeholder="Name or employee code" /></label>
