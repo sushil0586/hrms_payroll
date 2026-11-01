@@ -70,6 +70,12 @@ export function LeaveYearWorkbench({ portal, periods: initialPeriods, runs: init
   const [preview, setPreview] = useState<Preview | null>(null);
   const [closeInput, setCloseInput] = useState({ source_period_id: "", target_period_id: "", carry_forward_cap: "0.00", expiring_units: "0.00", expiry_date: "", scheduled_for: "", confirmation: "" });
   const activeRuns = useMemo(() => runs.some((item) => item.status === "queued" || item.status === "running"), [runs]);
+  const periodSummary = useMemo(() => ({
+    open: periods.filter((item) => item.status === "open").length,
+    closed: periods.filter((item) => item.status === "closed").length,
+    locked: periods.filter((item) => item.status === "locked").length,
+    activeRuns: runs.filter((item) => item.status === "queued" || item.status === "running").length,
+  }), [periods, runs]);
 
   useEffect(() => {
     if (!activeRuns) return;
@@ -195,6 +201,13 @@ export function LeaveYearWorkbench({ portal, periods: initialPeriods, runs: init
       <div aria-live="polite" className="sr-only">{busy ? "Leave-year operation in progress." : message || error}</div>
       {error ? <div className="notice notice--danger" role="alert"><strong>Action required.</strong><span>{error}</span></div> : null}
       {message ? <div className="notice notice--success" role="status"><strong>Updated.</strong><span>{message}</span></div> : null}
+
+      <section className="workspace-metric-grid" aria-label="Leave-year operational summary">
+        <MetricTile label="Open periods" value={periodSummary.open} />
+        <MetricTile label="Closed periods" value={periodSummary.closed} />
+        <MetricTile label="Locked periods" value={periodSummary.locked} />
+        <MetricTile label="Active close jobs" value={periodSummary.activeRuns} />
+      </section>
 
       <WorkspaceFormControls><fieldset className="workspace-form-controls" disabled={Boolean(busy)}>
       <section className="section panel-card-soft workspace-operation-card" aria-labelledby="leave-periods-title">

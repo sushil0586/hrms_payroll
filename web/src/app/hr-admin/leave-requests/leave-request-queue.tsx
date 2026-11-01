@@ -11,6 +11,7 @@ import type { HrAdminOptionItem, LeaveRequestItem, PagedStatusCounts } from "@/l
 
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 type Props = {
   items: LeaveRequestItem[];
@@ -110,7 +111,7 @@ function collisionTone(item: LeaveRequestItem): "success" | "warning" | "danger"
 export function LeaveRequestQueue({ items, currentFilters, pagination, statusCounts, leaveTypeOptions, canApproveLeaveRequests, pending, onApplyFilters, onPage, onReview }: Props) {
   const [validationError, setValidationError] = useState("");
   const filterLeaveTypeOptions = useMemo(() => leaveTypeOptions.filter((item) => item.code).sort((a, b) => a.name.localeCompare(b.name)), [leaveTypeOptions]);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
   const selectedItem = items.find(item => item.id === selectedId) ?? null;
 
   function pageHref(page: number) {
@@ -127,13 +128,13 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
         <span><strong>{(statusCounts.rejected ?? 0) + (statusCounts.cancelled ?? 0)}</strong> tenant rejected / cancelled</span>
         <span><strong>{items.filter((item) => item.attendance_collision_summary?.payroll_blocking).length}</strong> payroll blocking on this page</span>
       </div>
-      <section className="queue-toolbar panel-card-soft">
+      <section className="panel-card-soft attendance-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Leave request queue</h2>
             <p className="section-copy section-copy-soft">Search requests, verify policy evidence, and see exactly where each approval is waiting.</p>
           </div>
-
+          <div className="queue-toolbar__meta"><span className="queue-summary-chip"><strong>{pagination.total_count}</strong> matching</span><span className="queue-summary-chip"><strong>{selectedItem ? "1" : "0"}</strong> selected</span></div>
         </div>
         <WorkspaceFilterForm key={JSON.stringify(currentFilters)} action="/hr-admin/leave-requests" label="Leave request filters" className="workspace-filter-form--block" updateMode="scoped" onSubmit={event => {
           event.preventDefault();
@@ -206,13 +207,13 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
                 {items.map((item) => {
                   const isSelected = selectedItem?.id === item.id;
                   return (
-                    <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id}>
+                    <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedId(item.id)}>
                       <td><strong>{item.employee_name || "Employee"}</strong><span>{item.employee_code || "No code"} · {item.department || "No department"}</span></td>
                       <td><strong>{item.leave_type}</strong><span>{item.requested_units} requested · {item.approved_units} approved</span></td>
                       <td><strong>{formatDate(item.start_date)}</strong><span>to {formatDate(item.end_date)}</span></td>
                       <td><strong>{getWaitingLabel(item)}</strong><span>{item.policy_name || "No policy linked"}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{titleCase(item.status)}</WorkspaceStatusBadge><span>{item.attendance_collision_summary?.collision_count ? `${item.attendance_collision_summary.collision_count} collision(s)` : "Collision clear"}</span></td>
-                      <td><button className="button button--secondary button--compact" onClick={() => setSelectedId(item.id)} type="button" aria-label={`Inspect leave request for ${item.employee_name || item.employee_code}`}>Inspect</button></td>
+                      <td><button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedId(item.id); }} type="button" aria-label={`Inspect leave request for ${item.employee_name || item.employee_code}`}>Inspect</button></td>
                     </tr>
                   );
                 })}
@@ -255,7 +256,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
                 <h2 className="section-heading-soft">Leave request detail</h2>
                 <p className="section-copy section-copy-soft">Focused policy, approval, collision, and balance context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={() => setSelectedId("")} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedId(""); }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

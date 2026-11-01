@@ -40,7 +40,7 @@ export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCr
   const [status, setStatus] = useWorkspaceQueryFilter("status", "");
   const [leaveType, setLeaveType] = useWorkspaceQueryFilter("leave_type", "");
   const [accrualFrequency, setAccrualFrequency] = useWorkspaceQueryFilter("accrual", "");
-  const [selectedPolicyId, setSelectedPolicyId] = useState("");
+  const [selectedPolicyId, setSelectedPolicyId] = useState(policies[0]?.id ?? "");
   const [selectedPolicy, setSelectedPolicy] = useState<HrAdminLeavePolicy | null>(null);
   const impactRequest = useRef(0);
   const [impact, setImpact] = useState<HrAdminLeavePolicyImpact | null>(null);
@@ -140,18 +140,21 @@ export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCr
         <span><strong>{policies.length - activeCount}</strong> inactive or draft</span>
       </div>
 
-      <div className="workspace-data-panel">
+      <section aria-label="Leave policy filters" className="panel-card-soft attendance-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Leave policy catalog</h2>
-            <p className="section-copy section-copy-soft">Find a policy, inspect details, then edit or remove with the existing checks.</p>
+            <p className="section-copy section-copy-soft">Search policy rules and inspect their entitlement, eligibility, and approval setup.</p>
           </div>
-          <span className="queue-summary-chip"><strong>{filteredPolicies.length}</strong> shown</span>
+          <div className="queue-toolbar__meta">
+            <span className="queue-summary-chip"><strong>{filteredPolicies.length}</strong> in this view</span>
+            <span className="queue-summary-chip"><strong>{selectedDetail ? "1" : "0"}</strong> selected</span>
+          </div>
         </div>
         <WorkspaceFilterForm action="/hr-admin/leave-policies" label="Leave policy filters" className="workspace-filter-form--three" updateMode="scoped" onSubmit={(event) => event.preventDefault()}>
           <label className="form-field">
             <span>Search</span>
-            <input className="input-control" name="q" placeholder="Policy name, code, type, status" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input className="input-control" name="q" placeholder="Policy name, code, type, status" type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
           <label className="form-field">
             <span>Status</span>
@@ -180,21 +183,22 @@ export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCr
             </div>
           </details>
           <div className="workspace-filter-actions">
-            <span className="muted" role="status">Filters update this catalog only.</span>
             <button className="button button--secondary" onClick={() => { setQuery(""); setStatus(""); setLeaveType(""); setAccrualFrequency(""); }} type="button">Clear filters</button>
             {canManagePolicies && onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create leave policy</button> : null}
           </div>
         </WorkspaceFilterForm>
+      </section>
 
-        {successMessage ? (
-          <div className="notice notice--success" role="status">
-            <strong>Policy updated.</strong>
-            <span className="muted">{successMessage}</span>
-          </div>
-        ) : null}
+      {successMessage ? (
+        <div className="notice notice--success" role="status">
+          <strong>Policy updated.</strong>
+          <span className="muted">{successMessage}</span>
+        </div>
+      ) : null}
 
-        <div className="employee-directory-layout">
-          <WorkspaceTableScrollRegion className="employee-directory-table-wrap workspace-table-region" label="Leave policies table scroll">
+      <div className={`attendance-review-workbench${selectedDetail ? " attendance-review-workbench--with-detail" : ""}`}>
+        <section className="panel-card-soft attendance-directory-panel">
+          <WorkspaceTableScrollRegion className="attendance-directory-table-wrap workspace-table-region" label="Leave policies table scroll">
             <table aria-label="Leave policies" className="accerio-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
@@ -207,8 +211,10 @@ export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCr
                 </tr>
               </thead>
               <tbody>
-                {filteredPolicies.map((item) => (
-                  <tr className={selectedDetail?.id === item.id ? "table-row--selected" : ""} key={item.id}>
+                {filteredPolicies.map((item) => {
+                  const isSelected = selectedDetail?.id === item.id;
+                  return (
+                  <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedPolicyId(item.id)}>
                     <td>
                       <div className="workspace-table__primary-cell">
                         <strong>{item.name}</strong>
@@ -219,49 +225,76 @@ export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCr
                     <td>{item.annual_entitlement} units</td>
                     <td>{item.accrual_frequency}</td>
                     <td><WorkspaceStatusBadge tone={normalized(item.status) === "active" ? "success" : "neutral"}>{item.status}</WorkspaceStatusBadge></td>
-                    <td><button className="button button--secondary" onClick={() => setSelectedPolicyId(item.id)} type="button">Inspect</button></td>
+                    <td><button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedPolicyId(item.id); }} type="button">Inspect</button></td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filteredPolicies.length === 0 ? (
-                  <tr><td colSpan={6}>No leave policies match the current filters.</td></tr>
+                  <tr><td colSpan={6}><strong>No leave policies match these filters.</strong><span>Clear filters to restore the catalog.</span></td></tr>
                 ) : null}
               </tbody>
             </table>
           </WorkspaceTableScrollRegion>
 
-          {selectedDetail ? (
-            <aside id="leave-setup-detail" tabIndex={-1} className="panel-card-soft attendance-detail-drawer" aria-label="Leave policy detail">
-              <div className="record-card__header">
+        </section>
+
+        {selectedDetail ? (
+          <aside id="leave-setup-detail" tabIndex={-1} className="panel-card-soft attendance-detail-drawer" aria-label="Leave policy detail">
+              <div className="queue-toolbar__header">
                 <div>
-                  <h2>{selectedDetail.name}</h2>
-                  <p className="section-copy section-copy-soft">{selectedDetail.code} · {selectedDetail.leave_type}</p>
+                  <h2 className="section-heading-soft">Leave policy detail</h2>
+                  <p className="section-copy section-copy-soft">Focused entitlement, eligibility, and governance state.</p>
                 </div>
-                <div className="record-card__actions">
-                  <button className="button button--secondary" onClick={() => setSelectedPolicyId("")} type="button">Close</button>
-                  {canManagePolicies ? (
-                    <button className="button button--secondary" disabled={pending} onClick={() => onOpenEdit?.(selectedDetail.id)} type="button">Edit</button>
-                  ) : null}
-                  {canManagePolicies ? <button className="button button--ghost" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openRemoveDialog(selectedDetail); }} type="button">Remove</button> : null}
+                <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedPolicyId(""); }} type="button">Close</button>
+              </div>
+              <article className="record-card record-card--compact">
+                <div className="record-card__header">
+                  <div>
+                    <h3>{selectedDetail.name}</h3>
+                    <p className="section-copy section-copy-soft">{selectedDetail.code} · {selectedDetail.leave_type}</p>
+                  </div>
+                  <WorkspaceStatusBadge tone={normalized(selectedDetail.status) === "active" ? "success" : "neutral"}>{selectedDetail.status}</WorkspaceStatusBadge>
                 </div>
+                <div className="record-card__eyebrow">
+                  <WorkspaceStatusBadge tone="info">{selectedDetail.accrual_frequency}</WorkspaceStatusBadge>
+                  <PlatformGovernanceCard item={selectedDetail} />
+                </div>
+              </article>
+              <div className="record-card__actions">
+                {canManagePolicies ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit?.(selectedDetail.id)} type="button">Edit leave policy</button> : null}
+                {canManagePolicies ? <button className="button button--ghost" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openRemoveDialog(selectedDetail); }} type="button">Removal options</button> : null}
               </div>
-              <div className="record-card__eyebrow">
-                <WorkspaceStatusBadge tone={normalized(selectedDetail.status) === "active" ? "success" : "neutral"}>{selectedDetail.status}</WorkspaceStatusBadge>
-                <WorkspaceStatusBadge tone="info">{selectedDetail.accrual_frequency}</WorkspaceStatusBadge>
-                <PlatformGovernanceCard item={selectedDetail} />
-              </div>
-              <div className="detail-grid">
-                <div className="detail-row"><span className="detail-label">Annual entitlement</span><span className="detail-value">{selectedDetail.annual_entitlement} units</span></div>
+              <details className="record-card" open>
+                <summary>Entitlement</summary>
+                <div className="detail-grid">
+                  <div className="detail-row"><span className="detail-label">Annual entitlement</span><span className="detail-value">{selectedDetail.annual_entitlement} units</span></div>
+                  <div className="detail-row"><span className="detail-label">Accrual frequency</span><span className="detail-value">{selectedDetail.accrual_frequency}</span></div>
+                </div>
+              </details>
+              <details className="record-card" open>
+                <summary>Effective period</summary>
+                <div className="detail-grid">
                 <div className="detail-row"><span className="detail-label">Effective from</span><span className="detail-value">{selectedDetail.effective_from || "Not set"}</span></div>
                 <div className="detail-row"><span className="detail-label">Effective to</span><span className="detail-value">{selectedDetail.effective_to || "Open ended"}</span></div>
+                </div>
+              </details>
+              <details className="record-card" open>
+                <summary>Eligibility and calculation</summary>
+                <div className="detail-grid">
                 <div className="detail-row"><span className="detail-label">Sandwich rule</span><span className="detail-value">{selectedDetail.sandwich_rule_enabled ? "Enabled" : "Disabled"}</span></div>
                 <div className="detail-row"><span className="detail-label">Probation eligible</span><span className="detail-value">{selectedDetail.is_probation_eligible ? "Yes" : "No"}</span></div>
                 <div className="detail-row"><span className="detail-label">Minimum service</span><span className="detail-value">{selectedDetail.minimum_service_days} days</span></div>
+                </div>
+              </details>
+              <details className="record-card" open>
+                <summary>Approval</summary>
+                <div className="detail-grid">
                 <div className="detail-row"><span className="detail-label">Automatic approval</span><span className="detail-value">{selectedDetail.config_snapshot.approval.auto_approve_enabled ? `${selectedDetail.config_snapshot.approval.auto_approve_after_hours} elapsed hours per step` : "Disabled"}</span></div>
-              </div>
+                </div>
+              </details>
               <PlatformGovernanceNotice item={selectedDetail} />
-            </aside>
-          ) : null}
-        </div>
+          </aside>
+        ) : null}
       </div>
 
       {selectedPolicy ? (

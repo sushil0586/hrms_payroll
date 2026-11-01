@@ -24,6 +24,7 @@ import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { WorkspaceFormControls } from "@/components/patterns/workspace-form-controls";
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
+import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 type Props = {
   balancesPage: HrAdminLeaveBalanceListResponse;
@@ -517,8 +518,8 @@ export function LeaveBalanceOperations({
   const [reviewReasonById, setReviewReasonById] = useState<Record<string, string>>({});
   const [reviewingTransactionId, setReviewingTransactionId] = useState<string | null>(null);
   const reviewingTransactionRef = useRef<string | null>(null);
-  const [selectedBalanceId, setSelectedBalanceId] = useState(initialFilters?.selectedBalanceId ?? "");
-  const [selectedTransactionId, setSelectedTransactionId] = useState(initialFilters?.selectedTransactionId ?? "");
+  const [selectedBalanceId, setSelectedBalanceId] = useState(initialFilters?.selectedBalanceId || balances[0]?.id || "");
+  const [selectedTransactionId, setSelectedTransactionId] = useState(initialFilters?.selectedTransactionId || transactions[0]?.id || "");
   const pageSize = filters.pageSize ?? balancesPage.page_size;
   const safeBalancePage = Math.min(balancesPage.page, balancesPage.total_pages ?? Math.max(1, Math.ceil(balancesPage.total_count / balancesPage.page_size)));
   const safeTransactionPage = Math.min(transactionsPage.page, transactionsPage.total_pages ?? Math.max(1, Math.ceil(transactionsPage.total_count / transactionsPage.page_size)));
@@ -700,7 +701,10 @@ export function LeaveBalanceOperations({
         <span><strong>{transactionsPage.total_count}</strong> matching transactions</span>
         <span><strong>{transactions.filter(item=>item.status==="pending").length}</strong> pending reviews on this transaction page</span>
       </div>
-      <LeaveBalanceFilters key={JSON.stringify(filters)} filters={filters} policies={options.leave_policies} employees={balanceEmployeeOptions} pending={isRefreshing} onApply={(next) => { setSelectedBalanceId(""); setSelectedTransactionId(""); void refreshLedger(next, 1, 1, true); }} />
+      <section aria-label="Leave balance filters" className="panel-card-soft attendance-queue-toolbar">
+        <div className="queue-toolbar__header"><div><h2 className="section-heading-soft">Leave balance workspace</h2><p className="section-copy section-copy-soft">Filter balances and maker-checker transactions from one governed ledger view.</p></div><div className="queue-toolbar__meta"><span className="queue-summary-chip"><strong>{balancesPage.total_count}</strong> balances</span><span className="queue-summary-chip"><strong>{transactionsPage.total_count}</strong> transactions</span></div></div>
+        <LeaveBalanceFilters key={JSON.stringify(filters)} filters={filters} policies={options.leave_policies} employees={balanceEmployeeOptions} pending={isRefreshing} onApply={(next) => { setSelectedBalanceId(""); setSelectedTransactionId(""); void refreshLedger(next, 1, 1, true); }} />
+      </section>
 
       <section className="section queue-layout">
         <div className="queue-toolbar__header">
@@ -737,13 +741,13 @@ export function LeaveBalanceOperations({
                   {balances.map((item) => {
                     const isSelected = selectedBalance?.id === item.id;
                     return (
-                      <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id}>
+                      <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedBalanceId(item.id)}>
                         <td><strong>{item.employee_name}</strong><span>{item.employee_code}</span></td>
                         <td><strong>{item.leave_policy_name}</strong><span>{item.leave_type_name} · Year {item.period_year}</span></td>
                         <td><strong>{item.closing_balance}</strong><span>{item.opening_balance} opening</span></td>
                         <td><strong>{item.consumed_amount}</strong><span>{item.accrued_amount} accrued</span></td>
                         <td><strong>{item.reserved_amount}</strong><span>{item.encashed_amount} encashed</span></td>
-                        <td><button className="button button--secondary button--compact" aria-label={`Inspect balance for ${item.employee_name}`} onClick={() => setSelectedBalanceId(item.id)} type="button">Inspect</button></td>
+                        <td><button className="button button--secondary button--compact" aria-label={`Inspect balance for ${item.employee_name}`} onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedBalanceId(item.id); }} type="button">Inspect</button></td>
                       </tr>
                     );
                   })}
@@ -779,7 +783,7 @@ export function LeaveBalanceOperations({
                   <h2 className="section-heading-soft">Balance detail</h2>
                   <p className="section-copy section-copy-soft">Focused employee-policy ledger context.</p>
                 </div>
-                <button className="button button--secondary button--compact" onClick={() => setSelectedBalanceId("")} type="button">Close</button>
+                <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedBalanceId(""); }} type="button">Close</button>
               </div>
               <article className="record-card record-card--compact">
                 <div className="record-card__header">
@@ -845,13 +849,13 @@ export function LeaveBalanceOperations({
                     const isSelected = selectedTransaction?.id === item.id;
                     const tone = item.status === "applied" ? "success" : item.status === "pending" ? "warning" : item.status === "rejected" ? "danger" : "neutral";
                     return (
-                      <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id}>
+                      <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedTransactionId(item.id)}>
                         <td><strong>{item.employee_name}</strong><span>{item.employee_code}</span></td>
                         <td><strong>{item.action.replaceAll("_", " ")}</strong><span>{item.effective_date}</span></td>
                         <td><strong>{item.units}</strong><span>{item.leave_policy_name}</span></td>
                         <td><WorkspaceStatusBadge tone={tone}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge><span>{item.can_current_actor_review ? "Reviewable" : "Not reviewable by you"}</span></td>
                         <td><strong>{item.closing_balance_before} to {item.closing_balance_after}</strong><span>{item.reason || "No reason"}</span></td>
-                        <td><button className="button button--secondary button--compact" aria-label={`Inspect transaction for ${item.employee_name}`} onClick={() => setSelectedTransactionId(item.id)} type="button">Inspect</button></td>
+                        <td><button className="button button--secondary button--compact" aria-label={`Inspect transaction for ${item.employee_name}`} onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedTransactionId(item.id); }} type="button">Inspect</button></td>
                       </tr>
                     );
                   })}
@@ -883,7 +887,7 @@ export function LeaveBalanceOperations({
                   <h2 className="section-heading-soft">Transaction detail</h2>
                   <p className="section-copy section-copy-soft">Review evidence and maker-checker state.</p>
                 </div>
-                <button className="button button--secondary button--compact" onClick={() => setSelectedTransactionId("")} type="button">Close</button>
+                <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedTransactionId(""); }} type="button">Close</button>
               </div>
               <article className="record-card record-card--compact">
                 <div className="record-card__header">
