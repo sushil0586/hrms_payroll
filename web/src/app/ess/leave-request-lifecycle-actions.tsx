@@ -4,7 +4,8 @@ import { apiFieldErrors, mutationErrorMessage, networkMutationMessage } from "@/
 
 import { useEffect, useRef, useState } from "react";
 
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionToast, ERROR_TOAST_DURATION_MS, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { hasFieldErrors, requireText, validateUploadFile, type FieldErrors } from "@/lib/ui/validation";
 import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
@@ -108,14 +109,16 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
       isSubmittingRef.current = false;
       return;
     }
+    const successMessage = action === "withdraw" ? "Leave request withdrawn." : item.cancel_requires_reapproval ? "Cancellation request submitted." : "Approved leave cancelled.";
     setToast({
       title: "Action saved.",
-      message: action === "withdraw" ? "Leave request withdrawn." : item.cancel_requires_reapproval ? "Cancellation request submitted." : "Approved leave cancelled.",
+      message: successMessage,
       tone: "success",
     });
     if (onCompleted) {
       try {
         await onCompleted();
+        rememberActionSuccess("/ess/leave", item.id, "Leave request updated.", successMessage);
         resetIdempotencyKeys();
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : "The action was saved, but updated leave data could not be loaded. Do not submit it again.";
@@ -132,7 +135,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? ERROR_TOAST_DURATION_MS : SUCCESS_TOAST_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 

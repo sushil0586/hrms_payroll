@@ -44,6 +44,16 @@
 @media (max-width: 767px) {
   .ess-compact { padding: 16px 12px; gap: 16px; }
   .ess-dashboard-grid { grid-template-columns: minmax(0,1fr); }
+  .ess-compact .workspace-status-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+  .ess-compact .workspace-status-tab {
+    justify-content: center;
+    min-width: 0;
+    white-space: normal;
+  }
   .ess-compact .workspace-standard-panel__header, .ess-compact .workspace-standard-panel__body { padding: 14px; }
   .ess-identity { padding: 14px; }
   .ess-profile-nav { gap: 2px; }

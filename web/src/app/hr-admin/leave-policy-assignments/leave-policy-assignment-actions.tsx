@@ -3,10 +3,11 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 
 import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 
 import { useEffect, useState } from "react";
 
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionToast, ERROR_TOAST_DURATION_MS, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
@@ -36,7 +37,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? ERROR_TOAST_DURATION_MS : SUCCESS_TOAST_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -53,18 +54,17 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
       if (!response.ok) {
         const message = getErrorMessage(payload, response.status);
         setError(message);
-        setToast({ title: "Action needs attention.", message, tone: "error" });
         return;
       }
       const message = action === "delete" ? "Leave assignment removed." : "Leave assignment deactivated.";
       setSuccessMessage(message);
       setToast({ title: "Assignment updated.", message, tone: "success" });
+      rememberActionSuccess("/hr-admin/leave-policy-assignments", assignmentId, message, "The confirmed assignment catalog has been refreshed.");
       setDialogOpen(false);
       await onChanged?.();
     } catch {
       const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Action needs attention.", message, tone: "error" });
     } finally {
       setIsSubmitting(false);
     }

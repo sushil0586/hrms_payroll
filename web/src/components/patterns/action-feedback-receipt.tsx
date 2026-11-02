@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionToast, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
 
 type Receipt = { pathname: string; id: string; message: string; title: string; createdAt: number };
 const key = "accerio.action-feedback";
+const eventName = "accerio:action-feedback";
 const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
@@ -14,7 +15,9 @@ export function rememberActionSuccess(path: string, id: string, title: string, m
   try {
     const url = new URL(path, window.location.origin);
     if (url.origin !== window.location.origin || !id) return;
-    sessionStorage.setItem(key, JSON.stringify({ pathname: url.pathname, id, title, message, createdAt: Date.now() } satisfies Receipt));
+    const receipt = { pathname: url.pathname, id, title, message, createdAt: Date.now() } satisfies Receipt;
+    sessionStorage.setItem(key, JSON.stringify(receipt));
+    window.dispatchEvent(new CustomEvent<Receipt>(eventName, { detail: receipt }));
   } catch { /* Restricted browser storage must not prevent an authorized navigation. */ }
 }
 
@@ -38,12 +41,29 @@ function ClientReceipt({ recordIds }: { recordIds: string[] }) {
     } catch { /* Expired/unavailable receipts do not change the authoritative list. */ }
     return null;
   });
+  const [showToast, setShowToast] = useState(Boolean(receipt));
   useEffect(() => {
     try { sessionStorage.removeItem(key); } catch { /* Browser storage can be restricted. */ }
   }, []);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const next = (event as CustomEvent<Receipt>).detail;
+      if (!next || next.pathname !== window.location.pathname) return;
+      setReceipt(next);
+      setShowToast(true);
+      try { sessionStorage.removeItem(key); } catch { /* Browser storage can be restricted. */ }
+    };
+    window.addEventListener(eventName, receive);
+    return () => window.removeEventListener(eventName, receive);
+  }, []);
+  useEffect(() => {
+    if (!showToast) return;
+    const timeout = window.setTimeout(() => setShowToast(false), SUCCESS_TOAST_DURATION_MS);
+    return () => window.clearTimeout(timeout);
+  }, [receipt, showToast]);
   if (!receipt) return null;
   return <div className="notice notice--success">
     <strong>{receipt.title}</strong><span>{receipt.message}</span>
-    <ActionToast title={receipt.title} message={receipt.message} tone="success" onDismiss={() => setReceipt(null)} />
+    {showToast ? <ActionToast title={receipt.title} message={receipt.message} tone="success" onDismiss={() => setShowToast(false)} /> : null}
   </div>;
 }

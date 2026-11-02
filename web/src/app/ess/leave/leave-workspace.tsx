@@ -11,8 +11,8 @@ import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-
 import { apiFieldErrors, mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
 import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
 import { useValidationFocus } from "@/lib/ui/use-validation-focus";
-import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionFeedbackReceipt, rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
+import { ActionToast, ERROR_TOAST_DURATION_MS, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
@@ -499,7 +499,7 @@ function LeaveApplyModal({
       const message = "Review the highlighted leave fields and try again.";
       setFieldErrors(nextErrors);
       setFeedback({ tone: "error", message });
-      setToast({ title: "Submission needs attention.", message, tone: "error" });
+      setToast(null);
       submittingRef.current = false;
       return;
     }
@@ -565,7 +565,7 @@ function LeaveApplyModal({
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? ERROR_TOAST_DURATION_MS : SUCCESS_TOAST_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -664,7 +664,7 @@ function LeaveApplyModal({
               </div>
             ) : null}
             {!leaveTypes.length ? (
-              <div className="notice form-field--full" role="status">
+              <div className="notice notice--warning form-field--full" role="status">
                 <strong>No leave type is available.</strong>
                 <span className="muted">Ask HR to assign a leave policy before submitting a request.</span>
               </div>
@@ -679,7 +679,7 @@ function LeaveApplyModal({
               <span className="muted">After you submit, approval goes to your manager when required.</span>
               <AsyncActionButton
                 className="button button--primary"
-                disabled={submitting || !leaveTypes.length || !requestEstimate.valid || !evidenceReady}
+                disabled={submitting || !leaveTypes.length}
                 pending={submitting}
                 pendingLabel="Submitting leave"
                 type="submit"
@@ -707,13 +707,13 @@ function LeaveApplyModal({
               <span>{selectedLeaveType?.allow_negative_balance ? "This leave type permits negative balance; the assigned policy is checked on submit." : "Final balance check uses the mapped leave and attendance policy."}</span>
             </div>
             {!requestEstimate.valid ? (
-              <div className="notice">
+              <div className="notice notice--warning">
                 <strong>Check dates.</strong>
-                <span className="muted">End date must be the same as or after the start date.</span>
+                <span className="muted">Choose dates in chronological order before submitting.</span>
               </div>
             ) : null}
             {overlappingRequest ? (
-              <div className="notice">
+              <div className="notice notice--warning">
                 <strong>Leave already exists in this range.</strong>
                 <span className="muted">You already have {overlappingRequest.leave_type} from {formatDate(overlappingRequest.start_date)} to {formatDate(overlappingRequest.end_date)}. The server checks day portions and policy before accepting your request.</span>
               </div>
@@ -850,11 +850,11 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
         <>
           {applyOpen ? createPortal(
             <LeaveApplyModal
-              onSubmitted={async () => {
+              onSubmitted={async (requestId) => {
                 const result = await leaveResource.load({ ...appliedQuery, status: "all", page: 1, q: "", leave_type: "", period: "", date_from: "", date_to: "", day: "", requestId: "" }, "replace");
                 if (result.ok) {
                   setApplyOpen(false);
-                  setOperationMessage("Leave request submitted. Review its status in your history.");
+                  rememberActionSuccess("/ess/leave", requestId, "Leave request submitted.", "Review its status in your history.");
                 }
                 return result.ok;
               }}
@@ -873,7 +873,6 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
               onCompleted={async () => {
                 const result = await leaveResource.load({ ...appliedQuery, requestId: "" }, "replace");
                 if (!result.ok) throw new Error("The action was saved, but updated leave data could not be loaded. Do not submit it again; retry the workspace refresh.");
-                setOperationMessage("Leave request updated. History and entitlements now show the confirmed state.");
                 setDismissedRequestId(selectedRequest.id);
                 setClickedRequest(null);
               }}
@@ -971,7 +970,8 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
               navigationMode="scoped" offset={(monthStart.getUTCDay() + 6) % 7} days={calendarDays} onSelect={(event, day) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void leaveResource.load({ ...appliedQuery, day, page: 1, requestId: "" }); }} /> : <div className="notice" role="status">Calendar counts are unavailable. <button className="button button--secondary" type="button" onClick={() => void leaveResource.load(appliedQuery, "none")}>Retry calendar</button></div>}
           </> : null}
             {selectedDay ? <section id="leave-day-details" aria-label="Selected leave day"><h3>{formatDate(selectedDay)}</h3><p>{leaveRequests.total_count} matching request{leaveRequests.total_count === 1 ? "" : "s"}. Review the history below and use pagination for additional requests.</p><a data-navigation-mode="local" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void leaveResource.load({ ...appliedQuery, day: "", page: 1, requestId: "" }); }} className="button button--secondary" href={buildHref(queryParams, { day: undefined, page: "1" })}>Clear selected day</a></section> : null}
-          <div className="employee-directory-table-wrap" role="region" aria-label="Scrollable leave history" tabIndex={0}>
+          <div className="employee-directory-table-wrap workspace-table-loading-owner" role="region" aria-label="Scrollable leave history" aria-busy={leaveResource.isPending} tabIndex={0}>
+            {leaveResource.isPending ? <div className="workspace-table-loading" role="status"><span className="button-spinner" aria-hidden="true" />Loading leave requests</div> : null}
             <table className="workspace-table attendance-directory-table leave-request-table" aria-label="Leave request history">
               <thead>
                 <tr>
@@ -1014,7 +1014,8 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
                           <button
                             aria-label={`View ${request.leave_type} from ${request.start_date}`}
                             className="button button--secondary"
-                            onClick={() => {
+                            onClick={(triggerEvent) => {
+                              focusActionTrigger(triggerEvent);
                               setDismissedRequestId(null);
                               setClickedRequest(request);
                             }}
@@ -1040,7 +1041,7 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
             </table>
           </div>
         </div>
-        <PaginationBar
+        {leaveRequests.total_count ? <PaginationBar
           navigationMode="scoped"
           pending={leaveResource.isPending}
           firstHref={buildHref(queryParams, { page: "1" })}
@@ -1056,7 +1057,7 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
           pageSize={leaveRequests.page_size}
           previousHref={buildHref(queryParams, { page: String(Math.max(1, page - 1)) })}
           totalCount={leaveRequests.total_count}
-        />
+        /> : null}
       </WorkspaceStandardPanel>
 
       {modal}

@@ -27,6 +27,8 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
   const leaveTypeCode = normalizeParam(currentParams.leave_type_code) ?? "";
   const fromDate = normalizeParam(currentParams.from_date) ?? "";
   const toDate = normalizeParam(currentParams.to_date) ?? "";
+  const requestedSort = normalizeParam(currentParams.sort) ?? "applied-desc";
+  const sort = ["applied-desc", "applied-asc", "employee", "start-desc", "status"].includes(requestedSort) ? requestedSort : "applied-desc";
 
   const invalidDates = attendanceDateError(fromDate, toDate);
   if (invalidDates) return <main className="shell accerio-page"><PageIntro appearance="accerio" eyebrow="Filter validation" title="Review leave filters" description={invalidDates} actions={<a data-navigation-mode="document" className="button button--secondary" href="/hr-admin/leave-requests">Clear filters</a>} /><p role="alert" className="notice notice--error">{invalidDates}</p></main>;
@@ -68,6 +70,7 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
           leave_type_code: leaveTypeCode,
           from_date: fromDate,
           to_date: toDate,
+          sort,
           page,
           page_size: pageSize,
         }} leaveTypes={optionsResult.data.leave_types} employees={optionsResult.data.employees} canApproveLeaveRequests={canApproveLeaveRequests} />

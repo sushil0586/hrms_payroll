@@ -42,6 +42,7 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
     status: normalizeParam(currentParams.status) ?? "all",
     scope: normalizeParam(currentParams.scope) ?? "all",
     risk: normalizeParam(currentParams.risk) ?? "all",
+    sort: ["policy-asc", "policy-desc", "priority-desc", "risk"].includes(normalizeParam(currentParams.sort) ?? "") ? normalizeParam(currentParams.sort)! : "policy-asc",
   };
   const createModal = normalizeParam(currentParams.leaveAssignmentModal) === "create";
   const editLeaveAssignmentId = normalizeParam(currentParams.editLeaveAssignment);

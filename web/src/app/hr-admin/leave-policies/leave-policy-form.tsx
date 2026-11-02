@@ -10,7 +10,7 @@ import { WorkspaceFormControls } from "@/components/patterns/workspace-form-cont
 import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
 import { useValidationFocus } from "@/lib/ui/use-validation-focus";
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionToast, ERROR_TOAST_DURATION_MS, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
 import { FormSection } from "@/components/patterns/form-section";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PlatformGovernanceFormBanner } from "@/components/patterns/platform-governance-form-banner";
@@ -32,6 +32,7 @@ type Props = {
   itemId?: string;
   item?: HrAdminLeavePolicy;
   returnPath?: string;
+  onCancel?: () => void;
   onSaved?: () => Promise<boolean> | boolean;
 };
 
@@ -365,7 +366,7 @@ function normalizedLabel(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-export function LeavePolicyForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-policies", onSaved }: Props) {
+export function LeavePolicyForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-policies", onCancel, onSaved }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -557,7 +558,6 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
     if (mode === "edit" && item && item.can_edit_directly === false) {
       const message = "This record cannot be edited directly in its current governance state.";
       setError(message);
-      setToast({ title: "Save needs attention.", message, tone: "error" });
       return;
     }
     isSubmittingRef.current = true;
@@ -589,7 +589,6 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
       setFieldErrors(nextErrors);
       const message = "Review the highlighted leave policy fields and try again.";
       setError(message);
-      setToast({ title: "Review the highlighted fields.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -604,7 +603,6 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
     } catch {
       const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Save not confirmed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -614,7 +612,6 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
       setFieldErrors(apiFieldErrors(payload, Object.keys(nextErrors) as LeavePolicyField[], {"config_snapshot.approval.auto_approve_after_hours":"auto_approve_after_hours"}));
       const message = response.ok ? "The server returned an incomplete confirmation. Check the latest list before retrying; your entries are still here." : getErrorMessage(payload, response.status);
       setError(message);
-      setToast({ title: response.ok || response.status >= 500 ? "Save not confirmed." : "Unable to save.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -695,7 +692,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? ERROR_TOAST_DURATION_MS : SUCCESS_TOAST_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -1719,7 +1716,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item, ret
           <span className="muted">Policy changes save back into the leave policy catalog and stay ready for scoped assignments.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create leave policy" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={() => onCancel ? onCancel() : router.push(returnPath)} type="button">Cancel</button>
           </div>
         </div>
       </section>

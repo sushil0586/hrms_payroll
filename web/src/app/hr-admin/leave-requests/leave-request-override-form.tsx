@@ -3,9 +3,8 @@
 import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
 import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
 
-import { useSearchParams } from "next/navigation";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { leaveDecisionMessage } from "@/lib/ui/leave-decision-message";
@@ -14,6 +13,7 @@ import type { LeaveRequestItem } from "@/lib/types";
 type Props = {
   closeHref: string;
   item: LeaveRequestItem;
+  onClose?: () => void;
   onDecided?: () => Promise<void> | void;
 };
 
@@ -127,25 +127,13 @@ export function LeaveRequestOverrideForm({ closeHref, item, onDecided }: Props) 
 }
 
 /** URL-owned presentation; opening/authorization still comes from the server page. */
-export function LeaveRequestReviewDialog({ closeHref, item, onDecided }: Props) {
-  const params = useSearchParams();
-  const open = params.get("overrideLeave") === item.id;
-  const wasOpen = useRef(open);
-  useEffect(() => {
-    if (!open && wasOpen.current) {
-      document.querySelector<HTMLElement>(`[data-leave-review-opener="${item.id}"]`)?.focus({ preventScroll: true });
-    }
-    wasOpen.current = open;
-  }, [open, item.id]);
-  if (!open) return null;
+export function LeaveRequestReviewDialog({ closeHref, item, onClose, onDecided }: Props) {
   return <HrAdminActionModal
     className="accerio-dialog"
     closeHref={closeHref}
     onClose={() => {
-      // Closing changes presentation only. Native history updates Next search
-      // params immediately, avoiding a server navigation that can retain a
-      // stale modal while the filtered RSC transition commits in WebKit.
       window.history.replaceState(null, "", closeHref);
+      onClose?.();
     }}
     explicitTabOrder
     description="Approve or reject the current pending leave step when HR must act for an unavailable approver."

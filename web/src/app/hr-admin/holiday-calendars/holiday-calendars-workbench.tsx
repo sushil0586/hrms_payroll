@@ -4,7 +4,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -55,6 +55,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [year, setYear] = useWorkspaceQueryFilter("year", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const createModalOpen = modalMode !== undefined ? modalMode === "create" : searchParams.get("calendarModal") === "create";
   const controlledEditItem = editCalendarId ? items.find((item) => item.id === editCalendarId) ?? null : null;
   const modalEditItem = canManagePolicies && (modalMode === "edit" || (modalMode === undefined && editItem)) ? controlledEditItem ?? editItem ?? null : null;
@@ -141,7 +142,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
             setStatus("all");
             setYear("all");
           }} type="button">Clear filters</button>
-          {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create calendar</button> : <Link className="button button--primary" href={queueHref({ calendarModal: "create" })}>Create calendar</Link> : null}
+          {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={(event) => { focusActionTrigger(event); onOpenCreate(); }} type="button">Create calendar</button> : <Link className="button button--primary" href={queueHref({ calendarModal: "create" })}>Create calendar</Link> : null}
         </div>
       </section>
 
@@ -171,6 +172,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
                       <td><WorkspaceStatusBadge tone={statusTone(item)}>{item.is_active ? "Active" : "Inactive"}</WorkspaceStatusBadge><span><PlatformGovernanceCard item={item} /></span></td>
                       <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
                         triggerEvent.stopPropagation();
+                        detailTriggerRef.current = triggerEvent.currentTarget;
                         setSelectedItemId(item.id);
                        }} type="button">Inspect</button></td>
                     </tr>
@@ -193,7 +195,10 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
                 <h2 className="section-heading-soft">Calendar detail</h2>
                 <p className="section-copy section-copy-soft">Focused scope and holiday-row context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={() => {
+                setSelectedItemId("");
+                window.requestAnimationFrame(() => detailTriggerRef.current?.focus({ preventScroll: true }));
+              }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">
@@ -209,7 +214,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit calendar</button> : <Link className="button button--primary" href={queueHref({ editCalendar: selectedItem.id })}>Edit calendar</Link>
+                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={(event) => { focusActionTrigger(event); onOpenEdit(selectedItem.id); }} type="button">Edit calendar</button> : <Link className="button button--primary" href={queueHref({ editCalendar: selectedItem.id })}>Edit calendar</Link>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit calendar</button>
               )}
@@ -243,6 +248,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
 
       {canManagePolicies && createModalOpen ? (
         <HrAdminActionModal
+          busy={pending}
           className="attendance-policy-modal"
           closeHref={queueHref()}
           eyebrow="Holiday calendar"
@@ -250,6 +256,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
           title="Create holiday calendar"
           description="Define the calendar year, scope, and holiday rows."
           tabs={["Scope", "Holiday rows", "Review"]}
+          onClose={onCloseModal}
         >
           <HolidayCalendarForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyHolidayCalendarValue()} mode="create" options={options} onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
@@ -257,6 +264,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
 
       {modalEditItem ? (
         <HrAdminActionModal
+          busy={pending}
           className="attendance-policy-modal"
           closeHref={queueHref()}
           eyebrow="Holiday calendar"
@@ -264,6 +272,7 @@ export function HolidayCalendarsWorkbench({ canManagePolicies, editItem, items, 
           title={`Edit ${modalEditItem.name}`}
           description="Update scope, year, and holiday definitions."
           tabs={["Scope", "Holiday rows", "Review"]}
+          onClose={onCloseModal}
         >
           <HolidayCalendarForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={holidayCalendarToFormValue(modalEditItem)} item={modalEditItem} itemId={modalEditItem.id} mode="edit" options={options} onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>

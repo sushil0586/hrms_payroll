@@ -8,7 +8,7 @@ import { WorkspaceFormControls } from "@/components/patterns/workspace-form-cont
 import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
 import { useValidationFocus } from "@/lib/ui/use-validation-focus";
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionToast, ERROR_TOAST_DURATION_MS, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { FormSection } from "@/components/patterns/form-section";
@@ -27,6 +27,7 @@ type Props = {
   itemId?: string;
   initialEmployeeLabel?: string | null;
   returnPath?: string;
+  onCancel?: () => void;
   onSaved?: () => Promise<boolean> | boolean;
 };
 
@@ -57,7 +58,7 @@ function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string
   return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
 }
 
-export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel, returnPath = "/hr-admin/leave-policy-assignments", onSaved }: Props) {
+export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel, returnPath = "/hr-admin/leave-policy-assignments", onCancel, onSaved }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -176,7 +177,6 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
     }
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
-      setToast({ title: "Save needs attention.", message: conflictCheck.summary, tone: "error" });
       return;
     }
     cancelConflictCheck.current?.();
@@ -192,7 +192,6 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
       setFieldErrors(nextErrors);
       const message = "Review the highlighted leave policy assignment fields and try again.";
       setError(message);
-      setToast({ title: "Review the highlighted fields.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -207,7 +206,6 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
     } catch {
       const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Save not confirmed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -217,7 +215,6 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
       setFieldErrors(apiFieldErrors(payload, Object.keys(nextErrors) as LeavePolicyAssignmentField[]));
       const message = response.ok ? "The server returned an incomplete confirmation. Check the latest list before retrying; your entries are still here." : getErrorMessage(payload, response.status);
       setError(message);
-      setToast({ title: response.ok || response.status >= 500 ? "Save not confirmed." : "Unable to save.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -235,7 +232,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
+    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? ERROR_TOAST_DURATION_MS : SUCCESS_TOAST_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -338,7 +335,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
           <span className="muted">Assignment changes go back into the leave policy rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">
             <AsyncActionButton className="button button--primary" pending={isSubmitting} pendingLabel="Saving leave policy assignment" type="submit">{mode === "create" ? "Create assignment" : "Save changes"}</AsyncActionButton>
-            <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={() => onCancel ? onCancel() : router.push(returnPath)} type="button">Cancel</button>
           </div>
         </div>
       </section>

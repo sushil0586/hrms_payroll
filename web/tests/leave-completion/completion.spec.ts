@@ -11,7 +11,7 @@ let errors:string[];
 test.beforeAll(async({browser},info)=>{
  mkdirSync(evidence,{recursive:true});writeFileSync(path.join(evidence,info.project.name+'-browser.json'),JSON.stringify({engine:browser.browserType().name(),version:browser.version(),platform:process.platform,arch:process.arch,node:process.version},null,2));
  fixture=await provisionIsolatedQaWorkspace(info);
- const code=`import runpy,json; module=runpy.run_path(${JSON.stringify(path.join(repo,'docs/qa/evidence/leave-completion-phase1/browser-fixture.py'))}); print(json.dumps(module['prepare'](${JSON.stringify(fixture.manifestPath)})))`;
+ const code=`import json; from tests.fixtures.leave_deep import prepare_completion; print(json.dumps(prepare_completion(${JSON.stringify(fixture.manifestPath)})))`;
  data=JSON.parse(execFileSync(path.join(repo,'.venv/bin/python'),['backend/manage.py','shell','-c',code],{cwd:repo,env:process.env,encoding:'utf8'}).trim().split('\n').at(-1)!);
 });
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(fixture);});
@@ -105,7 +105,7 @@ test('balance import resolves a filtered-out employee exactly, blocks fuzzy code
 });
 
 test('assignment import detects an off-page existing pair and creates only the exact target among hundreds of similar codes',async({page})=>{
- await login(page,'hr_admin');await page.goto('/hr-admin/leave-policy-assignments?q=no-visible-assignments');await page.getByText('Assignment governance tools',{exact:true}).click();
+ await login(page,'hr_admin');await page.goto('/hr-admin/leave-policy-assignments?q=no-visible-assignments');await page.getByText('Conflict resolution and import tools',{exact:true}).click();
  const box=page.getByLabel('Leave policy assignment CSV data');const table=page.getByRole('table',{name:'Leave assignment import results'});
  const csv=(code:string)=>`employee_code,leave_policy_name,effective_from,effective_to,priority,is_active\n${code},${data.policy_name},${data.today},,999,true`;
  let writes=0;page.on('request',r=>{if(r.method()==='POST'&&/\/api\/hr-admin\/leave-policy-assignments\/bulk-import\/?$/.test(r.url()))writes++;});
@@ -148,7 +148,7 @@ test('a superseded history navigation cannot replace the latest committed query'
 
 
 test('CSV validation does not truncate priorities or round units, and dated assignments follow backend policy',async({page})=>{
- await login(page,'hr_admin');await page.goto('/hr-admin/leave-policy-assignments');await page.getByText('Assignment governance tools',{exact:true}).click();
+ await login(page,'hr_admin');await page.goto('/hr-admin/leave-policy-assignments');await page.getByText('Conflict resolution and import tools',{exact:true}).click();
  const box=page.getByLabel('Leave policy assignment CSV data');const table=page.getByRole('table',{name:'Leave assignment import results'});let businessWrites=0;
  page.on('request',r=>{if(r.method()==='POST'&&(/\/api\/hr-admin\/leave-policy-assignments\/bulk-import$/.test(r.url())||r.url().endsWith('/api/hr-admin/leave-balances/actions')))businessWrites++;});
  const csv=(priority:string,active='true',from=data.today)=>`employee_code,leave_policy_name,effective_from,effective_to,priority,is_active\n${data.dated_code},${data.policy_name},${from},,${priority},${active}`;

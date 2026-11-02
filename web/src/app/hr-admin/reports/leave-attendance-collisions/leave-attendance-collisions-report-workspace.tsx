@@ -1,5 +1,7 @@
 "use client";
 
+import { formatWorkspaceDate } from "@/lib/ui/date-time-format";
+
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
@@ -166,9 +168,18 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery(""); setLeaveStatus("All"); setSeverity("All"); setBlocking("All");
+    setLeaveType("All"); setAttendanceStatus("All"); setSortBy("severity"); setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Leave-attendance collision report workspace">
       <div className="report-catalog-workspace leave-attendance-collisions-report" data-testid="leave-attendance-collisions-report">
+        <div className="report-command-panel">
+          <div><span className="workspace-card__eyebrow">Leave and attendance</span><h2>Collision evidence review</h2><p className="section-copy section-copy-soft">Reconcile approved leave against attendance records before payroll-impacting exceptions progress.</p></div>
+          <div className="report-command-panel__actions"><AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton><AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton><button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button></div>
+        </div>
         <div className="attendance-summary-strip report-summary-strip" role="group" aria-label="Leave attendance collision summary">
           <span><strong>{filteredRows.length}</strong> collisions</span>
           <span><strong>{rows.length}</strong> total rows</span>
@@ -177,7 +188,9 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
           <span><strong>{unique(filteredRows.map((row) => row.employee_code)).length}</strong> employees</span>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" role="group" aria-label="Leave attendance collision filters">
+        <div className="report-filter-panel" aria-label="Leave attendance collision filters">
+          <div className="report-filter-panel__header"><div><strong>Filter collision evidence</strong><span>Narrow by leave state, severity, and payroll-blocking impact.</span></div><button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button></div>
+          <div className="report-filter-grid report-filter-grid--attendance">
           <label><span>Search collisions</span><input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, leave, status, shift" /></label>
           <label><span>Leave status</span><select aria-label="Leave status" className="input-control" value={leaveStatus} onChange={(event) => updateFilter(() => setLeaveStatus(event.target.value))}>{leaveStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
           <label><span>Severity</span><select aria-label="Severity" className="input-control" value={severity} onChange={(event) => updateFilter(() => setSeverity(event.target.value))}>{severities.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
@@ -185,13 +198,12 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
           <label><span>Leave type</span><select aria-label="Leave type" className="input-control" value={leaveType} onChange={(event) => updateFilter(() => setLeaveType(event.target.value))}>{leaveTypes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label><span>Attendance status</span><select aria-label="Attendance status" className="input-control" value={attendanceStatus} onChange={(event) => updateFilter(() => setAttendanceStatus(event.target.value))}>{attendanceStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
           <label><span>Sort</span><select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}><option value="severity">Severity first</option><option value="date">Newest collision date</option><option value="employee">Employee</option><option value="leave_type">Leave type</option><option value="attendance_status">Attendance status</option></select></label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => row.payroll_blocking).length}</strong> payroll blocking</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
-          <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
         <WorkspaceTableScrollRegion label="Leave attendance collisions, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
@@ -201,8 +213,8 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
               {visibleRows.map((row) => (
                 <tr key={`${row.leave_request_id}-${row.attendance_record_id}-${row.collision_date}`}>
                   <td><strong>{row.employee_name}</strong><span>{row.employee_code}</span><span>{row.department || "No department"}</span></td>
-                  <td><div className="payroll-register-stack"><strong>{row.leave_type}</strong><span>{row.leave_start_date} to {row.leave_end_date}</span><span>{row.approved_units} approved units</span><span className={statusClass(row.leave_status)}>{titleCase(row.leave_status)}</span></div></td>
-                  <td><div className="payroll-register-stack"><strong>{row.collision_date}</strong><span>{titleCase(row.attendance_status)}</span><span>{row.shift || "No shift"}</span><span>{row.check_in_at || "No in"} / {row.check_out_at || "No out"}</span></div></td>
+                  <td><div className="payroll-register-stack"><strong>{row.leave_type}</strong><span>{formatWorkspaceDate(row.leave_start_date)} to {formatWorkspaceDate(row.leave_end_date)}</span><span>{row.approved_units} approved units</span><span className={statusClass(row.leave_status)}>{titleCase(row.leave_status)}</span></div></td>
+                  <td><div className="payroll-register-stack"><strong>{formatWorkspaceDate(row.collision_date)}</strong><span>{titleCase(row.attendance_status)}</span><span>{row.shift || "No shift"}</span><span>{row.check_in_at || "No in"} / {row.check_out_at || "No out"}</span></div></td>
                   <td><div className="payroll-register-stack"><span className={statusClass(row.severity)}>{titleCase(row.severity)}</span><span className={statusClass(String(row.payroll_blocking))}>{row.payroll_blocking ? "Payroll blocking" : "Not blocking"}</span><span>{row.leave_units} leave units</span></div></td>
                   <td><div className="payroll-register-stack"><code>{row.workflow_reference}</code><code>{row.attendance_record_id}</code><span>{row.message}</span></div></td>
                   <td><div className="report-row-actions"><Link className="button button--secondary" href={`/hr-admin/leave-requests?selectedLeave=${row.leave_request_id}`}>Review</Link><Link className="button button--ghost" href={`/hr-admin/attendance-records?editRecord=${row.attendance_record_id}`}>Attendance</Link></div></td>

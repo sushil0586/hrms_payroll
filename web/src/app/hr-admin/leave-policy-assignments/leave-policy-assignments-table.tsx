@@ -1,8 +1,9 @@
 "use client";
 
 import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -15,16 +16,19 @@ type Props = {
   assignments: HrAdminScopedAssignment[];
   onChanged?: () => Promise<void>;
   onOpenEdit?: (id: string) => void;
+  pending?: boolean;
 };
 
-export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, onChanged, onOpenEdit }: Props) {
-  const [selectedId, setSelectedId] = useState(assignments[0]?.id ?? "");
+export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, onChanged, onOpenEdit, pending }: Props) {
+  const [selectedId, setSelectedId] = useState("");
+  const inspectTriggerRef = useRef<HTMLButtonElement | null>(null);
   const selected = assignments.find((item) => item.id === selectedId) ?? null;
 
   return (
-    <div className={`attendance-review-workbench${selected ? " attendance-review-workbench--with-detail" : ""}`}>
+    <div className="attendance-review-workbench">
       <ActionFeedbackReceipt recordIds={assignments.map(item => item.id)} />
-      <section className="panel-card-soft attendance-directory-panel">
+      <section aria-busy={pending || undefined} className="panel-card-soft attendance-directory-panel workspace-table-loading-owner">
+        {pending ? <div className="workspace-table-loading" role="status"><span aria-hidden="true" className="async-action-button__spinner" />Updating leave assignments</div> : null}
         <WorkspaceTableScrollRegion className="attendance-directory-table-wrap workspace-table-region" label="Leave assignments table scroll">
           <table aria-label="Leave assignments" className="accerio-data-table workspace-table attendance-directory-table">
           <thead>
@@ -41,7 +45,7 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, on
             {assignments.map((item) => {
               const isSelected = selected?.id === item.id;
               return (
-              <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedId(item.id)}>
+              <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id}>
                 <td>
                   <div className="workspace-table__primary-cell">
                     <strong>{item.policy_name}</strong>
@@ -60,7 +64,7 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, on
                     <WorkspaceStatusBadge tone="success">Clear</WorkspaceStatusBadge>
                   )}
                 </td>
-                <td><button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedId(item.id); }} type="button">Inspect</button></td>
+                <td><button aria-label="Inspect" title={`Inspect ${item.policy_name}`} ref={(node) => { if (isSelected && node) inspectTriggerRef.current = node; }} className="button button--secondary button--compact button--icon" onClick={(event) => { focusActionTrigger(event); inspectTriggerRef.current = event.currentTarget; event.stopPropagation(); setSelectedId(item.id); }} type="button">...</button></td>
               </tr>
               );
             })}
@@ -73,13 +77,14 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, on
       </section>
 
       {selected ? (
-        <aside id="leave-assignment-detail" tabIndex={-1} className="panel-card-soft attendance-detail-drawer" aria-label="Leave assignment detail">
+        <HrAdminActionModal closeHref="/hr-admin/leave-policy-assignments" description="Review assignment scope, effective coverage, priority, and overlap risk without leaving the catalog." eyebrow="Leave assignment inspection" labelledBy="leave-assignment-detail-title" onClose={() => { setSelectedId(""); window.requestAnimationFrame(() => inspectTriggerRef.current?.focus({ preventScroll: true })); }} title="Leave assignment detail">
+        <aside id="leave-assignment-detail" tabIndex={-1} aria-label="Leave assignment detail">
           <div className="queue-toolbar__header">
             <div>
               <h2 className="section-heading-soft">Leave assignment detail</h2>
               <p className="section-copy section-copy-soft">Focused scope, priority, and conflict state.</p>
             </div>
-            <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedId(""); }} type="button">Close</button>
+            <button className="button button--secondary button--compact" onClick={() => { setSelectedId(""); window.requestAnimationFrame(() => inspectTriggerRef.current?.focus({ preventScroll: true })); }} type="button">Close</button>
           </div>
           <article className="record-card record-card--compact">
             <div className="record-card__header">
@@ -133,6 +138,7 @@ export function LeavePolicyAssignmentsTable({ assignments, canManagePolicies, on
           ) : null}
           {canManagePolicies ? <LeavePolicyAssignmentActions onChanged={onChanged} key={selected.id} assignmentId={selected.id} isActive={selected.is_active} policyName={selected.policy_name} /> : null}
         </aside>
+        </HrAdminActionModal>
       ) : null}
     </div>
   );

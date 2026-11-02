@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { useCallback, useSyncExternalStore, type MouseEvent } from "react";
 
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { ManagerApprovalReviewAction } from "@/app/mss/approvals/manager-approval-review-action";
 import type {
   AttendanceRegularizationItem,
@@ -672,8 +671,8 @@ export function ApprovalsWorkspace({ initialData, initialQuery, permissions }: {
   }[queue];
 
   return (
-    <main aria-busy={resource.isPending} className="shell shell--workspace shell--mss-approvals accerio-page" data-hydrated={hydrated} onClickCapture={navigate}>
-      <PageIntro appearance="accerio" eyebrow="Manager workspace" title="Manager approvals"
+    <main aria-busy={resource.isPending} className="shell shell--workspace shell--mss-approvals mss-experience-shell accerio-page" data-hydrated={hydrated} onClickCapture={navigate}>
+      <WorkspaceStandardHeader eyebrow="Manager self service" title="Manager approvals"
         description="Review requests, confirm context and record a decision." />
 
       <section className="workspace-section" aria-label="Manager approval metrics">

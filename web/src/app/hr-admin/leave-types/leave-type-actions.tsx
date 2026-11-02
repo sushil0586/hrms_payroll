@@ -6,7 +6,8 @@ import { apiErrorMessage, mutationErrorMessage, networkMutationMessage } from "@
 
 import { useEffect, useState } from "react";
 
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionToast, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import type { HrAdminLeaveTypeImpact } from "@/lib/types";
@@ -43,14 +44,12 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName, onChang
       if (!response.ok) {
         const message = response.status >= 500 ? "Removal impact is unavailable. No removal was submitted. Close this dialog and retry the impact check." : apiErrorMessage(payload, "Unable to load removal impact. Close this dialog and try again.");
         setError(message);
-        setToast({ title: "Action needs attention.", message, tone: "error" });
         return;
       }
       setImpact(payload as HrAdminLeaveTypeImpact);
     } catch {
       const message = "Unable to load the removal impact. Check your connection and reopen this dialog to retry.";
       setError(message);
-      setToast({ title: "Action needs attention.", message, tone: "error" });
     } finally {
       setIsLoadingImpact(false);
     }
@@ -65,7 +64,7 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName, onChang
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
+    const timeout = window.setTimeout(() => setToast(null), SUCCESS_TOAST_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -81,19 +80,18 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName, onChang
         const message = errorMessage(payload, response.status);
         setImpact((payload as HrAdminLeaveTypeImpact) ?? impact);
         setError(message);
-        setToast({ title: "Action needs attention.", message, tone: "error" });
         return;
       }
       const message = action === "delete" ? "Leave type deleted." : "Leave type deactivated.";
       setSuccessMessage(message);
       setToast({ title: "Leave type updated.", message, tone: "success" });
+      rememberActionSuccess("/hr-admin/leave-types", leaveTypeId, "Leave type updated.", message);
       setDialogOpen(false);
       setImpact(null);
       await onChanged?.();
     } catch {
       const message = networkMutationMessage;
       setError(message);
-      setToast({ title: "Action needs attention.", message, tone: "error" });
     } finally {
       setIsSubmitting(false);
     }

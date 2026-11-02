@@ -9,6 +9,9 @@ type ActionToastProps = {
   onDismiss?: () => void;
 };
 
+export const SUCCESS_TOAST_DURATION_MS = 5_000;
+export const ERROR_TOAST_DURATION_MS = 8_000;
+
 export function ActionToast({ message, title, tone, onDismiss }: ActionToastProps) {
   if (!message) return null;
   if (typeof document === "undefined") return null;

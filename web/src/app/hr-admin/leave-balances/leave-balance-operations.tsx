@@ -5,6 +5,7 @@ import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error
 import { unambiguousNameIndex } from "@/lib/ui/unambiguous-name-index";
 import { useLatestEmployeeCodeResolution } from "@/lib/ui/use-latest-employee-code-resolution";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
+import { ActionToast, ERROR_TOAST_DURATION_MS, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
@@ -25,6 +26,7 @@ import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-tabl
 import { WorkspaceFormControls } from "@/components/patterns/workspace-form-controls";
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
 import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
+import { hasFieldErrors, requireText, requireValue, type FieldErrors } from "@/lib/ui/validation";
 
 type Props = {
   balancesPage: HrAdminLeaveBalanceListResponse;
@@ -45,6 +47,7 @@ type Props = {
 };
 
 type ImportStatus = "ready" | "blocked" | "created" | "failed";
+type BalanceActionField = "employee_id" | "leave_policy_id" | "units" | "effective_date" | "reason";
 
 type LeaveBalanceImportRow = {
   index: number;
@@ -512,14 +515,18 @@ export function LeaveBalanceOperations({
   const [formValue, setFormValue] = useState<HrAdminLeaveBalanceActionInput>(defaultActionValue);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<BalanceActionField>>({});
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [feedbackContext, setFeedbackContext] = useState<"action" | "review" | "import">("action");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const [reviewReasonById, setReviewReasonById] = useState<Record<string, string>>({});
   const [reviewingTransactionId, setReviewingTransactionId] = useState<string | null>(null);
   const reviewingTransactionRef = useRef<string | null>(null);
-  const [selectedBalanceId, setSelectedBalanceId] = useState(initialFilters?.selectedBalanceId || balances[0]?.id || "");
-  const [selectedTransactionId, setSelectedTransactionId] = useState(initialFilters?.selectedTransactionId || transactions[0]?.id || "");
+  const [selectedBalanceId, setSelectedBalanceId] = useState(initialFilters?.selectedBalanceId || "");
+  const [selectedTransactionId, setSelectedTransactionId] = useState(initialFilters?.selectedTransactionId || "");
+  const balanceInspectTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const transactionInspectTriggerRef = useRef<HTMLButtonElement | null>(null);
   const pageSize = filters.pageSize ?? balancesPage.page_size;
   const safeBalancePage = Math.min(balancesPage.page, balancesPage.total_pages ?? Math.max(1, Math.ceil(balancesPage.total_count / balancesPage.page_size)));
   const safeTransactionPage = Math.min(transactionsPage.page, transactionsPage.total_pages ?? Math.max(1, Math.ceil(transactionsPage.total_count / transactionsPage.page_size)));
@@ -530,6 +537,12 @@ export function LeaveBalanceOperations({
   })])).values());
   const selectedBalance = balances.find((item) => item.id === selectedBalanceId) ?? null;
   const selectedTransaction = transactions.find((item) => item.id === selectedTransactionId) ?? null;
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), toast.tone === "success" ? SUCCESS_TOAST_DURATION_MS : ERROR_TOAST_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   async function refreshLedger(nextFilters = filters, requestedBalancePage = safeBalancePage, requestedTransactionPage = safeTransactionPage, commitHistory = false) {
     const sourceUrl = window.location.href;
@@ -543,7 +556,7 @@ export function LeaveBalanceOperations({
     if (nextFilters.query) filters.set("q", nextFilters.query);
     if (nextFilters.employeeId) filters.set("employee_id", nextFilters.employeeId);
     if (nextFilters.policyId) filters.set("leave_policy_id", nextFilters.policyId);
-    filters.set("page_size", String(pageSize));
+    filters.set("page_size", String(nextFilters.pageSize));
     async function readPage<T extends { total_count: number; total_pages?: number; page_size: number }>(path: string, page: number, status?: string): Promise<T> {
       const query = new URLSearchParams(filters);
       query.set("page", String(page));
@@ -582,6 +595,30 @@ export function LeaveBalanceOperations({
     }
   }
 
+  useEffect(() => {
+    const restoreHistoryState = () => {
+      const query = new URLSearchParams(window.location.search);
+      const pageSize = Number(query.get("page_size")) || 12;
+      const balancePage = Number(query.get("balance_page")) || 1;
+      const transactionPage = Number(query.get("transaction_page")) || 1;
+      void refreshLedger({
+        query: query.get("q") ?? "",
+        employeeId: query.get("employee_id") ?? "",
+        policyId: query.get("leave_policy_id") ?? "",
+        transactionStatus: query.get("transaction_status") ?? "",
+        pageSize,
+        balancePage,
+        transactionPage,
+        selectedBalanceId: query.get("selectedBalance") ?? "",
+        selectedTransactionId: query.get("selectedTransaction") ?? "",
+      }, balancePage, transactionPage, false);
+    };
+    window.addEventListener("popstate", restoreHistoryState);
+    return () => window.removeEventListener("popstate", restoreHistoryState);
+    // The listener must use the current server-page snapshots after navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverBalancesPage, serverTransactionsPage]);
+
   function pageHref(updates: Record<string, string | undefined>) {
     return buildLeaveBalanceHref({
       q: filters.query || undefined,
@@ -597,6 +634,7 @@ export function LeaveBalanceOperations({
 
   function update<Key extends keyof HrAdminLeaveBalanceActionInput>(key: Key, value: HrAdminLeaveBalanceActionInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
+    if (key in fieldErrors) setFieldErrors((current) => ({ ...current, [key]: undefined }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -607,6 +645,22 @@ export function LeaveBalanceOperations({
     }
     setError("");
     setSuccessMessage("");
+    const units = Number(formValue.units);
+    const nextFieldErrors: FieldErrors<BalanceActionField> = {
+      employee_id: requireValue(formValue.employee_id, "Select the employee whose balance will change."),
+      leave_policy_id: requireValue(formValue.leave_policy_id, "Select the leave policy to adjust."),
+      units: !formValue.units.trim() || !Number.isFinite(units) || units <= 0 || !/^\d+(?:\.\d{1,2})?$/.test(formValue.units.trim())
+        ? "Enter units greater than zero with no more than two decimal places."
+        : undefined,
+      effective_date: requireValue(formValue.effective_date, "Select the effective date."),
+      reason: requireText(formValue.reason, "Enter a reason for this balance action."),
+    };
+    setFieldErrors(nextFieldErrors);
+    if (hasFieldErrors(nextFieldErrors)) {
+      setError("Review the highlighted balance action fields.");
+      window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-label="Balance action"] [aria-invalid="true"]')?.focus());
+      return;
+    }
     if (!canManageBalances) {
       setError("You need leave balance management permission to apply balance actions.");
       return;
@@ -621,21 +675,27 @@ export function LeaveBalanceOperations({
         body: JSON.stringify(formValue),
       });
     } catch {
-      setError("Unable to confirm the outcome. Check the transaction ledger before retrying to avoid recording the action twice.");
+      const message = "Unable to confirm the outcome. Check the transaction ledger before retrying to avoid recording the action twice.";
+      setError(message);
+      setToast({ title: "Balance action not confirmed", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload, response.status));
+      const message = getErrorMessage(payload, response.status);
+      setError(message);
+      setToast({ title: "Balance action rejected", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
     const result = payload as HrAdminLeaveBalanceActionResult;
     setFormValue(defaultActionValue);
+    setFieldErrors({});
     setSuccessMessage(result.message);
+    setToast({ title: "Balance updated", message: result.message, tone: "success" });
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     await refreshLedger();
@@ -695,6 +755,7 @@ export function LeaveBalanceOperations({
   const feedback = <>{error ? <div role="alert" className="notice notice--error">{error}</div> : null}{successMessage ? <div role="status" className="notice notice--success">{successMessage}</div> : null}{isRefreshing ? <div role="status" className="notice">Refreshing the ledger…</div> : null}{refreshError ? <div role="alert" className="notice notice--error">{refreshError} <button className="button button--secondary" disabled={isRefreshing} onClick={() => void refreshLedger()} type="button">Retry ledger refresh</button></div> : null}</>;
   return (
     <div data-local-update-hydrated={hydrated ? "true" : "false"}>
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} onDismiss={() => setToast(null)} /> : null}
       {feedbackContext === "review" && !selectedTransaction ? feedback : null}
       <div className="attendance-summary-strip" role="group" aria-label="Leave balance summary">
         <span><strong>{balancesPage.total_count}</strong> matching balances</span>
@@ -725,6 +786,7 @@ export function LeaveBalanceOperations({
         </div>
         <div className={`attendance-review-workbench${selectedBalance ? " attendance-review-workbench--with-detail" : ""}`}>
           <section className="panel-card-soft attendance-directory-panel">
+            <div className="workspace-table-loading-owner">
             <WorkspaceTableScrollRegion label="Balance ledger table scroll" className="attendance-directory-table-wrap workspace-table-region">
               <table aria-label="Balance ledger" className="workspace-table attendance-directory-table accerio-data-table">
                 <thead>
@@ -747,7 +809,7 @@ export function LeaveBalanceOperations({
                         <td><strong>{item.closing_balance}</strong><span>{item.opening_balance} opening</span></td>
                         <td><strong>{item.consumed_amount}</strong><span>{item.accrued_amount} accrued</span></td>
                         <td><strong>{item.reserved_amount}</strong><span>{item.encashed_amount} encashed</span></td>
-                        <td><button className="button button--secondary button--compact" aria-label={`Inspect balance for ${item.employee_name}`} onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedBalanceId(item.id); }} type="button">Inspect</button></td>
+                        <td><button ref={(node) => { if (isSelected && node) balanceInspectTriggerRef.current = node; }} className="button button--secondary button--compact" aria-label={`Inspect balance for ${item.employee_name}`} onClick={(event) => { focusActionTrigger(event); balanceInspectTriggerRef.current = event.currentTarget; event.stopPropagation(); setSelectedBalanceId(item.id); }} type="button">Inspect</button></td>
                       </tr>
                     );
                   })}
@@ -757,7 +819,9 @@ export function LeaveBalanceOperations({
                 </tbody>
               </table>
             </WorkspaceTableScrollRegion>
-            <div className="panel-card-soft attendance-pagination-panel">
+            {isRefreshing ? <div className="workspace-table-loading" role="status"><span className="button-spinner" aria-hidden="true" />Updating balance ledger</div> : null}
+            </div>
+            {balancesPage.total_count > 0 ? <div className="panel-card-soft attendance-pagination-panel">
               <PaginationBar navigationMode="scoped"
                 firstHref={pageHref({ balance_page: "1", transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
                 hasNext={balancesPage.has_next}
@@ -774,7 +838,7 @@ export function LeaveBalanceOperations({
                 {Object.entries({q:initialFilters?.query,employee_id:initialFilters?.employeeId,leave_policy_id:initialFilters?.policyId,transaction_status:initialFilters?.transactionStatus}).map(([name,value])=><input key={name} type="hidden" name={name} value={value ?? ""}/>)}
                 <label className="form-field"><span>Rows</span><select className="input-control" name="page_size" defaultValue={pageSize}>{Array.from(new Set([12,25,50,pageSize])).sort((a,b)=>a-b).map(size=><option key={size} value={size}>{size}</option>)}</select></label><button className="button button--secondary" type="submit">Apply page size</button>
               </WorkspaceFilterForm>
-            </div>
+            </div> : null}
           </section>
           {selectedBalance ? (
             <aside id="balance-detail" tabIndex={-1} className="panel-card-soft attendance-detail-drawer" aria-label="Leave balance detail">
@@ -783,7 +847,7 @@ export function LeaveBalanceOperations({
                   <h2 className="section-heading-soft">Balance detail</h2>
                   <p className="section-copy section-copy-soft">Focused employee-policy ledger context.</p>
                 </div>
-                <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedBalanceId(""); }} type="button">Close</button>
+                <button className="button button--secondary button--compact" onClick={() => { setSelectedBalanceId(""); window.requestAnimationFrame(() => balanceInspectTriggerRef.current?.focus({ preventScroll: true })); }} type="button">Close</button>
               </div>
               <article className="record-card record-card--compact">
                 <div className="record-card__header">
@@ -832,6 +896,7 @@ export function LeaveBalanceOperations({
         </div>
         <div className={`attendance-review-workbench${selectedTransaction ? " attendance-review-workbench--with-detail" : ""}`}>
           <section className="panel-card-soft attendance-directory-panel">
+            <div className="workspace-table-loading-owner">
             <WorkspaceTableScrollRegion label="Balance transactions table scroll" className="attendance-directory-table-wrap workspace-table-region">
               <table aria-label="Balance transactions" className="workspace-table attendance-directory-table accerio-data-table">
                 <thead>
@@ -855,7 +920,7 @@ export function LeaveBalanceOperations({
                         <td><strong>{item.units}</strong><span>{item.leave_policy_name}</span></td>
                         <td><WorkspaceStatusBadge tone={tone}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge><span>{item.can_current_actor_review ? "Reviewable" : "Not reviewable by you"}</span></td>
                         <td><strong>{item.closing_balance_before} to {item.closing_balance_after}</strong><span>{item.reason || "No reason"}</span></td>
-                        <td><button className="button button--secondary button--compact" aria-label={`Inspect transaction for ${item.employee_name}`} onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedTransactionId(item.id); }} type="button">Inspect</button></td>
+                        <td><button ref={(node) => { if (isSelected && node) transactionInspectTriggerRef.current = node; }} className="button button--secondary button--compact" aria-label={`Inspect transaction for ${item.employee_name}`} onClick={(event) => { focusActionTrigger(event); transactionInspectTriggerRef.current = event.currentTarget; event.stopPropagation(); setSelectedTransactionId(item.id); }} type="button">Inspect</button></td>
                       </tr>
                     );
                   })}
@@ -865,7 +930,9 @@ export function LeaveBalanceOperations({
                 </tbody>
               </table>
             </WorkspaceTableScrollRegion>
-            <div className="panel-card-soft attendance-pagination-panel">
+            {isRefreshing ? <div className="workspace-table-loading" role="status"><span className="button-spinner" aria-hidden="true" />Updating transaction ledger</div> : null}
+            </div>
+            {transactionsPage.total_count > 0 ? <div className="panel-card-soft attendance-pagination-panel">
               <PaginationBar navigationMode="scoped"
                 firstHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: "1", page_size: String(pageSize) })}
                 hasNext={transactionsPage.has_next}
@@ -878,7 +945,7 @@ export function LeaveBalanceOperations({
                 totalCount={transactionsPage.total_count}
                 pending={isRefreshing} onFirst={() => void refreshLedger(filters, safeBalancePage, 1, true)} onLast={() => void refreshLedger(filters, safeBalancePage, transactionsPage.total_pages ?? 1, true)} onNext={() => void refreshLedger(filters, safeBalancePage, safeTransactionPage + 1, true)} onPrevious={() => void refreshLedger(filters, safeBalancePage, safeTransactionPage - 1, true)}
               />
-            </div>
+            </div> : null}
           </section>
           {selectedTransaction ? (
             <aside id="transaction-detail" tabIndex={-1} className="panel-card-soft attendance-detail-drawer" aria-label="Leave balance transaction detail">
@@ -887,7 +954,7 @@ export function LeaveBalanceOperations({
                   <h2 className="section-heading-soft">Transaction detail</h2>
                   <p className="section-copy section-copy-soft">Review evidence and maker-checker state.</p>
                 </div>
-                <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedTransactionId(""); }} type="button">Close</button>
+                <button className="button button--secondary button--compact" onClick={() => { setSelectedTransactionId(""); window.requestAnimationFrame(() => transactionInspectTriggerRef.current?.focus({ preventScroll: true })); }} type="button">Close</button>
               </div>
               <article className="record-card record-card--compact">
                 <div className="record-card__header">
@@ -963,16 +1030,20 @@ export function LeaveBalanceOperations({
           <form aria-label="Balance action" className="queue-toolbar panel-card-soft" onSubmit={handleSubmit}>
             <WorkspaceFormControls>
             <div className="queue-toolbar__grid two-column-grid">
-              <EmployeeSearchSelect initialOptions={balanceEmployeeOptions} value={formValue.employee_id ?? ""} onChange={(value) => update("employee_id", value || null)} />
+              <div aria-invalid={Boolean(fieldErrors.employee_id) || undefined}>
+                <EmployeeSearchSelect initialOptions={balanceEmployeeOptions} value={formValue.employee_id ?? ""} onChange={(value) => update("employee_id", value || null)} />
+                {fieldErrors.employee_id ? <span className="field-error" role="alert">{fieldErrors.employee_id}</span> : null}
+              </div>
               <label className="queue-toolbar__search">
                 <span className="muted">Leave policy</span>
-                <select className="input-control" value={formValue.leave_policy_id ?? ""} onChange={(event) => update("leave_policy_id", event.target.value || null)}>
+                <select aria-label="Leave policy" aria-invalid={Boolean(fieldErrors.leave_policy_id) || undefined} className="input-control" value={formValue.leave_policy_id ?? ""} onChange={(event) => update("leave_policy_id", event.target.value || null)}>
                   {selectOptions(options.leave_policies)}
                 </select>
+                {fieldErrors.leave_policy_id ? <span className="field-error" role="alert">{fieldErrors.leave_policy_id}</span> : null}
               </label>
               <label className="queue-toolbar__search">
                 <span className="muted">Action</span>
-                <select className="input-control" value={formValue.action} onChange={(event) => update("action", event.target.value as HrAdminLeaveBalanceActionInput["action"])}>
+                <select aria-label="Action" className="input-control" value={formValue.action} onChange={(event) => update("action", event.target.value as HrAdminLeaveBalanceActionInput["action"])}>
                   <option value="credit_adjustment">Credit adjustment</option>
                   <option value="debit_adjustment">Debit adjustment</option>
                   <option value="encashment">Encashment</option>
@@ -980,22 +1051,23 @@ export function LeaveBalanceOperations({
               </label>
               <label className="queue-toolbar__search">
                 <span className="muted">Units</span>
-                <input className="input-control" value={formValue.units} onChange={(event) => update("units", event.target.value)} />
+                <input aria-label="Units" aria-invalid={Boolean(fieldErrors.units) || undefined} className="input-control" inputMode="decimal" value={formValue.units} onChange={(event) => update("units", event.target.value)} />
+                {fieldErrors.units ? <span className="field-error" role="alert">{fieldErrors.units}</span> : null}
               </label>
               <label className="queue-toolbar__search">
                 <span className="muted">Effective date</span>
-                <input className="input-control" type="date" value={formValue.effective_date ?? ""} onChange={(event) => update("effective_date", event.target.value || null)} />
+                <input aria-label="Effective date" aria-invalid={Boolean(fieldErrors.effective_date) || undefined} className="input-control" type="date" value={formValue.effective_date ?? ""} onChange={(event) => update("effective_date", event.target.value || null)} />
+                {fieldErrors.effective_date ? <span className="field-error" role="alert">{fieldErrors.effective_date}</span> : null}
               </label>
               <label className="queue-toolbar__search">
                 <span className="muted">Reason</span>
-                <input className="input-control" value={formValue.reason} onChange={(event) => update("reason", event.target.value)} />
+                <input aria-label="Reason" aria-invalid={Boolean(fieldErrors.reason) || undefined} className="input-control" value={formValue.reason} onChange={(event) => update("reason", event.target.value)} />
+                {fieldErrors.reason ? <span className="field-error" role="alert">{fieldErrors.reason}</span> : null}
               </label>
             </div>
             {feedbackContext === "action" ? feedback : null}
             <div className="queue-toolbar__actions">
-              <button className="button button--primary" disabled={isSubmitting || !canManageBalances} type="submit">
-                {isSubmitting ? "Applying..." : "Apply balance action"}
-              </button>
+              <AsyncActionButton className="button button--primary" disabled={!canManageBalances} pending={isSubmitting} pendingLabel="Applying balance action" type="submit">Apply balance action</AsyncActionButton>
             </div>
             {!canManageBalances ? (
               <div className="notice"><strong>Read-only leave balance view.</strong><span className="muted">Balance actions and reviews require leave balance management permission.</span></div>

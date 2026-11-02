@@ -3,9 +3,10 @@
 import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 
 import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminOptionItem, LeaveRequestItem, PagedStatusCounts } from "@/lib/types";
 
@@ -21,6 +22,7 @@ type Props = {
     leave_type_code: string;
     from_date: string;
     to_date: string;
+    sort: string;
     page: number;
     page_size: number;
   };
@@ -111,7 +113,8 @@ function collisionTone(item: LeaveRequestItem): "success" | "warning" | "danger"
 export function LeaveRequestQueue({ items, currentFilters, pagination, statusCounts, leaveTypeOptions, canApproveLeaveRequests, pending, onApplyFilters, onPage, onReview }: Props) {
   const [validationError, setValidationError] = useState("");
   const filterLeaveTypeOptions = useMemo(() => leaveTypeOptions.filter((item) => item.code).sort((a, b) => a.name.localeCompare(b.name)), [leaveTypeOptions]);
-  const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState("");
+  const inspectTriggerRef = useRef<HTMLButtonElement | null>(null);
   const selectedItem = items.find(item => item.id === selectedId) ?? null;
 
   function pageHref(page: number) {
@@ -144,13 +147,23 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
           if (from && to && from > to) {
             event.preventDefault(); setValidationError("From date must be on or before to date.");
             event.currentTarget.querySelector<HTMLInputElement>('[name="to_date"]')?.focus();
-          } else { setValidationError(""); onApplyFilters?.({ q: String(data.get("q") || ""), status: String(data.get("status") || ""), leave_type_code: String(data.get("leave_type_code") || ""), from_date: from, to_date: to, page: 1, page_size: currentFilters.page_size }); }
+          } else { setValidationError(""); onApplyFilters?.({ q: String(data.get("q") || ""), status: String(data.get("status") || ""), leave_type_code: String(data.get("leave_type_code") || ""), from_date: from, to_date: to, sort: String(data.get("sort") || "applied-desc"), page: 1, page_size: currentFilters.page_size }); }
         }}>
         <input type="hidden" name="page_size" value={currentFilters.page_size} />
         <div className="workspace-filter-bar attendance-record-filter-bar">
           <label className="form-field">
             <span className="muted">Search</span>
             <input className="input-control" name="q" placeholder="Employee, code, leave type, reason, workflow" defaultValue={currentFilters.q} />
+          </label>
+          <label className="form-field">
+            <span className="muted">Sort by</span>
+            <select className="input-control" name="sort" defaultValue={currentFilters.sort}>
+              <option value="applied-desc">Newest applied</option>
+              <option value="applied-asc">Oldest applied</option>
+              <option value="employee">Employee A-Z</option>
+              <option value="start-desc">Latest leave date</option>
+              <option value="status">Status</option>
+            </select>
           </label>
           <label className="form-field">
             <span className="muted">Request status</span>
@@ -182,15 +195,16 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
         </div>
         <div className="queue-toolbar__actions attendance-toolbar-actions">
           <button className="button button--primary" disabled={pending} type="submit">Apply filters</button>
-          <button className="button button--ghost" type="button" onClick={() => onApplyFilters?.({ q: "", status: "", leave_type_code: "", from_date: "", to_date: "", page: 1, page_size: currentFilters.page_size })}>Clear filters</button>
+          <button className="button button--ghost" type="button" onClick={() => onApplyFilters?.({ q: "", status: "", leave_type_code: "", from_date: "", to_date: "", sort: "applied-desc", page: 1, page_size: currentFilters.page_size })}>Clear filters</button>
           <button className="button button--secondary" onClick={() => window.print()} type="button">Print queue</button>
         </div>
         {validationError ? <p role="alert" className="notice notice--error">{validationError}</p> : null}
         </WorkspaceFilterForm>
       </section>
 
-      <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
-        <section className="panel-card-soft attendance-directory-panel">
+      <div className="attendance-review-workbench">
+        <section aria-busy={pending || undefined} className="panel-card-soft attendance-directory-panel workspace-table-loading-owner">
+          {pending ? <div className="workspace-table-loading" role="status"><span aria-hidden="true" className="async-action-button__spinner" />Updating leave requests</div> : null}
           <WorkspaceTableScrollRegion label="Leave requests table scroll" className="attendance-directory-table-wrap workspace-table-region">
             <table aria-label="Leave requests" className="workspace-table attendance-directory-table accerio-data-table">
               <thead>
@@ -207,13 +221,13 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
                 {items.map((item) => {
                   const isSelected = selectedItem?.id === item.id;
                   return (
-                    <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedId(item.id)}>
+                    <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id}>
                       <td><strong>{item.employee_name || "Employee"}</strong><span>{item.employee_code || "No code"} · {item.department || "No department"}</span></td>
                       <td><strong>{item.leave_type}</strong><span>{item.requested_units} requested · {item.approved_units} approved</span></td>
                       <td><strong>{formatDate(item.start_date)}</strong><span>to {formatDate(item.end_date)}</span></td>
                       <td><strong>{getWaitingLabel(item)}</strong><span>{item.policy_name || "No policy linked"}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{titleCase(item.status)}</WorkspaceStatusBadge><span>{item.attendance_collision_summary?.collision_count ? `${item.attendance_collision_summary.collision_count} collision(s)` : "Collision clear"}</span></td>
-                      <td><button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); event.stopPropagation(); setSelectedId(item.id); }} type="button" aria-label={`Inspect leave request for ${item.employee_name || item.employee_code}`}>Inspect</button></td>
+                      <td><button ref={(node) => { if (isSelected && node) inspectTriggerRef.current = node; }} className="button button--secondary button--compact button--icon" onClick={(event) => { focusActionTrigger(event); inspectTriggerRef.current = event.currentTarget; event.stopPropagation(); setSelectedId(item.id); }} title={`Inspect ${item.employee_name || item.employee_code || "leave request"}`} type="button" aria-label={`Inspect leave request for ${item.employee_name || item.employee_code}`}>...</button></td>
                     </tr>
                   );
                 })}
@@ -223,7 +237,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
               </tbody>
             </table>
           </WorkspaceTableScrollRegion>
-          <div className="panel-card-soft attendance-pagination-panel">
+          {pagination.total_count > 0 ? <div className="panel-card-soft attendance-pagination-panel">
             <PaginationBar
               hasNext={pagination.has_next}
               hasPrevious={pagination.has_previous}
@@ -246,17 +260,18 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
               </label>
               <button className="button button--secondary" type="submit">Apply</button>
             </WorkspaceFilterForm>
-          </div>
+          </div> : null}
         </section>
 
         {selectedItem ? (
-          <aside id="leave-request-detail" tabIndex={-1} className="panel-card-soft attendance-detail-drawer" aria-label="Leave request detail">
+          <HrAdminActionModal closeHref="/hr-admin/leave-requests" description="Review policy, approval, collision, attachment, and balance context without leaving the queue." eyebrow="Leave request inspection" labelledBy="leave-request-detail-title" onClose={() => { setSelectedId(""); window.requestAnimationFrame(() => inspectTriggerRef.current?.focus({ preventScroll: true })); }} title="Leave request detail">
+          <aside id="leave-request-detail" tabIndex={-1} aria-label="Leave request detail">
             <div className="queue-toolbar__header">
               <div>
                 <h2 className="section-heading-soft">Leave request detail</h2>
                 <p className="section-copy section-copy-soft">Focused policy, approval, collision, and balance context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(event) => { focusActionTrigger(event); setSelectedId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={() => { setSelectedId(""); window.requestAnimationFrame(() => inspectTriggerRef.current?.focus({ preventScroll: true })); }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">
@@ -317,6 +332,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
               </div>
             </details>
           </aside>
+          </HrAdminActionModal>
         ) : null}
       </div>
     </section>

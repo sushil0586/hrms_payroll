@@ -5,7 +5,7 @@ import { mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error
 
 import { useEffect, useRef, useState } from "react";
 
-import { ActionToast } from "@/components/patterns/action-toast";
+import { ActionToast, ERROR_TOAST_DURATION_MS, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { leaveDecisionMessage } from "@/lib/ui/leave-decision-message";
 import { requireText } from "@/lib/ui/validation";
@@ -155,7 +155,10 @@ export function ManagerDecisionPanel({
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 8000 : 3500);
+    const timeout = window.setTimeout(
+      () => setToast(null),
+      toast.tone === "error" ? ERROR_TOAST_DURATION_MS : SUCCESS_TOAST_DURATION_MS,
+    );
     return () => window.clearTimeout(timeout);
   }, [toast]);
 

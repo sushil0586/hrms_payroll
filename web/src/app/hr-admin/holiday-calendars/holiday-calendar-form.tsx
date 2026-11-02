@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -53,6 +53,8 @@ export function HolidayCalendarForm({
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  const submittingRef = useRef(false);
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
   const yearLocked = isGovernanceFieldLocked(item, "year");
@@ -61,6 +63,10 @@ export function HolidayCalendarForm({
   const locationLocked = isGovernanceFieldLocked(item, "location_id");
   const activeLocked = isGovernanceFieldLocked(item, "is_active");
   const holidaysLocked = isGovernanceFieldLocked(item, "holidays");
+
+  useEffect(() => {
+    if (error) errorRef.current?.focus({ preventScroll: true });
+  }, [error]);
 
   function update<Key extends keyof HrAdminHolidayCalendarWriteInput>(key: Key, value: HrAdminHolidayCalendarWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -91,12 +97,13 @@ export function HolidayCalendarForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (acceptedUnconfirmed) return;
+    if (acceptedUnconfirmed || submittingRef.current) return;
     if (mode === "edit" && item && item.can_edit_directly === false) {
       setError("This record cannot be edited directly in its current governance state.");
       return;
     }
     setError("");
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       const response = await fetch(mode === "create" ? "/api/hr-admin/holiday-calendars" : `/api/hr-admin/holiday-calendars/${itemId}`, {
@@ -107,6 +114,7 @@ export function HolidayCalendarForm({
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(getErrorMessage(payload));
+        submittingRef.current = false;
         setIsSubmitting(false);
         return;
       }
@@ -115,6 +123,7 @@ export function HolidayCalendarForm({
         const reconciled = await onSaved();
         if (!reconciled) {
           setError("The calendar was accepted, but the catalog could not be confirmed. Do not submit it again; retry the catalog read.");
+          submittingRef.current = false;
           setIsSubmitting(false);
         }
         return;
@@ -122,12 +131,13 @@ export function HolidayCalendarForm({
       router.push(successHref);
     } catch {
       setError("Unable to save holiday calendar. Check your connection and try again.");
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   }
 
   return (
-    <form className={`section form-layout-modern holiday-calendar-form${compact ? " holiday-calendar-form--modal" : ""}`} onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting || undefined} className={`section form-layout-modern holiday-calendar-form${compact ? " holiday-calendar-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -193,7 +203,7 @@ export function HolidayCalendarForm({
           </FormSection>
         </div>
 
-        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" ref={errorRef} role="alert" tabIndex={-1}><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Calendar changes save directly back into attendance operations and policy references.</span>
           <div className="form-actions-bar__buttons">

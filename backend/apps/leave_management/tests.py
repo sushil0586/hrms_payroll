@@ -509,12 +509,13 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         )
 
     def test_weekend_only_leave_request_is_rejected_when_policy_excludes_weekly_off(self):
+        saturday = _next_weekday(5)
         with self.assertRaises(ValidationError) as context:
             submit_leave_request(
                 employee=self.employee,
                 leave_type=self.leave_type,
-                start_date=date(2026, 10, 10),
-                end_date=date(2026, 10, 11),
+                start_date=saturday,
+                end_date=saturday + timedelta(days=1),
                 start_day_portion="full_day",
                 end_day_portion="full_day",
                 reason="Weekend only",
@@ -527,12 +528,13 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
 
     def test_weekend_exclusion_uses_standard_weekend_when_attendance_policy_is_missing(self):
         AttendancePolicyAssignment.objects.filter(employee=self.employee).delete()
+        friday = _next_weekday(4)
 
         leave_request = submit_leave_request(
             employee=self.employee,
             leave_type=self.leave_type,
-            start_date=date(2026, 10, 23),
-            end_date=date(2026, 10, 25),
+            start_date=friday,
+            end_date=friday + timedelta(days=2),
             start_day_portion="full_day",
             end_day_portion="full_day",
             reason="Weekend fallback",
@@ -544,21 +546,22 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         self.assertEqual(
             [(item["date"], item["counted"], item["reason"], item["units"]) for item in breakdown["days"]],
             [
-                ("2026-10-23", True, "working_day", "1.00"),
-                ("2026-10-24", False, "weekly_off", "0.00"),
-                ("2026-10-25", False, "weekly_off", "0.00"),
+                (friday.isoformat(), True, "working_day", "1.00"),
+                ((friday + timedelta(days=1)).isoformat(), False, "weekly_off", "0.00"),
+                ((friday + timedelta(days=2)).isoformat(), False, "weekly_off", "0.00"),
             ],
         )
 
     def test_weekly_off_exclusion_follows_custom_roster_not_standard_weekend(self):
         self.shift.weekly_off_days = ["tuesday", "wednesday"]
         self.shift.save(update_fields=["weekly_off_days", "updated_at"])
+        saturday = _next_weekday(5)
 
         leave_request = submit_leave_request(
             employee=self.employee,
             leave_type=self.leave_type,
-            start_date=date(2026, 10, 31),
-            end_date=date(2026, 11, 4),
+            start_date=saturday,
+            end_date=saturday + timedelta(days=4),
             start_day_portion="full_day",
             end_day_portion="full_day",
             reason="Custom roster weekly off",
@@ -570,15 +573,16 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         self.assertEqual(
             [(item["date"], item["day"], item["counted"], item["reason"], item["units"]) for item in breakdown["days"]],
             [
-                ("2026-10-31", "Saturday", True, "working_day", "1.00"),
-                ("2026-11-01", "Sunday", True, "working_day", "1.00"),
-                ("2026-11-02", "Monday", True, "working_day", "1.00"),
-                ("2026-11-03", "Tuesday", False, "weekly_off", "0.00"),
-                ("2026-11-04", "Wednesday", False, "weekly_off", "0.00"),
+                (saturday.isoformat(), "Saturday", True, "working_day", "1.00"),
+                ((saturday + timedelta(days=1)).isoformat(), "Sunday", True, "working_day", "1.00"),
+                ((saturday + timedelta(days=2)).isoformat(), "Monday", True, "working_day", "1.00"),
+                ((saturday + timedelta(days=3)).isoformat(), "Tuesday", False, "weekly_off", "0.00"),
+                ((saturday + timedelta(days=4)).isoformat(), "Wednesday", False, "weekly_off", "0.00"),
             ],
         )
 
     def test_leave_units_follow_employee_shift_assignment_over_policy_default_shift(self):
+        saturday = _next_weekday(5)
         roster_shift = Shift.objects.create(
             tenant=self.tenant,
             code="employee-roster-shift",
@@ -593,15 +597,15 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
             employee=self.employee,
             shift=roster_shift,
             assignment_kind=EmployeeShiftAssignmentKind.FIXED,
-            effective_from=date(2026, 10, 1),
+            effective_from=saturday,
             is_primary=True,
         )
 
         leave_request = submit_leave_request(
             employee=self.employee,
             leave_type=self.leave_type,
-            start_date=date(2026, 10, 31),
-            end_date=date(2026, 11, 3),
+            start_date=saturday,
+            end_date=saturday + timedelta(days=3),
             start_day_portion="full_day",
             end_day_portion="full_day",
             reason="Employee-specific roster",
@@ -624,10 +628,10 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
                 for item in breakdown["days"]
             ],
             [
-                ("2026-10-31", "Saturday", True, "working_day", "Employee Roster Shift", "shift_assignment", "fixed"),
-                ("2026-11-01", "Sunday", True, "working_day", "Employee Roster Shift", "shift_assignment", "fixed"),
-                ("2026-11-02", "Monday", False, "weekly_off", "Employee Roster Shift", "shift_assignment", "fixed"),
-                ("2026-11-03", "Tuesday", False, "weekly_off", "Employee Roster Shift", "shift_assignment", "fixed"),
+                (saturday.isoformat(), "Saturday", True, "working_day", "Employee Roster Shift", "shift_assignment", "fixed"),
+                ((saturday + timedelta(days=1)).isoformat(), "Sunday", True, "working_day", "Employee Roster Shift", "shift_assignment", "fixed"),
+                ((saturday + timedelta(days=2)).isoformat(), "Monday", False, "weekly_off", "Employee Roster Shift", "shift_assignment", "fixed"),
+                ((saturday + timedelta(days=3)).isoformat(), "Tuesday", False, "weekly_off", "Employee Roster Shift", "shift_assignment", "fixed"),
             ],
         )
 

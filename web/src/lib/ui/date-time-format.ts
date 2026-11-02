@@ -12,3 +12,16 @@ export function formatWorkspaceDateTime(value: string | null | undefined, timeZo
   const hour = Number(part("hour"));
   return `${part("day")} ${months[Number(part("month")) - 1]} ${part("year")}, ${hour % 12 || 12}:${part("minute")} ${hour >= 12 ? "pm" : "am"}`;
 }
+
+/** Stable date-only presentation for server and browser rendered workspace content. */
+export function formatWorkspaceDate(value: string | null | undefined, timeZone = "Asia/Kolkata"): string {
+  if (!value) return "Not available";
+  const instant = new Date(value);
+  if (!Number.isFinite(instant.getTime())) return "Not available";
+  const parts = new Intl.DateTimeFormat("en-GB-u-nu-latn", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(instant);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value ?? "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${part("day")} ${months[Number(part("month")) - 1]} ${part("year")}`;
+}
