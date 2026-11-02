@@ -62,7 +62,7 @@ from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentCa
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.employee_lifecycle.effective_services import initialize_employment_timeline
 from apps.employee_lifecycle.models import EmployeeExit, EmployeeLifecycleEvent, ExitStatus, LifecycleEventStatus, LifecycleEventType, OnboardingStatus, ProbationDecision
-from apps.iam.models import MembershipStatus, Role, TenantMembership, User
+from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
 from apps.leave_management.models import LeaveBalance, LeaveBalanceTransaction, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
 from apps.notifications.models import (
     Notification,
@@ -5131,6 +5131,387 @@ def test_custom_statutory_viewer_role_gates_statutory_mutations(api_client: APIC
     assert "statutory.declarations.manage" in str(blocked_profile_create.json())
 
 
+def test_statutory_declaration_catalog_is_validated_preserved_and_audited(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="catalog-validation-pack",
+        name="Catalog Validation Pack",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+        config_snapshot={"calculation_control": {"rounding": "nearest_rupee"}},
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    invalid = api_client.patch(
+        f"/api/v1/hr-admin/payroll-statutory-packs/{pack.id}/",
+        {
+            "config_snapshot": {
+                "calculation_control": {"rounding": "nearest_rupee"},
+                "declaration_catalog": {
+                    "financial_years": [
+                        {"value": "FY2026-27", "label": "FY 2026-27", "is_open": True, "declaration_profile_ref": "profile.v1", "proof_window_ref": "window.v1"},
+                        {"value": "FY2026-27", "label": "Duplicate", "is_open": True, "declaration_profile_ref": "profile.v1", "proof_window_ref": "window.v1"},
+                    ],
+                    "sections": [{"code": "80C", "label": "Investments", "item_kinds": ["unsupported"], "component_codes": [], "proof_required": True}],
+                },
+            },
+        },
+        format="json",
+    )
+    assert invalid.status_code == 400
+    pack.refresh_from_db()
+    assert "declaration_catalog" not in pack.config_snapshot
+
+    catalog = {
+        "financial_years": [
+            {"value": "FY2026-27", "label": "FY 2026-27", "is_open": True, "declaration_profile_ref": "profile.v1", "proof_window_ref": "window.v1"},
+        ],
+        "sections": [
+            {"code": "80C", "label": "Investments", "item_kinds": [PayrollStatutoryDeclarationItemKind.INVESTMENT], "component_codes": ["LIC", "ELSS"], "proof_required": True},
+        ],
+    }
+    updated = api_client.patch(
+        f"/api/v1/hr-admin/payroll-statutory-packs/{pack.id}/",
+        {"config_snapshot": {"calculation_control": {"rounding": "nearest_rupee"}, "declaration_catalog": catalog}},
+        format="json",
+    )
+    assert updated.status_code == 200, updated.json()
+    pack.refresh_from_db()
+    assert pack.config_snapshot["calculation_control"] == {"rounding": "nearest_rupee"}
+    assert pack.config_snapshot["declaration_catalog"] == catalog
+    audit = SaasCommercialAuditEvent.objects.get(tenant=tenant, event_type="statutory_pack_updated", event_snapshot__resource_id=str(pack.id))
+    assert audit.actor_identifier == "nisha.rao"
+    assert audit.source_ref == "hrms.payroll_statutory.catalog.audit.v1"
+    assert audit.event_snapshot["new_declaration_catalog"] == catalog
+
+
+def test_payroll_finance_statutory_view_is_locked_and_redacted(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    target_employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    role = Role.objects.create(tenant=tenant, code="statutory-finance-review", name="Statutory Finance Review", is_active=True)
+    role.permissions.create(permission_key="payroll.review")
+    user = User.objects.create_user(username="statutory.finance", email="statutory.finance@example.com", password=PASSWORD)
+    membership = TenantMembership.objects.create(tenant=tenant, user=user, status=MembershipStatus.ACTIVE, is_default=True)
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="STAT-FIN-001",
+        first_name="Finance",
+        last_name="Reviewer",
+        work_email="statutory.finance@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.localdate(),
+        membership=membership,
+    )
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="finance-redaction-pack",
+        name="Finance Redaction Pack",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=target_employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+    )
+    locked_at = timezone.now()
+    locked = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=target_employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2026-27",
+        status=PayrollStatutoryDeclarationStatus.DRAFT,
+        source_ref="employee:EMP-0042:private",
+    )
+    EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=target_employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2027-28",
+        status=PayrollStatutoryDeclarationStatus.DRAFT,
+    )
+    EmployeeStatutoryDeclarationItem.objects.create(
+        tenant=tenant,
+        declaration=locked,
+        employee=target_employee,
+        section_code="80C",
+        name="Private LIC proof",
+        declared_amount="1000.00",
+        proof_document_ref="employee-document:private-reference",
+    )
+    locked.status = PayrollStatutoryDeclarationStatus.LOCKED
+    locked.declared_total_amount = Decimal("1000.00")
+    locked.verified_total_amount = Decimal("0.00")
+    locked.submitted_at = locked_at
+    locked.verified_at = locked_at
+    locked.locked_at = locked_at
+    locked.save(update_fields=["status", "declared_total_amount", "verified_total_amount", "submitted_at", "verified_at", "locked_at", "updated_at"])
+
+    token = login(api_client, "statutory.finance")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    result = api_client.get("/api/v1/hr-admin/payroll-statutory-setup/")
+
+    assert result.status_code == 200, result.json()
+    payload = result.json()
+    assert len(payload["declarations"]) == 1
+    finance_declaration = payload["declarations"][0]
+    assert finance_declaration["id"] == str(locked.id)
+    assert finance_declaration["employee_id"] == "00000000-0000-0000-0000-000000000000"
+    assert finance_declaration["employee_code"] == ""
+    assert finance_declaration["employee_name"].startswith("Declaration ")
+    assert finance_declaration["source_ref"] == ""
+    assert finance_declaration["reconciliation_status"] == "exception"
+    assert finance_declaration["reconciliation_difference"] == "1000.00"
+    assert finance_declaration["exception_count"] == 1
+    assert payload["employee_profiles"] == []
+    assert payload["declaration_items"] == []
+    assert payload["options"]["employees"] == []
+    assert "ABCDE1234F" not in str(payload)
+    assert "Private LIC proof" not in str(payload)
+    assert "EMP-0042" not in str(payload)
+
+
+def test_statutory_declaration_reopen_requires_open_year_and_records_governance(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    catalog = {
+        "financial_years": [
+            {
+                "value": "FY2026-27",
+                "label": "FY 2026-27",
+                "is_open": False,
+                "declaration_profile_ref": "profile.v1",
+                "proof_window_ref": "window.v1",
+            }
+        ],
+        "sections": [
+            {
+                "code": "80C",
+                "label": "Investments",
+                "item_kinds": [PayrollStatutoryDeclarationItemKind.INVESTMENT],
+                "component_codes": ["LIC"],
+                "proof_required": True,
+            }
+        ],
+    }
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="governed-reopen-pack",
+        name="Governed Reopen Pack",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+        config_snapshot={"declaration_catalog": catalog},
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+        declaration_status=PayrollDeclarationStatus.LOCKED,
+    )
+    now = timezone.now()
+    declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2026-27",
+        status=PayrollStatutoryDeclarationStatus.LOCKED,
+        submitted_at=now,
+        verified_at=now,
+        locked_at=now,
+        declared_total_amount="12000.00",
+        verified_total_amount="12000.00",
+    )
+    previous_hash = declaration.source_hash
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    endpoint = f"/api/v1/hr-admin/employee-statutory-declarations/{declaration.id}/reopen/"
+    request_payload = {
+        "reason": "Employee supplied corrected investment evidence.",
+        "approval_reference": "CHANGE-STAT-2026-001",
+    }
+
+    approval_role = Role.objects.filter(
+        tenant=tenant,
+        membership_roles__membership__user__username="nisha.rao",
+        permissions__permission_key="payroll.approve",
+    ).first()
+    assert approval_role is not None
+    approval_role.permissions.filter(permission_key="payroll.approve").delete()
+    denied_response = api_client.post(endpoint, request_payload, format="json")
+    assert denied_response.status_code == 403
+    assert "payroll.approve" in str(denied_response.json())
+    approval_role.permissions.create(permission_key="payroll.approve")
+
+    closed_response = api_client.post(endpoint, request_payload, format="json")
+    assert closed_response.status_code == 400, closed_response.json()
+    assert "Closed financial years cannot be reopened" in str(closed_response.json())
+    declaration.refresh_from_db()
+    assert declaration.status == PayrollStatutoryDeclarationStatus.LOCKED
+    assert declaration.source_hash == previous_hash
+
+    catalog["financial_years"][0]["is_open"] = True
+    pack.config_snapshot = {"declaration_catalog": catalog}
+    pack.save(update_fields=["config_snapshot", "updated_at"])
+    reopened_response = api_client.post(endpoint, request_payload, format="json")
+    assert reopened_response.status_code == 200, reopened_response.json()
+    assert reopened_response.json()["status"] == PayrollStatutoryDeclarationStatus.REJECTED
+
+    declaration.refresh_from_db()
+    profile.refresh_from_db()
+    assert declaration.locked_at is None
+    assert declaration.locked_by is None
+    assert declaration.verified_at is None
+    assert declaration.rejection_reason == request_payload["reason"]
+    assert declaration.source_hash != previous_hash
+    assert profile.declaration_status == PayrollDeclarationStatus.PROOFS_PENDING
+    lifecycle_event = declaration.config_snapshot["lifecycle_events"][-1]
+    assert lifecycle_event["approval_reference"] == request_payload["approval_reference"]
+    assert lifecycle_event["previous_status"] == PayrollStatutoryDeclarationStatus.LOCKED
+    assert lifecycle_event["previous_source_hash"] == previous_hash
+
+    audit = SaasCommercialAuditEvent.objects.get(
+        tenant=tenant,
+        event_type="statutory_declaration_reopened",
+        event_snapshot__resource_id=str(declaration.id),
+    )
+    assert audit.actor_identifier == "nisha.rao"
+    assert audit.source_ref == "hrms.payroll_statutory.declaration.lifecycle.v1"
+    assert audit.event_snapshot["approval_reference"] == request_payload["approval_reference"]
+    assert audit.event_snapshot["previous_source_hash"] == previous_hash
+
+
+def test_statutory_financial_year_lifecycle_blocks_unready_close_and_audits_reopen(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    catalog = {
+        "financial_years": [{
+            "value": "FY2026-27",
+            "label": "FY 2026-27",
+            "is_open": True,
+            "declaration_profile_ref": "profile.v1",
+            "proof_window_ref": "window.v1",
+        }],
+        "sections": [{
+            "code": "80C",
+            "label": "Investments",
+            "item_kinds": [PayrollStatutoryDeclarationItemKind.INVESTMENT],
+            "component_codes": ["LIC"],
+            "proof_required": True,
+        }],
+    }
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="governed-year-close-pack",
+        name="Governed Year Close Pack",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+        config_snapshot={"declaration_catalog": catalog},
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+    )
+    declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2026-27",
+        declared_total_amount="12000.00",
+        verified_total_amount="0.00",
+    )
+    endpoint = f"/api/v1/hr-admin/payroll-statutory-packs/{pack.id}/financial-years/FY2026-27/lifecycle/"
+    close_payload = {
+        "action": "close",
+        "reason": "All employee declaration evidence has completed review.",
+        "approval_reference": "STAT-YEAR-CLOSE-001",
+    }
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    approval_role = Role.objects.filter(
+        tenant=tenant,
+        membership_roles__membership__user__username="nisha.rao",
+        permissions__permission_key="payroll.approve",
+    ).first()
+    assert approval_role is not None
+    approval_role.permissions.filter(permission_key="payroll.approve").delete()
+    denied = api_client.post(endpoint, close_payload, format="json")
+    assert denied.status_code == 403
+    approval_role.permissions.create(permission_key="payroll.approve")
+
+    unresolved = api_client.post(endpoint, close_payload, format="json")
+    assert unresolved.status_code == 400
+    assert str(declaration.id) in unresolved.json()["unresolved_declaration_ids"]
+
+    now = timezone.now()
+    declaration.status = PayrollStatutoryDeclarationStatus.LOCKED
+    declaration.submitted_at = now
+    declaration.verified_at = now
+    declaration.locked_at = now
+    declaration.verified_total_amount = Decimal("11000.00")
+    declaration.save()
+    mismatch = api_client.post(endpoint, close_payload, format="json")
+    assert mismatch.status_code == 400
+    assert str(declaration.id) in mismatch.json()["reconciliation_exception_ids"]
+
+    declaration.verified_total_amount = declaration.declared_total_amount
+    declaration.save()
+    closed = api_client.post(endpoint, close_payload, format="json")
+    assert closed.status_code == 200, closed.json()
+    pack.refresh_from_db()
+    closed_year = pack.config_snapshot["declaration_catalog"]["financial_years"][0]
+    assert closed_year["is_open"] is False
+    assert closed_year["close_approval_reference"] == close_payload["approval_reference"]
+    assert closed_year["lifecycle_events"][-1]["action"] == "close"
+
+    bypass_catalog = dict(pack.config_snapshot["declaration_catalog"])
+    bypass_years = [dict(year) for year in bypass_catalog["financial_years"]]
+    bypass_years[0]["is_open"] = True
+    bypass_catalog["financial_years"] = bypass_years
+    bypass = api_client.patch(
+        f"/api/v1/hr-admin/payroll-statutory-packs/{pack.id}/",
+        {"config_snapshot": {**pack.config_snapshot, "declaration_catalog": bypass_catalog}},
+        format="json",
+    )
+    assert bypass.status_code == 400
+    assert "governed financial-year lifecycle" in str(bypass.json())
+
+    reopened = api_client.post(endpoint, {
+        "action": "reopen",
+        "reason": "Approved correction window for a late statutory adjustment.",
+        "approval_reference": "STAT-YEAR-REOPEN-001",
+    }, format="json")
+    assert reopened.status_code == 200, reopened.json()
+    pack.refresh_from_db()
+    reopened_year = pack.config_snapshot["declaration_catalog"]["financial_years"][0]
+    assert reopened_year["is_open"] is True
+    assert [event["action"] for event in reopened_year["lifecycle_events"]] == ["close", "reopen"]
+    assert SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="statutory_financial_year_closed",
+        event_snapshot__financial_year_code="FY2026-27",
+    ).exists()
+    assert SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="statutory_financial_year_reopened",
+        event_snapshot__financial_year_code="FY2026-27",
+    ).exists()
+
+
 def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -5152,17 +5533,25 @@ def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIC
         tax_regime=PayrollTaxRegime.OLD,
     )
 
-    declaration_response = api_client.post(
+    rejected_declaration_response = api_client.post(
         "/api/v1/hr-admin/employee-statutory-declarations/",
         {
             "employee_id": str(employee.id),
             "employee_statutory_profile_id": str(profile.id),
             "financial_year_code": "fy2026-27",
             "declaration_profile_ref": "india.tax.declaration.fy2026.v1",
-            "proof_window_ref": "india.tax.proof-window.fy2026.v1",
             "tax_regime": PayrollTaxRegime.OLD,
-            "source_ref": "employee.tax.declaration:EMP-0042:fy2026",
-            "config_snapshot": {"submission_channel_ref": "hr_admin.seeded.v1"},
+        },
+        format="json",
+    )
+    assert rejected_declaration_response.status_code == 400
+    declaration_response = api_client.post(
+        "/api/v1/hr-admin/employee-statutory-declarations/",
+        {
+            "employee_id": str(employee.id),
+            "employee_statutory_profile_id": str(profile.id),
+            "financial_year_code": "fy2026-27",
+            "tax_regime": PayrollTaxRegime.OLD,
         },
         format="json",
     )
@@ -5173,7 +5562,7 @@ def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIC
     assert declaration_payload["status"] == PayrollStatutoryDeclarationStatus.DRAFT
     assert len(declaration_payload["source_hash"]) == 64
 
-    item_response = api_client.post(
+    rejected_item_response = api_client.post(
         f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/items/",
         {
             "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
@@ -5183,13 +5572,41 @@ def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIC
             "declared_amount": "60000.00",
             "proof_status": PayrollStatutoryProofStatus.SUBMITTED,
             "proof_document_ref": "employee-document:lic-premium-fy2026",
-            "source_ref": "tax-proof:EMP-0042:lic",
-            "config_snapshot": {"proof_type_ref": "insurance.receipt.v1"},
         },
         format="json",
     )
+    assert rejected_item_response.status_code == 400
+    category = DocumentCategory.objects.create(
+        tenant=tenant,
+        code="employee-statutory-proof-workflow",
+        name="Employee Statutory Proof Workflow",
+        category_type=DocumentCategoryType.TAX,
+        requires_verification=True,
+        allow_employee_upload=True,
+        allow_multiple_files=True,
+        is_active=True,
+        visibility_rules={"statutory_proof": True},
+    )
+    employee_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
+    item_response = api_client.post(
+        f"/api/v1/me/statutory-declarations/{declaration_id}/proof-upload/",
+        {
+            "category_id": str(category.id),
+            "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
+            "section_code": "80c",
+            "component_code": "lic",
+            "name": "Life Insurance Premium",
+            "declared_amount": "60000.00",
+            "file": SimpleUploadedFile("lic-proof.pdf", b"%PDF-1.4 statutory workflow proof\n", content_type="application/pdf"),
+        },
+        format="multipart",
+    )
     assert item_response.status_code == 201, item_response.json()
-    item_payload = item_response.json()
+    item_response_payload = item_response.json()["item"]
+    hr_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {hr_token}")
+    item_payload = item_response_payload
     item_id = item_payload["id"]
     assert item_payload["section_code"] == "80C"
     assert item_payload["component_code"] == "LIC"
@@ -5197,21 +5614,24 @@ def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIC
     assert item_payload["proof_submitted_at"] is not None
     assert len(item_payload["source_hash"]) == 64
 
+    employee_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
     exemption_response = api_client.post(
-        f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/items/",
+        f"/api/v1/me/statutory-declarations/{declaration_id}/proof-upload/",
         {
+            "category_id": str(category.id),
             "item_kind": PayrollStatutoryDeclarationItemKind.EXEMPTION,
             "section_code": "hra",
-            "component_code": "rent",
+            "component_code": "rent_receipt",
             "name": "House Rent Exemption",
             "declared_amount": "120000.00",
-            "verified_amount": "120000.00",
-            "proof_status": PayrollStatutoryProofStatus.NOT_REQUIRED,
-            "source_ref": "tax-proof:EMP-0042:rent",
+            "file": SimpleUploadedFile("rent-proof.pdf", b"%PDF-1.4 statutory rent proof\n", content_type="application/pdf"),
         },
-        format="json",
+        format="multipart",
     )
     assert exemption_response.status_code == 201, exemption_response.json()
+    hr_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {hr_token}")
 
     item_verify_response = api_client.post(
         f"/api/v1/hr-admin/employee-statutory-declaration-items/{item_id}/verify/",
@@ -5236,6 +5656,17 @@ def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIC
     profile.refresh_from_db()
     assert profile.declaration_status == PayrollDeclarationStatus.VERIFIED
 
+    approval_role = Role.objects.filter(
+        tenant=tenant,
+        membership_roles__membership__user__username="nisha.rao",
+        permissions__permission_key="payroll.approve",
+    ).first()
+    assert approval_role is not None
+    approval_role.permissions.filter(permission_key="payroll.approve").delete()
+    blocked_lock_response = api_client.post(f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/lock/", {}, format="json")
+    assert blocked_lock_response.status_code == 403
+    assert "payroll.approve" in str(blocked_lock_response.json())
+    approval_role.permissions.create(permission_key="payroll.approve")
     lock_response = api_client.post(f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/lock/", {}, format="json")
     assert lock_response.status_code == 200, lock_response.json()
     assert lock_response.json()["status"] == PayrollStatutoryDeclarationStatus.LOCKED
@@ -5515,6 +5946,46 @@ def test_employee_statutory_declaration_proof_upload_creates_document_and_links_
     assert item_payload["proof_artifact_key"] == str(document.artifact_id)
     assert declaration_item.proof_document_ref == f"employee-document:{document.id}"
     assert declaration_item.config_snapshot["proof_upload_surface_ref"] == "ess.statutory-declarations"
+
+    missing_target_response = api_client.post(
+        f"/api/v1/me/statutory-declarations/{declaration.id}/proof-upload/",
+        {
+            "category_id": str(category.id),
+            "item_id": str(declaration_item.id),
+            "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
+            "section_code": "80c",
+            "component_code": "elss",
+            "name": "ELSS Investment",
+            "declared_amount": "70000.00",
+            "file": SimpleUploadedFile("elss-proof-missing-target.pdf", b"%PDF-1.4 replacement without target\n", content_type="application/pdf"),
+        },
+        format="multipart",
+    )
+    assert missing_target_response.status_code == 400
+
+    replacement_response = api_client.post(
+        f"/api/v1/me/statutory-declarations/{declaration.id}/proof-upload/",
+        {
+            "category_id": str(category.id),
+            "item_id": str(declaration_item.id),
+            "replace_document_id": str(document.id),
+            "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
+            "section_code": "80c",
+            "component_code": "elss",
+            "name": "ELSS Investment",
+            "declared_amount": "70000.00",
+            "file": SimpleUploadedFile("elss-proof-replacement.pdf", b"%PDF-1.4 replacement proof upload\n", content_type="application/pdf"),
+        },
+        format="multipart",
+    )
+    assert replacement_response.status_code == 201, replacement_response.json()
+    replacement_document = EmployeeDocument.objects.get(id=replacement_response.json()["document"]["id"])
+    document.refresh_from_db()
+    declaration_item.refresh_from_db()
+    assert document.status == EmployeeDocumentStatus.REPLACED
+    assert replacement_document.previous_document_id == document.id
+    assert declaration_item.proof_document_ref == f"employee-document:{replacement_document.id}"
+    assert declaration_item.proof_status == PayrollStatutoryProofStatus.SUBMITTED
 
 
 def test_employee_statutory_declaration_write_scope_and_lock_guards(api_client: APIClient, bootstrapped_workspace):
@@ -6329,7 +6800,7 @@ def test_hr_admin_payroll_draft_calculation_consumes_configured_statutory_compon
     assert "salary.basic_monthly" in employee_pf_line["trace_snapshot"]["dependencies"]
 
 
-def test_hr_admin_payroll_draft_calculation_annualizes_tds_with_verified_declaration_caps(api_client: APIClient, bootstrapped_workspace):
+def test_hr_admin_payroll_draft_calculation_consumes_only_locked_declaration_hashes(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
     tenant = bootstrapped_workspace["pending_leave"].tenant
@@ -6453,7 +6924,7 @@ def test_hr_admin_payroll_draft_calculation_annualizes_tds_with_verified_declara
         submitted_at=verified_at,
         verified_at=verified_at,
     )
-    EmployeeStatutoryDeclarationItem.objects.create(
+    declaration_item = EmployeeStatutoryDeclarationItem.objects.create(
         tenant=tenant,
         declaration=declaration,
         employee=employee,
@@ -6467,6 +6938,17 @@ def test_hr_admin_payroll_draft_calculation_annualizes_tds_with_verified_declara
         proof_document_ref="employee-document:elss-proof",
         verified_at=verified_at,
     )
+
+    verified_response = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
+    assert verified_response.status_code == 200, verified_response.json()
+    verified_tds_line = next(item for item in verified_response.json()["lines"] if item["component_code"] == "TDS")
+    assert verified_tds_line["amount"] == "1125.00"
+    assert verified_tds_line["config_snapshot"]["annualization"]["declaration_adjustment"] == "0.00"
+    assert verified_tds_line["trace_snapshot"]["declaration_sources"] == []
+
+    declaration.status = PayrollStatutoryDeclarationStatus.LOCKED
+    declaration.locked_at = timezone.now()
+    declaration.save()
 
     response = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
 
@@ -6489,6 +6971,23 @@ def test_hr_admin_payroll_draft_calculation_annualizes_tds_with_verified_declara
     assert annualization["tax_regime_selection_mode"] == "profile"
     assert annualization["declaration_cap_evidence"][0]["raw_amount"] == "75000.00"
     assert annualization["declaration_cap_evidence"][0]["capped_amount"] == "50000.00"
+    declaration_source = annualization["declaration_cap_evidence"][0]["declaration_sources"][0]
+    assert declaration_source == {
+        "declaration_id": str(declaration.id),
+        "declaration_source_hash": declaration.source_hash,
+        "item_id": str(declaration_item.id),
+        "item_source_hash": declaration_item.source_hash,
+    }
+    assert tds_line["trace_snapshot"]["declaration_sources"] == [declaration_source]
+    assert len(tds_line["source_hash"]) == 64
+    assert tds_line["source_hash"] != verified_tds_line["source_hash"]
+    setup_response = api_client.get(
+        "/api/v1/hr-admin/payroll-calculation-setup/",
+        {"run_id": str(payroll_run.id), "calculation_id": payload["calculation"]["id"], "line_id": tds_line["id"]},
+    )
+    assert setup_response.status_code == 200, setup_response.json()
+    assert setup_response.json()["selected_line"]["id"] == tds_line["id"]
+    assert setup_response.json()["selected_line"]["trace_snapshot"]["declaration_sources"] == [declaration_source]
     comparison_by_regime = {item["tax_regime"]: item for item in annualization["regime_comparisons"]}
     assert comparison_by_regime[PayrollTaxRegime.OLD]["period_tax_amount"] == "500.00"
     assert comparison_by_regime[PayrollTaxRegime.OLD]["is_selected"] is True
@@ -6500,6 +6999,61 @@ def test_hr_admin_payroll_draft_calculation_annualizes_tds_with_verified_declara
         "employee_statutory_profile",
         "employee_statutory_declarations",
     ]
+
+    open_review = api_client.post(
+        f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/open-review/",
+        {"calculation_id": payload["calculation"]["id"], "review_profile_ref": "phase9.statutory.evidence.v1"},
+        format="json",
+    )
+    assert open_review.status_code == 200, open_review.json()
+    review_id = open_review.json()["review"]["id"]
+    evidence_seal = open_review.json()["review"]["config_snapshot"]["calculation_evidence"]
+    assert evidence_seal["declaration_sources"] == [declaration_source]
+    assert {item["line_id"] for item in evidence_seal["line_sources"]} == {
+        item["id"] for item in payload["lines"]
+    }
+
+    submit_review = api_client.post(f"/api/v1/hr-admin/payroll-reviews/{review_id}/submit/", {}, format="json")
+    assert submit_review.status_code == 200, submit_review.json()
+    checker = create_payroll_checker(tenant=tenant, username="phase9.statutory.checker")
+    checker_token = login(api_client, checker.username)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {checker_token}")
+
+    EmployeeStatutoryDeclaration.objects.filter(id=declaration.id).update(
+        status=PayrollStatutoryDeclarationStatus.REJECTED,
+    )
+    stale_approval = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review_id}/approve/",
+        {"comment": "Evidence must remain exact."},
+        format="json",
+    )
+    assert stale_approval.status_code == 400
+    assert "evidence is stale" in str(stale_approval.json()).lower()
+    assert not PayrollRunApproval.objects.filter(review_id=review_id).exists()
+
+    EmployeeStatutoryDeclaration.objects.filter(id=declaration.id).update(
+        status=PayrollStatutoryDeclarationStatus.LOCKED,
+    )
+    approved = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review_id}/approve/",
+        {"comment": "Locked statutory evidence reconciled."},
+        format="json",
+    )
+    assert approved.status_code == 200, approved.json()
+    locked = api_client.post(f"/api/v1/hr-admin/payroll-reviews/{review_id}/lock/", {}, format="json")
+    assert locked.status_code == 200, locked.json()
+    assert locked.json()["review"]["config_snapshot"]["calculation_evidence"] == evidence_seal
+
+    locked_line = PayrollCalculationLine.objects.get(id=tds_line["id"])
+    locked_line.amount = Decimal("501.00")
+    with pytest.raises(ValidationError, match="immutable"):
+        locked_line.save()
+    locked_line.refresh_from_db()
+    with pytest.raises(ValidationError, match="immutable"):
+        locked_line.delete()
+    recalculate = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
+    assert recalculate.status_code == 400
+    assert "locked" in str(recalculate.json()).lower()
 
 
 def test_hr_admin_payroll_draft_calculation_blocks_missing_employee_statutory_profile(api_client: APIClient, bootstrapped_workspace):
@@ -7532,10 +8086,31 @@ def test_hr_admin_payroll_outputs_generate_and_publish_locked_review(api_client:
     assert payslip["download_url"] is None
     assert payslip["signed_download_url"] is None
     assert payslip["signed_download_expires_at"] is None
+    output_batch = PayrollOutputBatch.objects.get(id=batch_id)
+    review_evidence = review.config_snapshot["calculation_evidence"]
+    review_evidence_hash = hashlib.sha256(
+        json.dumps(review_evidence, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    assert output_batch.config_snapshot["calculation_evidence"] == review_evidence
+    assert output_batch.config_snapshot["calculation_evidence_hash"] == review_evidence_hash
+    assert all(
+        artifact.config_snapshot["calculation_evidence_hash"] == review_evidence_hash
+        for artifact in output_batch.artifacts.all()
+    )
 
     blocked_download_response = api_client.get(f"/api/v1/hr-admin/payroll-output-artifacts/{payslip['id']}/download/")
     assert blocked_download_response.status_code == 400
     assert "published" in blocked_download_response.json()["detail"]
+
+    PayrollOutputArtifact.objects.filter(id=payslip["id"]).update(source_hash="0" * 64)
+    tampered_publish_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/",
+        {},
+        format="json",
+    )
+    assert tampered_publish_response.status_code == 400
+    assert "source hash verification failed" in tampered_publish_response.json()["detail"]
+    PayrollOutputArtifact.objects.filter(id=payslip["id"]).update(source_hash=payslip["source_hash"])
 
     publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
     assert publish_response.status_code == 200, publish_response.json()
@@ -8402,6 +8977,15 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
     publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
     assert publish_response.status_code == 200, publish_response.json()
 
+    source_payslip = PayrollOutputArtifact.objects.get(
+        output_batch_id=batch_id,
+        kind=PayrollOutputArtifactKind.PAYSLIP,
+    )
+    with pytest.raises(DatabaseError), transaction.atomic():
+        PayrollOutputArtifact.objects.filter(pk=source_payslip.pk).update(source_hash="0" * 64)
+    source_payslip.refresh_from_db()
+    assert source_payslip.source_hash != "0" * 64
+
     handoff_response = api_client.post(
         f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
         {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
@@ -8419,6 +9003,34 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
         PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
         PayrollOutputArtifactKind.STATUTORY_REPORT,
     }
+    source_artifacts = list(
+        PayrollOutputArtifact.objects.filter(
+            output_batch_id=batch_id,
+            kind__in=[PayrollOutputArtifactKind.PAYSLIP, PayrollOutputArtifactKind.REGISTER],
+        ).order_by("kind", "artifact_key")
+    )
+    source_manifest = [
+        {
+            "id": str(artifact.id),
+            "kind": artifact.kind,
+            "artifact_key": artifact.artifact_key,
+            "source_hash": artifact.source_hash,
+            "checksum_sha256": artifact.checksum_sha256,
+        }
+        for artifact in source_artifacts
+    ]
+    source_manifest_hash = hashlib.sha256(
+        json.dumps(source_manifest, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    handoff_config = handoff_payload["handoff"]["config_snapshot"]
+    assert handoff_config["source_artifact_manifest"] == source_manifest
+    assert handoff_config["source_artifact_manifest_hash"] == source_manifest_hash
+    assert handoff_config["calculation_evidence_hash"]
+    assert all(
+        item["config_snapshot"]["source_artifact_manifest_hash"] == source_manifest_hash
+        and item["config_snapshot"]["calculation_evidence_hash"] == handoff_config["calculation_evidence_hash"]
+        for item in handoff_payload["artifacts"]
+    )
     bank_advice = next(item for item in handoff_payload["artifacts"] if item["kind"] == PayrollOutputArtifactKind.BANK_ADVICE)
     assert bank_advice["line_snapshot"][0]["employee_code"] == "EMP-0042"
     assert bank_advice["line_snapshot"][0]["net_pay"] == "28200.00"
@@ -8431,6 +9043,18 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
     handoff = PayrollFinanceHandoff.objects.get(id=handoff_id)
     assert handoff.posting_accounting_period == posting_period
     assert handoff.posting_date == pay_date
+    original_bank_source_hash = bank_advice["source_hash"]
+    PayrollOutputArtifact.objects.filter(id=bank_advice["id"]).update(source_hash="0" * 64)
+    tampered_transmit_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/",
+        {},
+        format="json",
+    )
+    assert tampered_transmit_response.status_code == 400
+    assert "source hash verification failed" in tampered_transmit_response.json()["detail"]
+    assert PayrollFinanceHandoff.objects.get(id=handoff_id).status == PayrollFinanceHandoffStatus.GENERATED
+    assert PayrollProviderDelivery.objects.filter(handoff_id=handoff_id).count() == 0
+    PayrollOutputArtifact.objects.filter(id=bank_advice["id"]).update(source_hash=original_bank_source_hash)
     actor = User.objects.create_superuser(
         username="finance-period-controller",
         email="finance-period-controller@example.test",
@@ -13352,6 +13976,42 @@ def test_manager_session_exposes_workspace_role_codes(api_client: APIClient, boo
         "tenant_admin": False,
         "platform_admin": False,
     }
+
+
+@pytest.mark.django_db
+def test_finance_manager_with_employee_and_manager_roles_gets_hr_workspace_access(
+    api_client: APIClient,
+    bootstrapped_workspace,
+):
+    membership = TenantMembership.objects.select_related("user").get(
+        tenant=bootstrapped_workspace["pending_leave"].tenant,
+        user__username="karan.mehta",
+    )
+    finance_role = Role.objects.create(
+        tenant=membership.tenant,
+        code="payroll-finance-manager",
+        name="Payroll Finance Manager",
+        is_system_role=True,
+        is_active=True,
+    )
+    finance_role.permissions.create(permission_key="finance.handoff.view")
+    MembershipRole.objects.create(membership=membership, role=finance_role, is_primary=False)
+
+    token = login(api_client, "karan.mehta")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/auth/session/")
+
+    assert response.status_code == 200
+    assert response.json()["default_membership"]["role_codes"] == ["manager", "payroll-finance-manager"]
+    assert response.json()["workspace_access"] == {
+        "ess": True,
+        "mss": True,
+        "hr_admin": True,
+        "tenant_admin": False,
+        "platform_admin": False,
+    }
+    assert "finance.handoff.view" in response.json()["effective_permissions"]
 
 
 @pytest.mark.django_db

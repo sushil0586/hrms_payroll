@@ -100,6 +100,10 @@ from apps.payroll.models import (
     PayrollInputSnapshot,
     PayrollOutputArtifact,
     PayrollOutputBatch,
+    PayrollProviderCallbackEvent,
+    PayrollProviderDelivery,
+    PayrollProviderJob,
+    PayrollProviderRetryEvent,
     PayGroup,
     PayGroupAssignment,
     PayGroupStatus,
@@ -772,6 +776,10 @@ class Command(BaseCommand):
             PayrollBackgroundJob.objects.filter(tenant=tenant).delete()
             PayrollArtifactAccessEvent.objects.filter(tenant=tenant).delete()
             PayrollArtifactSignedAccessGrant.objects.filter(tenant=tenant).delete()
+            PayrollProviderJob.objects.filter(tenant=tenant).delete()
+            PayrollProviderCallbackEvent.objects.filter(tenant=tenant).delete()
+            PayrollProviderRetryEvent.objects.filter(tenant=tenant).delete()
+            PayrollProviderDelivery.objects.filter(tenant=tenant).delete()
             PayrollOutputArtifact.objects.filter(tenant=tenant).delete()
             PayrollFinanceHandoff.objects.filter(tenant=tenant).delete()
             PayrollOutputBatch.objects.filter(tenant=tenant).delete()

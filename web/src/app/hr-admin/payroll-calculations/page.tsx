@@ -93,6 +93,39 @@ function annualizationSnapshot(line: HrAdminPayrollCalculationLineListItem) {
   return recordValue(line.config_snapshot?.annualization);
 }
 
+type DeclarationSource = {
+  declaration_id: string;
+  declaration_source_hash: string;
+  item_id: string;
+  item_source_hash: string;
+};
+
+function declarationSources(line: HrAdminPayrollCalculationLineListItem): DeclarationSource[] {
+  const sources = line.trace_snapshot?.declaration_sources;
+  if (!Array.isArray(sources)) {
+    return [];
+  }
+  return sources.flatMap((source) => {
+    const record = recordValue(source);
+    if (!record) {
+      return [];
+    }
+    const declarationId = String(record.declaration_id ?? "");
+    const declarationHash = String(record.declaration_source_hash ?? "");
+    const itemId = String(record.item_id ?? "");
+    const itemHash = String(record.item_source_hash ?? "");
+    if (!declarationId || !declarationHash || !itemId || !itemHash) {
+      return [];
+    }
+    return [{
+      declaration_id: declarationId,
+      declaration_source_hash: declarationHash,
+      item_id: itemId,
+      item_source_hash: itemHash,
+    }];
+  });
+}
+
 function snapshotText(value: unknown) {
   if (Array.isArray(value)) {
     return `${value.length} items`;
@@ -362,6 +395,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLineListIt
   const capEvidence = Array.isArray(annualization?.declaration_cap_evidence)
     ? annualization.declaration_cap_evidence
     : [];
+  const lockedDeclarationSources = declarationSources(line);
   const regimeComparisons = Array.isArray(annualization?.regime_comparisons)
     ? annualization.regime_comparisons.map(recordValue).filter((item): item is Record<string, unknown> => Boolean(item))
     : [];
@@ -424,6 +458,25 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLineListIt
               ))}
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {lockedDeclarationSources.length ? (
+        <section className="payroll-rule-source-card" aria-label="Locked declaration evidence">
+          <span className="workspace-card__eyebrow">Locked declaration evidence</span>
+          <p className="section-copy section-copy-soft">
+            Exact immutable sources consumed by this calculation. Employee and proof details are intentionally excluded.
+          </p>
+          <div className="payroll-calc-declaration-source-list">
+            {lockedDeclarationSources.map((source) => (
+              <div key={`${source.declaration_id}:${source.item_id}`}>
+                <span>Declaration</span>
+                <code title={source.declaration_id}>{source.declaration_source_hash}</code>
+                <span>Item</span>
+                <code title={source.item_id}>{source.item_source_hash}</code>
+              </div>
+            ))}
+          </div>
         </section>
       ) : null}
 
@@ -519,6 +572,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const result = await getHrAdminPayrollCalculationSetup({
     run_id: selectedRunId,
     calculation_id: selectedCalculationId,
+    line_id: selectedLineId,
     run_page: runPage,
     run_page_size: runSize,
     calculation_page: calculationPage,
@@ -552,7 +606,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
     pageSize: lineSize,
     totalPages: setup.pagination?.lines?.total_pages ?? paginate(visibleLines, linePage, lineSize).totalPages,
   };
-  const selectedLine = visibleLines.find((item) => item.id === selectedLineId) ?? visibleLines.find((item) => item.component_code === "TDS") ?? visibleLines[0] ?? null;
+  const selectedLine = setup.selected_line ?? visibleLines.find((item) => item.id === selectedLineId) ?? visibleLines.find((item) => item.component_code === "TDS") ?? visibleLines[0] ?? null;
   const totals = selectedCalculation?.totals_snapshot ?? {};
   const visibleValidationIssues = setup.validation_issues.filter((issue) => {
     if (issue.status !== "open") {

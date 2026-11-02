@@ -1491,12 +1491,68 @@ class HrAdminPayrollStatutoryPackWriteSerializer(serializers.Serializer):
     validation_profile_ref = serializers.CharField(max_length=160, required=False)
     config_snapshot = serializers.JSONField(required=False)
 
+    def validate_config_snapshot(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Configuration must be an object.")
+        catalog = value.get("declaration_catalog")
+        if catalog is None:
+            return value
+        if not isinstance(catalog, dict):
+            raise serializers.ValidationError("Declaration catalog must be an object.")
+        years = catalog.get("financial_years")
+        sections = catalog.get("sections")
+        if not isinstance(years, list) or not years:
+            raise serializers.ValidationError("Declaration catalog requires at least one financial year.")
+        if not isinstance(sections, list) or not sections:
+            raise serializers.ValidationError("Declaration catalog requires at least one section.")
+
+        year_values = []
+        for index, year in enumerate(years):
+            if not isinstance(year, dict):
+                raise serializers.ValidationError(f"Financial year {index + 1} must be an object.")
+            value_key = str(year.get("value") or "").strip().upper()
+            if not value_key or not str(year.get("label") or "").strip():
+                raise serializers.ValidationError(f"Financial year {index + 1} requires a value and label.")
+            if not str(year.get("declaration_profile_ref") or "").strip() or not str(year.get("proof_window_ref") or "").strip():
+                raise serializers.ValidationError(f"Financial year {index + 1} requires declaration profile and proof window references.")
+            year_values.append(value_key)
+        if len(year_values) != len(set(year_values)):
+            raise serializers.ValidationError("Financial year values must be unique.")
+
+        section_codes = []
+        allowed_item_kinds = set(PayrollStatutoryDeclarationItemKind.values)
+        for index, section in enumerate(sections):
+            if not isinstance(section, dict):
+                raise serializers.ValidationError(f"Section {index + 1} must be an object.")
+            code = str(section.get("code") or "").strip().upper()
+            if not code or not str(section.get("label") or "").strip():
+                raise serializers.ValidationError(f"Section {index + 1} requires a code and label.")
+            item_kinds = section.get("item_kinds")
+            if not isinstance(item_kinds, list) or not item_kinds:
+                raise serializers.ValidationError(f"Section {code} requires at least one declaration type.")
+            invalid_kinds = sorted({str(item) for item in item_kinds} - allowed_item_kinds)
+            if invalid_kinds:
+                raise serializers.ValidationError(f"Section {code} contains unsupported declaration types: {', '.join(invalid_kinds)}.")
+            component_codes = section.get("component_codes")
+            if not isinstance(component_codes, list) or any(not str(item).strip() for item in component_codes):
+                raise serializers.ValidationError(f"Section {code} component codes must be a list of non-empty values.")
+            section_codes.append(code)
+        if len(section_codes) != len(set(section_codes)):
+            raise serializers.ValidationError("Section codes must be unique.")
+        return value
+
     def validate(self, attrs):
         if not self.partial:
             missing = [field for field in ["code", "name", "effective_from"] if field not in attrs]
             if missing:
                 raise serializers.ValidationError({field: "This field is required." for field in missing})
         return attrs
+
+
+class HrAdminPayrollStatutoryYearLifecycleSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["close", "reopen"])
+    reason = serializers.CharField(min_length=8, max_length=500)
+    approval_reference = serializers.CharField(min_length=3, max_length=160)
 
 
 class HrAdminPayrollStatutoryComponentSerializer(serializers.Serializer):
@@ -1830,6 +1886,9 @@ class HrAdminEmployeeStatutoryDeclarationSerializer(serializers.Serializer):
     submitted_item_count = serializers.IntegerField()
     verified_item_count = serializers.IntegerField()
     rejected_item_count = serializers.IntegerField()
+    reconciliation_status = serializers.CharField()
+    reconciliation_difference = serializers.DecimalField(max_digits=14, decimal_places=2)
+    exception_count = serializers.IntegerField()
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
 
@@ -1839,17 +1898,22 @@ class HrAdminEmployeeStatutoryDeclarationWriteSerializer(serializers.Serializer)
     employee_statutory_profile_id = serializers.UUIDField(required=False)
     statutory_pack_id = serializers.UUIDField(required=False, allow_null=True)
     financial_year_code = serializers.CharField(max_length=40, required=False)
-    declaration_profile_ref = serializers.CharField(max_length=160, required=False)
-    proof_window_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
-    status = serializers.ChoiceField(choices=PayrollStatutoryDeclarationStatus.values, required=False)
     tax_regime = serializers.ChoiceField(choices=PayrollTaxRegime.values, required=False)
-    declared_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
-    verified_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
-    rejection_reason = serializers.CharField(required=False, allow_blank=True)
-    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
     config_snapshot = serializers.JSONField(required=False)
 
     def validate(self, attrs):
+        server_owned = {
+            "declaration_profile_ref",
+            "proof_window_ref",
+            "status",
+            "declared_total_amount",
+            "verified_total_amount",
+            "rejection_reason",
+            "source_ref",
+        }
+        supplied = server_owned.intersection(self.initial_data)
+        if supplied:
+            raise serializers.ValidationError({field: "This field is controlled by the statutory declaration workflow." for field in sorted(supplied)})
         if not self.partial:
             missing = [field for field in ["employee_id", "employee_statutory_profile_id", "financial_year_code"] if field not in attrs]
             if missing:
@@ -1894,14 +1958,13 @@ class HrAdminEmployeeStatutoryDeclarationItemWriteSerializer(serializers.Seriali
     component_code = serializers.CharField(max_length=120, required=False, allow_blank=True)
     name = serializers.CharField(max_length=255, required=False)
     declared_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
-    verified_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
-    proof_status = serializers.ChoiceField(choices=PayrollStatutoryProofStatus.values, required=False)
-    proof_document_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
-    proof_artifact_key = serializers.CharField(max_length=240, required=False, allow_blank=True)
-    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
     config_snapshot = serializers.JSONField(required=False)
 
     def validate(self, attrs):
+        server_owned = {"verified_amount", "proof_status", "proof_document_ref", "proof_artifact_key", "source_ref"}
+        supplied = server_owned.intersection(self.initial_data)
+        if supplied:
+            raise serializers.ValidationError({field: "This field is controlled by proof upload or review." for field in sorted(supplied)})
         if not self.partial:
             missing = [field for field in ["section_code", "name", "declared_amount"] if field not in attrs]
             if missing:
@@ -1911,6 +1974,11 @@ class HrAdminEmployeeStatutoryDeclarationItemWriteSerializer(serializers.Seriali
 
 class HrAdminEmployeeStatutoryDeclarationRejectSerializer(serializers.Serializer):
     reason = serializers.CharField()
+
+
+class HrAdminEmployeeStatutoryDeclarationReopenSerializer(serializers.Serializer):
+    reason = serializers.CharField(min_length=8, max_length=500)
+    approval_reference = serializers.CharField(min_length=3, max_length=160)
 
 
 class HrAdminEmployeeStatutoryDeclarationItemVerifySerializer(serializers.Serializer):
@@ -1936,6 +2004,7 @@ class HrAdminPayrollStatutoryOptionsSerializer(serializers.Serializer):
     legal_entities = serializers.JSONField()
     branches = serializers.JSONField()
     locations = serializers.JSONField()
+    declaration_catalog = serializers.JSONField()
 
 
 class HrAdminPayrollStatutorySetupSerializer(serializers.Serializer):
@@ -2024,13 +2093,22 @@ class MeStatutoryDeclarationWriteSerializer(serializers.Serializer):
     employee_statutory_profile_id = serializers.UUIDField(required=False)
     statutory_pack_id = serializers.UUIDField(required=False, allow_null=True)
     financial_year_code = serializers.CharField(max_length=40, required=False)
-    declaration_profile_ref = serializers.CharField(max_length=160, required=False)
-    proof_window_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
     tax_regime = serializers.ChoiceField(choices=PayrollTaxRegime.values, required=False)
-    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
     config_snapshot = serializers.JSONField(required=False)
 
     def validate(self, attrs):
+        server_owned = {
+            "declaration_profile_ref",
+            "proof_window_ref",
+            "status",
+            "declared_total_amount",
+            "verified_total_amount",
+            "rejection_reason",
+            "source_ref",
+        }
+        supplied = server_owned.intersection(self.initial_data)
+        if supplied:
+            raise serializers.ValidationError({field: "This field is controlled by the statutory declaration workflow." for field in sorted(supplied)})
         if not self.partial and "financial_year_code" not in attrs:
             raise serializers.ValidationError({"financial_year_code": "This field is required."})
         return attrs
@@ -2042,20 +2120,13 @@ class MeStatutoryDeclarationItemWriteSerializer(serializers.Serializer):
     component_code = serializers.CharField(max_length=120, required=False, allow_blank=True)
     name = serializers.CharField(max_length=255, required=False)
     declared_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
-    proof_status = serializers.ChoiceField(
-        choices=[
-            PayrollStatutoryProofStatus.NOT_REQUIRED,
-            PayrollStatutoryProofStatus.PENDING,
-            PayrollStatutoryProofStatus.SUBMITTED,
-        ],
-        required=False,
-    )
-    proof_document_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
-    proof_artifact_key = serializers.CharField(max_length=240, required=False, allow_blank=True)
-    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
     config_snapshot = serializers.JSONField(required=False)
 
     def validate(self, attrs):
+        server_owned = {"verified_amount", "proof_status", "proof_document_ref", "proof_artifact_key", "source_ref"}
+        supplied = server_owned.intersection(self.initial_data)
+        if supplied:
+            raise serializers.ValidationError({field: "This field is controlled by proof upload or review." for field in sorted(supplied)})
         if not self.partial:
             missing = [field for field in ["section_code", "name", "declared_amount"] if field not in attrs]
             if missing:
@@ -2534,6 +2605,7 @@ class HrAdminPayrollCalculationSetupSerializer(serializers.Serializer):
     runs = HrAdminPayrollRunSerializer(many=True)
     calculations = HrAdminPayrollRunCalculationSerializer(many=True)
     lines = HrAdminPayrollCalculationLineListSerializer(many=True)
+    selected_line = HrAdminPayrollCalculationLineSerializer(allow_null=True, required=False)
     validation_issues = HrAdminPayrollValidationIssueSerializer(many=True)
     options = HrAdminPayrollCalculationOptionsSerializer()
 

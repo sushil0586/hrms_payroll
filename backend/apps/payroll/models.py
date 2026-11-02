@@ -2385,6 +2385,10 @@ class PayrollCalculationLine(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def clean(self):
         errors = {}
+        if self.pk:
+            previous = PayrollCalculationLine.objects.filter(pk=self.pk).first()
+            if previous and previous.payroll_run.status == PayrollRunStatus.LOCKED:
+                errors["payroll_run"] = "Final locked payroll calculation lines are immutable."
         if self.calculation_id and self.tenant_id and self.calculation.tenant_id != self.tenant_id:
             errors["calculation"] = "Payroll calculation must belong to the same tenant."
         if self.payroll_run_id and self.tenant_id and self.payroll_run.tenant_id != self.tenant_id:
@@ -2433,6 +2437,11 @@ class PayrollCalculationLine(UUIDPrimaryKeyModel, TimeStampedModel):
             self.line_source = PayrollCalculationLineSource.ADJUSTMENT
         self.full_clean()
         return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.payroll_run.status == PayrollRunStatus.LOCKED:
+            raise ValidationError({"payroll_run": "Final locked payroll calculation lines are immutable."})
+        return super().delete(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.payroll_run.code}:{self.employee.employee_code}:{self.component_code}"

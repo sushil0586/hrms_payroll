@@ -4490,8 +4490,36 @@ export type HrAdminEmployeeStatutoryDeclaration = {
   submitted_item_count: number;
   verified_item_count: number;
   rejected_item_count: number;
+  reconciliation_status: "matched" | "exception";
+  reconciliation_difference: string;
+  exception_count: number;
   created_at: string;
   updated_at: string;
+};
+
+export type StatutoryDeclarationCatalog = {
+  source: "tenant_config" | "legacy_compatibility";
+  financial_years: Array<{
+    value: string;
+    label: string;
+    is_open: boolean;
+    lifecycle_events?: Array<Record<string, unknown>>;
+    closed_at?: string;
+    closed_by?: string;
+    close_approval_reference?: string;
+    reopened_at?: string;
+    reopened_by?: string;
+    reopen_approval_reference?: string;
+    declaration_profile_ref: string;
+    proof_window_ref: string;
+  }>;
+  sections: Array<{
+    code: string;
+    label: string;
+    item_kinds: string[];
+    component_codes: string[];
+    proof_required: boolean;
+  }>;
 };
 
 export type HrAdminPayrollStatutorySetupResponse = {
@@ -4544,6 +4572,7 @@ export type HrAdminPayrollStatutorySetupResponse = {
     legal_entities: HrAdminOptionItem[];
     branches: HrAdminOptionItem[];
     locations: HrAdminOptionItem[];
+    declaration_catalog: StatutoryDeclarationCatalog;
   };
 };
 
@@ -4663,6 +4692,7 @@ export type HrAdminPayrollCalculationSetupResponse = {
   runs: HrAdminPayrollRun[];
   calculations: HrAdminPayrollRunCalculation[];
   lines: HrAdminPayrollCalculationLineListItem[];
+  selected_line?: HrAdminPayrollCalculationLine | null;
   validation_issues: HrAdminPayrollValidationIssue[];
   options: {
     payroll_run_statuses: HrAdminEnumOption[];
@@ -6011,6 +6041,7 @@ export type EssStatutoryDeclarationListResponse = PaginatedListResponse<EssStatu
     statutory_proof_statuses: HrAdminEnumOption[];
     tax_regimes: HrAdminEnumOption[];
     proof_upload_categories: HrAdminOptionItem[];
+    declaration_catalog: StatutoryDeclarationCatalog;
   };
 };
 

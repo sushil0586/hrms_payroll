@@ -2668,10 +2668,6 @@ def _tds_declaration_cap_adjustments(
     if not financial_year_code:
         return Decimal("0.00"), []
 
-    declaration_statuses = _profile_list(annualization_config, "declaration_statuses") or [
-        PayrollStatutoryDeclarationStatus.VERIFIED,
-        PayrollStatutoryDeclarationStatus.LOCKED,
-    ]
     proof_statuses = _profile_list(annualization_config, "proof_statuses") or [
         PayrollStatutoryProofStatus.VERIFIED,
         PayrollStatutoryProofStatus.NOT_REQUIRED,
@@ -2686,7 +2682,7 @@ def _tds_declaration_cap_adjustments(
         employee=employee_profile.employee,
         employee_statutory_profile=employee_profile,
         financial_year_code=financial_year_code,
-        status__in=declaration_statuses,
+        status=PayrollStatutoryDeclarationStatus.LOCKED,
     ).prefetch_related("items")
     if declaration_profile_refs:
         declarations = declarations.filter(declaration_profile_ref__in=declaration_profile_refs)
@@ -2719,6 +2715,18 @@ def _tds_declaration_cap_adjustments(
         for item in matched_items:
             consumed_item_ids.add(str(item.id))
         total_adjustment += capped_amount
+        declaration_sources = sorted(
+            [
+                {
+                    "declaration_id": str(item.declaration_id),
+                    "declaration_source_hash": item.declaration.source_hash,
+                    "item_id": str(item.id),
+                    "item_source_hash": item.source_hash,
+                }
+                for item in matched_items
+            ],
+            key=lambda source: source["item_id"],
+        )
         evidence.append({
             "rule_index": index,
             "cap_ref": raw_rule.get("cap_ref") or raw_rule.get("section_code") or raw_rule.get("component_code") or f"cap_rule:{index}",
@@ -2726,6 +2734,7 @@ def _tds_declaration_cap_adjustments(
             "capped_amount": str(capped_amount),
             "max_amount": str(max_amount or ""),
             "item_ids": [str(item.id) for item in matched_items],
+            "declaration_sources": declaration_sources,
             "section_codes": sorted({_code_value(item.section_code) for item in matched_items if item.section_code}),
             "component_codes": sorted({_code_value(item.component_code) for item in matched_items if item.component_code}),
         })
@@ -3020,12 +3029,17 @@ def _tds_annualized_line_specs(
     source_hash_payload = {
         **trace_payload,
         "employee_statutory_profile_hash": employee_profile.source_hash if employee_profile else "",
-            "declaration_item_ids": [
-                item_id
-                for cap in selected_projection.get("declaration_cap_evidence", [])
-                for item_id in cap.get("item_ids", [])
-            ],
-        }
+        "declaration_item_ids": [
+            item_id
+            for cap in selected_projection.get("declaration_cap_evidence", [])
+            for item_id in cap.get("item_ids", [])
+        ],
+        "declaration_sources": [
+            source
+            for cap in selected_projection.get("declaration_cap_evidence", [])
+            for source in cap.get("declaration_sources", [])
+        ],
+    }
     return [{
         "owner": PayrollStatutoryContributionOwner.EMPLOYEE,
         "amount": amount,
@@ -3048,6 +3062,7 @@ def _tds_annualized_line_specs(
                 **trace_payload,
             }],
             "employee_statutory_profile_hash": employee_profile.source_hash if employee_profile else "",
+            "declaration_sources": source_hash_payload["declaration_sources"],
         },
         "config_snapshot": {
             "annualization": trace_payload,
@@ -4551,6 +4566,62 @@ def _review_profile(payroll_run: PayrollRun) -> dict[str, Any]:
     return profile if isinstance(profile, dict) else {}
 
 
+def _calculation_evidence_snapshot(calculation: PayrollRunCalculation) -> dict[str, Any]:
+    lines = list(calculation.lines.order_by("calculation_order", "component_code", "id"))
+    declaration_sources = []
+    for line in lines:
+        trace = line.trace_snapshot if isinstance(line.trace_snapshot, dict) else {}
+        for source in trace.get("declaration_sources", []):
+            if not isinstance(source, dict):
+                continue
+            declaration_sources.append({
+                "declaration_id": str(source.get("declaration_id") or ""),
+                "declaration_source_hash": str(source.get("declaration_source_hash") or ""),
+                "item_id": str(source.get("item_id") or ""),
+                "item_source_hash": str(source.get("item_source_hash") or ""),
+            })
+    return {
+        "calculation_id": str(calculation.id),
+        "line_sources": [
+            {"line_id": str(line.id), "source_hash": line.source_hash}
+            for line in lines
+        ],
+        "declaration_sources": sorted(
+            declaration_sources,
+            key=lambda source: (source["declaration_id"], source["item_id"]),
+        ),
+    }
+
+
+def _validate_review_evidence_current(review: PayrollRunReview) -> None:
+    config = review.config_snapshot if isinstance(review.config_snapshot, dict) else {}
+    expected = config.get("calculation_evidence")
+    if not isinstance(expected, dict):
+        raise PayrollReviewError("Payroll review is missing its calculation evidence seal.")
+    current = _calculation_evidence_snapshot(review.calculation)
+    if current != expected:
+        raise PayrollReviewError("Payroll review evidence is stale; create a new controlled calculation and review.")
+
+    for source in expected.get("declaration_sources", []):
+        declaration = EmployeeStatutoryDeclaration.objects.select_for_update().filter(
+            tenant=review.tenant,
+            id=source.get("declaration_id"),
+        ).only("status", "source_hash").first()
+        item = EmployeeStatutoryDeclarationItem.objects.select_for_update().filter(
+            tenant=review.tenant,
+            id=source.get("item_id"),
+            declaration_id=source.get("declaration_id"),
+        ).only("source_hash").first()
+        if (
+            not declaration
+            or declaration.status != PayrollStatutoryDeclarationStatus.LOCKED
+            or declaration.source_hash != source.get("declaration_source_hash")
+            or not item
+            or item.source_hash != source.get("item_source_hash")
+        ):
+            raise PayrollReviewError("Payroll review evidence is stale; create a new controlled calculation and review.")
+
+
 def _exception_summary(review: PayrollRunReview) -> dict[str, Any]:
     exceptions = review.exceptions.all()
     open_items = exceptions.filter(status=PayrollExceptionStatus.OPEN)
@@ -4602,7 +4673,10 @@ def open_payroll_run_review(
                 "review_profile_ref": profile_ref,
                 "opened_by": opened_by,
                 "totals_snapshot": calculation.totals_snapshot,
-                "config_snapshot": {"review_profile": profile},
+                "config_snapshot": {
+                    "review_profile": profile,
+                    "calculation_evidence": _calculation_evidence_snapshot(calculation),
+                },
             },
         )
         if created:
@@ -4708,11 +4782,14 @@ def decide_payroll_run_exception(
     return exception
 
 
+@transaction.atomic
 def submit_payroll_run_review(review: PayrollRunReview, *, submitted_by=None) -> PayrollRunReview:
     """Mark a payroll review ready for approval after open blockers are cleared."""
 
+    review = PayrollRunReview.objects.select_for_update().select_related("calculation", "payroll_run").get(pk=review.pk)
     if review.status not in {PayrollReviewStatus.OPEN, PayrollReviewStatus.REJECTED}:
         raise PayrollReviewError("Only open or rejected payroll reviews can be submitted for approval.")
+    _validate_review_evidence_current(review)
     summary = _exception_summary(review)
     if summary["open_blocker_count"]:
         raise PayrollReviewError("Cannot submit payroll review while blocker exceptions are open.")
@@ -4735,11 +4812,12 @@ def approve_payroll_run_review(
 ) -> PayrollRunApproval:
     """Approve a submitted payroll review."""
 
-    review = PayrollRunReview.objects.select_for_update().select_related("payroll_run").get(pk=review.pk)
+    review = PayrollRunReview.objects.select_for_update().select_related("calculation", "payroll_run").get(pk=review.pk)
     if review.status != PayrollReviewStatus.READY_FOR_APPROVAL:
         raise PayrollReviewError("Payroll review must be ready for approval before approval.")
     if approved_by and review.submitted_by_id == approved_by.id:
         raise PayrollReviewError("Payroll review submitter cannot approve the same review.")
+    _validate_review_evidence_current(review)
     summary = _exception_summary(review)
     if summary["open_blocker_count"]:
         raise PayrollReviewError("Cannot approve payroll review while blocker exceptions are open.")
@@ -4794,11 +4872,14 @@ def reject_payroll_run_review(
     return approval
 
 
+@transaction.atomic
 def lock_approved_payroll_run_review(review: PayrollRunReview, *, locked_by=None) -> PayrollRunReview:
     """Final-lock an approved payroll review and payroll run."""
 
+    review = PayrollRunReview.objects.select_for_update().select_related("calculation", "payroll_run").get(pk=review.pk)
     if review.status != PayrollReviewStatus.APPROVED:
         raise PayrollReviewError("Payroll review must be approved before final lock.")
+    _validate_review_evidence_current(review)
     summary = _exception_summary(review)
     if summary["open_blocker_count"]:
         raise PayrollReviewError("Cannot lock payroll review while blocker exceptions are open.")
@@ -6082,6 +6163,42 @@ def notify_published_payroll_payslip(artifact: PayrollOutputArtifact, *, publish
     return notifications
 
 
+def _review_calculation_evidence(review: PayrollRunReview) -> tuple[dict[str, Any], str]:
+    config = review.config_snapshot if isinstance(review.config_snapshot, dict) else {}
+    evidence = config.get("calculation_evidence")
+    if not isinstance(evidence, dict):
+        raise PayrollOutputError("Payroll review is missing its calculation evidence seal.")
+    evidence_hash = hashlib.sha256(
+        json.dumps(evidence, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    return evidence, evidence_hash
+
+
+def _validate_output_batch_evidence_current(batch: PayrollOutputBatch) -> None:
+    try:
+        _validate_review_evidence_current(batch.review)
+    except PayrollReviewError as exc:
+        raise PayrollOutputError(str(exc)) from exc
+    review_evidence, review_evidence_hash = _review_calculation_evidence(batch.review)
+    config = batch.config_snapshot if isinstance(batch.config_snapshot, dict) else {}
+    if (
+        config.get("calculation_evidence") != review_evidence
+        or config.get("calculation_evidence_hash") != review_evidence_hash
+    ):
+        raise PayrollOutputError("Payroll output evidence does not match the final-locked review.")
+    for artifact in batch.artifacts.select_for_update():
+        artifact_config = artifact.config_snapshot if isinstance(artifact.config_snapshot, dict) else {}
+        if artifact_config.get("calculation_evidence_hash") != review_evidence_hash:
+            raise PayrollOutputError("Payroll output artifact evidence does not match the final-locked review.")
+        if artifact.source_hash != artifact._artifact_digest():
+            raise PayrollOutputError("Payroll output artifact source hash verification failed.")
+        if artifact.file_payload:
+            payload_checksum = hashlib.sha256(artifact.file_payload.encode("utf-8")).hexdigest()
+            if artifact.checksum_sha256 != payload_checksum:
+                raise PayrollOutputError("Payroll output artifact checksum verification failed.")
+
+
+@transaction.atomic
 def generate_payroll_outputs(
     review: PayrollRunReview,
     *,
@@ -6090,14 +6207,20 @@ def generate_payroll_outputs(
 ) -> PayrollOutputBatch:
     """Generate payslip and register artifact snapshots for a final-locked payroll review."""
 
+    review = PayrollRunReview.objects.select_for_update().select_related("calculation", "payroll_run").get(pk=review.pk)
     if review.status != PayrollReviewStatus.LOCKED:
         raise PayrollOutputError("Payroll outputs require a final-locked payroll review.")
     if review.payroll_run.status != PayrollRunStatus.LOCKED:
         raise PayrollOutputError("Payroll outputs require a final-locked payroll run.")
+    try:
+        _validate_review_evidence_current(review)
+    except PayrollReviewError as exc:
+        raise PayrollOutputError(str(exc)) from exc
+    calculation_evidence, calculation_evidence_hash = _review_calculation_evidence(review)
 
     profile = _output_profile(review)
     profile_ref = output_profile_ref or profile.get("output_profile_ref") or "payroll.output.profile.default.v1"
-    existing = PayrollOutputBatch.objects.filter(
+    existing = PayrollOutputBatch.objects.select_for_update().filter(
         tenant=review.tenant,
         review=review,
         output_profile_ref=profile_ref,
@@ -6105,6 +6228,7 @@ def generate_payroll_outputs(
     if existing:
         if existing.status == PayrollOutputBatchStatus.PUBLISHED:
             raise PayrollOutputError("Published payroll output batches cannot be regenerated.")
+        _validate_output_batch_evidence_current(existing)
         return _sync_output_batch_summary(existing)
 
     calculation = review.calculation
@@ -6133,6 +6257,8 @@ def generate_payroll_outputs(
                 "output_profile": profile,
                 "calculation_id": str(calculation.id),
                 "review_id": str(review.id),
+                "calculation_evidence": calculation_evidence,
+                "calculation_evidence_hash": calculation_evidence_hash,
             },
         )
         employee_groups: dict[str, list[PayrollCalculationLine]] = {}
@@ -6153,6 +6279,7 @@ def generate_payroll_outputs(
             payslip_config = {
                 "artifact_template_ref": profile.get("payslip_template_ref", "payroll.payslip.template.default.v1"),
                 "source_hashes": sorted({line.source_hash for line in employee_lines if line.source_hash}),
+                "calculation_evidence_hash": calculation_evidence_hash,
             }
             if first_line.input_snapshot_id:
                 attendance_spine = (
@@ -6233,6 +6360,7 @@ def generate_payroll_outputs(
         register_config = {
             "artifact_template_ref": profile.get("register_template_ref", "payroll.register.template.default.v1"),
             "employee_count": len(register_rows),
+            "calculation_evidence_hash": calculation_evidence_hash,
         }
         register_config = _artifact_config_with_storage(register_config, profile)
         PayrollOutputArtifact.objects.create(
@@ -6263,15 +6391,21 @@ def generate_payroll_outputs(
     return batch
 
 
+@transaction.atomic
 def publish_payroll_output_batch(batch: PayrollOutputBatch, *, published_by=None) -> PayrollOutputBatch:
     """Publish generated payroll output artifacts."""
 
+    batch = PayrollOutputBatch.objects.select_for_update().select_related(
+        "review__calculation",
+        "payroll_run",
+    ).get(pk=batch.pk)
     if batch.status == PayrollOutputBatchStatus.PUBLISHED:
         return batch
     if batch.status != PayrollOutputBatchStatus.GENERATED:
         raise PayrollOutputError("Only generated payroll output batches can be published.")
     if batch.review.status != PayrollReviewStatus.LOCKED or batch.payroll_run.status != PayrollRunStatus.LOCKED:
         raise PayrollOutputError("Payroll outputs can only be published for final-locked payroll.")
+    _validate_output_batch_evidence_current(batch)
     _assert_output_batch_reconciliation_passed(batch, action_label="publish")
     publish_time = timezone.now()
     with transaction.atomic():
@@ -6455,6 +6589,7 @@ def _create_statutory_filing_artifacts(
     generated_by=None,
     profile: dict[str, Any],
     artifact_key_prefix: str,
+    source_evidence_config: dict[str, Any],
 ) -> list[PayrollOutputArtifact]:
     filing_profile = _statutory_filing_profile(profile)
     if filing_profile.get("enabled") is False:
@@ -6471,6 +6606,7 @@ def _create_statutory_filing_artifacts(
             continue
         base_profile_ref = filing.output_profile_ref or filing_profile.get("return_output_profile_ref") or handoff.statutory_pack_ref
         base_config = {
+            **source_evidence_config,
             "handoff_id": str(handoff.id),
             "handoff_profile_ref": handoff.handoff_profile_ref,
             "statutory_filing_calendar_id": str(filing.id),
@@ -9640,6 +9776,7 @@ def _delivery_needs_provider_adapter_submission(delivery: PayrollProviderDeliver
     return delivery.status == PayrollProviderDeliveryStatus.SUBMITTED and not isinstance(response_snapshot.get("adapter_submission"), dict)
 
 
+@transaction.atomic
 def generate_payroll_finance_handoff(
     batch: PayrollOutputBatch,
     *,
@@ -9648,12 +9785,43 @@ def generate_payroll_finance_handoff(
 ) -> PayrollFinanceHandoff:
     """Generate finance handoff artifacts for a published payroll output batch."""
 
+    batch = PayrollOutputBatch.objects.select_for_update(of=("self",)).select_related(
+        "review__calculation",
+        "payroll_run__pay_group__legal_entity",
+        "payroll_run__period__calendar",
+    ).get(pk=batch.pk)
     if batch.status != PayrollOutputBatchStatus.PUBLISHED:
         raise PayrollFinanceHandoffError("Payroll finance handoff requires a published payroll output batch.")
     try:
+        _validate_output_batch_evidence_current(batch)
         _assert_output_batch_reconciliation_passed(batch, action_label="finance handoff")
     except PayrollOutputError as exc:
         raise PayrollFinanceHandoffError(str(exc)) from exc
+
+    source_artifacts = list(
+        batch.artifacts.filter(
+            kind__in=[PayrollOutputArtifactKind.PAYSLIP, PayrollOutputArtifactKind.REGISTER],
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ).order_by("kind", "artifact_key")
+    )
+    source_artifact_manifest = [
+        {
+            "id": str(artifact.id),
+            "kind": artifact.kind,
+            "artifact_key": artifact.artifact_key,
+            "source_hash": artifact.source_hash,
+            "checksum_sha256": artifact.checksum_sha256,
+        }
+        for artifact in source_artifacts
+    ]
+    source_artifact_manifest_hash = hashlib.sha256(
+        json.dumps(source_artifact_manifest, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    batch_config = batch.config_snapshot if isinstance(batch.config_snapshot, dict) else {}
+    source_evidence_config = {
+        "calculation_evidence_hash": batch_config.get("calculation_evidence_hash", ""),
+        "source_artifact_manifest_hash": source_artifact_manifest_hash,
+    }
 
     profile = _finance_handoff_profile(batch)
     profile_ref = handoff_profile_ref or profile.get("handoff_profile_ref") or "payroll.finance_handoff.profile.default.v1"
@@ -9793,6 +9961,9 @@ def generate_payroll_finance_handoff(
                 "finance_handoff_profile": profile,
                 "source_output_batch_id": str(batch.id),
                 "source_output_profile_ref": batch.output_profile_ref,
+                "calculation_evidence_hash": source_evidence_config["calculation_evidence_hash"],
+                "source_artifact_manifest": source_artifact_manifest,
+                "source_artifact_manifest_hash": source_artifact_manifest_hash,
             },
         )
         _finance_artifact(
@@ -9805,7 +9976,11 @@ def generate_payroll_finance_handoff(
             totals_snapshot={"net_pay": str(bank_total), "employee_count": len(bank_rows)},
             line_snapshot=bank_rows,
             generated_by=generated_by,
-            config_snapshot={"handoff_id": str(handoff.id), "handoff_profile_ref": profile_ref},
+            config_snapshot={
+                **source_evidence_config,
+                "handoff_id": str(handoff.id),
+                "handoff_profile_ref": profile_ref,
+            },
         )
         _finance_artifact(
             batch=batch,
@@ -9822,7 +9997,11 @@ def generate_payroll_finance_handoff(
             },
             line_snapshot=accounting_rows,
             generated_by=generated_by,
-            config_snapshot={"handoff_id": str(handoff.id), "handoff_profile_ref": profile_ref},
+            config_snapshot={
+                **source_evidence_config,
+                "handoff_id": str(handoff.id),
+                "handoff_profile_ref": profile_ref,
+            },
         )
         _finance_artifact(
             batch=batch,
@@ -9834,7 +10013,11 @@ def generate_payroll_finance_handoff(
             totals_snapshot={"statutory_total": str(statutory_total), "line_count": len(statutory_rows)},
             line_snapshot=statutory_rows,
             generated_by=generated_by,
-            config_snapshot={"handoff_id": str(handoff.id), "handoff_profile_ref": profile_ref},
+            config_snapshot={
+                **source_evidence_config,
+                "handoff_id": str(handoff.id),
+                "handoff_profile_ref": profile_ref,
+            },
         )
         statutory_filing_artifacts = _create_statutory_filing_artifacts(
             batch=batch,
@@ -9843,6 +10026,7 @@ def generate_payroll_finance_handoff(
             generated_by=generated_by,
             profile=profile,
             artifact_key_prefix=artifact_key_prefix,
+            source_evidence_config=source_evidence_config,
         )
         if statutory_filing_artifacts:
             handoff.totals_snapshot = {
@@ -9859,6 +10043,55 @@ def generate_payroll_finance_handoff(
     return handoff
 
 
+def _validate_finance_handoff_evidence_current(handoff: PayrollFinanceHandoff) -> None:
+    try:
+        _validate_output_batch_evidence_current(handoff.output_batch)
+    except PayrollOutputError as exc:
+        raise PayrollFinanceHandoffError(str(exc)) from exc
+
+    source_artifacts = list(
+        handoff.output_batch.artifacts.filter(
+            kind__in=[PayrollOutputArtifactKind.PAYSLIP, PayrollOutputArtifactKind.REGISTER],
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ).order_by("kind", "artifact_key")
+    )
+    source_manifest = [
+        {
+            "id": str(artifact.id),
+            "kind": artifact.kind,
+            "artifact_key": artifact.artifact_key,
+            "source_hash": artifact.source_hash,
+            "checksum_sha256": artifact.checksum_sha256,
+        }
+        for artifact in source_artifacts
+    ]
+    source_manifest_hash = hashlib.sha256(
+        json.dumps(source_manifest, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    handoff_config = handoff.config_snapshot if isinstance(handoff.config_snapshot, dict) else {}
+    batch_config = handoff.output_batch.config_snapshot if isinstance(handoff.output_batch.config_snapshot, dict) else {}
+    if (
+        handoff_config.get("calculation_evidence_hash") != batch_config.get("calculation_evidence_hash")
+        or handoff_config.get("source_artifact_manifest") != source_manifest
+        or handoff_config.get("source_artifact_manifest_hash") != source_manifest_hash
+    ):
+        raise PayrollFinanceHandoffError("Payroll finance handoff evidence no longer matches its published outputs.")
+
+    finance_artifacts = list(
+        handoff.output_batch.artifacts.filter(kind__in=FINANCE_ARTIFACT_KINDS).order_by("kind", "artifact_key")
+    )
+    if not finance_artifacts:
+        raise PayrollFinanceHandoffError("Payroll finance handoff requires generated finance artifacts.")
+    for artifact in finance_artifacts:
+        artifact_config = artifact.config_snapshot if isinstance(artifact.config_snapshot, dict) else {}
+        if (
+            artifact_config.get("handoff_id") != str(handoff.id)
+            or artifact_config.get("calculation_evidence_hash") != handoff_config.get("calculation_evidence_hash")
+            or artifact_config.get("source_artifact_manifest_hash") != source_manifest_hash
+        ):
+            raise PayrollFinanceHandoffError("Payroll finance artifact evidence does not match its handoff seal.")
+
+
 @transaction.atomic
 def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmitted_by=None) -> PayrollFinanceHandoff:
     """Mark a generated finance handoff as transmitted and publish its finance artifacts."""
@@ -9868,6 +10101,7 @@ def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmit
         .select_related("posting_accounting_period", "output_batch")
         .get(pk=handoff.pk)
     )
+    _validate_finance_handoff_evidence_current(handoff)
     if handoff.posting_accounting_period_id:
         from apps.payroll.fiscal_services import assert_period_is_postable
 

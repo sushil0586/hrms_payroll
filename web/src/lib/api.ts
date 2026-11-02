@@ -683,6 +683,7 @@ export async function getHrAdminPayrollRulesSetup() {
 export async function getHrAdminPayrollCalculationSetup(params?: {
   run_id?: string;
   calculation_id?: string;
+  line_id?: string;
   run_page?: string | number;
   run_page_size?: string | number;
   calculation_page?: string | number;
@@ -6853,6 +6854,9 @@ function getDemoData<T>(path: string): T {
         submitted_item_count: 0,
         verified_item_count: 1,
         rejected_item_count: 0,
+        reconciliation_status: "exception" as const,
+        reconciliation_difference: "5000.00",
+        exception_count: 1,
         created_at: "2026-08-30T13:10:00+05:30",
         updated_at: now,
       },
@@ -6889,6 +6893,9 @@ function getDemoData<T>(path: string): T {
         submitted_item_count: 1,
         verified_item_count: 0,
         rejected_item_count: 0,
+        reconciliation_status: "exception" as const,
+        reconciliation_difference: "50000.00",
+        exception_count: 1,
         created_at: "2026-09-01T12:05:00+05:30",
         updated_at: now,
       },
@@ -7236,6 +7243,21 @@ function getDemoData<T>(path: string): T {
         legal_entities: demoHrAdminPolicyOptions.legal_entities,
         branches: demoHrAdminPolicyOptions.branches,
         locations: demoHrAdminPolicyOptions.locations,
+        declaration_catalog: {
+          source: "tenant_config",
+          financial_years: [
+            { value: "FY2026-27", label: "FY 2026-27", is_open: true, declaration_profile_ref: "payroll.statutory.declaration.india.default.v1", proof_window_ref: "apr-to-jan-proof-window" },
+            { value: "FY2027-28", label: "FY 2027-28", is_open: true, declaration_profile_ref: "payroll.statutory.declaration.india.default.v1", proof_window_ref: "apr-to-jan-proof-window" },
+          ],
+          sections: [
+            { code: "80C", label: "80C investments", item_kinds: ["investment"], component_codes: ["EPF", "PPF", "ELSS", "LIC", "NSC", "TUITION_FEES"], proof_required: true },
+            { code: "80CCD(1B)", label: "NPS additional", item_kinds: ["investment", "deduction"], component_codes: ["NPS"], proof_required: true },
+            { code: "80D", label: "Medical insurance", item_kinds: ["deduction"], component_codes: ["MEDICAL_INSURANCE_SELF", "MEDICAL_INSURANCE_PARENTS"], proof_required: true },
+            { code: "HRA", label: "House rent allowance", item_kinds: ["rental", "exemption"], component_codes: ["RENT_RECEIPT", "LANDLORD_PAN"], proof_required: true },
+            { code: "HOME_LOAN", label: "Home loan", item_kinds: ["deduction", "exemption"], component_codes: ["HOME_LOAN_INTEREST", "HOME_LOAN_PRINCIPAL"], proof_required: true },
+            { code: "PREVIOUS_EMPLOYER", label: "Previous employer", item_kinds: ["previous_employment"], component_codes: ["FORM_16", "SALARY_STATEMENT"], proof_required: true },
+          ],
+        },
       },
     };
   };
@@ -7283,6 +7305,7 @@ function getDemoData<T>(path: string): T {
           { id: "doccat-tax-proof", name: "Tax Proof Uploads" },
           { id: "doccat-rent-proof", name: "Rent Receipts" },
         ],
+        declaration_catalog: setup.options.declaration_catalog,
       },
     };
   };

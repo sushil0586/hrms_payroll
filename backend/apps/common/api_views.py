@@ -174,6 +174,7 @@ from apps.common.api_serializers import (
     HrAdminEmployeeStatutoryDeclarationItemVerifySerializer,
     HrAdminEmployeeStatutoryDeclarationItemWriteSerializer,
     HrAdminEmployeeStatutoryDeclarationRejectSerializer,
+    HrAdminEmployeeStatutoryDeclarationReopenSerializer,
     HrAdminEmployeeStatutoryDeclarationSerializer,
     HrAdminEmployeeStatutoryDeclarationWriteSerializer,
     HrAdminEmployeeStatutoryProfileSerializer,
@@ -185,6 +186,7 @@ from apps.common.api_serializers import (
     HrAdminPayrollStatutoryFilingCalendarSerializer,
     HrAdminPayrollStatutoryFilingCalendarWriteSerializer,
     HrAdminPayrollStatutoryPackSerializer,
+    HrAdminPayrollStatutoryYearLifecycleSerializer,
     HrAdminPayrollStatutoryPackWriteSerializer,
     HrAdminPayrollStatutorySetupSerializer,
     HrAdminPayrollStatutorySlabSerializer,
@@ -7452,6 +7454,96 @@ def build_me_statutory_declaration_payload(item: EmployeeStatutoryDeclaration) -
     }
 
 
+_LEGACY_DECLARATION_SECTIONS = (
+    {"code": "80C", "label": "80C investments", "item_kinds": ["investment"], "component_codes": ["EPF", "PPF", "ELSS", "LIC", "NSC", "TUITION_FEES"], "proof_required": True},
+    {"code": "80CCD(1B)", "label": "NPS additional", "item_kinds": ["investment", "deduction"], "component_codes": ["NPS"], "proof_required": True},
+    {"code": "80D", "label": "Medical insurance", "item_kinds": ["deduction"], "component_codes": ["MEDICAL_INSURANCE_SELF", "MEDICAL_INSURANCE_PARENTS"], "proof_required": True},
+    {"code": "HRA", "label": "House rent allowance", "item_kinds": ["rental", "exemption"], "component_codes": ["RENT_RECEIPT", "LANDLORD_PAN"], "proof_required": True},
+    {"code": "HOME_LOAN", "label": "Home loan", "item_kinds": ["deduction", "exemption"], "component_codes": ["HOME_LOAN_INTEREST", "HOME_LOAN_PRINCIPAL"], "proof_required": True},
+    {"code": "PREVIOUS_EMPLOYER", "label": "Previous employer", "item_kinds": ["previous_employment"], "component_codes": ["FORM_16", "SALARY_STATEMENT"], "proof_required": True},
+)
+
+
+def _india_financial_year_code(day: date, offset: int = 0) -> str:
+    start_year = day.year if day.month >= 4 else day.year - 1
+    start_year += offset
+    return f"FY{start_year}-{str(start_year + 1)[-2:]}"
+
+
+def _statutory_declaration_catalog(pack: PayrollStatutoryPack | None) -> dict:
+    snapshot = pack.config_snapshot if pack and isinstance(pack.config_snapshot, dict) else {}
+    configured = snapshot.get("declaration_catalog") if isinstance(snapshot.get("declaration_catalog"), dict) else {}
+    raw_years = configured.get("financial_years") if isinstance(configured.get("financial_years"), list) else []
+    raw_sections = configured.get("sections") if isinstance(configured.get("sections"), list) else []
+    default_profile_ref = "payroll.statutory.declaration.india.default.v1"
+    default_window_ref = "annual-proof-window"
+    years = []
+    for raw in raw_years:
+        if not isinstance(raw, dict) or not str(raw.get("value") or "").strip():
+            continue
+        value = str(raw["value"]).strip().upper()
+        years.append({
+            "value": value,
+            "label": str(raw.get("label") or value),
+            "is_open": bool(raw.get("is_open", True)),
+            "declaration_profile_ref": str(raw.get("declaration_profile_ref") or default_profile_ref),
+            "proof_window_ref": str(raw.get("proof_window_ref") or default_window_ref),
+        })
+    if not years:
+        years = [
+            {
+                "value": _india_financial_year_code(timezone.localdate(), offset),
+                "label": _india_financial_year_code(timezone.localdate(), offset).replace("FY", "FY "),
+                "is_open": True,
+                "declaration_profile_ref": default_profile_ref,
+                "proof_window_ref": default_window_ref,
+            }
+            for offset in (0, 1)
+        ]
+
+    sections = []
+    for raw in raw_sections or _LEGACY_DECLARATION_SECTIONS:
+        if not isinstance(raw, dict) or not str(raw.get("code") or "").strip():
+            continue
+        code = str(raw["code"]).strip().upper()
+        item_kinds = [str(value) for value in raw.get("item_kinds", []) if str(value) in PayrollStatutoryDeclarationItemKind.values]
+        sections.append({
+            "code": code,
+            "label": str(raw.get("label") or code),
+            "item_kinds": item_kinds or list(PayrollStatutoryDeclarationItemKind.values),
+            "component_codes": [str(value).strip().upper() for value in raw.get("component_codes", []) if str(value).strip()],
+            "proof_required": bool(raw.get("proof_required", True)),
+        })
+    return {"source": "tenant_config" if raw_years and raw_sections else "legacy_compatibility", "financial_years": years, "sections": sections}
+
+
+def _catalog_year(catalog: dict, financial_year_code: str) -> dict:
+    normalized = (financial_year_code or "").strip().upper()
+    year = next((item for item in catalog["financial_years"] if item["value"] == normalized), None)
+    if not year or not year["is_open"]:
+        raise serializers.ValidationError({"financial_year_code": "Select an open financial year from the statutory declaration catalog."})
+    return year
+
+
+def _catalog_section(catalog: dict, section_code: str) -> dict:
+    normalized = (section_code or "").strip().upper()
+    section = next((item for item in catalog["sections"] if item["code"] == normalized), None)
+    if not section:
+        raise serializers.ValidationError({"section_code": "Select a configured statutory declaration section."})
+    return section
+
+
+def _validate_catalog_item(catalog: dict, validated_data) -> dict:
+    section = _catalog_section(catalog, validated_data.get("section_code", ""))
+    item_kind = validated_data.get("item_kind") or PayrollStatutoryDeclarationItemKind.INVESTMENT
+    if item_kind not in section["item_kinds"]:
+        raise serializers.ValidationError({"item_kind": "Select an item kind allowed for this statutory section."})
+    component_code = (validated_data.get("component_code") or "").strip().upper()
+    if component_code and component_code not in section["component_codes"]:
+        raise serializers.ValidationError({"component_code": "Select a component configured for this statutory section."})
+    return section
+
+
 def _build_me_statutory_declaration_list_payload(employee: Employee, request) -> dict:
     page, page_size = _get_page_params(request)
     search_value = (request.query_params.get("q") or "").strip()
@@ -7485,10 +7577,9 @@ def _build_me_statutory_declaration_list_payload(employee: Employee, request) ->
     all_declaration_items = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, employee=employee)
     declared_total = all_declarations.aggregate(total=Sum("declared_total_amount"))["total"] or Decimal("0.00")
     verified_total = all_declarations.aggregate(total=Sum("verified_total_amount"))["total"] or Decimal("0.00")
-    available_years = list(
-        all_declarations.order_by("-financial_year_code").values_list("financial_year_code", flat=True).distinct()
-    )
     profile_payload = build_hr_admin_employee_statutory_profile_payload(latest_profile) if latest_profile else None
+    declaration_catalog = _statutory_declaration_catalog(latest_profile.statutory_pack if latest_profile else None)
+    available_years = [item["value"] for item in declaration_catalog["financial_years"]]
     proof_upload_categories = DocumentCategory.objects.filter(
         tenant=employee.tenant,
         is_active=True,
@@ -7540,6 +7631,7 @@ def _build_me_statutory_declaration_list_payload(employee: Employee, request) ->
             "statutory_proof_statuses": [{"value": value, "label": label} for value, label in PayrollStatutoryProofStatus.choices],
             "tax_regimes": [{"value": value, "label": label} for value, label in PayrollTaxRegime.choices],
             "proof_upload_categories": proof_upload_category_options,
+            "declaration_catalog": declaration_catalog,
         },
     }
 
@@ -7569,6 +7661,11 @@ def save_me_statutory_declaration(employee: Employee, validated_data, *, item=No
         if not profile:
             raise serializers.ValidationError({"employee_statutory_profile_id": "No active employee statutory profile found."})
 
+    effective_profile = profile or (item.employee_statutory_profile if item is not None else None)
+    catalog = _statutory_declaration_catalog(effective_profile.statutory_pack if effective_profile else None)
+    financial_year_code = validated_data.get("financial_year_code", item.financial_year_code if item else "")
+    catalog_year = _catalog_year(catalog, financial_year_code)
+
     if item is None:
         item = EmployeeStatutoryDeclaration(tenant=employee.tenant, employee=employee, employee_statutory_profile=profile)
         if profile and profile.statutory_pack_id:
@@ -7584,16 +7681,12 @@ def save_me_statutory_declaration(employee: Employee, validated_data, *, item=No
             raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
         item.statutory_pack = statutory_pack
 
-    for field in [
-        "financial_year_code",
-        "declaration_profile_ref",
-        "proof_window_ref",
-        "tax_regime",
-        "source_ref",
-        "config_snapshot",
-    ]:
+    for field in ["financial_year_code", "tax_regime", "config_snapshot"]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
+
+    item.declaration_profile_ref = catalog_year["declaration_profile_ref"]
+    item.proof_window_ref = catalog_year["proof_window_ref"]
 
     if not item.source_ref:
         item.source_ref = f"employee.statutory.declaration:{employee.employee_code}:{item.financial_year_code}"
@@ -7614,6 +7707,13 @@ def save_me_statutory_declaration_item(employee: Employee, declaration: Employee
     if declaration.employee_id != employee.id or declaration.tenant_id != employee.tenant_id:
         raise serializers.ValidationError({"declaration": "Invalid selection."})
     _assert_employee_statutory_declaration_editable(declaration)
+    catalog = _statutory_declaration_catalog(declaration.statutory_pack)
+    catalog_data = {
+        "section_code": validated_data.get("section_code", item.section_code if item else ""),
+        "item_kind": validated_data.get("item_kind", item.item_kind if item else PayrollStatutoryDeclarationItemKind.INVESTMENT),
+        "component_code": validated_data.get("component_code", item.component_code if item else ""),
+    }
+    catalog_section = _validate_catalog_item(catalog, catalog_data)
     if item is None:
         item = EmployeeStatutoryDeclarationItem(tenant=employee.tenant, declaration=declaration, employee=employee)
     for field in [
@@ -7622,17 +7722,20 @@ def save_me_statutory_declaration_item(employee: Employee, declaration: Employee
         "component_code",
         "name",
         "declared_amount",
+        "proof_status",
         "proof_document_ref",
         "proof_artifact_key",
-        "source_ref",
         "config_snapshot",
     ]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
 
-    if "proof_status" in validated_data:
-        item.proof_status = validated_data["proof_status"]
-    elif item.proof_status in {PayrollStatutoryProofStatus.VERIFIED, PayrollStatutoryProofStatus.REJECTED}:
+    if item.proof_status in {PayrollStatutoryProofStatus.VERIFIED, PayrollStatutoryProofStatus.REJECTED}:
+        item.proof_status = PayrollStatutoryProofStatus.PENDING
+
+    if not catalog_section["proof_required"] and not (item.proof_document_ref or item.proof_artifact_key):
+        item.proof_status = PayrollStatutoryProofStatus.NOT_REQUIRED
+    elif catalog_section["proof_required"] and item.proof_status == PayrollStatutoryProofStatus.NOT_REQUIRED:
         item.proof_status = PayrollStatutoryProofStatus.PENDING
 
     if (item.proof_document_ref or item.proof_artifact_key) and item.proof_status == PayrollStatutoryProofStatus.PENDING:
@@ -7662,8 +7765,29 @@ def upload_me_statutory_declaration_proof(employee: Employee, declaration: Emplo
     if declaration.employee_id != employee.id or declaration.tenant_id != employee.tenant_id:
         raise serializers.ValidationError({"declaration": "Invalid selection."})
     _assert_employee_statutory_declaration_editable(declaration)
+    catalog = _statutory_declaration_catalog(declaration.statutory_pack)
+    _validate_catalog_item(catalog, validated_data)
 
     with transaction.atomic():
+        item = None
+        if validated_data.get("item_id"):
+            item = EmployeeStatutoryDeclarationItem.objects.filter(
+                tenant=employee.tenant,
+                employee=employee,
+                declaration=declaration,
+                id=validated_data["item_id"],
+            ).first()
+            if not item:
+                raise serializers.ValidationError({"item_id": "Declaration item not found."})
+            current_document_id = ""
+            if item.proof_document_ref.startswith("employee-document:"):
+                current_document_id = item.proof_document_ref.removeprefix("employee-document:")
+            replacement_id = str(validated_data.get("replace_document_id") or "")
+            if current_document_id and replacement_id != current_document_id:
+                raise serializers.ValidationError({"replace_document_id": "Replace the document currently linked to this declaration item."})
+            if replacement_id and not current_document_id:
+                raise serializers.ValidationError({"replace_document_id": "This declaration item does not have a replaceable document."})
+
         document = create_self_service_employee_document(
             employee,
             {
@@ -7676,16 +7800,6 @@ def upload_me_statutory_declaration_proof(employee: Employee, declaration: Emplo
                 "file": validated_data["file"],
             },
         )
-        item = None
-        if validated_data.get("item_id"):
-            item = EmployeeStatutoryDeclarationItem.objects.filter(
-                tenant=employee.tenant,
-                employee=employee,
-                declaration=declaration,
-                id=validated_data["item_id"],
-            ).first()
-            if not item:
-                raise serializers.ValidationError({"item_id": "Declaration item not found."})
 
         item_data = {
             "proof_status": PayrollStatutoryProofStatus.SUBMITTED,
@@ -9646,6 +9760,9 @@ def build_hr_admin_employee_statutory_profile_payload(item: EmployeeStatutoryPro
 
 def build_hr_admin_employee_statutory_declaration_payload(item: EmployeeStatutoryDeclaration) -> dict:
     declaration_items = item.items.all()
+    reconciliation_difference = item.declared_total_amount - item.verified_total_amount
+    rejected_item_count = declaration_items.filter(proof_status=PayrollStatutoryProofStatus.REJECTED).count()
+    exception_count = rejected_item_count + (1 if reconciliation_difference != Decimal("0.00") else 0)
     return {
         "id": item.id,
         "employee_id": item.employee_id,
@@ -9678,7 +9795,10 @@ def build_hr_admin_employee_statutory_declaration_payload(item: EmployeeStatutor
         "item_count": declaration_items.count(),
         "submitted_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.SUBMITTED).count(),
         "verified_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.VERIFIED).count(),
-        "rejected_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.REJECTED).count(),
+        "rejected_item_count": rejected_item_count,
+        "reconciliation_status": "matched" if exception_count == 0 else "exception",
+        "reconciliation_difference": reconciliation_difference,
+        "exception_count": exception_count,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
     }
@@ -9750,6 +9870,8 @@ def get_hr_admin_payroll_statutory_setup_payload(actor) -> dict:
         PayrollStatutoryFilingStatus.ACKNOWLEDGED,
         PayrollStatutoryFilingStatus.WAIVED,
     ]
+    active_declaration_pack = packs.filter(status=PayrollConfigStatus.ACTIVE).first() or packs.first()
+    declaration_catalog = _statutory_declaration_catalog(active_declaration_pack)
 
     return {
         "summary": {
@@ -9805,30 +9927,149 @@ def get_hr_admin_payroll_statutory_setup_payload(actor) -> dict:
             "legal_entities": [{"id": item.id, "name": item.name} for item in LegalEntity.objects.filter(tenant=tenant, is_active=True).order_by("name")],
             "branches": [{"id": item.id, "name": item.name} for item in Branch.objects.filter(tenant=tenant, is_active=True).order_by("name")],
             "locations": [{"id": item.id, "name": item.name} for item in Location.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "declaration_catalog": declaration_catalog,
         },
     }
 
 
 def save_hr_admin_payroll_statutory_pack(actor, validated_data, *, item=None):
-    if item is None:
-        item = PayrollStatutoryPack(tenant=actor.tenant)
-    for field in [
-        "code",
-        "name",
-        "country_code",
-        "jurisdiction_ref",
-        "status",
-        "effective_from",
-        "effective_to",
-        "currency_code",
-        "statutory_profile_ref",
-        "validation_profile_ref",
-        "config_snapshot",
-    ]:
-        if field in validated_data:
-            setattr(item, field, validated_data[field])
-    item.save()
+    creating = item is None
+    with transaction.atomic():
+        if item is None:
+            item = PayrollStatutoryPack(tenant=actor.tenant)
+        previous_catalog = {} if creating else (item.config_snapshot or {}).get("declaration_catalog", {})
+        if not creating and "config_snapshot" in validated_data and previous_catalog:
+            next_catalog = validated_data["config_snapshot"].get("declaration_catalog", {})
+            previous_states = {
+                str(year.get("value") or "").strip().upper(): bool(year.get("is_open", True))
+                for year in previous_catalog.get("financial_years", [])
+                if isinstance(year, dict)
+            }
+            next_states = {
+                str(year.get("value") or "").strip().upper(): bool(year.get("is_open", True))
+                for year in next_catalog.get("financial_years", [])
+                if isinstance(year, dict)
+            }
+            changed_states = sorted(code for code, is_open in previous_states.items() if next_states.get(code) != is_open)
+            if changed_states:
+                raise serializers.ValidationError({
+                    "config_snapshot": f"Use the governed financial-year lifecycle action to change open state: {', '.join(changed_states)}."
+                })
+        for field in [
+            "code",
+            "name",
+            "country_code",
+            "jurisdiction_ref",
+            "status",
+            "effective_from",
+            "effective_to",
+            "currency_code",
+            "statutory_profile_ref",
+            "validation_profile_ref",
+            "config_snapshot",
+        ]:
+            if field in validated_data:
+                setattr(item, field, validated_data[field])
+        item.save()
+        _record_hr_admin_setup_audit_event(
+            actor,
+            event_type=f"statutory_pack_{'created' if creating else 'updated'}",
+            source_ref="hrms.payroll_statutory.catalog.audit.v1",
+            event_snapshot={
+                "action": "created" if creating else "updated",
+                "resource_type": "payroll_statutory_pack",
+                "resource_id": str(item.id),
+                "pack_code": item.code,
+                "previous_declaration_catalog": previous_catalog,
+                "new_declaration_catalog": (item.config_snapshot or {}).get("declaration_catalog", {}),
+            },
+        )
     return item
+
+
+def transition_hr_admin_payroll_statutory_year(
+    actor,
+    pack: PayrollStatutoryPack,
+    financial_year_code: str,
+    *,
+    action: str,
+    reason: str,
+    approval_reference: str,
+) -> PayrollStatutoryPack:
+    snapshot = dict(pack.config_snapshot or {})
+    configured_catalog = snapshot.get("declaration_catalog")
+    if not isinstance(configured_catalog, dict):
+        raise serializers.ValidationError({"financial_year_code": "Configure an explicit declaration catalog before governing a financial year."})
+    years = [dict(year) for year in configured_catalog.get("financial_years", []) if isinstance(year, dict)]
+    normalized_code = financial_year_code.strip().upper()
+    year_index = next((index for index, year in enumerate(years) if str(year.get("value") or "").strip().upper() == normalized_code), None)
+    if year_index is None:
+        raise serializers.ValidationError({"financial_year_code": "Financial year is not present in this statutory pack."})
+
+    year = years[year_index]
+    currently_open = bool(year.get("is_open", True))
+    if action == "close" and not currently_open:
+        raise serializers.ValidationError({"action": "Financial year is already closed."})
+    if action == "reopen" and currently_open:
+        raise serializers.ValidationError({"action": "Financial year is already open."})
+
+    declarations = EmployeeStatutoryDeclaration.objects.filter(
+        tenant=actor.tenant,
+        statutory_pack=pack,
+        financial_year_code=normalized_code,
+    ).prefetch_related("items")
+    unresolved_ids = []
+    reconciliation_exception_ids = []
+    if action == "close":
+        for declaration in declarations:
+            if declaration.status != PayrollStatutoryDeclarationStatus.LOCKED:
+                unresolved_ids.append(str(declaration.id))
+                continue
+            has_rejected_item = any(item.proof_status == PayrollStatutoryProofStatus.REJECTED for item in declaration.items.all())
+            if declaration.declared_total_amount != declaration.verified_total_amount or has_rejected_item:
+                reconciliation_exception_ids.append(str(declaration.id))
+        if unresolved_ids or reconciliation_exception_ids:
+            raise serializers.ValidationError({
+                "readiness": "Financial year cannot close while declarations or reconciliation exceptions remain unresolved.",
+                "unresolved_declaration_ids": unresolved_ids,
+                "reconciliation_exception_ids": reconciliation_exception_ids,
+            })
+
+    now = timezone.now()
+    past_action = "closed" if action == "close" else "reopened"
+    actor_identifier = str(getattr(actor.membership.user, "username", "") or actor.membership.user_id)
+    lifecycle = {
+        "action": action,
+        "occurred_at": now.isoformat(),
+        "actor_identifier": actor_identifier,
+        "approval_reference": approval_reference,
+        "reason": reason,
+        "locked_declaration_count": declarations.filter(status=PayrollStatutoryDeclarationStatus.LOCKED).count(),
+    }
+    year["is_open"] = action == "reopen"
+    year["lifecycle_events"] = [*(year.get("lifecycle_events") if isinstance(year.get("lifecycle_events"), list) else []), lifecycle][-50:]
+    year[f"{past_action}_at"] = now.isoformat()
+    year[f"{past_action}_by"] = actor_identifier
+    year[f"{action}_approval_reference"] = approval_reference
+    years[year_index] = year
+    snapshot["declaration_catalog"] = {**configured_catalog, "financial_years": years}
+    pack.config_snapshot = snapshot
+    pack.save(update_fields=["config_snapshot", "updated_at"])
+    _record_hr_admin_setup_audit_event(
+        actor,
+        event_type=f"statutory_financial_year_{past_action}",
+        source_ref="hrms.payroll_statutory.year_lifecycle.v1",
+        event_snapshot={
+            **lifecycle,
+            "resource_type": "payroll_statutory_financial_year",
+            "resource_id": f"{pack.id}:{normalized_code}",
+            "pack_id": str(pack.id),
+            "financial_year_code": normalized_code,
+            "previous_is_open": currently_open,
+            "new_is_open": action == "reopen",
+        },
+    )
+    return pack
 
 
 def save_hr_admin_payroll_statutory_component(actor, validated_data, *, item=None):
@@ -10086,20 +10327,16 @@ def save_hr_admin_employee_statutory_declaration(actor, validated_data, *, item=
         if validated_data["statutory_pack_id"] and not statutory_pack:
             raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
         item.statutory_pack = statutory_pack
-    for field in [
-        "financial_year_code",
-        "declaration_profile_ref",
-        "proof_window_ref",
-        "status",
-        "tax_regime",
-        "declared_total_amount",
-        "verified_total_amount",
-        "rejection_reason",
-        "source_ref",
-        "config_snapshot",
-    ]:
+    if item.employee_statutory_profile_id is None:
+        raise serializers.ValidationError({"employee_statutory_profile_id": "This field is required."})
+    catalog = _statutory_declaration_catalog(item.statutory_pack or item.employee_statutory_profile.statutory_pack)
+    financial_year_code = validated_data.get("financial_year_code", item.financial_year_code)
+    catalog_year = _catalog_year(catalog, financial_year_code)
+    for field in ["financial_year_code", "tax_regime", "config_snapshot"]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
+    item.declaration_profile_ref = catalog_year["declaration_profile_ref"]
+    item.proof_window_ref = catalog_year["proof_window_ref"]
     if item.employee_id is None:
         raise serializers.ValidationError({"employee_id": "This field is required."})
     if item.employee_statutory_profile_id is None:
@@ -10111,6 +10348,13 @@ def save_hr_admin_employee_statutory_declaration(actor, validated_data, *, item=
 def save_hr_admin_employee_statutory_declaration_item(actor, declaration: EmployeeStatutoryDeclaration, validated_data, *, item=None):
     if declaration.status == PayrollStatutoryDeclarationStatus.LOCKED:
         raise serializers.ValidationError({"declaration": "Locked statutory declarations cannot be edited."})
+    catalog = _statutory_declaration_catalog(declaration.statutory_pack)
+    catalog_data = {
+        "section_code": validated_data.get("section_code", item.section_code if item else ""),
+        "item_kind": validated_data.get("item_kind", item.item_kind if item else PayrollStatutoryDeclarationItemKind.INVESTMENT),
+        "component_code": validated_data.get("component_code", item.component_code if item else ""),
+    }
+    catalog_section = _validate_catalog_item(catalog, catalog_data)
     if item is None:
         item = EmployeeStatutoryDeclarationItem(tenant=actor.tenant, declaration=declaration, employee=declaration.employee)
     for field in [
@@ -10119,15 +10363,14 @@ def save_hr_admin_employee_statutory_declaration_item(actor, declaration: Employ
         "component_code",
         "name",
         "declared_amount",
-        "verified_amount",
-        "proof_status",
-        "proof_document_ref",
-        "proof_artifact_key",
-        "source_ref",
         "config_snapshot",
     ]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
+    if not catalog_section["proof_required"] and not (item.proof_document_ref or item.proof_artifact_key):
+        item.proof_status = PayrollStatutoryProofStatus.NOT_REQUIRED
+    elif catalog_section["proof_required"] and item.proof_status == PayrollStatutoryProofStatus.NOT_REQUIRED:
+        item.proof_status = PayrollStatutoryProofStatus.PENDING
     if item.proof_status in {PayrollStatutoryProofStatus.SUBMITTED, PayrollStatutoryProofStatus.VERIFIED} and not item.proof_submitted_at:
         item.proof_submitted_at = timezone.now()
     item.save()
@@ -10141,6 +10384,16 @@ def submit_hr_admin_employee_statutory_declaration(declaration: EmployeeStatutor
     _refresh_statutory_declaration_totals(declaration)
     if not declaration.items.exists():
         raise serializers.ValidationError({"items": "At least one declaration item is required before submission."})
+    catalog = _statutory_declaration_catalog(declaration.statutory_pack)
+    sections = {item["code"]: item for item in catalog["sections"]}
+    missing_proof = [
+        item.name
+        for item in declaration.items.all()
+        if sections.get(item.section_code, {}).get("proof_required", True)
+        and not (item.proof_document_ref or item.proof_artifact_key)
+    ]
+    if missing_proof:
+        raise serializers.ValidationError({"items": "Upload required proof for every declaration item before submission."})
     declaration.status = PayrollStatutoryDeclarationStatus.SUBMITTED
     declaration.submitted_at = timezone.now()
     declaration.submitted_by = submitted_by
@@ -10162,15 +10415,21 @@ def verify_hr_admin_employee_statutory_declaration(declaration: EmployeeStatutor
     if rejected_items.exists():
         raise serializers.ValidationError({"items": "Rejected proof items must be resolved before declaration verification."})
     now = timezone.now()
-    for declaration_item in declaration.items.filter(proof_status__in=[PayrollStatutoryProofStatus.PENDING, PayrollStatutoryProofStatus.SUBMITTED]):
-        if not (declaration_item.proof_document_ref or declaration_item.proof_artifact_key):
+    reviewable_statuses = [
+        PayrollStatutoryProofStatus.PENDING,
+        PayrollStatutoryProofStatus.SUBMITTED,
+        PayrollStatutoryProofStatus.NOT_REQUIRED,
+    ]
+    for declaration_item in declaration.items.filter(proof_status__in=reviewable_statuses):
+        if declaration_item.proof_status != PayrollStatutoryProofStatus.NOT_REQUIRED and not (declaration_item.proof_document_ref or declaration_item.proof_artifact_key):
             raise serializers.ValidationError({"items": "Pending proof items require a proof reference before declaration verification."})
-        declaration_item.proof_status = PayrollStatutoryProofStatus.VERIFIED
+        if declaration_item.proof_status != PayrollStatutoryProofStatus.NOT_REQUIRED:
+            declaration_item.proof_status = PayrollStatutoryProofStatus.VERIFIED
         if declaration_item.verified_amount == Decimal("0.00"):
             declaration_item.verified_amount = declaration_item.declared_amount
         declaration_item.verified_at = now
         declaration_item.verified_by = verified_by
-        if not declaration_item.proof_submitted_at:
+        if declaration_item.proof_status != PayrollStatutoryProofStatus.NOT_REQUIRED and not declaration_item.proof_submitted_at:
             declaration_item.proof_submitted_at = now
         declaration_item.save()
     _refresh_statutory_declaration_totals(declaration)
@@ -10213,6 +10472,75 @@ def lock_hr_admin_employee_statutory_declaration(declaration: EmployeeStatutoryD
     profile = declaration.employee_statutory_profile
     profile.declaration_status = PayrollDeclarationStatus.LOCKED
     profile.save()
+    return declaration
+
+
+def reopen_hr_admin_employee_statutory_declaration(
+    declaration: EmployeeStatutoryDeclaration,
+    *,
+    reopened_by,
+    reason: str,
+    approval_reference: str,
+) -> EmployeeStatutoryDeclaration:
+    if declaration.status not in {PayrollStatutoryDeclarationStatus.VERIFIED, PayrollStatutoryDeclarationStatus.LOCKED}:
+        raise serializers.ValidationError({"status": "Only verified or locked statutory declarations can be reopened."})
+    catalog = _statutory_declaration_catalog(declaration.statutory_pack)
+    catalog_year = next(
+        (year for year in catalog["financial_years"] if year["value"] == declaration.financial_year_code),
+        None,
+    )
+    if not catalog_year or not catalog_year["is_open"]:
+        raise serializers.ValidationError(
+            {"financial_year_code": "Closed financial years cannot be reopened. Use the governed year-close exception process."}
+        )
+
+    now = timezone.now()
+    previous_status = declaration.status
+    previous_source_hash = declaration.source_hash
+    snapshot = dict(declaration.config_snapshot or {})
+    lifecycle_events = list(snapshot.get("lifecycle_events") or [])
+    lifecycle_events.append({
+        "action": "reopened",
+        "occurred_at": now.isoformat(),
+        "actor_identifier": str(getattr(reopened_by, "username", "") or getattr(reopened_by, "id", "system")),
+        "approval_reference": approval_reference,
+        "reason": reason,
+        "previous_status": previous_status,
+        "previous_source_hash": previous_source_hash,
+    })
+    snapshot["lifecycle_events"] = lifecycle_events[-50:]
+
+    declaration.status = PayrollStatutoryDeclarationStatus.REJECTED
+    declaration.rejected_at = now
+    declaration.rejected_by = reopened_by
+    declaration.rejection_reason = reason
+    declaration.verified_at = None
+    declaration.verified_by = None
+    declaration.locked_at = None
+    declaration.locked_by = None
+    declaration.config_snapshot = snapshot
+    declaration.save()
+
+    profile = declaration.employee_statutory_profile
+    profile.declaration_status = PayrollDeclarationStatus.PROOFS_PENDING
+    profile.save()
+    record_saas_commercial_audit_event(
+        declaration.tenant,
+        event_type="statutory_declaration_reopened",
+        actor_identifier=str(getattr(reopened_by, "username", "") or getattr(reopened_by, "id", "system")),
+        source_ref="hrms.payroll_statutory.declaration.lifecycle.v1",
+        event_snapshot={
+            "action": "reopened",
+            "resource_type": "employee_statutory_declaration",
+            "resource_id": str(declaration.id),
+            "financial_year_code": declaration.financial_year_code,
+            "approval_reference": approval_reference,
+            "reason": reason,
+            "previous_status": previous_status,
+            "previous_source_hash": previous_source_hash,
+            "new_source_hash": declaration.source_hash,
+        },
+    )
     return declaration
 
 
@@ -12149,6 +12477,7 @@ def get_hr_admin_payroll_calculation_setup_payload(actor, request=None) -> dict:
     tenant = actor.tenant
     selected_run_id = (request.query_params.get("run_id") or "").strip() if request else ""
     selected_calculation_id = (request.query_params.get("calculation_id") or "").strip() if request else ""
+    selected_line_id = (request.query_params.get("line_id") or "").strip() if request else ""
     include_rule_versions = ((request.query_params.get("include_rule_versions") or "").lower() == "true") if request else False
     run_page, run_page_size = _payroll_setup_page_params(request, page_param="run_page", size_param="run_page_size")
     calculation_page, calculation_page_size = _payroll_setup_page_params(request, page_param="calculation_page", size_param="calculation_page_size")
@@ -12178,6 +12507,9 @@ def get_hr_admin_payroll_calculation_setup_payload(actor, request=None) -> dict:
         selected_calculation = latest_calculation
     if selected_calculation:
         lines = lines.filter(calculation=selected_calculation)
+    selected_line = lines.filter(id=selected_line_id).first() if selected_line_id else None
+    if not selected_line:
+        selected_line = lines.filter(component_code="TDS").first() or lines.first()
     active_versions = (
         PayrollRuleVersion.objects.filter(
             tenant=tenant,
@@ -12226,6 +12558,7 @@ def get_hr_admin_payroll_calculation_setup_payload(actor, request=None) -> dict:
         "runs": [build_hr_admin_payroll_run_payload(item) for item in runs_for_payload],
         "calculations": [build_hr_admin_payroll_calculation_payload(item) for item in paged_calculations],
         "lines": [build_hr_admin_payroll_calculation_line_list_payload(item) for item in paged_lines],
+        "selected_line": build_hr_admin_payroll_calculation_line_payload(selected_line) if selected_line else None,
         "validation_issues": [build_hr_admin_payroll_validation_issue_payload(item) for item in paged_validation_issues],
         "options": {
             "payroll_run_statuses": [{"value": value, "label": label} for value, label in PayrollRunStatus.choices],
@@ -14542,8 +14875,70 @@ class HrAdminPayrollStatutorySetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
-        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage", "statutory.declarations.view", "statutory.declarations.manage")
-        return response.Response(HrAdminPayrollStatutorySetupSerializer(get_hr_admin_payroll_statutory_setup_payload(employee)).data)
+        self.require_any_tenant_permission(
+            employee.tenant,
+            "statutory.setup.view",
+            "statutory.setup.manage",
+            "statutory.declarations.view",
+            "statutory.declarations.manage",
+            "payroll.review",
+            "payroll.approve",
+        )
+        payload = get_hr_admin_payroll_statutory_setup_payload(employee)
+        permission_keys = self.get_tenant_permission_keys(employee.tenant)
+        has_statutory_access = bool(permission_keys.intersection({
+            "statutory.setup.view",
+            "statutory.setup.manage",
+            "statutory.declarations.view",
+            "statutory.declarations.manage",
+        }))
+        if not has_statutory_access:
+            zero_uuid = "00000000-0000-0000-0000-000000000000"
+            locked_declarations = []
+            for declaration in payload["declarations"]:
+                if declaration["status"] != PayrollStatutoryDeclarationStatus.LOCKED:
+                    continue
+                locked_declarations.append({
+                    **declaration,
+                    "employee_id": zero_uuid,
+                    "employee_name": f"Declaration {declaration['source_hash'][:12]}",
+                    "employee_code": "",
+                    "employee_statutory_profile_id": zero_uuid,
+                    "declaration_profile_ref": "",
+                    "proof_window_ref": "",
+                    "submitted_by_name": None,
+                    "verified_by_name": None,
+                    "rejected_by_name": None,
+                    "locked_by_name": None,
+                    "rejection_reason": "",
+                    "source_ref": "",
+                    "config_snapshot": {},
+                })
+            locked_item_count = sum(declaration["item_count"] for declaration in locked_declarations)
+            payload = {
+                **payload,
+                "summary": {
+                    **payload["summary"],
+                    "employee_profile_count": 0,
+                    "active_employee_profile_count": 0,
+                    "pf_applicable_employee_count": 0,
+                    "esi_applicable_employee_count": 0,
+                    "declared_tax_profile_count": 0,
+                    "declaration_count": len(locked_declarations),
+                    "submitted_declaration_count": 0,
+                    "verified_declaration_count": 0,
+                    "locked_declaration_count": len(locked_declarations),
+                    "declaration_item_count": locked_item_count,
+                    "verified_declaration_item_count": sum(
+                        declaration["verified_item_count"] for declaration in locked_declarations
+                    ),
+                },
+                "employee_profiles": [],
+                "declarations": locked_declarations,
+                "declaration_items": [],
+                "options": {**payload["options"], "employees": []},
+            }
+        return response.Response(HrAdminPayrollStatutorySetupSerializer(payload).data)
 
 
 class HrAdminPayrollStatutoryPackListCreateView(HrAdminContextMixin, APIView):
@@ -14596,6 +14991,30 @@ class HrAdminPayrollStatutoryPackDetailView(HrAdminContextMixin, APIView):
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         return response.Response(HrAdminPayrollStatutoryPackSerializer(build_hr_admin_payroll_statutory_pack_payload(item)).data)
 
+
+class HrAdminPayrollStatutoryYearLifecycleView(HrAdminContextMixin, APIView):
+    @transaction.atomic
+    def post(self, request, item_id, financial_year_code):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
+        self.require_tenant_permission(employee.tenant, "payroll.approve")
+        serializer = HrAdminPayrollStatutoryYearLifecycleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        pack = PayrollStatutoryPack.objects.select_for_update().filter(id=item_id, tenant=employee.tenant).first()
+        if not pack:
+            return response.Response({"detail": "Payroll statutory pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        pack = transition_hr_admin_payroll_statutory_year(
+            employee,
+            pack,
+            financial_year_code,
+            **serializer.validated_data,
+        )
+        return response.Response({
+            "detail": f"Financial year {serializer.validated_data['action']} completed.",
+            "pack": HrAdminPayrollStatutoryPackSerializer(build_hr_admin_payroll_statutory_pack_payload(pack)).data,
+        })
 
 class HrAdminPayrollStatutoryComponentListCreateView(HrAdminContextMixin, APIView):
     def get(self, request):
@@ -15028,7 +15447,7 @@ class HrAdminEmployeeStatutoryDeclarationLockView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
-        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
+        self.require_tenant_permission(employee.tenant, "payroll.approve")
         item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
         ).prefetch_related("items").first()
@@ -15036,6 +15455,35 @@ class HrAdminEmployeeStatutoryDeclarationLockView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
         try:
             item = lock_hr_admin_employee_statutory_declaration(item, locked_by=request.user)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationReopenView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.approve")
+        serializer = HrAdminEmployeeStatutoryDeclarationReopenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                item = EmployeeStatutoryDeclaration.objects.select_for_update(of=("self",)).filter(
+                    tenant=employee.tenant,
+                    id=item_id,
+                ).select_related(
+                    "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+                ).prefetch_related("items").first()
+                if not item:
+                    return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+                item = reopen_hr_admin_employee_statutory_declaration(
+                    item,
+                    reopened_by=request.user,
+                    reason=serializer.validated_data["reason"],
+                    approval_reference=serializer.validated_data["approval_reference"],
+                )
         except serializers.ValidationError as exc:
             return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
