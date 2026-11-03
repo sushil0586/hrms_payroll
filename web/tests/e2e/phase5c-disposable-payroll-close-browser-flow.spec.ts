@@ -105,7 +105,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     const startedAt = Date.now();
     const mark = (phase: string) => console.log(`[P3-0634] ${phase}: ${Date.now() - startedAt}ms`);
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions", hrAdmin);
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
     await clickActionTab(page, /^Catalog\b/);
 
     const statutoryPackForm = form(page, "statutory-pack-form");

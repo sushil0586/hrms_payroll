@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminWorkflowTemplateAssignments } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
@@ -33,7 +33,7 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage({ searchPar
 
   return (
     <main className="shell shell--workspace workflow-workbench accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/workflow-template-assignments/new">Create workflow assignment</Link>
@@ -42,7 +42,6 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage({ searchPar
         }
         description="Attach workflow templates to organizational scopes so approval behavior stays configurable across client setups."
         eyebrow={result.state === "live" ? "Live workflow mode" : "Demo workflow mode"}
-        pills={[`${result.data.length} loaded assignments`]}
         title="Workflow template assignments"
       />
 

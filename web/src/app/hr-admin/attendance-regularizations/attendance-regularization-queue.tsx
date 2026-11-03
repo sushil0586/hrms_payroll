@@ -1,11 +1,8 @@
 "use client";
-import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
-
-
 import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { AttendanceRegularizationInlineReview } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-inline-review";
 import { AttendanceRegularizationReviewForm } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-review-form";
@@ -92,11 +89,25 @@ export function AttendanceRegularizationQueue({
   const pathname = "/hr-admin/attendance-regularizations";
   const reviewRegularizationId = reviewItem?.id ?? "";
   const scope = JSON.stringify(currentFilters);
-  const [selection, setSelection] = useState({scope, id: ""});
-  const selectedItemId = selection.scope === scope ? selection.id : "";
+  const [selection, setSelection] = useState({scope, id: items[0]?.id ?? ""});
+  const inspectionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const selectedItemId = selection.scope === scope
+    ? selection.id
+    : items[0]?.id ?? "";
   const setSelectedItemId = (id: string) => setSelection({scope, id});
+  function openInspection(trigger: HTMLButtonElement, id: string) {
+    trigger.focus({ preventScroll: true });
+    inspectionTriggerRef.current = trigger;
+    setSelectedItemId(id);
+  }
+  function closeInspection() {
+    setSelectedItemId("__closed");
+    window.requestAnimationFrame(() => inspectionTriggerRef.current?.focus({ preventScroll: true }));
+  }
   const [filterError, setFilterError] = useState("");
-  const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
+  const selectedItem = selectedItemId === "__closed"
+    ? null
+    : items.find((item) => item.id === selectedItemId) ?? items[0] ?? null;
   const modalReviewItem = canReviewRegularizations && reviewRegularizationId ? reviewItem : null;
   const numericPageSize = currentFilters.page_size;
   const totalPages = Math.max(1, Math.ceil(pagination.total_count / Math.max(numericPageSize, 1)));
@@ -212,7 +223,7 @@ export function AttendanceRegularizationQueue({
                     return (
                       <tr className={isSelected ? "employee-directory-table__row--active" : ""} key={item.id}>
                         <td>
-                          <button className="document-table-title-button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(item.id); }} type="button">
+                          <button className="document-table-title-button" onClick={(triggerEvent) => openInspection(triggerEvent.currentTarget, item.id)} type="button">
                             <strong>{item.employee_name || "Unknown employee"}</strong>
                             <small>{item.employee_code || "No code"} · {item.department || "Unassigned"}</small>
                           </button>
@@ -234,7 +245,7 @@ export function AttendanceRegularizationQueue({
                           <small>{item.approval_steps?.length ?? 0} approval steps</small>
                         </td>
                         <td>
-                          <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(item.id); }} type="button">Inspect</button>
+                          <button className="button button--secondary button--compact" onClick={(triggerEvent) => openInspection(triggerEvent.currentTarget, item.id)} type="button">Inspect</button>
                         </td>
                       </tr>
                     );
@@ -258,7 +269,7 @@ export function AttendanceRegularizationQueue({
                 <p className="section-copy section-copy-soft">Focused detail for the selected correction request.</p>
               </div>
               <div className="record-card__actions">
-                <button className="button button--ghost button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+                <button className="button button--ghost button--compact" onClick={closeInspection} type="button">Close</button>
                 {canReviewRegularizations ? (
                   <button className="button button--secondary button--compact" onClick={() => onOpenReview(selectedItem.id)} type="button">Review request</button>
                 ) : (

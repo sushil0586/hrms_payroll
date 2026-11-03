@@ -1,7 +1,4 @@
 "use client";
-import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
-
-
 import { useMemo, useRef, useState } from "react";
 
 import { attendanceRecordToFormValue } from "@/app/hr-admin/attendance-records/form-values";
@@ -110,14 +107,17 @@ export function AttendanceRecordBulkManager({
   const isRefreshing = pending;
   const scope = JSON.stringify(currentFilters);
   const [selection, setSelection] = useState<{scope: string; ids: string[]}>({scope, ids: []});
-  const [inspection, setInspection] = useState({scope, id: ""});
+  const [inspection, setInspection] = useState({scope, id: items[0]?.id ?? ""});
+  const inspectionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bulkStatus, setBulkStatus] = useState(statusOptions[0]?.value ?? "present");
   const submittingRef = useRef(false);
   const selectedIds = useMemo(() => selection.scope === scope ? selection.ids.filter(id => items.some(item => item.id === id)) : [], [items, scope, selection]);
-  const selectedItem = inspection.scope === scope ? items.find(item => item.id === inspection.id) ?? null : null;
+  const selectedItem = inspection.scope === scope
+    ? inspection.id === "__closed" ? null : items.find(item => item.id === inspection.id) ?? items[0] ?? null
+    : items[0] ?? null;
   const allSelected = items.length > 0 && selectedIds.length === items.length;
   function setSelectedIds(next: string[] | ((ids: string[]) => string[])) {
     setSelection(previous => {
@@ -126,6 +126,15 @@ export function AttendanceRecordBulkManager({
     });
   }
   function setSelectedItemId(id: string) { setInspection({scope, id}); }
+  function openInspection(trigger: HTMLButtonElement, id: string) {
+    trigger.focus({ preventScroll: true });
+    inspectionTriggerRef.current = trigger;
+    setSelectedItemId(id);
+  }
+  function closeInspection() {
+    setSelectedItemId("__closed");
+    window.requestAnimationFrame(() => inspectionTriggerRef.current?.focus({ preventScroll: true }));
+  }
   const editRecordId = editRecord?.id ?? "";
   const modalEditRecord = canManageRecords && editRecordId ? editRecord : null;
   const lateOnPage = items.filter((item) => item.late_minutes > 0).length;
@@ -306,9 +315,8 @@ export function AttendanceRecordBulkManager({
                         <span>{item.is_regularized ? "Regularized" : "Not regularized"}</span>
                       </td>
                       <td>
-                        <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                        <button className="button button--secondary button--compact" onClick={(triggerEvent) => { openInspection(triggerEvent.currentTarget, item.id);
                           triggerEvent.stopPropagation();
-                          setSelectedItemId(item.id);
                          }} type="button">
                           Inspect
                         </button>
@@ -336,7 +344,7 @@ export function AttendanceRecordBulkManager({
                 <h2 className="section-heading-soft">Attendance detail</h2>
                 <p className="section-copy section-copy-soft">Focused context for the selected record.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={closeInspection} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

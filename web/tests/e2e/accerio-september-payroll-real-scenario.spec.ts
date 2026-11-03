@@ -180,7 +180,7 @@ async function baselineCounts(page: Page) {
   };
 
   await gotoWithinSession(page, "/hr-admin/payroll-statutory");
-  await assertPageShell(page, "Payroll Statutory");
+  await assertPageShell(page, "Statutory Compliance");
 
   await gotoWithinSession(page, "/hr-admin/payroll-inputs");
   await assertPageShell(page, "Payroll Inputs");
@@ -1286,7 +1286,7 @@ test.describe("Accerio September payroll real scenario certification", () => {
       status: initialBaseline.blockingMissing.length ? "blocked" : "passed",
       steps: [
         "Logged in to stage HR Admin through browser session.",
-        "Verified HR Admin shell, Employees, Payroll Setup, Salary Setup, Payroll Statutory, and Payroll Inputs pages.",
+        "Verified HR Admin shell, Employees, Payroll Setup, Salary Setup, Statutory Compliance, and Payroll Inputs pages.",
         `Employee master options: ${JSON.stringify(initialBaseline.structuralCounts)}.`,
         `Payroll setup options: ${JSON.stringify(initialBaseline.payrollCounts)}.`,
         `Salary setup options: ${JSON.stringify(initialBaseline.salaryCounts)}.`,

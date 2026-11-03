@@ -24,6 +24,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "audit:workspace-consistency": "node scripts/check-workspace-consistency.mjs",
+    "audit:ui-interactions": "node scripts/audit-ui-interactions.mjs",
     "test:e2e": "playwright test tests/e2e",
     "test:e2e:live": "playwright test --config playwright.live.config.ts",
     "certify:users:phase1": "playwright test tests/e2e/user-journey-phase1-access-routing.spec.ts",

@@ -70,6 +70,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<AssignmentField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const isDirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
 
   useEffect(() => {
@@ -80,6 +81,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [isDirty, isSubmitting]);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   const filteredBranches = filteredByLegalEntity(options.branches, formValue.legal_entity_id);
   const filteredDepartments = filteredByBusinessUnit(options.departments, formValue.business_unit_id);
   const branchWarning =
@@ -203,7 +205,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
         </FormSection>
 
         {error ? (
-          <div className="notice notice--error" role="alert">
+          <div className="notice notice--error" role="alert" tabIndex={-1} ref={errorRef}>
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>
@@ -213,7 +215,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
           <button className="button button--primary" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}
           </button>
-          <button className="button button--secondary" onClick={() => { if (!isDirty || window.confirm("Discard unsaved workflow assignment changes?")) router.back(); }} type="button">
+          <button className="button button--secondary" disabled={isSubmitting} onClick={() => { if (!isDirty || window.confirm("Discard unsaved workflow assignment changes?")) router.back(); }} type="button">
             Cancel
           </button>
         </div>

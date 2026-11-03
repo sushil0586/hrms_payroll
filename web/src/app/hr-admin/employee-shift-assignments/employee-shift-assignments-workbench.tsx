@@ -4,7 +4,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -109,6 +109,7 @@ export function EmployeeShiftAssignmentsWorkbench({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedItemId) ?? null,
     [items, selectedItemId],
@@ -192,7 +193,10 @@ export function EmployeeShiftAssignmentsWorkbench({
           <div className="queue-toolbar__actions attendance-toolbar-actions">
             <button className="button button--primary" type="submit">Apply filters</button>
             {onQueryChange ? <button className="button button--secondary" onClick={() => onQueryChange({ q: "", kind: "all", risk: "all", primary: "all", page: "1", page_size: String(pageSize) })} type="button">Clear filters</button> : <Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Clear filters</Link>}
-            {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create assignment</button> : <Link className="button button--primary" href={queueHref({ assignmentModal: "create" })}>Create assignment</Link> : null}
+            {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={(triggerEvent) => {
+              focusActionTrigger(triggerEvent);
+              onOpenCreate();
+            }} type="button">Create assignment</button> : <Link className="button button--primary" href={queueHref({ assignmentModal: "create" })}>Create assignment</Link> : null}
           </div>
         </WorkspaceFilterForm>
       </section>
@@ -222,6 +226,7 @@ export function EmployeeShiftAssignmentsWorkbench({
                       <td><strong>{item.effective_from}</strong><span>to {item.effective_to ?? "open ended"}</span></td>
                       <td><WorkspaceStatusBadge tone={assignmentTone(item)}>{riskLabel(item)}</WorkspaceStatusBadge><span>{item.conflict_summary || "No overlap summary"}</span></td>
                       <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                        detailTriggerRef.current = triggerEvent.currentTarget;
                         triggerEvent.stopPropagation();
                         setSelectedItemId(item.id);
                        }} type="button">Inspect</button></td>
@@ -273,7 +278,11 @@ export function EmployeeShiftAssignmentsWorkbench({
                 <h2 className="section-heading-soft">Assignment detail</h2>
                 <p className="section-copy section-copy-soft">Focused coverage, window, and overlap context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={() => {
+                const trigger = detailTriggerRef.current;
+                setSelectedItemId("");
+                window.requestAnimationFrame(() => trigger?.focus({ preventScroll: true }));
+              }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">
@@ -290,7 +299,10 @@ export function EmployeeShiftAssignmentsWorkbench({
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit assignment</button> : <Link className="button button--primary" href={queueHref({ editAssignment: selectedItem.id })}>Edit assignment</Link>
+                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={(triggerEvent) => {
+                  focusActionTrigger(triggerEvent);
+                  onOpenEdit(selectedItem.id);
+                }} type="button">Edit assignment</button> : <Link className="button button--primary" href={queueHref({ editAssignment: selectedItem.id })}>Edit assignment</Link>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit assignment</button>
               )}
@@ -325,6 +337,8 @@ export function EmployeeShiftAssignmentsWorkbench({
           title="Create shift assignment"
           description="Assign an employee to fixed, rotating, or temporary shift coverage."
           tabs={["Coverage", "Behavior", "Overlap"]}
+          busy={pending}
+          onClose={onCloseModal}
         >
           <EmployeeShiftAssignmentForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyEmployeeShiftAssignmentValue()} mode="create" options={options} onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
@@ -339,6 +353,8 @@ export function EmployeeShiftAssignmentsWorkbench({
           title={`Edit ${modalEditItem.employee}`}
           description="Update shift coverage timing, precedence, and overlap handling."
           tabs={["Coverage", "Behavior", "Overlap"]}
+          busy={pending}
+          onClose={onCloseModal}
         >
           <EmployeeShiftAssignmentForm
             compact

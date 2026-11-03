@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { NotificationRetryAction } from "@/app/hr-admin/notifications/notification-retry-action";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotification, isApiNotFoundError } from "@/lib/api";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
 
@@ -30,11 +30,10 @@ export default async function HrAdminNotificationReviewPage({ params, searchPara
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={<Link className="button button--secondary" href={returnHref}>Back to queue</Link>}
         description="Inspect one notification payload and its current state."
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
-        pills={[item.status, item.channel, item.priority]}
         title="Notification review"
       />
 

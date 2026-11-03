@@ -12,6 +12,7 @@ import type {
   HrAdminOptionItem,
   HrAdminPolicyWorkbenchOptions,
 } from "@/lib/types";
+import { useValidationFocus } from "@/lib/ui/use-validation-focus";
 import { type FieldErrors, hasFieldErrors, requireValue } from "@/lib/ui/validation";
 
 type Props = {
@@ -72,6 +73,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
   const [conflictError, setConflictError] = useState("");
   const [conflictRetry, setConflictRetry] = useState(0);
+  const formRef = useValidationFocus(fieldErrors);
   const submittingRef = useRef(false);
   const hasEmployeeOverride = Boolean(formValue.employee_id);
   const selectedBranch = options.branches.find((item) => item.id === formValue.branch_id);
@@ -232,7 +234,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   }
 
   return (
-    <form className={`section form-layout-modern attendance-policy-assignment-form${compact ? " attendance-policy-assignment-form--modal" : ""}`} noValidate onSubmit={handleSubmit}>
+    <form ref={formRef} className={`section form-layout-modern attendance-policy-assignment-form${compact ? " attendance-policy-assignment-form--modal" : ""}`} noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>

@@ -534,6 +534,7 @@ function AttendanceDetailModal({ item, onClose }: { item: AttendanceRegularizati
 export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail, attendance: initialAttendance, currentParams, isDemo, regularizations: initialRegularizations }: Props) {
   const router = useRouter();
   const correctionActionRef = useRef<HTMLButtonElement | null>(null);
+  const submittedStatusRef = useRef<HTMLParagraphElement | null>(null);
   const hydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const [regularizeOpen, setRegularizeOpen] = useState(false);
   const [initialRecordId, setInitialRecordId] = useState<string>();
@@ -541,6 +542,10 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
   const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const searchParams = useSearchParams();
+  useEffect(() => {
+    if (!submitted) return;
+    window.requestAnimationFrame(() => submittedStatusRef.current?.focus({ preventScroll: true }));
+  }, [submitted]);
   const initialAttendanceQuery: AttendanceQuery = {
     month: normalizeParam(currentParams.month) ?? "",
     page: initialAttendance.page,
@@ -693,7 +698,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
       <WorkspaceStandardHeader title="Attendance" description="Review your recorded days and request an authorized correction." actions={<><button className="button button--primary" disabled={!eligible.length || isDemo || isRefreshing || Boolean(refreshError)} ref={correctionActionRef} onClick={(event) => requestCorrection(undefined, event.currentTarget)} type="button">Regularize attendance</button><a data-navigation-mode="document" className="button button--secondary" href="/ess">Overview</a></>} />
       <p className="sr-only" id="ess-attendance-table-scroll-help">When this table region is focused, use Left and Right arrow keys to scroll its columns.</p>
       {invalidMonth ? <p className="notice notice--error" role="alert">The requested month is invalid. Showing the current tenant month; choose a month below to continue.</p> : null}
-      {submitted ? <p className="notice notice--success" role="status">Attendance regularization submitted. Track the approval in Regularizations below.</p> : null}
+      {submitted ? <p className="notice notice--success" ref={submittedStatusRef} role="status" tabIndex={-1}>Attendance regularization submitted. Track the approval in Regularizations below.</p> : null}
       {isDemo ? <p className="notice">Preview mode. Corrections are unavailable.</p> : null}
       <div className="attendance-summary-strip" role="group" aria-label="Attendance period summary">
         <span><strong>{attendance.summary.recorded_days}</strong> recorded days</span>

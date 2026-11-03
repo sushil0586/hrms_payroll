@@ -7,7 +7,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 test.describe("Phase R4-B TDS e-file package certification", () => {
   test("HR admin can download a guarded Form 24Q package when mapped TDS evidence exists", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
 
     const tdsReport = page.getByTestId("tds-compliance-report");
     await expect(tdsReport).toBeVisible();

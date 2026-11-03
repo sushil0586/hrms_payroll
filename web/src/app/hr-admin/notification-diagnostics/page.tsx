@@ -2,7 +2,7 @@
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationDiagnostics } from "@/lib/api";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
 
@@ -16,12 +16,11 @@ export default async function HrAdminNotificationDiagnosticsPage() {
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={result.state === "live" ? "Live diagnostics" : "Demo diagnostics"}
         title="Notification diagnostics"
         description="See which templates and events are active, producing volume, failing delivery, or attracting test activity."
         actions={<Link className="button button--secondary" href="/hr-admin/notifications-admin">Back to notifications</Link>}
-        pills={["Catalog health", "Template usage", "Event diagnostics", "Test activity"]}
       />
 
       <section className="section">

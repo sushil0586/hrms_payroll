@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { ActionMenu } from "@/components/patterns/action-menu";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationDiagnostics, getHrAdminNotificationEvents, getHrAdminNotifications, getHrAdminNotificationOptions, getHrAdminNotificationTemplates } from "@/lib/api";
 
 import { OperationsGovernanceStrip } from "../operations-governance-strip";
@@ -116,7 +116,7 @@ export default async function HrAdminNotificationsAdminPage() {
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
         title="Notifications"
         description="Templates, triggers, and queue visibility."
@@ -138,8 +138,6 @@ export default async function HrAdminNotificationsAdminPage() {
             />
           </>
         }
-        pills={["Delivery", "Templates", "Events", "Queue"]}
-        showPills
       />
 
       <OperationsGovernanceStrip

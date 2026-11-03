@@ -143,8 +143,24 @@ test("double submit produces one notification template write", async ({ page }) 
     await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Controlled failure." }) });
   });
   await page.getByRole("button", { name: "Create template" }).dblclick();
-  await expect(page.locator('.notice[role="alert"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  await expect(page.locator('.notice[role="alert"]')).toBeFocused();
   expect(writes).toBe(1);
+});
+
+test("notification event locks cancellation while saving and focuses service errors", async ({ page }) => {
+  await login(page);
+  await page.goto("/hr-admin/notification-events/new", { waitUntil: "domcontentloaded" });
+  await page.locator('[data-event-field="code"]').fill("P3_EVENT_PENDING");
+  await page.locator('[data-event-field="name"]').fill("Pending event guard");
+  await page.locator('[data-event-field="trigger_key"]').fill("pending.event.guard");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/hr-admin/notification-events", async (route) => { await gate; await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Controlled event failure." }) }); });
+  await page.getByRole("button", { name: "Create notification event" }).click();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  release();
+  await expect(page.locator('.notice[role="alert"]')).toBeFocused();
 });
 
 test("invalid preview data is explained and preview actions remain reachable at short height", async ({ page }) => {

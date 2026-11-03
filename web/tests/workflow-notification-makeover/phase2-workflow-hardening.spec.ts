@@ -88,8 +88,23 @@ test("duplicate submit produces one write request", async ({ page }) => {
   await page.route("**/api/hr-admin/workflow-templates", async (route) => { writes += 1; await new Promise((resolve) => setTimeout(resolve, 300)); await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Controlled failure." }) }); });
   const submit = page.getByRole("button", { name: "Create workflow template" });
   await submit.dblclick();
-  await expect(page.locator('.notice[role="alert"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  await expect(page.locator('.notice[role="alert"]')).toBeFocused();
   expect(writes).toBe(1);
+});
+
+test("workflow assignment locks cancellation while saving and focuses service errors", async ({ page, browser }) => {
+  await createTemplateForWorkspace(browser, workspace);
+  await login(page);
+  await page.goto("/hr-admin/workflow-template-assignments/new", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Workflow template").selectOption({ index: 1 });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/hr-admin/workflow-template-assignments", async (route) => { await gate; await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Controlled assignment failure." }) }); });
+  await page.getByRole("button", { name: "Create assignment" }).click();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  release();
+  await expect(page.locator('.notice[role="alert"]')).toBeFocused();
 });
 
 test("exact duplicate assignment scope returns actionable conflict feedback", async ({ page, browser }) => {

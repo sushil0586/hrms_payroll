@@ -1,7 +1,6 @@
 import Link from "next/link";
 
-import { PageIntro } from "@/components/patterns/page-intro";
-import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getMssApprovalInbox } from "@/lib/api";
 import type { ManagerTeamSummary } from "@/lib/types";
 import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
@@ -101,12 +100,11 @@ export default async function MssControlCenterPage() {
   const dailyPriority = priorityCopy(totalPending, activeSignals);
 
   return (
-    <main className="shell shell--mss-control accerio-page">
-      <PageIntro
-        appearance="accerio"
+    <main className="shell shell--workspace shell--mss-control mss-experience-shell accerio-page">
+      <WorkspaceStandardHeader
         eyebrow={result.state === "live" ? "Live manager inbox" : "Demo manager inbox"}
         title="Manager dashboard"
-        description="Review team decisions, attendance signals, and approval risk from one calm daily workspace."
+        description="Review team decisions, attendance signals and approval risk from one daily workspace."
         actions={
           <>
             {canApproveLeave ? (
@@ -124,7 +122,6 @@ export default async function MssControlCenterPage() {
             </Link>
           </>
         }
-        pills={["Daily manager view", "Team approvals", "Payroll aware"]}
       />
 
       <section className="workspace-section">
@@ -138,27 +135,22 @@ export default async function MssControlCenterPage() {
         </div>
       </section>
 
-      <section className="section mss-dashboard" data-testid="mss-control-center">
-        <article className={`panel-card-soft mss-priority-card mss-priority-card--${dailyPriority.tone}`}>
-          <div className="mss-priority-card__content">
-            <div>
-              <span className="workspace-card__eyebrow">Today</span>
-              <h2>{dailyPriority.title}</h2>
-              <p className="section-copy section-copy-soft">{dailyPriority.body}</p>
-            </div>
-            <WorkspaceStatusBadge tone={statusTone(dailyPriority.tone)}>{statusLabel[dailyPriority.tone]}</WorkspaceStatusBadge>
-          </div>
-        </article>
+      <section className="mss-dashboard" data-testid="mss-control-center">
+        <WorkspaceStandardPanel
+          className={`mss-priority-card mss-priority-card--${dailyPriority.tone}`}
+          title={dailyPriority.title}
+          description={dailyPriority.body}
+          meta={<WorkspaceStatusBadge tone={statusTone(dailyPriority.tone)}>{statusLabel[dailyPriority.tone]}</WorkspaceStatusBadge>}
+        >
+          <span className="workspace-card__eyebrow">Today&apos;s priority</span>
+        </WorkspaceStandardPanel>
 
-        <article className="panel-card-soft mss-dashboard-card mss-dashboard-card--wide">
-          <div className="mss-dashboard-card__header">
-            <div>
-              <span className="workspace-card__eyebrow">Manager actions</span>
-              <h2>What to review next</h2>
-              <p className="section-copy section-copy-soft">Open one focused queue at a time. Approval detail and decision capture stay inside that queue.</p>
-            </div>
-            <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
-          </div>
+        <WorkspaceStandardPanel
+          className="mss-dashboard-card mss-dashboard-card--wide"
+          title="What to review next"
+          description="Open one focused queue at a time. Approval detail and decision capture stay inside that queue."
+          meta={<span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>}
+        >
           <div className="workspace-table-region" role="region" aria-label="Manager actions">
             {actions.length ? (
               <ul className="mss-action-list" aria-label="Approval queues">
@@ -183,23 +175,20 @@ export default async function MssControlCenterPage() {
               </div>
             )}
           </div>
-        </article>
+        </WorkspaceStandardPanel>
 
-        <article className="panel-card-soft mss-dashboard-card mss-dashboard-card--personal">
-          <div className="mss-dashboard-card__header">
-            <div>
-              <span className="workspace-card__eyebrow">Personal workspace</span>
-              <h2>Your ESS</h2>
-              <p className="section-copy section-copy-soft">Use ESS for your own payslips, documents, tax declarations, and personal leave.</p>
-            </div>
-          </div>
+        <WorkspaceStandardPanel
+          className="mss-dashboard-card mss-dashboard-card--personal"
+          title="Your ESS"
+          description="Use ESS for your own payslips, documents, tax declarations and personal leave."
+        >
           <div className="mss-personal-links">
             <Link className="button button--secondary" href="/ess">Open ESS</Link>
             <Link className="button button--secondary" href="/ess/payslips">Payslips</Link>
             <Link className="button button--secondary" href="/ess/documents">Documents</Link>
             <Link className="button button--secondary" href="/ess/statutory-declarations">Tax</Link>
           </div>
-        </article>
+        </WorkspaceStandardPanel>
       </section>
     </main>
   );

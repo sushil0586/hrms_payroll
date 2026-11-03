@@ -4,7 +4,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -55,6 +55,7 @@ export function AttendancePoliciesWorkbench({ items, state, options, canManagePo
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [unit, setUnit] = useWorkspaceQueryFilter("unit", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modalMode = searchParams.get("policyModal") ?? "";
   const editPolicyId = searchParams.get("editPolicy") ?? "";
 
@@ -155,6 +156,7 @@ export function AttendancePoliciesWorkbench({ items, state, options, canManagePo
                       <td><strong>{item.default_shift || "No shift"}</strong><span>{item.holiday_calendar || "No calendar"}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{formatLabel(item.status)}</WorkspaceStatusBadge><span>{formatLabel(item.attendance_unit)}</span></td>
                       <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                        detailTriggerRef.current = triggerEvent.currentTarget;
                         triggerEvent.stopPropagation();
                         setSelectedItemId(item.id);
                        }} type="button">Inspect</button></td>
@@ -178,7 +180,11 @@ export function AttendancePoliciesWorkbench({ items, state, options, canManagePo
                 <h2 className="section-heading-soft">Policy detail</h2>
                 <p className="section-copy section-copy-soft">Focused rules and governance state.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={() => {
+                const trigger = detailTriggerRef.current;
+                setSelectedItemId("");
+                window.requestAnimationFrame(() => trigger?.focus({ preventScroll: true }));
+              }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

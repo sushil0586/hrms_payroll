@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { NotificationsWorkspace } from "@/app/hr-admin/notifications/notifications-workspace";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationOptions, getHrAdminNotifications } from "@/lib/api";
 import { buildNotificationChannelSummaries } from "@/lib/notification-observability";
 
@@ -54,14 +54,10 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={<Link className="button button--secondary" href="/hr-admin/notifications-admin">Back to notifications</Link>}
         description="Inspect generated notifications across modules and review their delivery lifecycle."
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live notification mode" : "Demo notification mode"}
-        pills={[
-          `${result.data.total_count} notifications`,
-          `${result.data.items.filter((item) => !item.read_at).length} unread on this page`,
-        ]}
         title="Notification queue"
       />
       <section className="section">

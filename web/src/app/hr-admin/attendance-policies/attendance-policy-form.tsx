@@ -7,6 +7,7 @@ import { FormSection } from "@/components/patterns/form-section";
 import { PlatformGovernanceFormBanner } from "@/components/patterns/platform-governance-form-banner";
 import { GovernanceLockHint, isGovernanceFieldLocked } from "@/components/patterns/platform-governance-locks";
 import type { HrAdminAttendancePolicy, HrAdminAttendancePolicyPreview, HrAdminAttendancePolicyWriteInput, HrAdminPolicyOptions } from "@/lib/types";
+import { useValidationFocus } from "@/lib/ui/use-validation-focus";
 import { type FieldErrors, hasFieldErrors, requireText } from "@/lib/ui/validation";
 
 type Props = {
@@ -65,6 +66,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   const [previewResult, setPreviewResult] = useState<HrAdminAttendancePolicyPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const formRef = useValidationFocus(fieldErrors);
   const submittingRef = useRef(false);
   const previewRef = useRef(false);
   const shiftOptions = useMemo(() => selectOptions(options.shifts), [options.shifts]);
@@ -165,7 +167,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
       submittingRef.current = false;
       return;
     }
-    router.push(successHref);
+    window.location.assign(successHref);
   }
 
   function handleCancel() {
@@ -235,7 +237,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   }
 
   return (
-    <form className={`section form-layout-modern attendance-policy-form${compact ? " attendance-policy-form--modal" : ""}`} noValidate onSubmit={handleSubmit}>
+    <form ref={formRef} className={`section form-layout-modern attendance-policy-form${compact ? " attendance-policy-form--modal" : ""}`} noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>

@@ -33,12 +33,14 @@
     "**/*.tsx",
     ".next/build/types/**/*.ts",
     ".next/dev/types/**/*.ts",
+    ".next/l2a-fault/types/**/*.ts",
     ".next/local-qa/types/**/*.ts",
     ".next/playwright-l6b-final/types/**/*.ts",
     ".next/playwright-l6b-mobile/types/**/*.ts",
     ".next/playwright-l6b-neighbor/types/**/*.ts",
     ".next/playwright-l6b/types/**/*.ts",
     ".next/playwright-live/types/**/*.ts",
+    ".next/playwright-local-update-phase7/types/**/*.ts",
     ".next/playwright-phase3c-bank/types/**/*.ts",
     ".next/playwright-phase3c-lifecycle/types/**/*.ts",
     ".next/playwright-phase3e-employees/types/**/*.ts",
@@ -63,11 +65,11 @@
     ".next/playwright-phase6c2-salary-setup/types/**/*.ts",
     ".next/playwright-phase6c3-payroll-rules/types/**/*.ts",
     ".next/playwright-phase6c3-payroll-ui/types/**/*.ts",
+    ".next/playwright-reports-governance-controls/types/**/*.ts",
     ".next/playwright/types/**/*.ts",
     ".next/review/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts",
-    ".next/l2a-fault/types/**/*.ts"
+    "next-env.d.ts"
   ],
   "exclude": [
     "node_modules"

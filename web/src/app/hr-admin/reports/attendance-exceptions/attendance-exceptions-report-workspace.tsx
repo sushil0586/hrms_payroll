@@ -1,6 +1,6 @@
 "use client";
 
-import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
+import { formatWorkspaceDate, formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
@@ -43,12 +43,7 @@ function agingDays(appliedAt: string | null, createdAt: string, resolvedAt?: str
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
+  return value ? formatWorkspaceDate(value) : "Not set";
 }
 
 function formatDateTime(value: string | null | undefined) {

@@ -32,6 +32,10 @@ web/test-results/
 web/.hrms-data/
 web/qa-artifacts/
 
+# Generated QA evidence and visual prototypes belong in external artifact storage.
+docs/qa/evidence/
+docs/ui/prototypes/
+
 # Env and secrets
 .env
 .env.*

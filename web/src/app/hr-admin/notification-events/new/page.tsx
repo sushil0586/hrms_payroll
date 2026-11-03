@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { createEmptyNotificationEventValue } from "@/app/hr-admin/notification-events/form-values";
 import { NotificationEventForm } from "@/app/hr-admin/notification-events/notification-event-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationOptions } from "@/lib/api";
 
 export default async function HrAdminNewNotificationEventPage() {
@@ -10,12 +10,11 @@ export default async function HrAdminNewNotificationEventPage() {
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={optionsResult.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Create notification event"
         description="Define a trigger, audience, and delivery rule for notifications using the same modern form system as the rest of HR admin."
         actions={<Link className="button button--secondary" href="/hr-admin/notification-events">Back to events</Link>}
-        pills={["Trigger setup", "Audience targeting", "Delivery control"]}
       />
       <NotificationEventForm
         initialValue={createEmptyNotificationEventValue(

@@ -217,7 +217,7 @@ test("joined surfaces retain keyboard, responsive and selected accessibility con
   await page.goto(`/mss/notifications?q=${leaveRequestId}`);
   const opener = page.getByRole("button", { name: "Review notification" });
   await opener.focus();
-  await page.keyboard.press("Enter");
+  await opener.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(opener).toBeFocused();

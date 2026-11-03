@@ -44,7 +44,7 @@ export function ProfileWorkspace({ initialProfile, initialSection, payroll, perm
   }, [select]);
 
   return <main className="shell shell--workspace ess-experience-shell ess-compact accerio-page" data-hydrated={hydrated} id="ess-main">
-    <WorkspaceStandardHeader title="My Profile" description="Your employee information and related services." actions={<Link prefetch={false} className="button button--secondary" href="/ess">Back to dashboard</Link>} />
+    <WorkspaceStandardHeader eyebrow="Employee self service" title="My Profile" description="Your employee information and related services." actions={<Link prefetch={false} className="button button--secondary" href="/ess">Back to dashboard</Link>} />
     <EssIdentity profile={profile} />
     {isDemo ? <p className="notice">Preview data · Your employee information is available in a connected workspace.</p> : null}
     <ProfileSectionNav section={section} onSelect={select} />

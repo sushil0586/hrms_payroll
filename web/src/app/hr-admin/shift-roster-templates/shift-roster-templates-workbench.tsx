@@ -4,7 +4,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -116,6 +116,7 @@ export function ShiftRosterTemplatesWorkbench({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  const inspectionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedItemId) ?? null,
     [items, selectedItemId],
@@ -134,6 +135,17 @@ export function ShiftRosterTemplatesWorkbench({
     delete params.rosterModal;
     delete params.editRoster;
     return `${pathname}${buildQueryString({ ...params, ...overrides })}`;
+  }
+
+  function openInspection(trigger: HTMLButtonElement, id: string) {
+    trigger.focus({ preventScroll: true });
+    inspectionTriggerRef.current = trigger;
+    setSelectedItemId(id);
+  }
+
+  function closeInspection() {
+    setSelectedItemId("");
+    window.requestAnimationFrame(() => inspectionTriggerRef.current?.focus({ preventScroll: true }));
   }
 
   return (
@@ -197,7 +209,7 @@ export function ShiftRosterTemplatesWorkbench({
           <div className="queue-toolbar__actions attendance-toolbar-actions">
             <button className="button button--primary" type="submit">Apply filters</button>
             {onQueryChange ? <button className="button button--secondary" onClick={() => onQueryChange({ q: "", status: "all", kind: "all", pattern: "all", page: "1", page_size: String(pageSize) })} type="button">Clear filters</button> : <Link className="button button--secondary" href="/hr-admin/shift-roster-templates">Clear filters</Link>}
-            {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create template</button> : <Link className="button button--primary" href={queueHref({ rosterModal: "create" })}>Create template</Link> : null}
+            {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={(event) => { focusActionTrigger(event); onOpenCreate(); }} type="button">Create template</button> : <Link className="button button--primary" href={queueHref({ rosterModal: "create" })}>Create template</Link> : null}
           </div>
         </WorkspaceFilterForm>
       </section>
@@ -226,9 +238,8 @@ export function ShiftRosterTemplatesWorkbench({
                       <td><WorkspaceStatusBadge tone={item.assignment_kind === "temporary_override" ? "info" : "neutral"}>{titleLabel(item.assignment_kind)}</WorkspaceStatusBadge><span>Assignment mode</span></td>
                       <td><strong>{titleLabel(item.config_snapshot?.rotation?.pattern_type ?? "fixed")}</strong><span>{rotationSummary(item, options.shifts)}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{titleLabel(item.status)}</WorkspaceStatusBadge><span>{item.status === "draft" ? "Preview first" : "Rollout ready"}</span></td>
-                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { openInspection(triggerEvent.currentTarget, item.id);
                         triggerEvent.stopPropagation();
-                        setSelectedItemId(item.id);
                        }} type="button">Inspect</button></td>
                     </tr>
                   );
@@ -278,7 +289,7 @@ export function ShiftRosterTemplatesWorkbench({
                 <h2 className="section-heading-soft">Roster template detail</h2>
                 <p className="section-copy section-copy-soft">Focused pattern, status, and rollout context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={closeInspection} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">
@@ -294,7 +305,7 @@ export function ShiftRosterTemplatesWorkbench({
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit template</button> : <Link className="button button--primary" href={queueHref({ editRoster: selectedItem.id })}>Edit template</Link>
+                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={(event) => { focusActionTrigger(event); onOpenEdit(selectedItem.id); }} type="button">Edit template</button> : <Link className="button button--primary" href={queueHref({ editRoster: selectedItem.id })}>Edit template</Link>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit template</button>
               )}
@@ -332,6 +343,7 @@ export function ShiftRosterTemplatesWorkbench({
           closeHref={queueHref()}
           eyebrow="Roster template"
           labelledBy="roster-template-create-modal-title"
+          onClose={onCloseModal}
           title="Create roster template"
           description="Build a reusable shift pattern for later rollout."
           tabs={["Identity", "Pattern", "Review"]}
@@ -346,6 +358,7 @@ export function ShiftRosterTemplatesWorkbench({
           closeHref={queueHref()}
           eyebrow="Roster template"
           labelledBy="roster-template-edit-modal-title"
+          onClose={onCloseModal}
           title={`Edit ${modalEditItem.name}`}
           description="Adjust reusable shift pattern, status, and rollout behavior."
           tabs={["Identity", "Pattern", "Review"]}

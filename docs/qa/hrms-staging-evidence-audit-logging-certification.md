@@ -1,13 +1,13 @@
 # HRMS Staging Evidence API Audit Logging Certification
 
-Date: 2026-10-27  
-Staging: `https://hrms.accerio.in`  
-Deployed SHA: `c2703e810208179a94e8cc15615bb78c27c51104`  
-Decision: **BLOCKED pending patch deployment and centralized retention**
+Date: 2026-10-27
+Staging: `https://hrms.accerio.in`
+Deployed backend SHA: `a5353b4f2a564abb8ca245135669dec75a9457b8`
+Decision: **CONDITIONAL PASS**
 
 ## Scope And Safety
 
-This phase diagnosed staging read-only, implemented and tested a local logging correction, and reassessed Batch 1 entry. It did not commit, push, deploy, restart staging, mutate a database, send email, process payroll, create a tenant, or execute a frozen staging scenario.
+This phase diagnosed the logger, implemented and tested the correction, committed and deployed the authorized backend-only patch, and established a centralized CloudWatch Logs path. It did not push Git, run payroll, send email, create a tenant, or execute a frozen staging scenario. Two bounded evidence-API security probes used the existing synthetic grant: one intentional denial and one authorized read-only request.
 
 ## Root Cause
 
@@ -31,16 +31,20 @@ root handlers=0
 
 Docker uses the bounded `json-file` driver with `max-size=10m` and `max-file=5`; its stdout/stderr path exists and application access logs are otherwise available. The event was not misrouted or delayed at Docker: it was never emitted by Python logging.
 
-## Central Retention Finding
+## Central Retention Result
 
-No active CloudWatch Agent, Fluent Bit, Vector, Promtail, Filebeat, or Logstash service exists on the Lightsail host. Docker logs are host-local rotating files, not centralized retention. The current AWS operator also lacks `logs:DescribeLogGroups`, so no external CloudWatch Logs group, KMS setting, retention period, resource policy, or searchable stream could be independently verified.
+The approved central path is now active:
 
-Consequently:
+- CloudWatch log group: `/accerio/hrms/staging/security-audit` in `ap-south-1`;
+- encryption: CloudWatch Logs service-side encryption at rest using the AWS-managed service key;
+- retention: **90 days**;
+- collector: Amazon CloudWatch Agent `1.300074.0b1920`, enabled and active on `saas-staging-01`;
+- source filter: only Docker JSON records containing `staging_evidence_access`;
+- stream: `saas-staging-01/i-03f6588ec0afb56df`;
+- writer: dedicated IAM user `hrms-staging-audit-writer` with only create-stream, describe-stream, and put-events rights for this log group;
+- negative permissions: writer read and delete attempts both returned `AccessDenied`.
 
-- container visibility is not a substitute for centralized retention;
-- retention duration and security-team read access are not verified;
-- search by correlation ID in a central destination is not verified;
-- central audit certification remains blocked even after the local formatter/handler fix.
+The access key is root-readable only on the host; the downloaded transfer copy was removed. Unrelated application and payroll logs are not forwarded by this collector configuration.
 
 ## Local Remediation
 
@@ -88,27 +92,27 @@ The formatter does not serialize arbitrary `LogRecord` extras. Passwords, cookie
 
 ## Staging Evidence
 
-Current deployed code remains `c2703e8...` without this local logging patch.
+Commit `a5353b4f2a564abb8ca245135669dec75a9457b8` was deployed as backend image `sha256:e37ececcb376cfa17f5908fe1ffa9a8f71cdb3e437db78fe48d4917c651eaf26`. Django checks and `migrate --check` passed; the backend remained healthy with zero restarts.
 
 | Probe | HTTP result | Container audit event |
 |---|---:|---:|
-| Wrong fingerprint, correlation `audit-closure-denied-20261027` | 403 | Missing |
-| Authorized scoped GET, correlation `audit-closure-allowed-20261027` | 200 | Missing |
-| Previously revoked grant | 403 | Previously functionally verified; logging absent |
+| Wrong fingerprint, correlation `audit-central-denied-20261027` | 403 | Present in Docker and CloudWatch; `denied/fingerprint` |
+| Authorized scoped GET, correlation `audit-central-allowed-20261027` | 200 | Present in Docker and CloudWatch; `allowed/evidence_collected` |
+| Previously revoked grant | 403 | Functional denial remains previously verified; no new mutation was needed |
 
-The revoked state was not recreated in this phase because database mutation was prohibited. No staging event can be claimed centrally retained.
+Both retained records contain the expected pseudonymous references and omit authorization headers, tokens, cookies, passwords, email addresses, employee/payroll data, and request payloads. Each record was independently retrieved from CloudWatch by its correlation ID.
 
 ## Release Impact
 
-Application patch manifest before documentation reconciliation: **4 files**, listed above. The complete uncommitted certification change also includes this report and `docs/qa/hrms-staging-certification-dashboard.md`.
+The six-file application/certification patch was committed as `a5353b4f2a564abb8ca245135669dec75a9457b8` with parent `c2703e810208179a94e8cc15615bb78c27c51104`.
 
-- Commit recommendation: `fix(security): emit structured staging evidence audit logs`
-- Runtime impact: rebuild the backend image and recreate backend only; worker/beat do not serve this API, though synchronized image rollout may follow normal provenance policy.
+- Commit: `fix(security): emit structured staging evidence audit logs`
+- Runtime impact executed: backend-only immutable rebuild and recreate; worker/beat/web were unchanged.
 - Database impact: none.
 - Configuration impact: none for emission; the centralized collector requires separately approved infrastructure configuration.
 - Rollback: restore the previous backend image. No schema or data rollback is necessary.
 
-No commit or deployment is authorized by this phase.
+Rollback remains the previous backend image; no schema or data rollback is required.
 
 ## Central Collector Acceptance Criteria
 
@@ -138,12 +142,12 @@ The infrastructure owner must select an approved destination and provide:
 | Cleanup owner | APPROVAL REQUIRED | Not named |
 | Recovery/rollback owner | APPROVAL REQUIRED | Not named for the execution window |
 | Execution window | APPROVAL REQUIRED | No Batch 1 window authorized |
-| Central audit retention | BLOCKED | No deployed logging fix or verified central collector |
+| Central audit retention | PASS | Denied and allowed events searchable in encrypted CloudWatch Logs; 90-day retention; writer cannot read/delete |
 
 All 136 shared-staging scenarios remain **Not Run**.
 
 ## Verdict
 
-**BLOCKED.** The application root cause is fixed and verified locally, but the fix is uncommitted/undeployed and no approved centralized log-retention path is installed or evidenced. Batch 1 cannot yet be authorized.
+**CONDITIONAL PASS.** The logging defect, container visibility, centralized delivery, retention, redaction, and writer isolation are verified. The remaining Batch 1 gaps are governance approvals: named execution, cleanup, and rollback owners; an execution window; a governed cleanup/quarantine method; and an approved synthetic SES recipient list if delivery scenarios are included.
 
-Exact next action: security and infrastructure owners must approve the six-file candidate and a central collector/log-group design with retention and access controls; then commit, deploy the backend patch, and prove denied/allowed correlation-ID search in that destination before issuing Batch 1 execution authorization.
+Exact next action: issue the explicit Batch 1 authorization naming scenarios `STG-E2E-0101` through `STG-E2E-0106`, the run namespace/window, execution/cleanup/rollback owners, and the cleanup or quarantine method. All 136 shared-staging scenarios remain Not Run.

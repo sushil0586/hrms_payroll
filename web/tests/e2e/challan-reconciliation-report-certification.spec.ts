@@ -95,7 +95,7 @@ test.describe("Phase R4-C challan reconciliation report certification", () => {
     await expect(openLink).toHaveAttribute("href", /\/hr-admin\/payroll-statutory/);
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
     await expect(page).toHaveURL(/\/hr-admin\/payroll-statutory/);
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
     await expectNoHorizontalOverflow(page);
   });
 

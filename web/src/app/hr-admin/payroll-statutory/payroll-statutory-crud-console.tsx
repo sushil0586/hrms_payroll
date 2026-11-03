@@ -658,7 +658,7 @@ function emptyDeclaration(setup: HrAdminPayrollStatutorySetupResponse): Declarat
     employee_id: profile?.employee_id ?? setup.options.employees[0]?.id ?? "",
     employee_statutory_profile_id: profile?.id ?? "",
     statutory_pack_id: profile?.statutory_pack_id ?? setup.packs[0]?.id ?? "",
-    financial_year_code: "FY2026-27",
+    financial_year_code: setup.options.declaration_catalog.financial_years.find((item) => item.is_open)?.value ?? "",
     declaration_profile_ref: "payroll.statutory.declaration.browser.v1",
     proof_window_ref: "payroll.proof.browser.window.v1",
     status: "draft",
@@ -672,10 +672,11 @@ function emptyDeclaration(setup: HrAdminPayrollStatutorySetupResponse): Declarat
 }
 
 function emptyItem(setup: HrAdminPayrollStatutorySetupResponse): ItemForm {
+  const section = setup.options.declaration_catalog.sections[0];
   return {
     declaration_id: setup.declarations[0]?.id ?? "",
-    item_kind: setup.options.statutory_declaration_item_kinds[0]?.value ?? "investment",
-    section_code: "",
+    item_kind: section?.item_kinds[0] ?? setup.options.statutory_declaration_item_kinds[0]?.value ?? "investment",
+    section_code: section?.code ?? "",
     component_code: "",
     name: "",
     declared_amount: "10000",
@@ -854,11 +855,11 @@ function FieldError({ message }: { message?: string }) {
   return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
-function TextField({ label, value, onChange, required, type = "text", error }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; error?: string }) {
+function TextField({ label, value, onChange, required, type = "text", error, disabled = false }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; error?: string; disabled?: boolean }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <input aria-invalid={Boolean(error)} className="input-control" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input aria-invalid={Boolean(error)} className="input-control" disabled={disabled} required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
       <FieldError message={error} />
     </label>
   );
@@ -1051,10 +1052,12 @@ function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatu
 }
 
 export function PayrollStatutoryCrudConsole({
+  canLockDeclarations,
   canManageDeclarations,
   canManageSetup,
   initialSetup,
 }: {
+  canLockDeclarations: boolean;
   canManageDeclarations: boolean;
   canManageSetup: boolean;
   initialSetup: HrAdminPayrollStatutorySetupResponse;
@@ -1722,14 +1725,7 @@ export function PayrollStatutoryCrudConsole({
             employee_statutory_profile_id: declarationForm.employee_statutory_profile_id,
             statutory_pack_id: nullable(declarationForm.statutory_pack_id),
             financial_year_code: declarationForm.financial_year_code,
-            declaration_profile_ref: declarationForm.declaration_profile_ref,
-            proof_window_ref: declarationForm.proof_window_ref,
-            status: declarationForm.status,
             tax_regime: declarationForm.tax_regime,
-            declared_total_amount: decimal(declarationForm.declared_total_amount),
-            verified_total_amount: decimal(declarationForm.verified_total_amount),
-            rejection_reason: declarationForm.rejection_reason,
-            source_ref: declarationForm.source_ref,
             config_snapshot: makeSnapshot(declarationForm.config_profile_ref),
           }, applyDeclaration);
         }}>
@@ -1738,22 +1734,18 @@ export function PayrollStatutoryCrudConsole({
             <SelectField label="Employee" required value={declarationForm.employee_id} options={employeeOptions} onChange={(value) => setDeclarationForm((current) => ({ ...current, employee_id: value }))} />
             <SelectField label="Employee statutory profile" required value={declarationForm.employee_statutory_profile_id} options={profileOptions} onChange={profileSelect} />
             <SelectField label="Statutory pack" value={declarationForm.statutory_pack_id} options={[{ value: "", label: "No pack" }, ...packOptions]} onChange={(value) => setDeclarationForm((current) => ({ ...current, statutory_pack_id: value }))} />
-            <TextField label="Financial year code" required value={declarationForm.financial_year_code} onChange={(value) => setDeclarationForm((current) => ({ ...current, financial_year_code: value.toUpperCase() }))} />
-            <TextField label="Declaration profile reference" value={declarationForm.declaration_profile_ref} onChange={(value) => setDeclarationForm((current) => ({ ...current, declaration_profile_ref: value }))} />
-            <TextField label="Proof window reference" value={declarationForm.proof_window_ref} onChange={(value) => setDeclarationForm((current) => ({ ...current, proof_window_ref: value }))} />
-            <SelectField label="Status" value={declarationForm.status} options={enumOptions(setup.options.statutory_declaration_statuses)} onChange={(value) => setDeclarationForm((current) => ({ ...current, status: value }))} />
+            <SelectField label="Financial year" required value={declarationForm.financial_year_code} options={setup.options.declaration_catalog.financial_years.map((item) => ({ value: item.value, label: item.label }))} onChange={(value) => setDeclarationForm((current) => ({ ...current, financial_year_code: value }))} />
             <SelectField label="Tax regime" value={declarationForm.tax_regime} options={enumOptions(setup.options.tax_regimes)} onChange={(value) => setDeclarationForm((current) => ({ ...current, tax_regime: value }))} />
-            <TextField label="Declared total amount" type="number" value={declarationForm.declared_total_amount} onChange={(value) => setDeclarationForm((current) => ({ ...current, declared_total_amount: value }))} />
-            <TextField label="Verified total amount" type="number" value={declarationForm.verified_total_amount} onChange={(value) => setDeclarationForm((current) => ({ ...current, verified_total_amount: value }))} />
+            <TextField label="Status" disabled value={declarationForm.status} onChange={() => undefined} />
+            <TextField label="Declared total amount" disabled type="number" value={declarationForm.declared_total_amount} onChange={() => undefined} />
+            <TextField label="Verified total amount" disabled type="number" value={declarationForm.verified_total_amount} onChange={() => undefined} />
             <TextField label="Rejection reason" value={declarationForm.rejection_reason} onChange={(value) => setDeclarationForm((current) => ({ ...current, rejection_reason: value }))} />
-            <TextField label="Source reference" value={declarationForm.source_ref} onChange={(value) => setDeclarationForm((current) => ({ ...current, source_ref: value }))} />
-            <TextField label="Config profile reference" value={declarationForm.config_profile_ref} onChange={(value) => setDeclarationForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
           <div className="salary-crud-action-row">
             <button className="button button--secondary button--compact" disabled={!declarationForm.id || submitting === "submit declaration"} type="button" onClick={() => declarationForm.id && void postAction<HrAdminEmployeeStatutoryDeclaration>("submit declaration", `employee-statutory-declarations/${declarationForm.id}/submit`, {}, applyDeclaration)}>Submit</button>
             <button className="button button--secondary button--compact" disabled={!declarationForm.id || submitting === "verify declaration"} type="button" onClick={() => declarationForm.id && void postAction<HrAdminEmployeeStatutoryDeclaration>("verify declaration", `employee-statutory-declarations/${declarationForm.id}/verify`, {}, applyDeclaration)}>Verify</button>
             <button className="button button--secondary button--compact" disabled={!declarationForm.id || submitting === "reject declaration"} type="button" onClick={() => declarationForm.id && void postAction<HrAdminEmployeeStatutoryDeclaration>("reject declaration", `employee-statutory-declarations/${declarationForm.id}/reject`, { reason: declarationForm.rejection_reason || "Rejected through browser statutory QA." }, applyDeclaration)}>Reject</button>
-            <button className="button button--secondary button--compact" disabled={!declarationForm.id || submitting === "lock declaration"} type="button" onClick={() => declarationForm.id && void postAction<HrAdminEmployeeStatutoryDeclaration>("lock declaration", `employee-statutory-declarations/${declarationForm.id}/lock`, {}, applyDeclaration)}>Lock</button>
+            {canLockDeclarations ? <button className="button button--secondary button--compact" disabled={!declarationForm.id || declarationForm.status !== "verified" || submitting === "lock declaration"} type="button" onClick={() => declarationForm.id && void postAction<HrAdminEmployeeStatutoryDeclaration>("lock declaration", `employee-statutory-declarations/${declarationForm.id}/lock`, {}, applyDeclaration)}>Lock</button> : null}
           </div>
           <SetupRecordList
             activeId={declarationForm.id}
@@ -1781,11 +1773,6 @@ export function PayrollStatutoryCrudConsole({
             component_code: itemForm.component_code,
             name: itemForm.name,
             declared_amount: decimal(itemForm.declared_amount),
-            verified_amount: decimal(itemForm.verified_amount),
-            proof_status: itemForm.proof_status,
-            proof_document_ref: itemForm.proof_document_ref,
-            proof_artifact_key: itemForm.proof_artifact_key,
-            source_ref: itemForm.source_ref,
             config_snapshot: makeSnapshot(itemForm.config_profile_ref),
           }, applyItem);
         }}>
@@ -1793,16 +1780,12 @@ export function PayrollStatutoryCrudConsole({
           <div className="form-grid salary-crud-form-grid">
             <SelectField label="Declaration" required value={itemForm.declaration_id} options={declarationOptions} onChange={(value) => setItemForm((current) => ({ ...current, declaration_id: value }))} />
             <SelectField label="Item kind" value={itemForm.item_kind} options={enumOptions(setup.options.statutory_declaration_item_kinds)} onChange={(value) => setItemForm((current) => ({ ...current, item_kind: value }))} />
-            <TextField label="Section code" required value={itemForm.section_code} onChange={(value) => setItemForm((current) => ({ ...current, section_code: value.toUpperCase() }))} />
-            <TextField label="Component code" value={itemForm.component_code} onChange={(value) => setItemForm((current) => ({ ...current, component_code: value.toUpperCase() }))} />
+            <SelectField label="Section" required value={itemForm.section_code} options={setup.options.declaration_catalog.sections.map((item) => ({ value: item.code, label: `${item.code} - ${item.label}` }))} onChange={(value) => setItemForm((current) => ({ ...current, section_code: value, component_code: "" }))} />
+            <SelectField label="Component" value={itemForm.component_code} options={[{ value: "", label: "Select component" }, ...(setup.options.declaration_catalog.sections.find((item) => item.code === itemForm.section_code)?.component_codes ?? []).map((code) => ({ value: code, label: code.replaceAll("_", " ") }))]} onChange={(value) => setItemForm((current) => ({ ...current, component_code: value }))} />
             <TextField label="Name" required value={itemForm.name} onChange={(value) => setItemForm((current) => ({ ...current, name: value }))} />
             <TextField label="Declared amount" required error={fieldErrors["item.declared_amount"]} type="number" value={itemForm.declared_amount} onChange={(value) => setItemForm((current) => ({ ...current, declared_amount: value }))} />
-            <TextField label="Verified amount" error={fieldErrors["item.verified_amount"]} type="number" value={itemForm.verified_amount} onChange={(value) => setItemForm((current) => ({ ...current, verified_amount: value }))} />
-            <SelectField label="Proof status" value={itemForm.proof_status} options={enumOptions(setup.options.statutory_proof_statuses)} onChange={(value) => setItemForm((current) => ({ ...current, proof_status: value }))} />
-            <TextField label="Proof document reference" value={itemForm.proof_document_ref} onChange={(value) => setItemForm((current) => ({ ...current, proof_document_ref: value }))} />
-            <TextField label="Proof artifact key" value={itemForm.proof_artifact_key} onChange={(value) => setItemForm((current) => ({ ...current, proof_artifact_key: value }))} />
-            <TextField label="Source reference" value={itemForm.source_ref} onChange={(value) => setItemForm((current) => ({ ...current, source_ref: value }))} />
-            <TextField label="Config profile reference" value={itemForm.config_profile_ref} onChange={(value) => setItemForm((current) => ({ ...current, config_profile_ref: value }))} />
+            <TextField label="Verified amount" disabled error={fieldErrors["item.verified_amount"]} type="number" value={itemForm.verified_amount} onChange={() => undefined} />
+            <TextField label="Proof status" disabled value={itemForm.proof_status} onChange={() => undefined} />
             <TextField label="Item rejection reason" value={itemForm.rejection_reason} onChange={(value) => setItemForm((current) => ({ ...current, rejection_reason: value }))} />
           </div>
           <div className="salary-crud-action-row">

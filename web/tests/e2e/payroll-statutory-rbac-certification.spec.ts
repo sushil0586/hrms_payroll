@@ -265,7 +265,7 @@ test.describe("Payroll and statutory RBAC certification", () => {
     });
 
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions", persona);
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
     await expect(page.getByText("You can review statutory packs, filings, declarations, and evidence.")).toBeVisible();
     await expect(page.getByText("Read only")).toBeVisible();
     await expect(page.getByTestId("statutory-pack-form")).toHaveCount(0);

@@ -18,6 +18,9 @@ import type {
 
 import { ComplianceEvidenceStrip } from "../compliance-evidence-strip";
 import { PayrollStatutoryCrudConsole } from "./payroll-statutory-crud-console";
+import { StatutoryCatalogEditor } from "./statutory-catalog-editor";
+import { StatutoryFinanceExport } from "./statutory-finance-export";
+import { StatutoryReviewActions } from "./statutory-review-actions";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -147,7 +150,7 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 
 function PayrollStatutoryTabs({ activeTab, currentParams }: { activeTab: StatutoryTab; currentParams: Record<string, SearchParamValue> }) {
   return (
-    <nav aria-label="Payroll statutory sections" className="payroll-setup-tabs">
+    <nav aria-label="Statutory compliance sections" className="payroll-setup-tabs">
       {STATUTORY_TABS.map((tab) => (
         <Link
           aria-current={activeTab === tab.key ? "page" : undefined}
@@ -206,10 +209,12 @@ function PaginationControls({
 }
 
 function DeclarationRail({
+  aggregateOnly,
   currentParams,
   declarations,
   selectedDeclaration,
 }: {
+  aggregateOnly: boolean;
   currentParams: Record<string, SearchParamValue>;
   declarations: HrAdminEmployeeStatutoryDeclaration[];
   selectedDeclaration: HrAdminEmployeeStatutoryDeclaration | null;
@@ -228,9 +233,9 @@ function DeclarationRail({
             key={declaration.id}
           >
             <div>
-              <strong>{declaration.employee_name}</strong>
+              <strong>{aggregateOnly ? `Declaration ${declaration.source_hash.slice(0, 12)}` : declaration.employee_name}</strong>
               <span>
-                {declaration.employee_code} / {declaration.financial_year_code}
+                {aggregateOnly ? declaration.financial_year_code : `${declaration.employee_code} / ${declaration.financial_year_code}`}
               </span>
             </div>
             <StatusBadge status={declaration.status} label={declaration.status_label} />
@@ -249,11 +254,66 @@ function DeclarationRail({
   );
 }
 
+function DeclarationFilters({
+  aggregateOnly,
+  currentParams,
+  declarations,
+}: {
+  aggregateOnly: boolean;
+  currentParams: Record<string, SearchParamValue>;
+  declarations: HrAdminEmployeeStatutoryDeclaration[];
+}) {
+  const years = [...new Set(declarations.map((item) => item.financial_year_code))].sort().reverse();
+  return (
+    <form action="/hr-admin/payroll-statutory" className="workspace-card workspace-card--compact" data-navigation-mode="document" method="get">
+      <input name="tab" type="hidden" value="declarations" />
+      <div className="form-grid form-grid--three">
+        <label className="field-shell">
+          <span>{aggregateOnly ? "Declaration reference" : "Employee"}</span>
+          <input defaultValue={normalizeParam(currentParams.declarationQuery) ?? ""} name="declarationQuery" placeholder={aggregateOnly ? "Pseudonymous reference" : "Name or employee code"} />
+        </label>
+        <label className="field-shell">
+          <span>Financial year</span>
+          <select defaultValue={normalizeParam(currentParams.declarationYear) ?? ""} name="declarationYear">
+            <option value="">All years</option>
+            {years.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+        </label>
+        <label className="field-shell">
+          <span>Lifecycle status</span>
+          <select defaultValue={normalizeParam(currentParams.declarationStatus) ?? ""} name="declarationStatus">
+            <option value="">All statuses</option>
+            {["draft", "submitted", "verified", "rejected", "locked"].map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}
+          </select>
+        </label>
+        <label className="field-shell">
+          <span>Reconciliation</span>
+          <select defaultValue={normalizeParam(currentParams.reconciliation) ?? ""} name="reconciliation">
+            <option value="">All reconciliation states</option>
+            <option value="matched">Matched</option>
+            <option value="exception">Exception</option>
+          </select>
+        </label>
+      </div>
+      <div className="button-row">
+        <button className="button button--primary" type="submit">Apply filters</button>
+        <Link className="button button--secondary" href="/hr-admin/payroll-statutory?tab=declarations">Clear filters</Link>
+      </div>
+    </form>
+  );
+}
+
 function DeclarationDetail({
+  aggregateOnly,
+  canLock,
+  canReview,
   declaration,
   profile,
   proofItems,
 }: {
+  aggregateOnly: boolean;
+  canLock: boolean;
+  canReview: boolean;
   declaration: HrAdminEmployeeStatutoryDeclaration | null;
   profile: HrAdminEmployeeStatutoryProfile | null;
   proofItems: HrAdminEmployeeStatutoryDeclarationItem[];
@@ -275,9 +335,9 @@ function DeclarationDetail({
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
           <span className="workspace-card__eyebrow">Declaration detail</span>
-          <h2>{declaration.employee_name}</h2>
+          <h2>{aggregateOnly ? `Declaration ${declaration.source_hash.slice(0, 12)}` : declaration.employee_name}</h2>
           <p className="section-copy section-copy-soft">
-            {declaration.employee_code} / {declaration.financial_year_code} / {declaration.tax_regime_label}
+            {aggregateOnly ? `${declaration.financial_year_code} / ${declaration.tax_regime_label}` : `${declaration.employee_code} / ${declaration.financial_year_code} / ${declaration.tax_regime_label}`}
           </p>
         </div>
         <StatusBadge status={declaration.status} label={declaration.status_label} />
@@ -292,9 +352,13 @@ function DeclarationDetail({
           <span className="workspace-card__eyebrow">Verified</span>
           <strong>{formatMoney(declaration.verified_total_amount)}</strong>
         </div>
+        <div>
+          <span className="workspace-card__eyebrow">Reconciliation</span>
+          <strong>{declaration.reconciliation_status === "matched" ? "Matched" : `${formatMoney(declaration.reconciliation_difference)} exception`}</strong>
+        </div>
       </div>
 
-      <section className="payroll-rule-source-card">
+      {!aggregateOnly ? <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Profile controls</span>
         <div className="detail-grid">
           <DetailRow label="Pack" value={declaration.statutory_pack_name || "Unassigned"} />
@@ -304,9 +368,19 @@ function DeclarationDetail({
           <DetailRow label="PT state" value={profile?.professional_tax_state || "Pending"} />
           <DetailRow label="Proof window" value={declaration.proof_window_ref || "Pending"} />
         </div>
-      </section>
+      </section> : (
+        <section className="payroll-rule-source-card">
+          <span className="workspace-card__eyebrow">Finance reconciliation boundary</span>
+          <p className="section-copy section-copy-soft">This view contains locked declaration totals only. Employee identifiers, PAN, and private proof evidence remain restricted to HR statutory review.</p>
+          <div className="detail-grid">
+            <DetailRow label="Reconciliation" value={titleCase(declaration.reconciliation_status)} />
+            <DetailRow label="Difference" value={formatMoney(declaration.reconciliation_difference)} />
+            <DetailRow label="Exceptions" value={declaration.exception_count} />
+          </div>
+        </section>
+      )}
 
-      <section className="payroll-rule-source-card">
+      {!aggregateOnly ? <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Proof checks</span>
         <div className="payroll-statutory-proof-list">
           {proofItems.map((item) => (
@@ -329,16 +403,27 @@ function DeclarationDetail({
             <div className="empty-state">No proof rows are attached to this declaration yet.</div>
           ) : null}
         </div>
-      </section>
+      </section> : null}
+
+      {canReview && !aggregateOnly ? <StatutoryReviewActions canLock={canLock} declaration={declaration} proofItems={proofItems} /> : null}
 
       <section className="payroll-rule-source-card">
-        <span className="workspace-card__eyebrow">Lifecycle</span>
+        <span className="workspace-card__eyebrow">Audit timeline</span>
         <div className="detail-grid">
-          <DetailRow label="Submitted" value={formatDate(declaration.submitted_at)} />
-          <DetailRow label="Verified" value={formatDate(declaration.verified_at)} />
-          <DetailRow label="Locked" value={formatDate(declaration.locked_at)} />
+          <DetailRow label="Created" value={formatDate(declaration.created_at)} />
+          <DetailRow label="Submitted" value={`${formatDate(declaration.submitted_at)}${!aggregateOnly && declaration.submitted_by_name ? ` by ${declaration.submitted_by_name}` : ""}`} />
+          <DetailRow label="Verified" value={`${formatDate(declaration.verified_at)}${!aggregateOnly && declaration.verified_by_name ? ` by ${declaration.verified_by_name}` : ""}`} />
+          {declaration.rejected_at ? <DetailRow label="Returned" value={`${formatDate(declaration.rejected_at)}${!aggregateOnly && declaration.rejected_by_name ? ` by ${declaration.rejected_by_name}` : ""}`} /> : null}
+          <DetailRow label="Locked" value={`${formatDate(declaration.locked_at)}${!aggregateOnly && declaration.locked_by_name ? ` by ${declaration.locked_by_name}` : ""}`} />
           <DetailRow label="Source" value={<code>{declaration.source_hash}</code>} />
         </div>
+        {!aggregateOnly && proofItems.length > 0 ? <div className="payroll-statutory-proof-list">{proofItems.map((item) => (
+          <div className="payroll-statutory-proof-card" key={`timeline-${item.id}`}>
+            <div><strong>{item.name}</strong><span>{item.proof_status_label}</span></div>
+            <span>{formatDate(item.verified_at ?? item.rejected_at ?? item.proof_submitted_at)}</span>
+            {item.rejection_reason ? <span>{item.rejection_reason}</span> : null}
+          </div>
+        ))}</div> : null}
       </section>
     </aside>
   );
@@ -639,11 +724,13 @@ function PackSummary({ pack }: { pack: HrAdminPayrollStatutoryPack | null }) {
 }
 
 function DeclarationTable({
+  aggregateOnly,
   currentParams,
   declarations,
   page,
   pageSize,
 }: {
+  aggregateOnly: boolean;
   currentParams: Record<string, SearchParamValue>;
   declarations: HrAdminEmployeeStatutoryDeclaration[];
   page: number;
@@ -681,9 +768,9 @@ function DeclarationTable({
                 <tr key={declaration.id}>
                   <td>
                     <Link href={statutoryHref(currentParams, { tab: "declarations", declarationId: declaration.id })}>
-                      {declaration.employee_name}
+                      {aggregateOnly ? `Declaration ${declaration.source_hash.slice(0, 12)}` : declaration.employee_name}
                     </Link>
-                    <span className="table-cell-subtitle">{declaration.employee_code}</span>
+                    {!aggregateOnly ? <span className="table-cell-subtitle">{declaration.employee_code}</span> : null}
                   </td>
                   <td>{declaration.financial_year_code}</td>
                   <td><StatusBadge status={declaration.status} label={declaration.status_label} /></td>
@@ -783,11 +870,13 @@ function OverviewPanel({
 
 export default async function HrAdminPayrollStatutoryPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({
-    permissionKeys: ["statutory.setup.view", "statutory.setup.manage", "statutory.declarations.view", "statutory.declarations.manage"],
+    permissionKeys: ["statutory.setup.view", "statutory.setup.manage", "statutory.declarations.view", "statutory.declarations.manage", "payroll.review", "payroll.approve"],
     fallbackPath: "/hr-admin",
   });
   const canManageStatutorySetup = !sessionUser || sessionHasPermission(sessionUser, "statutory.setup.manage");
   const canManageStatutoryDeclarations = !sessionUser || sessionHasPermission(sessionUser, "statutory.declarations.manage");
+  const canLockStatutoryDeclarations = !sessionUser || sessionHasPermission(sessionUser, "payroll.approve");
+  const financeReadOnly = Boolean(sessionUser && !canManageStatutoryDeclarations && (sessionHasPermission(sessionUser, "payroll.review") || canLockStatutoryDeclarations));
   const currentParams = (await searchParams) ?? {};
   const activeTab = normalizeTab(currentParams.tab);
   const declarationPage = parsePositiveInteger(currentParams.declarationPage, 1);
@@ -801,9 +890,21 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
   const selectedDeclarationId = normalizeParam(currentParams.declarationId);
   const result = await getHrAdminPayrollStatutorySetup();
   const setup = result.data;
+  const declarationQuery = (normalizeParam(currentParams.declarationQuery) ?? "").trim().toLowerCase();
+  const declarationYear = normalizeParam(currentParams.declarationYear) ?? "";
+  const declarationStatus = normalizeParam(currentParams.declarationStatus) ?? "";
+  const reconciliation = normalizeParam(currentParams.reconciliation) ?? "";
+  const roleVisibleDeclarations = financeReadOnly ? setup.declarations.filter((item) => item.status === "locked") : setup.declarations;
+  const visibleDeclarations = roleVisibleDeclarations.filter((item) => {
+    const searchable = `${item.employee_name} ${item.employee_code} ${item.source_hash.slice(0, 12)}`.toLowerCase();
+    return (!declarationQuery || searchable.includes(declarationQuery))
+      && (!declarationYear || item.financial_year_code === declarationYear)
+      && (!declarationStatus || item.status === declarationStatus)
+      && (!reconciliation || item.reconciliation_status === reconciliation);
+  });
   const selectedDeclaration =
-    setup.declarations.find((item) => item.id === selectedDeclarationId) ??
-    setup.declarations[0] ??
+    visibleDeclarations.find((item) => item.id === selectedDeclarationId) ??
+    visibleDeclarations[0] ??
     null;
   const selectedProfile = selectedDeclaration
     ? setup.employee_profiles.find((item) => item.id === selectedDeclaration.employee_statutory_profile_id) ?? null
@@ -816,22 +917,22 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
   return (
     <main className="shell shell--payroll-setup shell--payroll-statutory accerio-page">
       <PageIntro appearance="accerio"
-        eyebrow={result.state === "live" ? "Live payroll phase 5I" : "Demo payroll phase 5I"}
-        title="Payroll Statutory"
-        description="Review statutory packs, employee tax profiles, declaration proofs, and source-controlled verification state before payroll calculation consumes them."
+        eyebrow={result.state === "live" ? "Live compliance workspace" : "Demo compliance workspace"}
+        title="Statutory Compliance"
+        description="Manage statutory packs, employer registrations, employee declarations, proof review, and filing readiness from one controlled workspace."
         className="page-header-surface page-header-surface--compact"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
         actions={
           <>
-            <Link className="button button--secondary" href="/hr-admin/payroll-calculations">
-              Calculations
+            <Link className="button button--secondary" href={statutoryHref(currentParams, { tab: "declarations" })}>
+              Declarations
             </Link>
-            <Link className="button button--secondary" href="/hr-admin/payroll-handoff">
-              Handoff
+            <Link className="button button--secondary" href="/hr-admin/reports/statutory-filing-status">
+              Filing status
             </Link>
-            <Link className="button button--primary" href="/hr-admin/payroll-rules">
-              Rule catalog
+            <Link className="button button--primary" href="/hr-admin/reports/compliance">
+              Compliance reports
             </Link>
           </>
         }
@@ -839,7 +940,7 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
 
       <ComplianceEvidenceStrip
         current="statutory"
-        eyebrow="Payroll compliance"
+        eyebrow="Statutory compliance"
         title="Statutory evidence control"
         description="Track packs, employer registrations, employee profiles, declarations, proof verification, and due filing calendars from one statutory evidence path."
         metrics={[
@@ -850,16 +951,12 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
         ]}
       />
 
-      <section className="section section--tight" aria-label="Payroll statutory metrics">
-        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll statutory summary">
-          <span><strong>{setup.summary.active_pack_count}</strong> active packs</span>
+      <section className="section section--tight" aria-label="Statutory compliance metrics">
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Statutory compliance summary">
           <span><strong>{setup.summary.active_statutory_component_count}</strong> components</span>
           <span><strong>{setup.summary.active_employee_profile_count}</strong> profiles</span>
           <span><strong>{setup.summary.active_employer_registration_count}</strong> registrations</span>
-          <span><strong>{setup.summary.due_filing_calendar_count}</strong> due filings</span>
-          <span><strong>{setup.summary.declaration_count}</strong> declarations</span>
           <span><strong>{setup.summary.locked_declaration_count}</strong> locked</span>
-          <span><strong>{setup.summary.verified_declaration_item_count}</strong> proofs verified</span>
         </div>
       </section>
 
@@ -870,16 +967,28 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
       ) : null}
 
       {activeTab === "declarations" ? (
-        <section className="payroll-setup-workspace payroll-statutory-workspace">
-          <DeclarationRail currentParams={currentParams} declarations={setup.declarations} selectedDeclaration={selectedDeclaration} />
-          <DeclarationTable
-            currentParams={currentParams}
-            declarations={setup.declarations}
-            page={declarationPage}
-            pageSize={declarationSize}
-          />
-          <DeclarationDetail declaration={selectedDeclaration} profile={selectedProfile} proofItems={selectedProofItems} />
-        </section>
+        <div className="stack-list">
+          {financeReadOnly ? <section className="workspace-card workspace-card--compact"><div className="workspace-card__header"><div><span className="workspace-card__eyebrow">Finance reconciliation</span><h2>Locked statutory totals</h2><p className="section-copy section-copy-soft">Export contains pseudonymous declaration references and locked totals only.</p></div><StatutoryFinanceExport declarations={visibleDeclarations} /></div></section> : null}
+          <DeclarationFilters aggregateOnly={financeReadOnly} currentParams={currentParams} declarations={roleVisibleDeclarations} />
+          <section className="payroll-setup-workspace payroll-statutory-workspace">
+            <DeclarationRail aggregateOnly={financeReadOnly} currentParams={currentParams} declarations={visibleDeclarations} selectedDeclaration={selectedDeclaration} />
+            <DeclarationTable
+              aggregateOnly={financeReadOnly}
+              currentParams={currentParams}
+              declarations={visibleDeclarations}
+              page={declarationPage}
+              pageSize={declarationSize}
+            />
+            <DeclarationDetail
+              aggregateOnly={financeReadOnly}
+              canLock={canLockStatutoryDeclarations}
+              canReview={canManageStatutoryDeclarations}
+              declaration={selectedDeclaration}
+              profile={selectedProfile}
+              proofItems={financeReadOnly ? [] : selectedProofItems}
+            />
+          </section>
+        </div>
       ) : null}
 
       {activeTab === "compliance" ? (
@@ -906,19 +1015,23 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
       ) : null}
 
       {activeTab === "catalog" ? (
-        <div className="payroll-setup-grid-two">
-          <PackSummary pack={activePack} />
-          <ComponentRegister
-            components={setup.statutory_components}
-            currentParams={currentParams}
-            page={componentPage}
-            pageSize={componentSize}
-          />
+        <div className="stack-list">
+          <StatutoryCatalogEditor canApprove={canLockStatutoryDeclarations} canManage={canManageStatutorySetup} itemKindOptions={setup.options.statutory_declaration_item_kinds} packs={setup.packs} />
+          <div className="payroll-setup-grid-two">
+            <PackSummary pack={activePack} />
+            <ComponentRegister
+              components={setup.statutory_components}
+              currentParams={currentParams}
+              page={componentPage}
+              pageSize={componentSize}
+            />
+          </div>
         </div>
       ) : null}
 
       {activeTab === "actions" ? (
         <PayrollStatutoryCrudConsole
+          canLockDeclarations={canLockStatutoryDeclarations}
           canManageDeclarations={canManageStatutoryDeclarations}
           canManageSetup={canManageStatutorySetup}
           initialSetup={setup}

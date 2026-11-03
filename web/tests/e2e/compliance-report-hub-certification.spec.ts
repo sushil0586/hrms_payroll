@@ -74,21 +74,21 @@ test.describe("Phase R4-H compliance report hub certification", () => {
       expect(JSON.stringify(manifest.filters)).toContain(hubExport.filter);
     }
 
-    const exportLink = hub.locator(".compliance-hub-card").filter({ hasText: "Provider filing receipts report" }).getByRole("link", { name: "Export" });
+    const exportLink = hub.locator('[data-report-key="provider-filing-receipts"]').getByRole("link", { name: "Export" });
     await expect(exportLink).toHaveAttribute("href", "/api/hr-admin/reports/provider-filing-receipts");
     const exportResponse = await page.request.get((await exportLink.getAttribute("href")) ?? "");
     expect(exportResponse.status()).toBe(200);
     expect(exportResponse.headers()["content-type"]).toContain("text/csv");
     expect(exportResponse.headers()["x-hrms-report-key"]).toBe("provider-filing-receipts");
     expect(exportResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
-    const manifestLink = hub.locator(".compliance-hub-card").filter({ hasText: "Provider filing receipts report" }).getByRole("link", { name: "Manifest" });
+    const manifestLink = hub.locator('[data-report-key="provider-filing-receipts"]').getByRole("link", { name: "Manifest" });
     await expect(manifestLink).toHaveAttribute("href", "/api/hr-admin/reports/provider-filing-receipts?format=manifest");
     const manifestResponse = await page.request.get((await manifestLink.getAttribute("href")) ?? "");
     expect(manifestResponse.status()).toBe(200);
     expect(manifestResponse.headers()["content-type"]).toContain("application/json");
     expect(manifestResponse.headers()["x-hrms-report-key"]).toBe("provider-filing-receipts");
 
-    const openLink = hub.locator(".compliance-hub-card").filter({ hasText: "Challan reconciliation report" }).getByRole("link", { name: "Open" });
+    const openLink = hub.locator('[data-report-key="challan-reconciliation"]').getByRole("link", { name: "Open" });
     await expect(openLink).toHaveAttribute("href", "/hr-admin/reports/challan-reconciliation");
     await openLink.click();
     await expectPageReady(page, "Challan Reconciliation");

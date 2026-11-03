@@ -3,7 +3,7 @@ import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filt
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationTemplates } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
@@ -50,7 +50,7 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Notification templates"
         description="Manage channel-specific message templates for operational alerts and user updates without drifting away from the shared admin design system."
@@ -64,7 +64,6 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
             </Link>
           </>
         }
-        pills={["Channel-aware content", "Metadata-ready templates", "System and custom template mix"]}
       />
 
       <section className="section">

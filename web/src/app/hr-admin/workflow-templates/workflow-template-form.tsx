@@ -116,6 +116,7 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<WorkflowTemplateField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const isDirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
 
   useEffect(() => {
@@ -126,6 +127,8 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [isDirty, isSubmitting]);
+
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
   const isLifecycleTemplate = formValue.module === "lifecycle";
   const lifecyclePreset = isLifecycleTemplate ? getLifecycleTriggerPreset(options, formValue.trigger_key) : null;
@@ -543,7 +546,7 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
         </FormSection>
 
         {error ? (
-          <div className="notice notice--error" role="alert">
+          <div className="notice notice--error" role="alert" tabIndex={-1} ref={errorRef}>
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>
@@ -553,7 +556,7 @@ export function WorkflowTemplateForm({ initialValue, mode, options, itemId }: Pr
           <button className="button button--primary" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Saving..." : mode === "create" ? "Create workflow template" : "Save changes"}
           </button>
-          <button className="button button--secondary" onClick={() => { if (!isDirty || window.confirm("Discard unsaved workflow template changes?")) router.back(); }} type="button">
+          <button className="button button--secondary" disabled={isSubmitting} onClick={() => { if (!isDirty || window.confirm("Discard unsaved workflow template changes?")) router.back(); }} type="button">
             Cancel
           </button>
         </div>

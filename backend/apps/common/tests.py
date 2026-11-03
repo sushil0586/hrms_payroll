@@ -981,6 +981,29 @@ class HrAdminOptionMetadataTests(TestCase):
             status=PayrollReviewStatus.LOCKED,
             locked_at=now,
         )
+        older_batch = PayrollOutputBatch.objects.create(
+            tenant=self.tenant,
+            payroll_run=run,
+            review=review,
+            status=PayrollOutputBatchStatus.PUBLISHED,
+            output_profile_ref="payroll.output.register.archive.v1",
+            generated_at=now,
+            published_at=now,
+            totals_snapshot={"gross_earnings": "80000.00", "employee_deductions": "8000.00", "net_pay": "72000.00"},
+            artifact_summary_snapshot={"artifact_count": 1, "payslip_count": 0, "register_count": 1},
+        )
+        PayrollOutputArtifact.objects.create(
+            tenant=self.tenant,
+            output_batch=older_batch,
+            payroll_run=run,
+            review=review,
+            kind=PayrollOutputArtifactKind.REGISTER,
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+            artifact_key="register:aug-2026-output",
+            title="Payroll Register - August 2026 Output",
+            file_payload="employee_code,net_pay\nEMP-0001,72000\n",
+            published_at=now,
+        )
         batch = PayrollOutputBatch.objects.create(
             tenant=self.tenant,
             payroll_run=run,
@@ -1018,31 +1041,6 @@ class HrAdminOptionMetadataTests(TestCase):
             file_payload="employee_code,net_pay\nEMP-0001,90000\n",
             published_at=now,
         )
-        older_batch = PayrollOutputBatch.objects.create(
-            tenant=self.tenant,
-            payroll_run=run,
-            review=review,
-            status=PayrollOutputBatchStatus.PUBLISHED,
-            output_profile_ref="payroll.output.register.archive.v1",
-            generated_at=now,
-            published_at=now,
-            totals_snapshot={"gross_earnings": "80000.00", "employee_deductions": "8000.00", "net_pay": "72000.00"},
-            artifact_summary_snapshot={"artifact_count": 1, "payslip_count": 0, "register_count": 1},
-        )
-        PayrollOutputBatch.objects.filter(id=older_batch.id).update(created_at=now - timezone.timedelta(days=1))
-        PayrollOutputArtifact.objects.create(
-            tenant=self.tenant,
-            output_batch=older_batch,
-            payroll_run=run,
-            review=review,
-            kind=PayrollOutputArtifactKind.REGISTER,
-            status=PayrollOutputArtifactStatus.PUBLISHED,
-            artifact_key="register:aug-2026-output",
-            title="Payroll Register - August 2026 Output",
-            file_payload="employee_code,net_pay\nEMP-0001,72000\n",
-            published_at=now,
-        )
-
         default_response = self.client.get("/api/v1/hr-admin/payroll-output-setup/")
         filtered_response = self.client.get("/api/v1/hr-admin/payroll-output-setup/?artifact_kind=register&artifact_page_size=100")
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -44,6 +44,7 @@ export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, succes
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
+  const submittingRef = useRef(false);
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
   const startLocked = isGovernanceFieldLocked(item, "start_time");
@@ -72,9 +73,11 @@ export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, succes
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (acceptedUnconfirmed) return;
+    if (submittingRef.current || acceptedUnconfirmed) return;
+    submittingRef.current = true;
     if (mode === "edit" && item && item.can_edit_directly === false) {
       setError("This record cannot be edited directly in its current governance state.");
+      submittingRef.current = false;
       return;
     }
     setError("");
@@ -89,12 +92,14 @@ export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, succes
     } catch {
       setError("Unable to reach the server. The shift was not confirmed; keep this form open and retry after checking the connection.");
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     if (onSaved) {
@@ -103,6 +108,7 @@ export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, succes
       if (!reconciled) {
         setError("The shift was accepted, but the catalog could not be confirmed. Do not submit it again; retry the catalog read.");
         setIsSubmitting(false);
+        submittingRef.current = false;
       }
       return;
     }

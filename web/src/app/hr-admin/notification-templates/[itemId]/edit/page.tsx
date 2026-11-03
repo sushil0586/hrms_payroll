@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { notificationTemplateToFormValue } from "@/app/hr-admin/notification-templates/form-values";
 import { NotificationTemplateForm } from "@/app/hr-admin/notification-templates/notification-template-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationOptions, getHrAdminNotificationTemplate, isApiNotFoundError } from "@/lib/api";
 
 type PageProps = { params: Promise<{ itemId: string }> };
@@ -25,12 +25,11 @@ export default async function HrAdminEditNotificationTemplatePage({ params }: Pa
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Edit notification template"
         description="Update template content and channel configuration without dropping back to the older admin visual style."
         actions={<Link className="button button--secondary" href="/hr-admin/notification-templates">Back to templates</Link>}
-        pills={["Content refinement", "Channel configuration", "Metadata updates"]}
       />
       <NotificationTemplateForm
         initialValue={notificationTemplateToFormValue(itemResult.data)}

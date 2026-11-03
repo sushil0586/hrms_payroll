@@ -51,9 +51,10 @@ test.describe("Employee statutory declaration flows", () => {
       await addProof.click();
       const proofDialog = page.getByRole("dialog", { name: "Add proof" });
       await expect(proofDialog).toBeVisible();
-      for (const label of ["Section", "Kind", "Component", "Item name", "Amount", "Proof reference", "Upload category", "Proof file"]) {
+      for (const label of ["Section", "Kind", "Component", "Item name", "Amount", "Upload category", "Proof file"]) {
         await expect(proofDialog.getByLabel(label)).toBeVisible();
       }
+      await expect(proofDialog.getByLabel("Proof reference")).toHaveCount(0);
       await expect(proofDialog.getByText("Proof quality check")).toBeVisible();
       await proofDialog.getByRole("button", { name: "Close" }).click();
     }

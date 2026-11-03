@@ -1,5 +1,7 @@
 "use client";
 
+import { formatWorkspaceDate } from "@/lib/ui/date-time-format";
+
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
@@ -131,9 +133,33 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setDerivedStatus("All");
+    setRisk("All");
+    setDepartment("All");
+    setPayrollImpacting("All");
+    setLeaveCollision("All");
+    setSortBy("risk");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Attendance derivation exceptions report workspace">
       <div className="report-catalog-workspace attendance-derivation-exceptions-report" data-testid="attendance-derivation-exceptions-report">
+        <div className="report-command-panel">
+          <div>
+            <span className="workspace-card__eyebrow">Derivation exceptions</span>
+            <h2>Attendance calculation review</h2>
+            <p className="section-copy section-copy-soft">Review schedule, work-time, leave-collision, and payroll-impact evidence using one consistent report context.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
+            <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+          </div>
+        </div>
+
         <div className="attendance-summary-strip report-summary-strip" aria-label="Derivation exception summary">
           <span><strong>{filteredRows.length}</strong> derivation exceptions</span>
           <span><strong>{rows.length}</strong> total rows</span>
@@ -142,7 +168,9 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
           <span><strong>{filteredRows.reduce((sum, row) => sum + row.record.derivation_summary.leave_collision_count, 0)}</strong> leave collisions</span>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Attendance derivation exception filters">
+        <div className="report-filter-panel" aria-label="Attendance derivation exception filters">
+          <div className="report-filter-panel__header"><div><strong>Filter derivation exceptions</strong><span>Narrow the review by risk, schedule outcome, and payroll impact.</span></div><button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button></div>
+          <div className="report-filter-grid report-filter-grid--attendance">
           <label><span>Search derivations</span><input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, status, reason, warning" /></label>
           <label><span>Derived status</span><select aria-label="Derived status" className="input-control" value={derivedStatus} onChange={(event) => updateFilter(() => setDerivedStatus(event.target.value))}>{derivedStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
           <label><span>Risk</span><select aria-label="Risk" className="input-control" value={risk} onChange={(event) => updateFilter(() => setRisk(event.target.value))}>{risks.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
@@ -150,13 +178,12 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
           <label><span>Payroll impact</span><select aria-label="Payroll impact" className="input-control" value={payrollImpacting} onChange={(event) => updateFilter(() => setPayrollImpacting(event.target.value))}><option value="All">All</option><option value="true">Impacting</option><option value="false">Not impacting</option></select></label>
           <label><span>Leave collision</span><select aria-label="Leave collision" className="input-control" value={leaveCollision} onChange={(event) => updateFilter(() => setLeaveCollision(event.target.value))}><option value="All">All</option><option value="present">Present</option><option value="none">None</option></select></label>
           <label><span>Sort</span><select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}><option value="risk">Risk first</option><option value="date">Newest date</option><option value="employee">Employee</option><option value="status">Derived status</option><option value="late">Late minutes</option><option value="lop">LOP units</option></select></label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => row.risk === "High").length}</strong> high risk</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
-          <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
         <WorkspaceTableScrollRegion label="Attendance derivation exceptions, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
@@ -168,7 +195,7 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
                 return (
                   <tr key={record.id}>
                     <td><strong>{record.employee_name}</strong><span>{record.employee_code}</span><span>{record.department || "No department"}</span></td>
-                    <td><div className="payroll-register-stack"><span className={statusClass(summary.status)}>{titleCase(summary.status)}</span><span>{record.attendance_date}</span><span className={statusClass(rowRisk)}>{rowRisk}</span></div></td>
+                    <td><div className="payroll-register-stack"><span className={statusClass(summary.status)}>{titleCase(summary.status)}</span><span>{formatWorkspaceDate(record.attendance_date)}</span><span className={statusClass(rowRisk)}>{rowRisk}</span></div></td>
                     <td><div className="payroll-register-stack"><span>{summary.schedule_day_type ? titleCase(summary.schedule_day_type) : "Missing schedule"}</span><span>{summary.schedule_resolution_source || "No resolver source"}</span><span>{summary.shift_name || record.shift || "No shift"}</span></div></td>
                     <td><div className="payroll-register-stack"><span>{summary.worked_hours} worked / {summary.expected_hours} expected</span><span>{summary.late_minutes} late minutes</span><span>{summary.early_exit_minutes} early exit minutes</span></div></td>
                     <td><div className="payroll-register-stack"><span className={statusClass(String(summary.payroll_impact.payroll_impacting))}>{summary.payroll_impact.payroll_impacting ? "Payroll impacting" : "Not payroll impacting"}</span><span>{summary.payroll_impact.payable_units} payable units</span><span>{summary.payroll_impact.lop_units} LOP units</span><span>{summary.leave_collision_count} leave collisions</span></div></td>

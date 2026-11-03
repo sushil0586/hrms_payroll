@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { createEmptyWorkflowTemplateValue } from "@/app/hr-admin/workflow-templates/form-values";
 import { WorkflowTemplateForm } from "@/app/hr-admin/workflow-templates/workflow-template-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminWorkflowOptions } from "@/lib/api";
 
 export default async function HrAdminNewWorkflowTemplatePage() {
@@ -10,7 +10,7 @@ export default async function HrAdminNewWorkflowTemplatePage() {
 
   return (
     <main className="shell shell--workspace workflow-workbench accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={<Link className="button button--secondary" href="/hr-admin/workflow-templates">Back to workflow templates</Link>}
         description="Define an approval template with reusable steps that can later be assigned by branch, department, or grade."
         eyebrow={optionsResult.state === "live" ? "Live workflow mode" : "Demo workflow mode"}

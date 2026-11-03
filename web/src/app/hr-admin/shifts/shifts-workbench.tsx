@@ -4,7 +4,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -59,6 +59,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [kind, setKind] = useWorkspaceQueryFilter("kind", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  const inspectionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modalMode = controlledModalMode ?? (searchParams.get("shiftModal") ?? "");
   const editShiftId = controlledEditShiftId ?? (searchParams.get("editShift") ?? "");
 
@@ -85,6 +86,17 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
 
   function queueHref(overrides: Record<string, string | number | boolean | undefined> = {}) {
     return `${pathname}${buildQueryString(overrides)}`;
+  }
+
+  function openInspection(trigger: HTMLButtonElement, id: string) {
+    trigger.focus({ preventScroll: true });
+    inspectionTriggerRef.current = trigger;
+    setSelectedItemId(id);
+  }
+
+  function closeInspection() {
+    setSelectedItemId("");
+    window.requestAnimationFrame(() => inspectionTriggerRef.current?.focus({ preventScroll: true }));
   }
 
   return (
@@ -137,7 +149,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
             setStatus("all");
             setKind("all");
           }} type="button">Clear filters</button>
-          {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={onOpenCreate} type="button">Create shift</button> : <Link className="button button--primary" href={queueHref({ shiftModal: "create" })}>Create shift</Link> : null}
+          {canManagePolicies ? onOpenCreate ? <button className="button button--primary" disabled={pending} onClick={(event) => { focusActionTrigger(event); onOpenCreate(); }} type="button">Create shift</button> : <Link className="button button--primary" href={queueHref({ shiftModal: "create" })}>Create shift</Link> : null}
         </div>
       </section>
 
@@ -165,9 +177,8 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
                       <td><strong>{item.break_minutes} min break</strong><span>{item.grace_in_minutes}/{item.grace_out_minutes} min grace</span></td>
                       <td><strong>{item.weekly_off_days.length ? item.weekly_off_days.map(formatDay).join(", ") : "None set"}</strong><span>{item.is_flexible ? "Flexible timing" : item.is_night_shift ? "Cross-day window" : "Fixed window"}</span></td>
                       <td><WorkspaceStatusBadge tone={shiftTone(item)}>{item.is_active ? "Active" : "Inactive"}</WorkspaceStatusBadge><span>{item.is_night_shift ? "Night shift" : item.is_flexible ? "Flexible" : "Standard"}</span></td>
-                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { openInspection(triggerEvent.currentTarget, item.id);
                         triggerEvent.stopPropagation();
-                        setSelectedItemId(item.id);
                        }} type="button">Inspect</button></td>
                     </tr>
                   );
@@ -189,7 +200,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
                 <h2 className="section-heading-soft">Shift detail</h2>
                 <p className="section-copy section-copy-soft">Focused timing, grace, and governance state.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={closeInspection} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">
@@ -207,7 +218,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit shift</button> : <Link className="button button--primary" href={queueHref({ editShift: selectedItem.id })}>Edit shift</Link>
+                onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={(event) => { focusActionTrigger(event); onOpenEdit(selectedItem.id); }} type="button">Edit shift</button> : <Link className="button button--primary" href={queueHref({ editShift: selectedItem.id })}>Edit shift</Link>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit shift</button>
               )}
@@ -240,6 +251,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
           closeHref={queueHref()}
           eyebrow="Shift master"
           labelledBy="shift-create-modal-title"
+          onClose={onCloseModal}
           title="Create shift"
           description="Define timing, grace handling, and weekly-off defaults."
           tabs={["Timing", "Behavior", "Weekly off"]}
@@ -254,6 +266,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
           closeHref={queueHref()}
           eyebrow="Shift master"
           labelledBy="shift-edit-modal-title"
+          onClose={onCloseModal}
           title={`Edit ${editItem.name}`}
           description="Adjust timing, grace handling, and weekly-off defaults."
           tabs={["Timing", "Behavior", "Weekly off"]}

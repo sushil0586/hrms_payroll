@@ -72,8 +72,13 @@ export function EmployeeShiftAssignmentForm({
   const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminEmployeeShiftAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const errorRef = useRef<HTMLDivElement | null>(null);
   const submittingRef = useRef(false);
   const shiftWarning = options.shifts.length === 0 ? "No active shifts are available. Create a shift before assigning coverage." : null;
+
+  useEffect(() => {
+    if (error) window.requestAnimationFrame(() => errorRef.current?.focus({ preventScroll: true }));
+  }, [error]);
 
   function update<Key extends keyof HrAdminEmployeeShiftAssignmentWriteInput>(key: Key, value: HrAdminEmployeeShiftAssignmentWriteInput[Key]) {
     setConflictCheck(null);
@@ -224,7 +229,7 @@ export function EmployeeShiftAssignmentForm({
     .join(" -> ");
 
   return (
-    <form className={`section form-layout-modern employee-shift-assignment-form${compact ? " employee-shift-assignment-form--modal" : ""}`} onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting || undefined} className={`section form-layout-modern employee-shift-assignment-form${compact ? " employee-shift-assignment-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -374,7 +379,7 @@ export function EmployeeShiftAssignmentForm({
           </FormSection>
         </div>
 
-        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" ref={errorRef} role="alert" tabIndex={-1}><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Shift assignment runtime supports fixed windows, weekly rotations, and temporary overrides.</span>
           <div className="form-actions-bar__buttons">

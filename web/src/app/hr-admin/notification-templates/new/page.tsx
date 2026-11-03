@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { createEmptyNotificationTemplateValue } from "@/app/hr-admin/notification-templates/form-values";
 import { NotificationTemplateForm } from "@/app/hr-admin/notification-templates/notification-template-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationOptions } from "@/lib/api";
 
 export default async function HrAdminNewNotificationTemplatePage() {
@@ -10,12 +10,11 @@ export default async function HrAdminNewNotificationTemplatePage() {
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={optionsResult.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Create notification template"
         description="Define reusable content for a notification channel using the same centralized, modern form language as the rest of the app."
         actions={<Link className="button button--secondary" href="/hr-admin/notification-templates">Back to templates</Link>}
-        pills={["Reusable message content", "Metadata-aware templates", "Channel-specific setup"]}
       />
       <NotificationTemplateForm
         initialValue={createEmptyNotificationTemplateValue(

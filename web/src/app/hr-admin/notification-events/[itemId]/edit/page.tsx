@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { notificationEventToFormValue } from "@/app/hr-admin/notification-events/form-values";
 import { NotificationEventForm } from "@/app/hr-admin/notification-events/notification-event-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationEvent, getHrAdminNotificationOptions, isApiNotFoundError } from "@/lib/api";
 
 type PageProps = { params: Promise<{ itemId: string }> };
@@ -25,12 +25,11 @@ export default async function HrAdminEditNotificationEventPage({ params }: PageP
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Edit notification event"
         description="Update routing, audience, and template selection for this trigger without leaving the shared admin workflow language."
         actions={<Link className="button button--secondary" href="/hr-admin/notification-events">Back to events</Link>}
-        pills={["Routing updates", "Audience refinement", "Template linkage"]}
       />
       <NotificationEventForm
         initialValue={notificationEventToFormValue(itemResult.data)}

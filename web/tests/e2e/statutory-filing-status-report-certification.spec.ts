@@ -84,7 +84,7 @@ test.describe("Phase R4-D statutory filing status report certification", () => {
 
     await page.getByTestId("statutory-filing-status-report").getByRole("link", { name: "Open" }).first().click();
     await expect(page).toHaveURL(/\/hr-admin\/payroll-statutory/);
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
     await expectNoHorizontalOverflow(page);
   });
 

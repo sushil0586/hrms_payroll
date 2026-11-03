@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { WorkspaceCard } from "@/components/patterns/workspace-card";
 import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 import { getHrAdminWorkflowTemplateAssignments, getHrAdminWorkflowTemplates, getHrAdminWorkflowTraces } from "@/lib/api";
@@ -62,7 +62,7 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
 
   return (
     <main className="shell shell--workspace workflow-workbench accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/workflow-templates">Open workflow templates</Link>
@@ -74,7 +74,6 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
         description="Configure reusable approval templates, attach them to org scopes, and inspect runtime approval traces from one workflow workspace."
         eyebrow={state === "live" ? "Live workflow mode" : "Demo workflow mode"}
         title="Workflow control"
-        pills={["Templates", "Assignments", "Timeline trace"]}
       />
 
       <section className="section">

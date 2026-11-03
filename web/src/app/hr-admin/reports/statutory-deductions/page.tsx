@@ -26,14 +26,14 @@ export default async function StatutoryDeductionsReportPage() {
         descriptionClassName="text-body-premium"
         actions={
           <>
-            <Link className="button button--secondary" href="/hr-admin/reports">
-              Reports
+            <Link className="button button--secondary" href="/hr-admin/reports/compliance">
+              Compliance hub
             </Link>
             <Link className="button button--secondary" href="/hr-admin/payroll-statutory">
               Statutory setup
             </Link>
-            <Link className="button button--secondary" href="/hr-admin/payroll-handoff">
-              Handoff
+            <Link className="button button--secondary" href="/hr-admin/reports/statutory-filing-status">
+              Filing status
             </Link>
           </>
         }

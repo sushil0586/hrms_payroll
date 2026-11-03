@@ -73,7 +73,7 @@ test.describe("Phase R4-A statutory deductions report certification", () => {
       await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
     }
     await expect(page).toHaveURL(/\/hr-admin\/payroll-statutory/);
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
     await expectNoHorizontalOverflow(page);
   });
 

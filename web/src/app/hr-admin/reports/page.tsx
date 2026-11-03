@@ -14,7 +14,7 @@ export default async function HrAdminReportsPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
   const dashboardResult = await getHrAdminDashboard();
-  const { overview, workforce, operations, documents, governance, delivery } = dashboardResult.data;
+  const { overview, delivery } = dashboardResult.data;
   const state = dashboardResult.state;
 
   return (
@@ -55,31 +55,21 @@ export default async function HrAdminReportsPage() {
         ]}
       />
 
-      <section className="section">
-        <div className="attendance-summary-strip payroll-run-summary-strip">
-          <span><strong>{overview.total_employees}</strong> Total employees</span>
-          <span><strong>{overview.active_employees}</strong> Active employees</span>
-          <span><strong>{overview.pending_approvals}</strong> Pending approvals</span>
-          <span><strong>{delivery.failed_notifications}</strong> Failed notifications</span>
-        </div>
-      </section>
-
-      <section className="section" aria-label="Report workspaces">
-        <div className="report-workspace-grid">
+      <nav className="section report-family-nav" aria-label="Report workspaces">
+        <div className="report-category-tabs">
           {[
-            { href: "/hr-admin/reports/hr-core", title: "HR Core Reports", copy: "Workforce, documents, lifecycle, and employee master reporting.", count: reportCatalog.filter((report) => report.category === "HR Core").length },
-            { href: "/hr-admin/reports/attendance", title: "Attendance Reports", copy: "Daily attendance, exception SLA, and leave balance reporting.", count: reportCatalog.filter((report) => report.category === "Attendance").length },
-            { href: "/hr-admin/reports/payroll", title: "Payroll Reports", copy: "Payroll register, variance, adjustments, payslips, bank advice, and handoff reports.", count: reportCatalog.filter((report) => report.category === "Payroll Finance").length },
-            { href: "/hr-admin/reports/compliance", title: "Compliance Reports", copy: "Statutory deductions, filings, challans, provider receipts, and readiness packages.", count: reportCatalog.filter((report) => report.category === "Compliance").length },
+            { href: "/hr-admin/reports/hr-core", title: "HR Core Reports", count: reportCatalog.filter((report) => report.category === "HR Core").length },
+            { href: "/hr-admin/reports/attendance", title: "Attendance Reports", count: reportCatalog.filter((report) => report.category === "Attendance").length },
+            { href: "/hr-admin/reports/payroll", title: "Payroll Reports", count: reportCatalog.filter((report) => report.category === "Payroll Finance").length },
+            { href: "/hr-admin/reports/compliance", title: "Compliance Reports", count: reportCatalog.filter((report) => report.category === "Compliance").length },
           ].map((workspace) => (
-            <Link className="report-workspace-card" href={workspace.href} key={workspace.href}>
-              <span className="workspace-card__eyebrow">{workspace.count} reports</span>
+            <Link className="report-category-tab report-family-nav__link" href={workspace.href} key={workspace.href}>
               <strong>{workspace.title}</strong>
-              <span>{workspace.copy}</span>
+              <span>{workspace.count} reports</span>
             </Link>
           ))}
         </div>
-      </section>
+      </nav>
 
       <section className="section">
         <div className="report-workspace-grid">
@@ -124,73 +114,7 @@ export default async function HrAdminReportsPage() {
         </div>
       </section>
 
-      <section className="section">
-        <div className="reports-summary-grid">
-          <div className="queue-summary-chip">
-            <strong>{workforce.department_headcount.length}</strong>
-            department rows tracked
-          </div>
-          <div className="queue-summary-chip">
-            <strong>{workforce.employment_status_breakdown.length}</strong>
-            employment states visible
-          </div>
-          <div className="queue-summary-chip">
-            <strong>{delivery.pending_notifications}</strong>
-            notifications awaiting delivery
-          </div>
-        </div>
-      </section>
-
       <ReportCatalogWorkspace reports={reportCatalog} />
-
-      <section className="section">
-        <div className="reports-grid reports-grid--compact">
-          <article className="workspace-card workspace-card--compact">
-            <div className="workspace-card__header">
-              <span className="workspace-card__eyebrow">Workflow</span>
-              <h2>How to use reports</h2>
-            </div>
-            <div className="detail-grid detail-grid--compact">
-              <div className="detail-row"><span className="detail-label">Find</span><span className="detail-value">Search by report, field, owner, or module.</span></div>
-              <div className="detail-row"><span className="detail-label">Open</span><span className="detail-value">Review filtered records before exporting.</span></div>
-              <div className="detail-row"><span className="detail-label">Prove</span><span className="detail-value">Use manifests, checksums, and export audit history.</span></div>
-            </div>
-          </article>
-
-          <article className="workspace-card workspace-card--compact">
-            <div className="workspace-card__header">
-              <span className="workspace-card__eyebrow">Coverage</span>
-              <h2>Current signals</h2>
-            </div>
-            <div className="reports-summary-grid">
-              <span className="queue-summary-chip"><strong>{workforce.joiners_this_month}</strong> joiners</span>
-              <span className="queue-summary-chip"><strong>{workforce.exits_this_month}</strong> exits</span>
-              <span className="queue-summary-chip"><strong>{operations.pending_leave_requests}</strong> leave approvals</span>
-              <span className="queue-summary-chip"><strong>{documents.expiring_in_30_days}</strong> expiring docs</span>
-              <span className="queue-summary-chip"><strong>{governance.workflow_templates}</strong> workflows</span>
-              <span className="queue-summary-chip"><strong>{delivery.sent_today}</strong> sent today</span>
-            </div>
-          </article>
-
-          <article className="workspace-card workspace-card--compact">
-            <div className="workspace-card__header">
-              <span className="workspace-card__eyebrow">Audit</span>
-              <h2>Evidence shortcuts</h2>
-            </div>
-            <p className="section-copy section-copy-soft">
-              Keep audit review separate from daily catalog work so reports stay easy to scan.
-            </p>
-            <div className="reports-export-bar reports-export-bar--right">
-              <Link className="button button--secondary" href="/hr-admin/reports/export-audits">
-                Export audit history
-              </Link>
-              <Link className="button button--secondary" href="/hr-admin/audit">
-                Audit center
-              </Link>
-            </div>
-          </article>
-        </div>
-      </section>
     </main>
   );
 }

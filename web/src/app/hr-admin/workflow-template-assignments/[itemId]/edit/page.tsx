@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { workflowTemplateAssignmentToFormValue } from "@/app/hr-admin/workflow-template-assignments/form-values";
 import { WorkflowTemplateAssignmentForm } from "@/app/hr-admin/workflow-template-assignments/workflow-template-assignment-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminWorkflowOptions, getHrAdminWorkflowTemplateAssignment, isApiNotFoundError } from "@/lib/api";
 
 type PageProps = {
@@ -23,7 +23,7 @@ export default async function HrAdminEditWorkflowTemplateAssignmentPage({ params
 
   return (
     <main className="shell shell--workspace workflow-workbench accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={<Link className="button button--secondary" href="/hr-admin/workflow-template-assignments">Back to workflow assignments</Link>}
         description="Update where this template applies so different teams and org scopes can use different approval chains."
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live workflow mode" : "Demo workflow mode"}

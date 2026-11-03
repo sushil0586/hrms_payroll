@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { NotificationDeliveryManager } from "@/app/hr-admin/notification-delivery/notification-delivery-manager";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationDiagnostics, getHrAdminNotificationOptions } from "@/lib/api";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
 
@@ -18,13 +18,11 @@ export default async function HrAdminNotificationDeliveryPage() {
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={result.state === "live" ? "Live delivery control" : "Demo delivery control"}
         title="Notification delivery"
         description="Configure tenant routing for in-app, email, SMS, push, and WhatsApp delivery."
         actions={<Link className="button button--secondary" href="/hr-admin/notifications-admin">Back to notifications</Link>}
-        pills={[`${enabledChannels} enabled channels`, `${result.data.notification_delivery_backends.length} backend options`]}
-        showPills
       />
 
       <section className="section">

@@ -54,8 +54,8 @@ export function NotificationsWorkspace({ initialData, initialQuery }: { initialD
   const apply = (formData: FormData) => void resource.load({ page: 1, page_size: Number(formData.get("page_size") || 10), q: String(formData.get("q") || ""), status: String(formData.get("status") || ""), channel: String(formData.get("channel") || ""), priority: String(formData.get("priority") || ""), subject_type: String(formData.get("subject_type") || "") });
   const pageQuery = (page: number) => ({ ...query, page });
 
-  return <main className="shell shell--workspace ess-compact accerio-page" data-hydrated={hydrated}>
-    <WorkspaceStandardHeader eyebrow="Employee inbox" title="Notifications" description="Your messages and updates. Delivery status is separate from whether you have read a message." actions={<Link prefetch={false} className="button button--secondary" href="/ess/requests">My Requests</Link>} />
+  return <main className="shell shell--workspace ess-experience-shell ess-compact accerio-page" data-hydrated={hydrated}>
+    <WorkspaceStandardHeader eyebrow="Employee self service" title="Notifications" description="Your messages and updates. Delivery status is separate from whether you have read a message." actions={<Link prefetch={false} className="button button--secondary" href="/ess/requests">My Requests</Link>} />
     <WorkspaceStandardPanel title="Inbox" description="Find a message, review its details and open the related employee service.">
       <div aria-busy={resource.isPending}>
         <WorkspaceFilterForm key={JSON.stringify(query)} action="/ess/notifications" className="workspace-filter-bar" onSubmit={(event) => { event.preventDefault(); apply(new FormData(event.currentTarget)); }} pending={resource.isPending} updateMode="scoped">

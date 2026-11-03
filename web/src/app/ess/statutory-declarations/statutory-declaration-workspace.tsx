@@ -485,26 +485,21 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
 
   const defaultFinancialYear = useMemo(() => {
     const snapshotValue = data.profile?.config_snapshot?.default_declaration_financial_year;
-    return typeof snapshotValue === "string" ? snapshotValue : data.summary.available_financial_years[0] ?? "";
-  }, [data.profile?.config_snapshot, data.summary.available_financial_years]);
-  const defaultProofWindow = useMemo(() => {
-    const snapshotValue = data.profile?.config_snapshot?.default_proof_window_ref;
-    return typeof snapshotValue === "string" ? snapshotValue : selectedDeclaration?.proof_window_ref ?? "";
-  }, [data.profile?.config_snapshot, selectedDeclaration?.proof_window_ref]);
+    const configured = data.options.declaration_catalog.financial_years.find((item) => item.value === snapshotValue && item.is_open);
+    return configured?.value ?? data.options.declaration_catalog.financial_years.find((item) => item.is_open)?.value ?? "";
+  }, [data.options.declaration_catalog.financial_years, data.profile?.config_snapshot]);
 
   const [financialYearCode, setFinancialYearCode] = useState(selectedDeclaration?.financial_year_code ?? defaultFinancialYear);
   const [taxRegime, setTaxRegime] = useState(selectedDeclaration?.tax_regime ?? data.profile?.tax_regime ?? "not_declared");
-  const [declarationProfileRef, setDeclarationProfileRef] = useState(selectedDeclaration?.declaration_profile_ref ?? "");
-  const [proofWindowRef, setProofWindowRef] = useState(selectedDeclaration?.proof_window_ref ?? defaultProofWindow);
-  const [sectionCode, setSectionCode] = useState("80C");
+  const [sectionCode, setSectionCode] = useState(data.options.declaration_catalog.sections[0]?.code ?? "");
   const [componentCode, setComponentCode] = useState("");
   const [itemKind, setItemKind] = useState(data.options.statutory_declaration_item_kinds[0]?.value ?? "investment");
   const [itemName, setItemName] = useState("");
   const [declaredAmount, setDeclaredAmount] = useState("");
-  const [proofDocumentRef, setProofDocumentRef] = useState("");
   const [proofCategoryId, setProofCategoryId] = useState(data.options.proof_upload_categories[0]?.id ?? "");
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofFileInputKey, setProofFileInputKey] = useState(0);
+  const [proofBeingReplaced, setProofBeingReplaced] = useState<EssStatutoryDeclarationItem | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(data.total_count / Math.max(data.page_size, 1)));
   const sharedParams = {
@@ -520,11 +515,24 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
     setActiveModal("proofDetail");
   }
 
+  function openProofReplacement(item: EssStatutoryDeclarationItem) {
+    const configuredCategory = typeof item.config_snapshot?.proof_category_id === "string" ? item.config_snapshot.proof_category_id : "";
+    setProofBeingReplaced(item);
+    setSectionCode(item.section_code);
+    setComponentCode(item.component_code);
+    setItemKind(item.item_kind);
+    setItemName(item.name);
+    setDeclaredAmount(item.declared_amount);
+    setProofCategoryId(configuredCategory || data.options.proof_upload_categories[0]?.id || "");
+    setProofFile(null);
+    setProofFileInputKey((current) => current + 1);
+    setProofFieldErrors({});
+    setActiveModal("proof");
+  }
+
   function openDeclaration() {
     setFinancialYearCode(selectedDeclaration?.financial_year_code ?? defaultFinancialYear);
     setTaxRegime(selectedDeclaration?.tax_regime ?? data.profile?.tax_regime ?? "not_declared");
-    setDeclarationProfileRef(selectedDeclaration?.declaration_profile_ref ?? "");
-    setProofWindowRef(selectedDeclaration?.proof_window_ref ?? defaultProofWindow);
     setActiveModal("declaration");
   }
 
@@ -567,12 +575,6 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
         entry_surface_ref: "ess.statutory-declarations",
       },
     };
-    if (declarationProfileRef.trim()) {
-      payload.declaration_profile_ref = declarationProfileRef.trim();
-    }
-    if (proofWindowRef.trim()) {
-      payload.proof_window_ref = proofWindowRef.trim();
-    }
     const endpoint = editableDeclaration ? `/api/me/statutory-declarations/${editableDeclaration.id}` : "/api/me/statutory-declarations";
     try {
       const response = await fetch(endpoint, {
@@ -608,11 +610,12 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
       return;
     }
     const amount = Number(declaredAmount);
+    const selectedSection = data.options.declaration_catalog.sections.find((item) => item.code === sectionCode);
     const nextErrors: FieldErrors<ProofField> = {
       name: requireText(itemName, "Enter a clear proof item name."),
       declared_amount: requireText(declaredAmount, "Enter the declared amount for this proof item.") ?? (!Number.isFinite(amount) || amount <= 0 ? "Enter a declared amount greater than zero." : undefined),
       proof_category_id: proofFile ? requireValue(proofCategoryId, "Select the upload category before attaching proof.") : undefined,
-      proof_file: validateUploadFile(proofFile, {
+      proof_file: (selectedSection?.proof_required && !proofFile ? "Upload proof for this statutory section." : undefined) ?? validateUploadFile(proofFile, {
         blockedTypeMessage: "This proof file type is not allowed. Upload a PDF, image, or document file.",
       }),
     };
@@ -640,6 +643,13 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
       body.set("declared_amount", declaredAmount);
       body.set("title", itemName);
       body.set("file", proofFile);
+      if (proofBeingReplaced) {
+        const documentId = proofBeingReplaced.proof_document_ref.startsWith("employee-document:")
+          ? proofBeingReplaced.proof_document_ref.slice("employee-document:".length)
+          : "";
+        body.set("item_id", proofBeingReplaced.id);
+        body.set("replace_document_id", documentId);
+      }
         response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/proof-upload`, {
           body,
           method: "POST",
@@ -654,8 +664,6 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
           declared_amount: declaredAmount,
           item_kind: itemKind,
           name: itemName,
-          proof_document_ref: proofDocumentRef.trim(),
-          proof_status: proofDocumentRef ? "submitted" : "pending",
           section_code: sectionCode,
         }),
         headers: { "Content-Type": "application/json" },
@@ -674,10 +682,10 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
       }
       setItemName("");
       setDeclaredAmount("");
-      setProofDocumentRef("");
       setProofFile(null);
+      setProofBeingReplaced(null);
       setProofFileInputKey((current) => current + 1);
-      setNoticeMessage(proofFile ? "Proof file uploaded and linked." : "Proof item saved.", "success");
+      setNoticeMessage(proofBeingReplaced ? "Proof replaced and linked to the existing declaration item." : proofFile ? "Proof file uploaded and linked." : "Proof item saved.", "success");
       setActiveModal(null);
     } catch {
       setNoticeMessage("Unable to reach the server. Check your connection and try again.", "error");
@@ -722,9 +730,9 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
   }, [toast]);
 
   return (
-    <main className="shell shell--workspace shell--ess-tax ess-compact accerio-page" data-hydrated={hydrated}>
+    <main className="shell shell--workspace shell--ess-tax ess-experience-shell ess-compact accerio-page" data-hydrated={hydrated}>
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <WorkspaceStandardHeader eyebrow={isDemo ? "Demo employee services" : "Employee services"} title="Statutory Declarations"
+      <WorkspaceStandardHeader eyebrow={isDemo ? "Demo employee self service" : "Employee self service"} title="Statutory Declarations"
         description="Review your tax declaration, provide evidence and follow HR verification."
         actions={<><Link prefetch={false} className="button button--secondary" href="/ess">Overview</Link><Link prefetch={false} className="button button--secondary" href="/ess/documents">Documents</Link></>} />
 
@@ -851,7 +859,12 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
           <form className="ess-tax-modal-form" id="ess-tax-declaration-form" noValidate onSubmit={handleDeclarationSubmit}>
             <label className="form-field">
               <span>Financial year <strong aria-hidden="true">*</strong></span>
-              <input aria-invalid={Boolean(declarationFieldErrors.financial_year_code)} className="input-control" onChange={(event) => { setFinancialYearCode(event.target.value); clearDeclarationFieldError("financial_year_code"); }} placeholder="FY2027-28" required disabled={readOnlySetup} value={financialYearCode} />
+              <select aria-invalid={Boolean(declarationFieldErrors.financial_year_code)} className="input-control" onChange={(event) => { setFinancialYearCode(event.target.value); clearDeclarationFieldError("financial_year_code"); }} required disabled={readOnlySetup} value={financialYearCode}>
+                <option value="">Select an open financial year</option>
+                {data.options.declaration_catalog.financial_years.filter((option) => option.is_open || option.value === financialYearCode).map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
               {declarationFieldErrors.financial_year_code ? <span className="field-error-text" role="alert">{declarationFieldErrors.financial_year_code}</span> : null}
             </label>
             <label className="form-field">
@@ -865,14 +878,10 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
               </select>
               {declarationFieldErrors.tax_regime ? <span className="field-error-text" role="alert">{declarationFieldErrors.tax_regime}</span> : null}
             </label>
-            <label className="form-field">
-              <span>Declaration profile</span>
-              <input className="input-control" onChange={(event) => setDeclarationProfileRef(event.target.value)} placeholder="Configured declaration profile ref" disabled={readOnlySetup} value={declarationProfileRef} />
-            </label>
-            <label className="form-field">
-              <span>Proof window</span>
-              <input className="input-control" onChange={(event) => setProofWindowRef(event.target.value)} placeholder="Configured proof window ref" disabled={readOnlySetup} value={proofWindowRef} />
-            </label>
+            <div className="ess-tax-helper-card">
+              <strong>Configuration controlled by HR</strong>
+              <span>The declaration profile and proof window are selected automatically for this financial year.</span>
+            </div>
             <div className="ess-tax-helper-card">
               <strong>{taxRegime === "new_regime" ? "New regime selected" : "India statutory guidance"}</strong>
               <span>
@@ -894,32 +903,40 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
           footer={(
             <>
               <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || (editableDeclaration ? `${editableDeclaration.financial_year_code} accepts draft proof rows.` : "Create or select a draft declaration first.")}</span>
-              <button className="button button--secondary" disabled={isSavingItem} onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="button button--secondary" disabled={isSavingItem} onClick={() => { setProofBeingReplaced(null); setActiveModal(null); }} type="button">Cancel</button>
               <AsyncActionButton className="button button--primary" disabled={!editableDeclaration} form="ess-tax-proof-form" pending={isSavingItem || isRefreshing} pendingLabel={isSavingItem ? (proofFile ? "Uploading proof" : "Saving proof") : "Refreshing declaration"} type="submit">
-                {proofFile ? "Upload proof" : "Add proof"}
+                {proofBeingReplaced ? "Replace proof" : proofFile ? "Upload proof" : "Add proof"}
               </AsyncActionButton>
             </>
           )}
           labelledBy="ess-tax-proof-modal-title"
-          onClose={() => setActiveModal(null)}
-          title="Add proof"
+          onClose={() => { setProofBeingReplaced(null); setActiveModal(null); }}
+          title={proofBeingReplaced ? "Replace proof" : "Add proof"}
         >
           <form className="ess-tax-modal-form ess-tax-modal-form--wide" id="ess-tax-proof-form" noValidate onSubmit={handleItemSubmit}>
             <label className="form-field">
               <span>Section</span>
-              <select className="input-control" disabled={!editableDeclaration} onChange={(event) => setSectionCode(event.target.value)} value={sectionCode}>
-                {indianTaxSections.map((section) => (
+              <select className="input-control" disabled={!editableDeclaration || Boolean(proofBeingReplaced)} onChange={(event) => {
+                const nextSectionCode = event.target.value;
+                const nextSection = data.options.declaration_catalog.sections.find((item) => item.code === nextSectionCode);
+                setSectionCode(nextSectionCode);
+                setItemKind(nextSection?.item_kinds[0] ?? "investment");
+                setComponentCode("");
+              }} value={sectionCode}>
+                {data.options.declaration_catalog.sections.map((section) => (
                   <option value={section.code} key={section.code}>
-                    {section.code} - {section.title}
+                    {section.code} - {section.label}
                   </option>
                 ))}
-                <option value="OTHER">Other deduction</option>
               </select>
             </label>
             <label className="form-field">
               <span>Kind</span>
-              <select className="input-control" disabled={!editableDeclaration} onChange={(event) => setItemKind(event.target.value)} value={itemKind}>
-                {data.options.statutory_declaration_item_kinds.map((option) => (
+              <select className="input-control" disabled={!editableDeclaration || Boolean(proofBeingReplaced)} onChange={(event) => setItemKind(event.target.value)} value={itemKind}>
+                {data.options.statutory_declaration_item_kinds.filter((option) => {
+                  const section = data.options.declaration_catalog.sections.find((item) => item.code === sectionCode);
+                  return !section || section.item_kinds.includes(option.value);
+                }).map((option) => (
                   <option value={option.value} key={option.value}>
                     {option.label}
                   </option>
@@ -928,21 +945,22 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
             </label>
             <label className="form-field">
               <span>Component</span>
-              <input className="input-control" disabled={!editableDeclaration} onChange={(event) => setComponentCode(event.target.value)} placeholder="LIC, ELSS, HRA" value={componentCode} />
+              <select className="input-control" disabled={!editableDeclaration || Boolean(proofBeingReplaced)} onChange={(event) => setComponentCode(event.target.value)} value={componentCode}>
+                <option value="">Select component</option>
+                {(data.options.declaration_catalog.sections.find((item) => item.code === sectionCode)?.component_codes ?? []).map((code) => (
+                  <option key={code} value={code}>{titleCase(code)}</option>
+                ))}
+              </select>
             </label>
             <label className="form-field">
               <span>Item name <strong aria-hidden="true">*</strong></span>
-              <input aria-invalid={Boolean(proofFieldErrors.name)} className="input-control" disabled={!editableDeclaration} onChange={(event) => { setItemName(event.target.value); clearProofFieldError("name"); }} placeholder="Bengaluru rent receipts" required value={itemName} />
+              <input aria-invalid={Boolean(proofFieldErrors.name)} className="input-control" disabled={!editableDeclaration || Boolean(proofBeingReplaced)} onChange={(event) => { setItemName(event.target.value); clearProofFieldError("name"); }} placeholder="Bengaluru rent receipts" required value={itemName} />
               {proofFieldErrors.name ? <span className="field-error-text" role="alert">{proofFieldErrors.name}</span> : null}
             </label>
             <label className="form-field">
               <span>Amount <strong aria-hidden="true">*</strong></span>
-              <input aria-invalid={Boolean(proofFieldErrors.declared_amount)} className="input-control" disabled={!editableDeclaration} inputMode="decimal" onChange={(event) => { setDeclaredAmount(event.target.value); clearProofFieldError("declared_amount"); }} placeholder="0.00" required value={declaredAmount} />
+              <input aria-invalid={Boolean(proofFieldErrors.declared_amount)} className="input-control" disabled={!editableDeclaration || Boolean(proofBeingReplaced)} inputMode="decimal" onChange={(event) => { setDeclaredAmount(event.target.value); clearProofFieldError("declared_amount"); }} placeholder="0.00" required value={declaredAmount} />
               {proofFieldErrors.declared_amount ? <span className="field-error-text" role="alert">{proofFieldErrors.declared_amount}</span> : null}
-            </label>
-            <label className="form-field">
-              <span>Proof reference</span>
-              <input className="input-control" disabled={!editableDeclaration} onChange={(event) => setProofDocumentRef(event.target.value)} placeholder="employee-document reference" value={proofDocumentRef} />
             </label>
             <label className="form-field">
               <span>Upload category</span>
@@ -962,8 +980,8 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
               {proofFieldErrors.proof_file ? <span className="field-error-text" role="alert">{proofFieldErrors.proof_file}</span> : null}
             </label>
             <div className="ess-tax-helper-card ess-tax-helper-card--wide">
-              <strong>Proof quality check</strong>
-              <span>Use clear files with employee name, financial year, amount, and issuer details visible. HR may reject incomplete or unreadable evidence.</span>
+              <strong>{proofBeingReplaced ? "Replacement keeps the audit trail" : "Proof quality check"}</strong>
+              <span>{proofBeingReplaced ? "The earlier file is retained as a replaced version. The new file returns this item to HR review." : "Use clear files with employee name, financial year, amount, and issuer details visible. HR may reject incomplete or unreadable evidence."}</span>
             </div>
           </form>
         </HrAdminActionModal>
@@ -1005,7 +1023,14 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
           closeHref="/ess/statutory-declarations"
           description={selectedProof.name}
           eyebrow="Proof detail"
-          footer={<button className="button button--primary" onClick={() => setActiveModal(null)} type="button">Close</button>}
+          footer={(
+            <>
+              {editableDeclaration && selectedProof.proof_document_ref.startsWith("employee-document:") ? (
+                <button className="button button--secondary" onClick={() => openProofReplacement(selectedProof)} type="button">Replace proof</button>
+              ) : null}
+              <button className="button button--primary" onClick={() => setActiveModal(null)} type="button">Close</button>
+            </>
+          )}
           labelledBy="ess-tax-proof-detail-modal-title"
           onClose={() => setActiveModal(null)}
           title="Proof detail"
@@ -1016,7 +1041,7 @@ export function StatutoryDeclarationWorkspace({ data: initialData, filters: init
             <DetailRow label="Declared" value={formatMoney(selectedProof.declared_amount)} />
             <DetailRow label="Accepted" value={formatMoney(selectedProof.verified_amount)} />
             <DetailRow label="Proof status" value={<StatusBadge status={selectedProof.proof_status} label={selectedProof.proof_status_label} />} />
-            <DetailRow label="Proof reference" value={selectedProof.proof_document_ref || selectedProof.proof_artifact_key || "Pending"} />
+            <DetailRow label="Private file" value={selectedProof.proof_document_ref || selectedProof.proof_artifact_key ? "Stored securely" : "Pending"} />
             <DetailRow label="Submitted" value={formatDate(selectedProof.proof_submitted_at)} />
             <DetailRow label="Verified" value={formatDate(selectedProof.verified_at)} />
           </div>

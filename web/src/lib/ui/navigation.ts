@@ -179,7 +179,7 @@ const payrollRulesSearchDestinations: HrAdminSearchDestination[] = [
 ];
 
 const statutorySearchDestinations: HrAdminSearchDestination[] = [
-  { href: "/hr-admin/payroll-statutory", label: "Statutory payroll overview", description: "Tax and compliance readiness", section: "Statutory" },
+  { href: "/hr-admin/payroll-statutory", label: "Statutory compliance overview", description: "Tax, declarations, and filing readiness", section: "Statutory" },
   { href: "/hr-admin/payroll-statutory?tab=declarations", label: "Statutory declarations", description: "Employee proof review and verification", section: "Statutory" },
   { href: "/hr-admin/payroll-statutory?tab=compliance", label: "Statutory compliance", description: "Employer registrations and filing calendars", section: "Statutory" },
   { href: "/hr-admin/payroll-statutory?tab=catalog", label: "Statutory catalog", description: "Packs, slabs, and components", section: "Statutory" },

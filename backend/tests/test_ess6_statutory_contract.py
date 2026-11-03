@@ -51,20 +51,22 @@ class Ess6StatutoryContractTests(TestCase):
             self.assertEqual(result.status_code,400)
         self.assertEqual(EmployeeStatutoryDeclaration.objects.count(),4)
 
-    def test_actual_draft_item_precision_submit_and_actor_are_persisted(self):
+    def test_actual_draft_item_precision_and_server_owned_proof_fields(self):
         item=self.declarations[0]
-        result=self.client.post(f'/api/v1/me/statutory-declarations/{item.id}/items/',{'section_code':'80C','name':'ESS6 exact amount','declared_amount':'1234.56','proof_document_ref':'synthetic-proof-reference'},format='json')
+        rejected=self.client.post(f'/api/v1/me/statutory-declarations/{item.id}/items/',{'section_code':'80C','name':'Unsafe proof reference','declared_amount':'1234.56','proof_document_ref':'synthetic-proof-reference'},format='json')
+        self.assertEqual(rejected.status_code,400)
+        self.assertFalse(item.items.exists())
+        result=self.client.post(f'/api/v1/me/statutory-declarations/{item.id}/items/',{'section_code':'80C','name':'ESS6 exact amount','declared_amount':'1234.56'},format='json')
         self.assertEqual(result.status_code,201)
         proof=EmployeeStatutoryDeclarationItem.objects.get(pk=result.json()['id'])
         self.assertEqual(proof.declared_amount,Decimal('1234.56'))
         self.assertEqual(proof.verified_amount,Decimal('0.00'))
         submitted=self.client.post(f'/api/v1/me/statutory-declarations/{item.id}/submit/',{},format='json')
-        self.assertEqual(submitted.status_code,200)
+        self.assertEqual(submitted.status_code,400)
         item.refresh_from_db()
-        self.assertEqual(item.status,'submitted')
-        self.assertEqual(item.submitted_by,self.actors[0][0])
-        self.assertEqual(submitted.json()['declared_total_amount'],'1234.56')
-        self.assertIsNotNone(item.submitted_at)
+        self.assertEqual(item.status,'draft')
+        self.assertIsNone(item.submitted_by)
+        self.assertIsNone(item.submitted_at)
 
     def test_employee_cannot_verify_proof_or_mutate_locked_declaration(self):
         item=self.declarations[0]

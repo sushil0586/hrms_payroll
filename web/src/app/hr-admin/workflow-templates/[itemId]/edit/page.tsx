@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { workflowTemplateToFormValue } from "@/app/hr-admin/workflow-templates/form-values";
 import { WorkflowTemplateForm } from "@/app/hr-admin/workflow-templates/workflow-template-form";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminWorkflowOptions, getHrAdminWorkflowTemplate, isApiNotFoundError } from "@/lib/api";
 
 type PageProps = {
@@ -23,7 +23,7 @@ export default async function HrAdminEditWorkflowTemplatePage({ params }: PagePr
 
   return (
     <main className="shell shell--workspace workflow-workbench accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={<Link className="button button--secondary" href="/hr-admin/workflow-templates">Back to workflow templates</Link>}
         description="Adjust routing, actors, escalation timing, and the reusable step chain for this template."
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live workflow mode" : "Demo workflow mode"}

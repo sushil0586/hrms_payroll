@@ -3,7 +3,7 @@ import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filt
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
 
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminNotificationEvents } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
@@ -61,7 +61,7 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
 
   return (
     <main className="shell notification-shell accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Notification events"
         description="Map operational triggers to audiences, templates, priorities, and channel delivery rules in a way that feels explicit and easy to audit."
@@ -75,7 +75,6 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
             </Link>
           </>
         }
-        pills={["Trigger-driven routing", "Template-linked delivery", "Priority-aware automation"]}
       />
 
       <section className="section">

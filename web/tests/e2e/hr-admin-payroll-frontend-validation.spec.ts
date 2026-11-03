@@ -60,7 +60,7 @@ async function openSetupActionForm(page: Page, testId: string) {
 
 async function openStatutoryActionGroup(page: Page, anchor: string, label: RegExp | string) {
   await page.goto(`/hr-admin/payroll-statutory?tab=actions#${anchor}`, { waitUntil: "domcontentloaded" });
-  await expectPageReady(page, "Payroll Statutory");
+  await expectPageReady(page, "Statutory Compliance");
   const tab = page.getByRole("navigation", { name: "Statutory setup action groups" }).getByRole("button", { name: label });
   await expect(tab).toBeVisible();
   await tab.click();

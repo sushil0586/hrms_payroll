@@ -4,7 +4,7 @@ import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { AttendancePolicyAssignmentForm } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignment-form";
 import { attendancePolicyAssignmentToFormValue, createEmptyAttendancePolicyAssignmentValue } from "@/app/hr-admin/attendance-policy-assignments/form-values";
@@ -52,6 +52,7 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [scope, setScope] = useWorkspaceQueryFilter("scope", "all");
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modalMode = controlledModalMode ?? "";
   const editAssignmentId = controlledEditId ?? "";
 
@@ -129,7 +130,10 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
             setStatus("all");
             setScope("all");
           }} type="button">Clear filters</button>
-          {canManagePolicies ? <button className="button button--primary" onClick={onOpenCreate} type="button">Create attendance assignment</button> : null}
+          {canManagePolicies ? <button className="button button--primary" onClick={(triggerEvent) => {
+            focusActionTrigger(triggerEvent);
+            onOpenCreate();
+          }} type="button">Create attendance assignment</button> : null}
         </div>
       </section>
 
@@ -156,6 +160,7 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
                       <td><strong>{item.priority}</strong><span>{item.employee_id ? "Employee override" : "Organization scope"}</span></td>
                       <td><WorkspaceStatusBadge tone={statusTone(item)}>{item.has_blocking_conflict ? "Blocked" : item.conflict_count ? "Needs review" : item.is_active ? "Active" : "Inactive"}</WorkspaceStatusBadge><span>{item.conflict_summary || "No overlap summary"}</span></td>
                       <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                        detailTriggerRef.current = triggerEvent.currentTarget;
                         triggerEvent.stopPropagation();
                         setSelectedItemId(item.id);
                        }} type="button">Inspect</button></td>
@@ -179,7 +184,11 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
                 <h2 className="section-heading-soft">Assignment detail</h2>
                 <p className="section-copy section-copy-soft">Focused scope and priority context.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedItemId(""); }} type="button">Close</button>
+              <button className="button button--secondary button--compact" onClick={() => {
+                const trigger = detailTriggerRef.current;
+                setSelectedItemId("");
+                window.requestAnimationFrame(() => trigger?.focus({ preventScroll: true }));
+              }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">
@@ -192,7 +201,10 @@ export function AttendancePolicyAssignmentsWorkbench({ items, state, options, ca
             </article>
             <div className="record-card__actions">
               {canManagePolicies ? (
-                <button className="button button--primary" onClick={() => onOpenEdit(selectedItem.id)} type="button">Edit assignment</button>
+                <button className="button button--primary" onClick={(triggerEvent) => {
+                  focusActionTrigger(triggerEvent);
+                  onOpenEdit(selectedItem.id);
+                }} type="button">Edit assignment</button>
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit assignment</button>
               )}

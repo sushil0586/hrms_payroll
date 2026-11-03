@@ -532,6 +532,7 @@ from apps.attendance.models import (
 from apps.tenants.models import Tenant
 from apps.attendance.services import (
     AttendanceDerivationContext,
+    ROSTER_PATTERN_DEFAULTS,
     build_attendance_derivation_summary,
     evaluate_attendance_runtime,
     ensure_employee_attendance_records,
@@ -2545,7 +2546,11 @@ def save_hr_admin_shift_roster_template(actor, validated_data, *, item=None):
     raw_config = validated_data.get("config_snapshot", getattr(item, "config_snapshot", {}))
     if item.assignment_kind == EmployeeShiftAssignmentKind.WEEKLY_ROTATION and "config_snapshot" in validated_data:
         raw_rotation = raw_config.get("rotation") if isinstance(raw_config, dict) else None
-        if not isinstance(raw_rotation, dict) or not raw_rotation.get("entries"):
+        pattern_type = raw_rotation.get("pattern_type") if isinstance(raw_rotation, dict) else None
+        if (
+            not isinstance(raw_rotation, dict)
+            or (not raw_rotation.get("entries") and pattern_type not in ROSTER_PATTERN_DEFAULTS)
+        ):
             raise serializers.ValidationError({"config_snapshot": "Weekly rotation templates need at least one rotation step."})
     normalized_config = normalize_employee_shift_assignment_config(
         raw_config,

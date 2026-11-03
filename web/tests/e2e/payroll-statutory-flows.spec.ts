@@ -90,13 +90,13 @@ async function openStatutoryActionTab(page: Page, name: keyof typeof statutoryAc
 }
 
 async function openStatutorySection(page: Page, name: RegExp | string) {
-  const tab = page.getByRole("navigation", { name: "Payroll statutory sections" }).getByRole("link", { name });
+  const tab = page.getByRole("navigation", { name: "Statutory compliance sections" }).getByRole("link", { name });
   const href = await tab.getAttribute("href");
   expect(href).toBeTruthy();
   const nextUrl = new URL(href!, page.url());
   const tabName = nextUrl.searchParams.get("tab") ?? "overview";
   await page.goto(`/hr-admin/payroll-statutory?tab=${tabName}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await expectPageReady(page, "Payroll Statutory");
+  await expectPageReady(page, "Statutory Compliance");
 }
 
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
@@ -122,7 +122,7 @@ test.describe("HR admin payroll statutory flows", () => {
     const packCode = pack.code;
 
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions");
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
 
     const csv = [
       "employee_code,statutory_pack_code,profile_ref,effective_from,effective_to,status,pan_number,uan_number,pf_number,esi_number,pf_applicable,esi_applicable,professional_tax_state,lwf_state,tax_regime,declaration_status,previous_employment_income,previous_employment_tax_deducted,source_ref,config_profile_ref",
@@ -184,19 +184,19 @@ test.describe("HR admin payroll statutory flows", () => {
   test("statutory workspace exposes packs, registrations, filings, proof review, and live source trail", async ({ page }) => {
     test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory");
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
 
     for (const link of ["Calculations", "Handoff", "Rule catalog"]) {
       await expect(page.getByRole("link", { name: link, exact: true })).toBeVisible();
     }
 
-    const summary = page.getByLabel("Payroll statutory summary");
+    const summary = page.getByLabel("Statutory compliance summary");
     await expect(summary).toBeVisible();
     for (const metric of ["active packs", "components", "profiles", "registrations", "due filings", "declarations", "locked", "proofs verified"]) {
       await expect(summary).toContainText(new RegExp(metric, "i"));
     }
 
-    const statutoryTabs = page.getByRole("navigation", { name: "Payroll statutory sections" });
+    const statutoryTabs = page.getByRole("navigation", { name: "Statutory compliance sections" });
     for (const tab of ["Overview", "Declarations", "Compliance", "Catalog", "Setup Actions"]) {
       await expect(statutoryTabs.getByRole("link", { name: new RegExp(tab) })).toBeVisible();
     }
@@ -252,7 +252,7 @@ test.describe("HR admin payroll statutory flows", () => {
   test("statutory setup browser CRUD covers configuration, employee declarations, and proof actions", async ({ page }) => {
     test.setTimeout(3 * 60 * 1000);
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions");
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
 
     const packForm = page.getByTestId("statutory-pack-form");
     const componentForm = page.getByTestId("statutory-component-form");
@@ -565,29 +565,24 @@ test.describe("HR admin payroll statutory flows", () => {
       "Employee",
       "Employee statutory profile",
       "Statutory pack",
-      "Financial year code",
-      "Declaration profile reference",
-      "Proof window reference",
+      "Financial year",
       "Status",
       "Tax regime",
       "Declared total amount",
       "Verified total amount",
       "Rejection reason",
-      "Source reference",
-      "Config profile reference",
     ]);
-    const declarationProfile = `payroll.declaration.${Date.now()}`;
+    await expect(field(declarationForm, "Status")).toBeDisabled();
+    await expect(field(declarationForm, "Declared total amount")).toBeDisabled();
+    await expect(field(declarationForm, "Verified total amount")).toBeDisabled();
+    for (const removedLabel of ["Declaration profile reference", "Proof window reference", "Source reference", "Config profile reference"]) {
+      await expect(declarationForm.getByLabel(removedLabel)).toHaveCount(0);
+    }
     const declarationResult = await submitAndCapture<{ id: string }>(page, "employee-statutory-declarations", "POST", async () => {
       await field(declarationForm, "Employee statutory profile").selectOption(profileResult.payload.id);
       await field(declarationForm, "Statutory pack").selectOption(packResult.payload.id);
-      await field(declarationForm, "Financial year code").fill(`FY${Date.now()}`.slice(0, 20));
-      await field(declarationForm, "Declaration profile reference").fill(declarationProfile);
-      await field(declarationForm, "Proof window reference").fill("proof.window.browser.v1");
-      await field(declarationForm, "Status").selectOption("draft");
+      await field(declarationForm, "Financial year").selectOption({ index: 0 });
       await field(declarationForm, "Tax regime").selectOption("new");
-      await field(declarationForm, "Declared total amount").fill("0");
-      await field(declarationForm, "Verified total amount").fill("0");
-      await field(declarationForm, "Config profile reference").fill("statutory.declaration.browser.profile.v1");
       await declarationForm.getByRole("button", { name: "Create declaration" }).click();
     });
     expect(declarationResult.ok).toBeTruthy();
@@ -596,60 +591,38 @@ test.describe("HR admin payroll statutory flows", () => {
     await expectFields(itemForm, [
       "Declaration",
       "Item kind",
-      "Section code",
-      "Component code",
+      "Section",
+      "Component",
       "Name",
       "Declared amount",
       "Verified amount",
       "Proof status",
-      "Proof document reference",
-      "Proof artifact key",
-      "Source reference",
-      "Config profile reference",
       "Item rejection reason",
     ]);
-    const sectionCode = `SEC${Date.now()}`.slice(0, 12);
+    await expect(field(itemForm, "Verified amount")).toBeDisabled();
+    await expect(field(itemForm, "Proof status")).toBeDisabled();
+    for (const removedLabel of ["Proof document reference", "Proof artifact key", "Source reference", "Config profile reference"]) {
+      await expect(itemForm.getByLabel(removedLabel)).toHaveCount(0);
+    }
     const itemResult = await submitAndCapture<{ id: string }>(page, `employee-statutory-declarations/${declarationResult.payload.id}/items`, "POST", async () => {
       await field(itemForm, "Declaration").selectOption(declarationResult.payload.id);
       await field(itemForm, "Item kind").selectOption("investment");
-      await field(itemForm, "Section code").fill(sectionCode);
-      await field(itemForm, "Component code").fill(componentCode);
-      await field(itemForm, "Name").fill(`Browser proof ${sectionCode}`);
+      await field(itemForm, "Section").selectOption("80C");
+      await field(itemForm, "Component").selectOption("LIC");
+      await field(itemForm, "Name").fill("Browser LIC investment");
       await field(itemForm, "Declared amount").fill("10000");
-      await field(itemForm, "Verified amount").fill("0");
-      await field(itemForm, "Proof status").selectOption("pending");
-      await field(itemForm, "Config profile reference").fill("statutory.item.browser.profile.v1");
       await itemForm.getByRole("button", { name: "Create declaration item" }).click();
     });
     expect(itemResult.ok).toBeTruthy();
 
-    await submitAndCapture(page, `employee-statutory-declaration-items/${itemResult.payload.id}`, "PATCH", async () => {
-      await field(itemForm, "Proof status").selectOption("submitted");
-      await field(itemForm, "Proof document reference").fill("doc-browser-proof-001");
-      await field(itemForm, "Verified amount").fill("9000");
-      await itemForm.getByRole("button", { name: "Save declaration item" }).click();
-    }).then((result) => expect(result.ok).toBeTruthy());
-
-    await submitAndCapture(page, `employee-statutory-declarations/${declarationResult.payload.id}/submit`, "POST", async () => {
-      await declarationForm.getByRole("button", { name: "Submit" }).click();
-    }).then((result) => expect(result.ok).toBeTruthy());
-    await submitAndCapture(page, `employee-statutory-declaration-items/${itemResult.payload.id}/verify`, "POST", async () => {
-      await itemForm.getByRole("button", { name: "Verify item" }).click();
-    }).then((result) => expect(result.ok).toBeTruthy());
-    await submitAndCapture(page, `employee-statutory-declarations/${declarationResult.payload.id}/verify`, "POST", async () => {
-      await declarationForm.getByRole("button", { name: "Verify" }).click();
-    }).then((result) => expect(result.ok).toBeTruthy());
-    await submitAndCapture(page, `employee-statutory-declarations/${declarationResult.payload.id}/lock`, "POST", async () => {
-      await declarationForm.getByRole("button", { name: "Lock" }).click();
-    }).then((result) => expect(result.ok).toBeTruthy());
-    await expect(page.getByText(/lock declaration completed/i).first()).toBeVisible();
+    await expect(field(itemForm, "Proof status")).toHaveValue("pending");
     await expectNoHorizontalOverflow(page);
   });
 
   test("statutory setup controls remain usable on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions");
-    await expectPageReady(page, "Payroll Statutory");
+    await expectPageReady(page, "Statutory Compliance");
 
     await expect(page.getByRole("heading", { name: "Statutory setup controls" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Statutory setup action groups" })).toBeVisible();
@@ -673,6 +646,7 @@ test.describe("HR admin payroll statutory flows", () => {
     await expect(page.getByTestId("statutory-declaration-form")).toBeVisible();
     await expect(page.getByTestId("statutory-declaration-item-form")).toBeVisible();
     await expect(field(page.getByTestId("statutory-declaration-item-form"), "Proof status")).toBeVisible();
+    await expect(field(page.getByTestId("statutory-declaration-item-form"), "Proof status")).toBeDisabled();
     await expectNoHorizontalOverflow(page);
   });
 });

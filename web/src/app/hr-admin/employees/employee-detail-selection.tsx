@@ -28,6 +28,8 @@ type SelectionProviderProps = {
   initialDetail: HrAdminEmployeeDetail | null;
   initialSelectedId: string | null;
   onAction?: (action: "edit" | "access" | "bank", detail: HrAdminEmployeeDetail) => void;
+  onActionFocusRestored?: () => void;
+  returnFocusAction?: "edit" | "access" | "bank" | null;
 };
 
 const SelectionContext = createContext<SelectionContextValue | null>(null);
@@ -52,6 +54,8 @@ export function EmployeeSelectionProvider({
   initialDetail,
   initialSelectedId,
   onAction,
+  onActionFocusRestored,
+  returnFocusAction,
 }: SelectionProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -69,6 +73,7 @@ export function EmployeeSelectionProvider({
   const [error, setError] = useState("");
   const selectedIdRef = useRef<string | null>(initialSelectedId);
   const triggerRef = useRef<HTMLAnchorElement | null>(null);
+  const urlSyncInitializedRef = useRef(false);
 
   const loadDetail = useCallback(async (employeeId: string, useCached = true) => {
     const cached = cacheRef.current.get(employeeId);
@@ -152,6 +157,9 @@ export function EmployeeSelectionProvider({
   useEffect(() => {
     const nextSelectedId = searchParams.get("employeeId");
     if (nextSelectedId === selectedIdRef.current) return;
+    const isInitialDefaultSelection = !urlSyncInitializedRef.current && !nextSelectedId && selectedIdRef.current === initialSelectedId;
+    urlSyncInitializedRef.current = true;
+    if (isInitialDefaultSelection) return;
     // URL changes are the external source of truth for browser Back/Forward navigation.
     selectedIdRef.current = nextSelectedId;
     setSelectedId(nextSelectedId);
@@ -163,7 +171,7 @@ export function EmployeeSelectionProvider({
       return;
     }
     void loadDetail(nextSelectedId);
-  }, [loadDetail, pathname, searchParams]);
+  }, [initialSelectedId, loadDetail, pathname, searchParams]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => () => requestRef.current?.controller.abort(), []);
@@ -187,6 +195,8 @@ export function EmployeeSelectionProvider({
             canEditEmployees={canEditEmployees}
             canManageEmployeeAccess={canManageEmployeeAccess}
             onAction={onAction}
+            onActionFocusRestored={onActionFocusRestored}
+            returnFocusAction={returnFocusAction}
           />
         ) : null}
       </section>
@@ -360,10 +370,12 @@ function EmployeeDetailContent({ detail }: { detail: HrAdminEmployeeDetail }) {
   );
 }
 
-function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess, onAction }: {
+function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess, onAction, onActionFocusRestored, returnFocusAction }: {
   canEditEmployees: boolean;
   canManageEmployeeAccess: boolean;
   onAction?: (action: "edit" | "access" | "bank", detail: HrAdminEmployeeDetail) => void;
+  onActionFocusRestored?: () => void;
+  returnFocusAction?: "edit" | "access" | "bank" | null;
 }) {
   const { detail, dismiss, error, retry, selectedId, state } = useEmployeeSelection();
   const pathname = usePathname();
@@ -377,6 +389,14 @@ function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess, onAct
     headingRef.current?.focus({preventScroll:true});
     headingRef.current?.scrollIntoView({block:"start"});
   }, [selectedId, searchParams]);
+
+  useEffect(() => {
+    if (state !== "ready" || !detail || !returnFocusAction) return;
+    const target = document.querySelector<HTMLElement>(`[data-employee-action="${returnFocusAction}"]`);
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    onActionFocusRestored?.();
+  }, [detail, onActionFocusRestored, returnFocusAction, state]);
 
   function href(updates: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -398,8 +418,8 @@ function EmployeeDetailDrawer({ canEditEmployees, canManageEmployeeAccess, onAct
           <Link data-navigation-mode="document" prefetch={false} className="button button--ghost button--compact" href={href({ employeeId: undefined, action: undefined })} scroll={false} onClick={event=>{if(event.button===0&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey){event.preventDefault();dismiss(href({employeeId:undefined,action:undefined}));}}}>Close details</Link>
           {detail && (canEditEmployees || canManageEmployeeAccess) ? (
             <div className="employee-detail-primary-actions">
-              {canEditEmployees ? onAction ? <button className="button button--secondary button--compact" type="button" onClick={()=>onAction("edit",detail)}>Edit</button> : <a className="button button--secondary button--compact" data-navigation-mode="document" href={href({ action: "edit", employeeId: detail.id })}>Edit</a> : null}
-              {onAction ? <>{canManageEmployeeAccess?<button className="button button--ghost button--compact" type="button" onClick={()=>onAction("access",detail)}>Manage access</button>:null}{canEditEmployees?<button className="button button--ghost button--compact" type="button" onClick={()=>onAction("bank",detail)}>Bank accounts</button>:null}</> : <ActionMenu documentNavigation items={actionItems} label="Actions" />}
+              {canEditEmployees ? onAction ? <button className="button button--secondary button--compact" data-employee-action="edit" type="button" onClick={()=>onAction("edit",detail)}>Edit</button> : <a className="button button--secondary button--compact" data-navigation-mode="document" href={href({ action: "edit", employeeId: detail.id })}>Edit</a> : null}
+              {onAction ? <>{canManageEmployeeAccess?<button className="button button--ghost button--compact" data-employee-action="access" type="button" onClick={()=>onAction("access",detail)}>Manage access</button>:null}{canEditEmployees?<button className="button button--ghost button--compact" data-employee-action="bank" type="button" onClick={()=>onAction("bank",detail)}>Bank accounts</button>:null}</> : <ActionMenu documentNavigation items={actionItems} label="Actions" />}
             </div>
           ) : null}
         </div>

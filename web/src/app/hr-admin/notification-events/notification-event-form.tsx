@@ -57,12 +57,14 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<NotificationEventField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const isDirty = JSON.stringify(formValue) !== JSON.stringify(initialValue);
   useEffect(() => {
     function warnBeforeUnload(event: BeforeUnloadEvent) { if (isDirty && !isSubmitting) event.preventDefault(); }
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [isDirty, isSubmitting]);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   const moduleHints = useMemo(
     () => Object.fromEntries(options.notification_catalog_authoring.event_module_hints.map((item) => [item.module, item])),
     [options.notification_catalog_authoring.event_module_hints],
@@ -410,7 +412,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
         </div>
 
         {error ? (
-          <div className="notice notice--error" role="alert">
+          <div className="notice notice--error" role="alert" tabIndex={-1} ref={errorRef}>
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>
@@ -422,7 +424,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? "Create notification event" : "Save changes"}
             </button>
-            <button className="button button--secondary" onClick={() => { if (!isDirty || window.confirm("Discard unsaved notification event changes?")) router.back(); }} type="button">
+            <button className="button button--secondary" disabled={isSubmitting} onClick={() => { if (!isDirty || window.confirm("Discard unsaved notification event changes?")) router.back(); }} type="button">
               Cancel
             </button>
           </div>

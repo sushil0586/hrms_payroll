@@ -1,5 +1,7 @@
 "use client";
 
+import { formatWorkspaceDate } from "@/lib/ui/date-time-format";
+
 import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import Link from "next/link";
@@ -153,9 +155,18 @@ export function RosterRolloutAuditReportWorkspace({
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery(""); setStatus("All"); setAssignmentKind("All"); setTemplateStatus("All");
+    setPrimaryState("All"); setRisk("All"); setSortBy("created"); setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Roster rollout audit report workspace">
       <div className="report-catalog-workspace roster-rollout-audit-report" data-testid="roster-rollout-audit-report">
+        <div className="report-command-panel">
+          <div><span className="workspace-card__eyebrow">Roster rollout audit</span><h2>Assignment rollout evidence</h2><p className="section-copy section-copy-soft">Inspect template scope, completion, and rollout risk with exports bound to the current filter context.</p></div>
+          <div className="report-command-panel__actions"><AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton><AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton><button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button></div>
+        </div>
         <div className="attendance-summary-strip report-summary-strip" aria-label="Roster rollout audit summary">
           <span><strong>{filteredRows.length}</strong> rollouts</span>
           <span><strong>{rollouts.length}</strong> total runs</span>
@@ -164,7 +175,9 @@ export function RosterRolloutAuditReportWorkspace({
           <span><strong>{filteredRows.filter((row) => row.rollout_risk !== "Low").length}</strong> review risk</span>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Roster rollout audit filters">
+        <div className="report-filter-panel" aria-label="Roster rollout audit filters">
+          <div className="report-filter-panel__header"><div><strong>Filter rollout history</strong><span>Narrow by template, assignment scope, status, and operational risk.</span></div><button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button></div>
+          <div className="report-filter-grid report-filter-grid--attendance">
           <label><span>Search rollouts</span><input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search template, pattern, scope, summary" /></label>
           <label><span>Rollout status</span><select aria-label="Rollout status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>{statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
           <label><span>Assignment kind</span><select aria-label="Assignment kind" className="input-control" value={assignmentKind} onChange={(event) => updateFilter(() => setAssignmentKind(event.target.value))}>{assignmentKinds.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}</select></label>
@@ -172,13 +185,12 @@ export function RosterRolloutAuditReportWorkspace({
           <label><span>Primary state</span><select aria-label="Primary state" className="input-control" value={primaryState} onChange={(event) => updateFilter(() => setPrimaryState(event.target.value))}><option value="All">All</option><option value="primary">Primary</option><option value="secondary">Secondary</option></select></label>
           <label><span>Risk</span><select aria-label="Risk" className="input-control" value={risk} onChange={(event) => updateFilter(() => setRisk(event.target.value))}>{risks.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label><span>Sort</span><select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}><option value="created">Created newest</option><option value="risk">Risk first</option><option value="template">Template</option><option value="window">Window newest</option><option value="completion">Completion high to low</option></select></label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => row.rollout_risk !== "Low").length}</strong> review rollouts</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <AsyncDownloadButton href={exportHref} fileName="report.csv">Export filtered CSV</AsyncDownloadButton>
-          <AsyncDownloadButton className="button button--ghost" href={manifestHref} fileName="report-manifest.json">Manifest</AsyncDownloadButton>
         </div>
 
         <WorkspaceTableScrollRegion label="Roster rollout audit, scroll for more columns" className="report-catalog-table-wrap workspace-table-region">
@@ -189,7 +201,7 @@ export function RosterRolloutAuditReportWorkspace({
                 <tr key={row.id}>
                   <td><strong>{row.template_name}</strong><span>{row.template_code || row.template_id}</span><span className={statusClass(row.template_status)}>{titleCase(row.template_status || "unknown")}</span></td>
                   <td><div className="payroll-register-stack"><span>{titleCase(row.assignment_kind || "unknown")}</span><span>{titleCase(row.pattern_type || "pattern missing")}</span><span>{row.rotation_step_count} steps / {row.off_step_count} off steps</span><span>Anchor {row.anchor_date || "not set"}</span></div></td>
-                  <td><div className="payroll-register-stack"><span>{row.effective_from} to {row.effective_to || "open ended"}</span><span>{row.is_primary ? "Primary assignments" : "Secondary assignments"}</span><span>{new Date(row.created_at).toLocaleDateString("en-IN")}</span></div></td>
+                  <td><div className="payroll-register-stack"><span>{formatWorkspaceDate(row.effective_from)} to {row.effective_to ? formatWorkspaceDate(row.effective_to) : "open ended"}</span><span>{row.is_primary ? "Primary assignments" : "Secondary assignments"}</span><span>Created {formatWorkspaceDate(row.created_at)}</span></div></td>
                   <td><div className="payroll-register-stack"><span>{row.scope || "Manual selection"}</span></div></td>
                   <td><div className="payroll-register-stack"><span className={statusClass(row.status)}>{titleCase(row.status)}</span><span>{row.created_count}/{row.target_count} created</span><span>{row.skipped_count} skipped</span><span>{row.completion_rate}% completion</span></div></td>
                   <td><div className="payroll-register-stack"><span className={statusClass(row.rollout_risk)}>{row.rollout_risk}</span><span>{row.summary}</span></div></td>

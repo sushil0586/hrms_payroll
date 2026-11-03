@@ -141,6 +141,7 @@ export function EmployeeDocumentQueue({
   const modalReviewDocument = canVerifyDocuments ? reviewDocument : null;
   const numericPageSize = currentFilters.page_size;
   const detailTitle = useRef<HTMLHeadingElement>(null);
+  const detailTrigger = useRef<HTMLButtonElement | null>(null);
   useEffect(() => { if (selectedDocumentId) detailTitle.current?.focus(); }, [selectedDocumentId]);
   const totalPages = Math.max(1, Math.ceil(pagination.total_count / Math.max(numericPageSize, 1)));
   const pageStart = pagination.total_count === 0 ? 0 : ((pagination.page - 1) * numericPageSize) + 1;
@@ -347,7 +348,7 @@ export function EmployeeDocumentQueue({
                               onChange={() => toggleOne(item.id)}
                               type="checkbox"
                             />
-                            <button className="document-table-title-button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedDocumentId(item.id); }} type="button">
+                            <button className="document-table-title-button" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); detailTrigger.current = triggerEvent.currentTarget; setSelectedDocumentId(item.id); }} type="button">
                               <strong>{item.title}</strong>
                               <small>{item.category_name} · v{item.version_number}</small>
                             </button>
@@ -370,7 +371,7 @@ export function EmployeeDocumentQueue({
                           <small>{item.uploaded_by_identifier || "Unknown uploader"}</small>
                         </td>
                         <td>
-                          <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedDocumentId(item.id); }} type="button">
+                          <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); detailTrigger.current = triggerEvent.currentTarget; setSelectedDocumentId(item.id); }} type="button">
                             Inspect
                           </button>
                         </td>
@@ -396,7 +397,7 @@ export function EmployeeDocumentQueue({
                 <p className="section-copy section-copy-soft">Focused review context for the selected file.</p>
               </div>
               <div className="record-card__actions">
-                <button className="button button--ghost button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedDocumentId(""); }} type="button">Close</button>
+                <button className="button button--ghost button--compact" onClick={() => { setSelectedDocumentId(""); window.requestAnimationFrame(() => detailTrigger.current?.focus({ preventScroll: true })); }} type="button">Close</button>
                 {canExportDocuments && selectedDocument.is_downloadable ? <Link className="button button--ghost button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.id}/download`}>Download</Link> : null}
                 {canVerifyDocuments ? (
                   <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openReviewModal(selectedDocument.id); }} type="button">Review</button>

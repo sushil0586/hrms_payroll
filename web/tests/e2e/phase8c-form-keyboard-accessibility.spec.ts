@@ -60,7 +60,7 @@ const formRoutes: FormRoute[] = [
   },
   {
     path: "/hr-admin/payroll-statutory?tab=actions",
-    heading: "Payroll Statutory",
+    heading: "Statutory Compliance",
     consoleHeading: "Statutory setup controls",
     expectedForms: [
       { testId: "statutory-pack-form", label: "Statutory pack form", minimumControls: 12, actionTab: "Catalog" },

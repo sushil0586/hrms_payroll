@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LocalCatalogFilterForm } from "@/components/patterns/local-catalog-filter-form";
 
-import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStandardHeader } from "@/components/patterns/workspace-standard";
 import { getHrAdminWorkflowTemplates } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
@@ -33,7 +33,7 @@ export default async function HrAdminWorkflowTemplatesPage({ searchParams }: Pag
 
   return (
     <main className="shell shell--workspace workflow-workbench accerio-page">
-      <PageIntro appearance="accerio"
+      <WorkspaceStandardHeader
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/workflow-templates/new">Create workflow template</Link>
@@ -43,7 +43,6 @@ export default async function HrAdminWorkflowTemplatesPage({ searchParams }: Pag
         }
         description="Build reusable approval chains for leave, attendance, lifecycle, and related HR flows."
         eyebrow={result.state === "live" ? "Live workflow mode" : "Demo workflow mode"}
-        pills={[`${result.data.length} loaded templates`]}
         title="Workflow templates"
       />
 

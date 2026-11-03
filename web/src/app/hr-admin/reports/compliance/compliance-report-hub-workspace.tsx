@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import type { ReportCatalogItem } from "@/lib/report-catalog";
 
 const groups = [
@@ -155,43 +156,26 @@ export function ComplianceReportHubWorkspace({ reports }: { reports: ReportCatal
         <AsyncDownloadButton className="button button--ghost" href="/api/hr-admin/reports/statutory-filing-status?due_status=Overdue&sort=due_status&format=manifest" fileName="overdue-statutory-filings-manifest.json">Overdue manifest</AsyncDownloadButton>
       </div>
 
-      <div className="compliance-hub-grid">
-        {visibleReports.map((report) => (
-          <article className="compliance-hub-card" key={report.key}>
-            <div className="workspace-card__header">
-              <span className="workspace-card__eyebrow">{report.primaryPersona}</span>
-              <h2>{report.title}</h2>
-            </div>
-            <p className="section-copy section-copy-soft">{report.description}</p>
-            <div className="reports-export-card__meta">
-              <span className={readyClass(report.status)}>{report.status}</span>
-              <span className="queue-summary-chip">
-                <strong>{healthSignal(report)}</strong>
-              </span>
-              <span className="queue-summary-chip">
-                <strong>{report.filters.length}</strong> filters
-              </span>
-              <span className="queue-summary-chip">
-                <strong>{report.exports.join(", ")}</strong>
-              </span>
-            </div>
-            <div className="report-row-actions">
-              {report.route ? (
-                <Link className="button button--secondary" href={report.route}>
-                  Open
-                </Link>
-              ) : null}
-              {report.exportRoute ? <AsyncDownloadButton className="button button--ghost" href={report.exportRoute} fileName={`${report.key}.csv`}>Export</AsyncDownloadButton> : null}
-              {report.exportRoute && report.key !== "tds-efile-readiness" && report.key !== "statutory-deductions" ? (
-                <AsyncDownloadButton className="button button--ghost" href={manifestHref(report.exportRoute)} fileName={`${report.key}-manifest.json`}>Manifest</AsyncDownloadButton>
-              ) : null}
-            </div>
-          </article>
-        ))}
-        {visibleReports.length === 0 ? (
-          <div className="empty-state">No compliance reports match the selected filters.</div>
-        ) : null}
-      </div>
+      <WorkspaceTableScrollRegion className="workspace-table-region" label="Compliance report catalog">
+        <table className="workspace-table compliance-hub-table">
+          <thead><tr><th>Report</th><th>Evidence</th><th>Readiness</th><th>Actions</th></tr></thead>
+          <tbody>
+            {visibleReports.map((report) => (
+              <tr data-report-key={report.key} key={report.key}>
+                <td><strong>{report.title}</strong><span>{report.description}</span><small>{report.primaryPersona}</small></td>
+                <td><strong>{healthSignal(report)}</strong><span>{report.filters.length} filters · {report.exports.join(", ")}</span></td>
+                <td><span className={readyClass(report.status)}>{report.status}</span></td>
+                <td><div className="report-row-actions">
+                  {report.route ? <Link className="button button--secondary" href={report.route}>Open</Link> : null}
+                  {report.exportRoute ? <AsyncDownloadButton className="button button--ghost" href={report.exportRoute} fileName={`${report.key}.csv`}>Export</AsyncDownloadButton> : null}
+                  {report.exportRoute && report.key !== "tds-efile-readiness" && report.key !== "statutory-deductions" ? <AsyncDownloadButton className="button button--ghost" href={manifestHref(report.exportRoute)} fileName={`${report.key}-manifest.json`}>Manifest</AsyncDownloadButton> : null}
+                </div></td>
+              </tr>
+            ))}
+            {visibleReports.length === 0 ? <tr><td colSpan={4}><div className="empty-state">No compliance reports match the selected filters.</div></td></tr> : null}
+          </tbody>
+        </table>
+      </WorkspaceTableScrollRegion>
     </div>
   );
 }
