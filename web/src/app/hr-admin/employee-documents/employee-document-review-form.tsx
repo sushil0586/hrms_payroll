@@ -70,7 +70,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
     event.preventDefault();
     if (submitting.current) return;
     const data = new FormData(event.currentTarget);
-    const body = { title: String(data.get("title") ?? ""), status: String(data.get("status") ?? ""), verification_status: String(data.get("verification_status") ?? ""), document_number: String(data.get("document_number") ?? ""), issued_on: String(data.get("issued_on") ?? "") || null, expires_on: String(data.get("expires_on") ?? "") || null, reupload_requested: data.get("reupload_requested") === "true", rejection_reason: String(data.get("rejection_reason") ?? "") };
+    const body = { title: String(data.get("title") ?? ""), verification_status: String(data.get("verification_status") ?? ""), document_number: String(data.get("document_number") ?? ""), issued_on: String(data.get("issued_on") ?? "") || null, expires_on: String(data.get("expires_on") ?? "") || null, reupload_requested: data.get("reupload_requested") === "true", rejection_reason: String(data.get("rejection_reason") ?? "") };
     setError(""); setFieldErrors({}); submitting.current = true; setBusy(true); onStateChange?.({ busy: true, dirty });
     let response: Response;
     try { response = await fetch(`/api/hr-admin/employee-documents/${itemId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
@@ -78,7 +78,12 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       const errors: Record<string, string> = {};
-      if (payload && typeof payload === "object") for (const [key, value] of Object.entries(payload)) if (Array.isArray(value)) errors[key] = value.map(String).join(" ");
+      if (payload && typeof payload === "object") {
+        for (const [key, value] of Object.entries(payload)) {
+          if (Array.isArray(value)) errors[key] = value.map(String).join(" ");
+          else if (typeof value === "string" && key !== "detail") errors[key] = value;
+        }
+      }
       setFieldErrors(errors); setError(response.status >= 500 ? "The review outcome could not be confirmed. Check the queue before trying again." : payload?.detail || "Review was not saved. Check the highlighted fields and try again."); submitting.current = false; setBusy(false); return;
     }
     setDirty(false); onStateChange?.({ busy: true, dirty: false });
@@ -108,6 +113,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       <WorkspaceStatusBadge tone={tone(document.verification_status)}>{humanize(document.verification_status)}</WorkspaceStatusBadge>
       <p>{document.review_status_label} · {document.expires_on ? `Expires ${document.expires_on}` : "No expiry recorded"}</p>
       {canDownload && document.is_downloadable ? <a className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${itemId}/download`}>Download current file</a> : <p className="muted">{document.is_downloadable ? "Downloading requires document export access." : "No stored file is available for this record."}</p>}
+      {document.previous_document ? <div className="notice"><strong>Compare with approved version v{document.previous_document.version_number}</strong><span>{document.previous_document.title} · {document.previous_document.file_name}. This approved version remains authoritative until the candidate is accepted.</span>{canDownload && document.previous_document.is_downloadable ? <a className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${document.previous_document.id}/download`}>Download approved version</a> : null}</div> : null}
     </section>
     {error ? <div className="notice notice--error" role="alert" ref={errorRef} tabIndex={-1}><strong>Review not confirmed</strong><span>{error}</span></div> : null}
     <fieldset disabled={busy || !ready} className="document-review-fields">
@@ -122,7 +128,6 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
         <summary tabIndex={0}>Document metadata</summary>
         <div className="form-grid">
           <div className="form-field"><label htmlFor="review-title">Title</label><input className="input-control" id="review-title" name="title" defaultValue={initialValue.title} {...invalid("title")} />{fieldError("title")}</div>
-          <div className="form-field"><label htmlFor="review-status">Record status</label><select className="input-control" id="review-status" name="status" defaultValue={initialValue.status} {...invalid("status")}>{options.employee_document_statuses.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>{fieldError("status")}</div>
           <div className="form-field"><label htmlFor="review-document_number">Document number</label><input className="input-control" id="review-document_number" name="document_number" defaultValue={initialValue.document_number} {...invalid("document_number")} />{fieldError("document_number")}</div>
           <div className="form-field"><label htmlFor="review-issued_on">Issued on</label><input className="input-control" type="date" id="review-issued_on" name="issued_on" defaultValue={initialValue.issued_on ?? ""} {...invalid("issued_on")} />{fieldError("issued_on")}</div>
           <div className="form-field"><label htmlFor="review-expires_on">Expires on</label><input className="input-control" type="date" id="review-expires_on" name="expires_on" defaultValue={initialValue.expires_on ?? ""} {...invalid("expires_on")} />{fieldError("expires_on")}</div>

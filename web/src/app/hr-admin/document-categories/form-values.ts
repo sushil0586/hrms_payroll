@@ -12,6 +12,9 @@ export function documentCategoryToFormValue(item: HrAdminDocumentCategory): HrAd
     requires_verification: item.requires_verification,
     allow_employee_upload: item.allow_employee_upload,
     allow_multiple_files: item.allow_multiple_files,
+    replacement_policy: item.replacement_policy,
+    accepted_mime_types: item.accepted_mime_types.join(", "),
+    max_upload_size_mb: item.max_upload_size_bytes ? String(item.max_upload_size_bytes / (1024 * 1024)) : "",
     visibility_rules: JSON.stringify(item.visibility_rules ?? {}, null, 2),
   };
 }
@@ -28,6 +31,9 @@ export function createEmptyDocumentCategoryValue(defaultCategoryType = "other"):
     requires_verification: true,
     allow_employee_upload: true,
     allow_multiple_files: false,
+    replacement_policy: "allowed",
+    accepted_mime_types: "application/pdf, image/png, image/jpeg",
+    max_upload_size_mb: "10",
     visibility_rules: "{}",
   };
 }

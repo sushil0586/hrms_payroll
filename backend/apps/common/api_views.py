@@ -668,9 +668,12 @@ from apps.platform_policies.services import detach_runtime_item_from_platform_so
 from apps.documents.models import (
     DocumentCategory,
     DocumentCategoryType,
+    DocumentReplacementPolicy,
     DocumentArtifact,
     DocumentArtifactSourceKind,
     DocumentRequirementRule,
+    DocumentLifecycleAuditEvent,
+    DocumentLifecycleEventType,
     DocumentVerificationLog,
     EmployeeDocument,
     EmployeeDocumentStatus,
@@ -679,6 +682,7 @@ from apps.documents.models import (
     VerificationStatus,
 )
 from apps.documents.services import (
+    document_artifact_is_downloadable,
     get_document_upload_max_bytes,
     store_document_artifact,
     validate_uploaded_document_file,
@@ -3062,6 +3066,8 @@ def save_hr_admin_workflow_assignment(actor, validated_data, *, item=None):
 
 
 def build_hr_admin_document_category_payload(item: DocumentCategory) -> dict:
+    legacy_mime_types = item.visibility_rules.get("accepted_mime_types", []) if isinstance(item.visibility_rules, dict) else []
+    accepted_mime_types = item.accepted_mime_types or (legacy_mime_types if isinstance(legacy_mime_types, list) else [])
     return {
         "id": item.id,
         "code": item.code,
@@ -3074,6 +3080,9 @@ def build_hr_admin_document_category_payload(item: DocumentCategory) -> dict:
         "requires_verification": item.requires_verification,
         "allow_employee_upload": item.allow_employee_upload,
         "allow_multiple_files": item.allow_multiple_files,
+        "replacement_policy": item.replacement_policy,
+        "accepted_mime_types": accepted_mime_types,
+        "max_upload_size_bytes": item.max_upload_size_bytes,
         "visibility_rules": item.visibility_rules,
     }
 
@@ -3094,12 +3103,20 @@ def save_hr_admin_document_category(actor, validated_data, *, item=None):
         "requires_verification",
         "allow_employee_upload",
         "allow_multiple_files",
+        "replacement_policy",
+        "max_upload_size_bytes",
     ]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
 
     if "visibility_rules" in validated_data:
         item.visibility_rules = validated_data["visibility_rules"] or {}
+
+    if "accepted_mime_types" in validated_data:
+        item.accepted_mime_types = validated_data["accepted_mime_types"]
+        visibility_rules = dict(item.visibility_rules) if isinstance(item.visibility_rules, dict) else {}
+        visibility_rules["accepted_mime_types"] = item.accepted_mime_types
+        item.visibility_rules = visibility_rules
 
     item.save()
     return item
@@ -3204,7 +3221,7 @@ def _get_employee_document_review_runtime(item: EmployeeDocument) -> dict:
 
 def _employee_document_file_available(artifact) -> bool:
     """Return whether an artifact still has a readable storage object."""
-    if not artifact or not artifact.stored_file or not artifact.stored_file.name:
+    if not document_artifact_is_downloadable(artifact) or not artifact.stored_file or not artifact.stored_file.name:
         return False
     try:
         return artifact.stored_file.storage.exists(artifact.stored_file.name)
@@ -3215,6 +3232,16 @@ def _employee_document_file_available(artifact) -> bool:
 def _stored_artifact_download_response(artifact, *, filename: str, missing_detail: str):
     if not artifact or not artifact.stored_file:
         return response.Response({"detail": missing_detail}, status=status.HTTP_404_NOT_FOUND)
+    if not document_artifact_is_downloadable(artifact):
+        if artifact.malware_scan_status == "quarantined":
+            return response.Response(
+                {"detail": "The file is quarantined and cannot be downloaded."},
+                status=status.HTTP_423_LOCKED,
+            )
+        return response.Response(
+            {"detail": "The file is unavailable until malware scanning succeeds."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
     try:
         file_handle = artifact.stored_file.open("rb")
     except FileNotFoundError:
@@ -3236,6 +3263,8 @@ def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
         .order_by("-version_number", "-created_at")
     )
     review_history_items = item.verification_logs.order_by("-created_at")
+    lifecycle_event_items = item.lifecycle_events.order_by("-created_at")
+    previous_document = item.previous_document
     expiry_runtime = _get_employee_document_expiry_runtime(item)
     review_runtime = _get_employee_document_review_runtime(item)
     return {
@@ -3247,7 +3276,21 @@ def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
         "category_name": item.category.name,
         "artifact_id": artifact.id if artifact else None,
         "is_downloadable": _employee_document_file_available(artifact),
+        "malware_scan_status": artifact.malware_scan_status if artifact else "error",
+        "malware_scanner_ref": artifact.malware_scanner_ref if artifact else "",
+        "malware_scanned_at": artifact.malware_scanned_at if artifact else None,
+        "quarantine_reason": artifact.quarantine_reason if artifact else "",
         "previous_document_id": item.previous_document_id,
+        "previous_document": ({
+            "id": previous_document.id,
+            "title": previous_document.title,
+            "file_name": previous_document.file_name,
+            "status": previous_document.status,
+            "verification_status": previous_document.verification_status,
+            "version_number": previous_document.version_number,
+            "is_downloadable": _employee_document_file_available(previous_document.artifact),
+            "created_at": previous_document.created_at,
+        } if previous_document else None),
         "replaced_by_document_id": replaced_by.id if replaced_by else None,
         "version_number": item.version_number,
         "title": item.title,
@@ -3297,6 +3340,19 @@ def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
                 "created_at": log.created_at,
             }
             for log in review_history_items
+        ],
+        "lifecycle_events": [
+            {
+                "id": event.id,
+                "event_type": event.event_type,
+                "actor_identifier": event.actor_identifier,
+                "previous_record_status": event.previous_record_status,
+                "new_record_status": event.new_record_status,
+                "previous_verification_status": event.previous_verification_status,
+                "new_verification_status": event.new_verification_status,
+                "created_at": event.created_at,
+            }
+            for event in lifecycle_event_items
         ],
         "created_at": item.created_at,
         "updated_at": item.updated_at,
@@ -3359,9 +3415,14 @@ def _create_employee_document(actor, validated_data, *, employee: Employee) -> E
         raise serializers.ValidationError({"category_id": "Document category not found."})
 
     uploaded_file = validated_data["file"]
-    accepted_mime_types = category.visibility_rules.get("accepted_mime_types", []) if isinstance(category.visibility_rules, dict) else []
+    legacy_mime_types = category.visibility_rules.get("accepted_mime_types", []) if isinstance(category.visibility_rules, dict) else []
+    accepted_mime_types = category.accepted_mime_types or (legacy_mime_types if isinstance(legacy_mime_types, list) else [])
     try:
-        validate_uploaded_document_file(uploaded_file, accepted_mime_types=accepted_mime_types if isinstance(accepted_mime_types, list) else None)
+        validate_uploaded_document_file(
+            uploaded_file,
+            accepted_mime_types=accepted_mime_types if isinstance(accepted_mime_types, list) else None,
+            max_upload_bytes=min(category.max_upload_size_bytes, get_document_upload_max_bytes()) if category.max_upload_size_bytes else None,
+        )
     except ValueError as exc:
         raise serializers.ValidationError({"file": str(exc)}) from exc
 
@@ -3381,6 +3442,8 @@ def _create_employee_document(actor, validated_data, *, employee: Employee) -> E
         replacement_document = existing_active_queryset.filter(id=replace_document_id).first()
         if not replacement_document:
             raise serializers.ValidationError({"replace_document_id": "Replacement target not found for this employee and category."})
+        if category.replacement_policy == DocumentReplacementPolicy.PROHIBITED:
+            raise serializers.ValidationError({"replace_document_id": "Replacement is disabled for this document category."})
 
     if not category.allow_multiple_files:
         existing_active = existing_active_queryset.exists()
@@ -3395,6 +3458,23 @@ def _create_employee_document(actor, validated_data, *, employee: Employee) -> E
             raise serializers.ValidationError(
                 {"category_id": "An active document already exists for this employee and category. Replace or archive it first."}
             )
+
+    if replacement_document and EmployeeDocument.objects.filter(
+        tenant=tenant,
+        employee=employee,
+        category=category,
+        status=EmployeeDocumentStatus.PENDING_REPLACEMENT,
+        verification_status=VerificationStatus.PENDING,
+    ).exists():
+        raise serializers.ValidationError(
+            {"replace_document_id": "A replacement is already awaiting review for this document category."}
+        )
+
+    next_version_number = (
+        EmployeeDocument.objects.filter(tenant=tenant, employee=employee, category=category)
+        .aggregate(max_version=Max("version_number"))["max_version"]
+        or 0
+    ) + 1
 
     artifact = None
     try:
@@ -3411,20 +3491,18 @@ def _create_employee_document(actor, validated_data, *, employee: Employee) -> E
             },
         )
 
-        if replacement_document:
-            replacement_document.status = EmployeeDocumentStatus.REPLACED
-            replacement_document.reupload_requested = False
-            replacement_document.reupload_requested_at = None
-            replacement_document.reupload_requested_by_identifier = ""
-            replacement_document.save(update_fields=["status", "reupload_requested", "reupload_requested_at", "reupload_requested_by_identifier", "updated_at"])
-
         item = EmployeeDocument.objects.create(
             tenant=tenant,
             employee=employee,
             category=category,
             artifact=artifact,
             previous_document=replacement_document,
-            version_number=(replacement_document.version_number + 1) if replacement_document else 1,
+            status=(
+                EmployeeDocumentStatus.PENDING_REPLACEMENT
+                if replacement_document and category.requires_verification
+                else EmployeeDocumentStatus.ACTIVE
+            ),
+            version_number=next_version_number,
             title=(validated_data.get("title") or artifact.original_filename).strip() or artifact.original_filename,
             file_name=artifact.original_filename,
             file_path=artifact.storage_key,
@@ -3436,6 +3514,14 @@ def _create_employee_document(actor, validated_data, *, employee: Employee) -> E
             uploaded_by_identifier=actor.employee_code,
             verification_status=VerificationStatus.PENDING if category.requires_verification else VerificationStatus.VERIFIED,
         )
+
+        if replacement_document:
+            if not category.requires_verification:
+                replacement_document.status = EmployeeDocumentStatus.REPLACED
+            replacement_document.reupload_requested = False
+            replacement_document.reupload_requested_at = None
+            replacement_document.reupload_requested_by_identifier = ""
+            replacement_document.save(update_fields=["status", "reupload_requested", "reupload_requested_at", "reupload_requested_by_identifier", "updated_at"])
     except Exception:
         if artifact and artifact.stored_file.name:
             artifact.stored_file.storage.delete(artifact.stored_file.name)
@@ -3445,6 +3531,15 @@ def _create_employee_document(actor, validated_data, *, employee: Employee) -> E
         item.verified_at = timezone.now()
         item.verified_by_identifier = actor.employee_code
     item.save(update_fields=["file_url", "verification_status", "verified_at", "verified_by_identifier", "updated_at"])
+    DocumentLifecycleAuditEvent.objects.create(
+        tenant=tenant,
+        employee_document=item,
+        event_type=(DocumentLifecycleEventType.REPLACEMENT_SUBMITTED if replacement_document else DocumentLifecycleEventType.UPLOADED),
+        actor_identifier=actor.employee_code,
+        new_record_status=item.status,
+        new_verification_status=item.verification_status,
+        metadata={"previous_document_id": str(replacement_document.id) if replacement_document else ""},
+    )
     return item
 
 
@@ -3454,6 +3549,8 @@ def create_self_service_employee_document(actor, validated_data) -> EmployeeDocu
         raise serializers.ValidationError({"category_id": "Document category not found."})
     if not category.allow_employee_upload:
         raise serializers.ValidationError({"category_id": "Employees cannot upload this document category directly."})
+    if validated_data.get("replace_document_id") and category.replacement_policy == DocumentReplacementPolicy.HR_ONLY:
+        raise serializers.ValidationError({"replace_document_id": "Only HR can replace documents in this category."})
     item = _create_employee_document(actor, validated_data, employee=actor)
     item.file_url = f"/api/v1/me/employee-documents/{item.id}/download/"
     item.save(update_fields=["file_url", "updated_at"])
@@ -3461,8 +3558,11 @@ def create_self_service_employee_document(actor, validated_data) -> EmployeeDocu
     return item
 
 
+@transaction.atomic
 def save_hr_admin_employee_document(actor, validated_data, *, item: EmployeeDocument):
+    item = EmployeeDocument.objects.select_for_update().get(pk=item.pk)
     previous_verification_status = item.verification_status
+    previous_record_status = item.status
     previous_reupload_requested = item.reupload_requested
     verification_changed = False
 
@@ -3488,8 +3588,34 @@ def save_hr_admin_employee_document(actor, validated_data, *, item: EmployeeDocu
 
     if "verification_status" in validated_data:
         item.verification_status = validated_data["verification_status"]
+        if item.verification_status == VerificationStatus.REJECTED and not str(validated_data.get("rejection_reason", item.rejection_reason) or "").strip():
+            raise serializers.ValidationError({"rejection_reason": "A rejection reason is required."})
         verification_changed = previous_verification_status != item.verification_status
         if item.verification_status == VerificationStatus.VERIFIED:
+            if not document_artifact_is_downloadable(item.artifact):
+                raise serializers.ValidationError(
+                    {"verification_status": "A document cannot be verified until malware scanning succeeds."}
+                )
+            if item.status == EmployeeDocumentStatus.PENDING_REPLACEMENT and item.previous_document_id:
+                previous_document = EmployeeDocument.objects.select_for_update().get(pk=item.previous_document_id)
+                if previous_document.status != EmployeeDocumentStatus.ACTIVE:
+                    raise serializers.ValidationError(
+                        {"verification_status": "The approved document changed before this replacement was reviewed. Refresh and try again."}
+                    )
+                previous_document.status = EmployeeDocumentStatus.REPLACED
+                previous_document.reupload_requested = False
+                previous_document.reupload_requested_at = None
+                previous_document.reupload_requested_by_identifier = ""
+                previous_document.save(
+                    update_fields=[
+                        "status",
+                        "reupload_requested",
+                        "reupload_requested_at",
+                        "reupload_requested_by_identifier",
+                        "updated_at",
+                    ]
+                )
+                item.status = EmployeeDocumentStatus.ACTIVE
             item.verified_at = timezone.now()
             item.verified_by_identifier = actor.employee_code
             item.rejection_reason = ""
@@ -3497,6 +3623,8 @@ def save_hr_admin_employee_document(actor, validated_data, *, item: EmployeeDocu
             item.reupload_requested_at = None
             item.reupload_requested_by_identifier = ""
         elif item.verification_status == VerificationStatus.REJECTED:
+            if item.status == EmployeeDocumentStatus.PENDING_REPLACEMENT:
+                item.status = EmployeeDocumentStatus.ARCHIVED
             item.verified_by_identifier = actor.employee_code
             if validated_data.get("reupload_requested") is None:
                 item.reupload_requested = True
@@ -3518,10 +3646,53 @@ def save_hr_admin_employee_document(actor, validated_data, *, item: EmployeeDocu
             comment=validated_data.get("rejection_reason", ""),
         )
         _notify_document_verification_updated(document=item)
+        event_type = DocumentLifecycleEventType.VERIFICATION_UPDATED
+        if previous_record_status == EmployeeDocumentStatus.PENDING_REPLACEMENT:
+            event_type = (
+                DocumentLifecycleEventType.REPLACEMENT_APPROVED
+                if item.verification_status == VerificationStatus.VERIFIED
+                else DocumentLifecycleEventType.REPLACEMENT_REJECTED
+            )
+        DocumentLifecycleAuditEvent.objects.create(
+            tenant=actor.tenant,
+            employee_document=item,
+            event_type=event_type,
+            actor_identifier=actor.employee_code,
+            previous_record_status=previous_record_status,
+            new_record_status=item.status,
+            previous_verification_status=previous_verification_status,
+            new_verification_status=item.verification_status,
+        )
 
     if item.reupload_requested and not previous_reupload_requested:
         _notify_document_reupload_requested(document=item)
 
+    return item
+
+
+@transaction.atomic
+def withdraw_self_service_employee_document(actor, *, item: EmployeeDocument) -> EmployeeDocument:
+    item = EmployeeDocument.objects.select_for_update().select_related("category").get(pk=item.pk)
+    if item.tenant_id != actor.tenant_id or item.employee_id != actor.id:
+        raise serializers.ValidationError({"detail": "Document not found."})
+    if item.status == EmployeeDocumentStatus.WITHDRAWN:
+        return item
+    if item.status != EmployeeDocumentStatus.PENDING_REPLACEMENT or item.verification_status != VerificationStatus.PENDING:
+        raise serializers.ValidationError({"detail": "Only a pending replacement can be withdrawn."})
+    previous_status = item.status
+    item.status = EmployeeDocumentStatus.WITHDRAWN
+    item.save(update_fields=["status", "updated_at"])
+    DocumentLifecycleAuditEvent.objects.create(
+        tenant=actor.tenant,
+        employee_document=item,
+        event_type=DocumentLifecycleEventType.REPLACEMENT_WITHDRAWN,
+        actor_identifier=actor.employee_code,
+        previous_record_status=previous_status,
+        new_record_status=item.status,
+        previous_verification_status=item.verification_status,
+        new_verification_status=item.verification_status,
+    )
+    _notify_document_replacement_withdrawn(document=item)
     return item
 
 
@@ -3813,6 +3984,7 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
     category_ids = list(rules_by_category_id.keys())
     compliant_category_ids = set()
     current_documents_by_category_id: dict = {}
+    pending_replacements_by_category_id: dict = {}
     if category_ids:
         document_queryset = EmployeeDocument.objects.filter(
             tenant=employee.tenant,
@@ -3825,6 +3997,15 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
             if document.category.requires_verification and document.verification_status != VerificationStatus.VERIFIED:
                 continue
             compliant_category_ids.add(document.category_id)
+        pending_replacement_queryset = EmployeeDocument.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            category_id__in=category_ids,
+            status=EmployeeDocumentStatus.PENDING_REPLACEMENT,
+            verification_status=VerificationStatus.PENDING,
+        ).order_by("-created_at")
+        for document in pending_replacement_queryset:
+            pending_replacements_by_category_id.setdefault(document.category_id, document)
 
     runtime_items = []
     for category_id, rule in rules_by_category_id.items():
@@ -3833,6 +4014,7 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
             due_on = joining_date + timedelta(days=rule.required_within_days_of_joining)
         is_future_due = bool(due_on and due_on > today)
         current_document = current_documents_by_category_id.get(category_id)
+        pending_replacement = pending_replacements_by_category_id.get(category_id)
         current_expiry_runtime = _get_employee_document_expiry_runtime(current_document) if current_document else {
             "state": "no_document",
             "label": "No document",
@@ -3858,6 +4040,13 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
                 "allow_employee_upload": rule.category.allow_employee_upload,
                 "requires_verification": rule.category.requires_verification,
                 "requires_expiry_date": rule.category.requires_expiry_date,
+                "accepted_mime_types": rule.category.accepted_mime_types or (
+                    rule.category.visibility_rules.get("accepted_mime_types", [])
+                    if isinstance(rule.category.visibility_rules, dict)
+                    else []
+                ),
+                "max_upload_size_bytes": min(rule.category.max_upload_size_bytes, get_document_upload_max_bytes()) if rule.category.max_upload_size_bytes else get_document_upload_max_bytes(),
+                "replacement_policy": rule.category.replacement_policy,
                 "current_document_id": current_document.id if current_document else None,
                 "current_document_title": current_document.title if current_document else "",
                 "current_verification_status": current_document.verification_status if current_document else "",
@@ -3871,6 +4060,9 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
                 "current_review_owner_label": current_review_runtime["owner_label"],
                 "current_review_status_label": current_review_runtime["status_label"],
                 "current_uploaded_at": current_document.created_at if current_document else None,
+                "pending_replacement_id": pending_replacement.id if pending_replacement else None,
+                "pending_replacement_title": pending_replacement.title if pending_replacement else "",
+                "pending_replacement_uploaded_at": pending_replacement.created_at if pending_replacement else None,
             }
         )
     return runtime_items
@@ -4263,6 +4455,29 @@ def _notify_document_upload_submitted(*, document: EmployeeDocument, actor: Empl
             "category_name": document.category.name,
             "verification_status": document.verification_status,
             "uploaded_by_identifier": actor.employee_code,
+        },
+    )
+
+
+def _notify_document_replacement_withdrawn(*, document: EmployeeDocument):
+    hr_owner_membership = _get_lifecycle_hr_owner_membership(employee=document.employee)
+    trigger_notification_event(
+        tenant=document.tenant,
+        module="documents",
+        trigger_key="documents.employee.replacement_withdrawn",
+        subject_type="employee_document",
+        subject_identifier=str(document.id),
+        recipient_membership=hr_owner_membership,
+        recipient_identifier=hr_owner_membership.user.username if hr_owner_membership and hr_owner_membership.user_id else "",
+        fallback_title=f"Document replacement withdrawn: {document.employee.employee_code}",
+        fallback_body=f"{document.employee.employee_code} withdrew the pending replacement for {document.category.name}.",
+        payload={
+            "employee_id": str(document.employee_id),
+            "employee_code": document.employee.employee_code,
+            "document_id": str(document.id),
+            "category_id": str(document.category_id),
+            "category_name": document.category.name,
+            "record_status": document.status,
         },
     )
 
@@ -7281,6 +7496,19 @@ class MeEmployeeDocumentDownloadView(EmployeeContextMixin, APIView):
             filename=item.artifact.original_filename or item.file_name or f"{item.title}.bin",
             missing_detail="Document file not found.",
         )
+
+
+class MeEmployeeDocumentWithdrawView(EmployeeContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeDocument.objects.filter(tenant=employee.tenant, employee=employee, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Document not found."}, status=status.HTTP_404_NOT_FOUND)
+        item = withdraw_self_service_employee_document(employee, item=item)
+        item = EmployeeDocument.objects.select_related("employee", "category", "artifact", "previous_document__artifact").get(pk=item.pk)
+        return response.Response(HrAdminEmployeeDocumentSerializer(build_hr_admin_employee_document_payload(item)).data)
 
 
 def _payroll_access_event_payload(event: PayrollArtifactAccessEvent) -> dict:

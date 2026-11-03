@@ -453,10 +453,11 @@ export function EmployeeDocumentQueue({
                   <div className="detail-row"><span className="detail-label">File size</span><span className="detail-value">{formatFileSize(selectedDocument.file_size_bytes)}</span></div>
                   <div className="detail-row"><span className="detail-label">Stored file</span><span className="detail-value">{selectedDocument.is_downloadable ? "Available" : "Unavailable"}</span></div>
                   <div className="detail-row"><span className="detail-label">Artifact</span><span className="detail-value">{selectedDocument.artifact_id || "Not linked"}</span></div>
-                  <div className="detail-row"><span className="detail-label">Previous version</span><span className="detail-value">{selectedDocument.previous_document_id ? "Available" : "Original upload"}</span></div>
+                  <div className="detail-row"><span className="detail-label">Previous version</span><span className="detail-value">{selectedDocument.previous_document ? `v${selectedDocument.previous_document.version_number} · ${selectedDocument.previous_document.file_name} · ${humanizeStatus(selectedDocument.previous_document.verification_status)}` : "Original upload"}</span></div>
                   <div className="detail-row"><span className="detail-label">Review steps</span><span className="detail-value">{selectedDocument.review_history.length}</span></div>
                 </div>
               </details>
+              {selectedDocument.previous_document ? <details className="employee-detail-section" open><summary>Replacement comparison</summary><div className="employee-detail-section__grid"><div className="detail-row"><span className="detail-label">Candidate</span><span className="detail-value">v{selectedDocument.version_number} · {selectedDocument.file_name}</span></div><div className="detail-row"><span className="detail-label">Approved current</span><span className="detail-value">v{selectedDocument.previous_document.version_number} · {selectedDocument.previous_document.file_name}</span></div>{canExportDocuments && selectedDocument.previous_document.is_downloadable ? <Link className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.previous_document.id}/download`}>Download approved version</Link> : null}</div></details> : null}
             </div>
 
             {selectedDocument.rejection_reason ? <div className="notice"><strong>Latest review note.</strong><span className="muted">{selectedDocument.rejection_reason}</span></div> : null}

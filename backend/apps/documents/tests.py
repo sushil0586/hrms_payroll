@@ -6,15 +6,18 @@ from unittest.mock import patch
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from rest_framework.serializers import ValidationError
 
 from apps.common.api_views import (
+    _get_employee_document_requirement_runtime,
     _get_employee_document_expiry_runtime,
     _send_document_expiry_attention_reminder,
     create_self_service_employee_document,
     save_hr_admin_employee_document,
+    withdraw_self_service_employee_document,
 )
-from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentVerificationLog, EmployeeDocument, EmployeeDocumentStatus, VerificationStatus
-from apps.documents.services import validate_uploaded_document_file
+from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentLifecycleAuditEvent, DocumentLifecycleEventType, DocumentMalwareScanStatus, DocumentReplacementPolicy, DocumentRequirementRule, DocumentVerificationLog, EmployeeDocument, EmployeeDocumentStatus, VerificationStatus
+from apps.documents.services import document_artifact_is_downloadable, validate_uploaded_document_file
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
 from apps.notifications.models import Notification
@@ -191,11 +194,267 @@ class EmployeeDocumentWorkflowTests(TestCase):
         )
         rejected.refresh_from_db()
 
-        self.assertEqual(rejected.status, EmployeeDocumentStatus.REPLACED)
+        self.assertEqual(rejected.status, EmployeeDocumentStatus.ACTIVE)
         self.assertFalse(rejected.reupload_requested)
         self.assertEqual(replacement.previous_document_id, rejected.id)
         self.assertEqual(replacement.version_number, 2)
+        self.assertEqual(replacement.status, EmployeeDocumentStatus.PENDING_REPLACEMENT)
         self.assertEqual(replacement.verification_status, VerificationStatus.PENDING)
+
+    def test_approved_document_remains_active_until_replacement_is_verified(self):
+        current = create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": self.category.id,
+                "title": "Approved PAN",
+                "file": _upload(),
+                "document_number": "ABCDE1234F",
+                "issued_on": None,
+                "expires_on": None,
+            },
+        )
+        save_hr_admin_employee_document(
+            self.hr_employee,
+            {"verification_status": VerificationStatus.VERIFIED},
+            item=current,
+        )
+
+        replacement = create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": self.category.id,
+                "replace_document_id": current.id,
+                "title": "Replacement PAN",
+                "file": _upload(name="replacement.pdf", content=b"%PDF-1.4\nreplacement\n%%EOF"),
+                "document_number": "ABCDE1234F",
+                "issued_on": None,
+                "expires_on": None,
+            },
+        )
+        current.refresh_from_db()
+        self.assertEqual(current.status, EmployeeDocumentStatus.ACTIVE)
+        self.assertEqual(current.verification_status, VerificationStatus.VERIFIED)
+        self.assertEqual(replacement.status, EmployeeDocumentStatus.PENDING_REPLACEMENT)
+
+        save_hr_admin_employee_document(
+            self.hr_employee,
+            {"verification_status": VerificationStatus.VERIFIED},
+            item=replacement,
+        )
+        current.refresh_from_db()
+        replacement.refresh_from_db()
+        self.assertEqual(current.status, EmployeeDocumentStatus.REPLACED)
+        self.assertEqual(replacement.status, EmployeeDocumentStatus.ACTIVE)
+
+    def test_rejected_replacement_preserves_approved_document(self):
+        current = create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": self.category.id,
+                "title": "Approved PAN",
+                "file": _upload(),
+                "document_number": "ABCDE1234F",
+                "issued_on": None,
+                "expires_on": None,
+            },
+        )
+        save_hr_admin_employee_document(
+            self.hr_employee,
+            {"verification_status": VerificationStatus.VERIFIED},
+            item=current,
+        )
+        replacement = create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": self.category.id,
+                "replace_document_id": current.id,
+                "title": "Replacement PAN",
+                "file": _upload(name="replacement.pdf", content=b"%PDF-1.4\nreplacement\n%%EOF"),
+                "document_number": "ABCDE1234F",
+                "issued_on": None,
+                "expires_on": None,
+            },
+        )
+
+        save_hr_admin_employee_document(
+            self.hr_employee,
+            {"verification_status": VerificationStatus.REJECTED, "rejection_reason": "Unreadable."},
+            item=replacement,
+        )
+        current.refresh_from_db()
+        replacement.refresh_from_db()
+        self.assertEqual(current.status, EmployeeDocumentStatus.ACTIVE)
+        self.assertEqual(current.verification_status, VerificationStatus.VERIFIED)
+        self.assertEqual(replacement.status, EmployeeDocumentStatus.ARCHIVED)
+        self.assertEqual(replacement.verification_status, VerificationStatus.REJECTED)
+
+    def test_employee_can_withdraw_pending_replacement_without_changing_approved_document(self):
+        current = create_self_service_employee_document(
+            self.employee,
+            {"category_id": self.category.id, "title": "Approved PAN", "file": _upload(), "document_number": "ABCDE1234F", "issued_on": None, "expires_on": None},
+        )
+        save_hr_admin_employee_document(self.hr_employee, {"verification_status": VerificationStatus.VERIFIED}, item=current)
+        replacement = create_self_service_employee_document(
+            self.employee,
+            {"category_id": self.category.id, "replace_document_id": current.id, "title": "Replacement PAN", "file": _upload(name="replacement.pdf"), "document_number": "ABCDE1234F", "issued_on": None, "expires_on": None},
+        )
+
+        withdrawn = withdraw_self_service_employee_document(self.employee, item=replacement)
+
+        current.refresh_from_db()
+        self.assertEqual(withdrawn.status, EmployeeDocumentStatus.WITHDRAWN)
+        self.assertEqual(current.status, EmployeeDocumentStatus.ACTIVE)
+        self.assertEqual(current.verification_status, VerificationStatus.VERIFIED)
+        self.assertTrue(DocumentLifecycleAuditEvent.objects.filter(employee_document=withdrawn, event_type=DocumentLifecycleEventType.REPLACEMENT_WITHDRAWN, actor_identifier="EMP-200").exists())
+        self.assertTrue(Notification.objects.filter(subject_identifier=str(withdrawn.id), recipient_membership=self.hr_membership, payload__record_status=EmployeeDocumentStatus.WITHDRAWN).exists())
+        repeated = withdraw_self_service_employee_document(self.employee, item=withdrawn)
+        self.assertEqual(repeated.status, EmployeeDocumentStatus.WITHDRAWN)
+        self.assertEqual(DocumentLifecycleAuditEvent.objects.filter(employee_document=withdrawn, event_type=DocumentLifecycleEventType.REPLACEMENT_WITHDRAWN).count(), 1)
+
+    def test_employee_cannot_withdraw_approved_or_other_employee_document(self):
+        document = create_self_service_employee_document(
+            self.employee,
+            {"category_id": self.category.id, "title": "PAN", "file": _upload(), "document_number": "ABCDE1234F", "issued_on": None, "expires_on": None},
+        )
+        with self.assertRaisesMessage(ValidationError, "Only a pending replacement can be withdrawn"):
+            withdraw_self_service_employee_document(self.employee, item=document)
+
+        other_user = User.objects.create_user(username="other-doc-user", email="other@example.com", password="test-pass")
+        other_membership = TenantMembership.objects.create(tenant=self.tenant, user=other_user, status=MembershipStatus.ACTIVE, employee_code="EMP-201")
+        other_employee = Employee.objects.create(tenant=self.tenant, membership=other_membership, employee_code="EMP-201", first_name="Other", employment_status=EmploymentStatus.ACTIVE)
+        document.status = EmployeeDocumentStatus.PENDING_REPLACEMENT
+        document.save(update_fields=["status", "updated_at"])
+        with self.assertRaisesMessage(ValidationError, "Document not found"):
+            withdraw_self_service_employee_document(other_employee, item=document)
+
+    def test_rejection_requires_reason_and_does_not_mutate_document(self):
+        document = create_self_service_employee_document(
+            self.employee,
+            {"category_id": self.category.id, "title": "PAN", "file": _upload(), "document_number": "ABCDE1234F", "issued_on": None, "expires_on": None},
+        )
+        with self.assertRaisesMessage(ValidationError, "A rejection reason is required"):
+            save_hr_admin_employee_document(self.hr_employee, {"verification_status": VerificationStatus.REJECTED}, item=document)
+        document.refresh_from_db()
+        self.assertEqual(document.verification_status, VerificationStatus.PENDING)
+
+    def test_document_lifecycle_events_record_submission_and_review(self):
+        document = create_self_service_employee_document(
+            self.employee,
+            {"category_id": self.category.id, "title": "PAN", "file": _upload(), "document_number": "ABCDE1234F", "issued_on": None, "expires_on": None},
+        )
+        save_hr_admin_employee_document(self.hr_employee, {"verification_status": VerificationStatus.VERIFIED}, item=document)
+        event_types = list(document.lifecycle_events.values_list("event_type", flat=True))
+        self.assertIn(DocumentLifecycleEventType.UPLOADED, event_types)
+        self.assertIn(DocumentLifecycleEventType.VERIFICATION_UPDATED, event_types)
+
+    def test_second_pending_replacement_is_rejected_without_changing_current_document(self):
+        current = create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": self.category.id,
+                "title": "Approved PAN",
+                "file": _upload(),
+                "document_number": "ABCDE1234F",
+                "issued_on": None,
+                "expires_on": None,
+            },
+        )
+        save_hr_admin_employee_document(
+            self.hr_employee,
+            {"verification_status": VerificationStatus.VERIFIED},
+            item=current,
+        )
+        create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": self.category.id,
+                "replace_document_id": current.id,
+                "title": "First replacement",
+                "file": _upload(name="first.pdf", content=b"%PDF-1.4\nfirst\n%%EOF"),
+                "document_number": "ABCDE1234F",
+                "issued_on": None,
+                "expires_on": None,
+            },
+        )
+
+        with self.assertRaisesMessage(ValidationError, "A replacement is already awaiting review"):
+            create_self_service_employee_document(
+                self.employee,
+                {
+                    "category_id": self.category.id,
+                    "replace_document_id": current.id,
+                    "title": "Second replacement",
+                    "file": _upload(name="second.pdf", content=b"%PDF-1.4\nsecond\n%%EOF"),
+                    "document_number": "ABCDE1234F",
+                    "issued_on": None,
+                    "expires_on": None,
+                },
+            )
+
+        current.refresh_from_db()
+        self.assertEqual(current.status, EmployeeDocumentStatus.ACTIVE)
+        self.assertEqual(current.verification_status, VerificationStatus.VERIFIED)
+        requirement = DocumentRequirementRule.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            is_mandatory=True,
+        )
+        runtime = _get_employee_document_requirement_runtime(self.employee)
+        self.assertEqual(len(runtime), 1)
+        self.assertEqual(runtime[0]["rule_id"], str(requirement.id))
+        self.assertEqual(runtime[0]["current_document_id"], current.id)
+        self.assertIsNotNone(runtime[0]["pending_replacement_id"])
+
+    def test_employee_replacement_respects_hr_only_category_policy(self):
+        current = create_self_service_employee_document(
+            self.employee,
+            {
+                "category_id": self.category.id,
+                "title": "PAN",
+                "file": _upload(),
+                "document_number": "ABCDE1234F",
+                "issued_on": None,
+                "expires_on": None,
+            },
+        )
+        self.category.replacement_policy = DocumentReplacementPolicy.HR_ONLY
+        self.category.save(update_fields=["replacement_policy", "updated_at"])
+
+        with self.assertRaisesMessage(ValidationError, "Only HR can replace documents"):
+            create_self_service_employee_document(
+                self.employee,
+                {
+                    "category_id": self.category.id,
+                    "replace_document_id": current.id,
+                    "title": "Replacement PAN",
+                    "file": _upload(name="replacement.pdf", content=b"%PDF-1.4\nreplacement\n%%EOF"),
+                    "document_number": "ABCDE1234F",
+                    "issued_on": None,
+                    "expires_on": None,
+                },
+            )
+
+        current.refresh_from_db()
+        self.assertEqual(current.status, EmployeeDocumentStatus.ACTIVE)
+
+    def test_category_upload_size_limit_is_enforced(self):
+        self.category.max_upload_size_bytes = 12
+        self.category.save(update_fields=["max_upload_size_bytes", "updated_at"])
+
+        with self.assertRaisesMessage(ValidationError, "Uploaded file exceeds the 12 byte limit"):
+            create_self_service_employee_document(
+                self.employee,
+                {
+                    "category_id": self.category.id,
+                    "title": "PAN",
+                    "file": _upload(),
+                    "document_number": "ABCDE1234F",
+                    "issued_on": None,
+                    "expires_on": None,
+                },
+            )
+
+        self.assertFalse(EmployeeDocument.objects.filter(employee=self.employee, category=self.category).exists())
 
     def test_expiry_attention_reminder_notifies_employee_with_runtime_state(self):
         expiring_category = DocumentCategory.objects.create(
@@ -363,3 +622,68 @@ class EmployeeDocumentWorkflowTests(TestCase):
         for name, content_type, content in samples:
             with self.subTest(name=name):
                 validate_uploaded_document_file(_upload(name=name, content=content, content_type=content_type))
+
+    def test_local_signature_scan_marks_clean_artifact_downloadable(self):
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root), patch.dict(
+            "os.environ", {"HRMS_DOCUMENT_MALWARE_SCAN_MODE": "local_signature"}
+        ):
+            document = create_self_service_employee_document(
+                self.employee,
+                {
+                    "category_id": self.category.id,
+                    "title": "Clean PAN",
+                    "file": _upload(),
+                    "document_number": "ABCDE1234F",
+                    "issued_on": None,
+                    "expires_on": None,
+                },
+            )
+
+        self.assertEqual(document.artifact.malware_scan_status, DocumentMalwareScanStatus.CLEAN)
+        self.assertTrue(document_artifact_is_downloadable(document.artifact))
+
+    def test_local_signature_scan_quarantines_detected_artifact(self):
+        infected_content = b"%PDF-1.4\nEICAR-STANDARD-ANTIVIRUS-TEST-FILE\n%%EOF"
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root), patch.dict(
+            "os.environ", {"HRMS_DOCUMENT_MALWARE_SCAN_MODE": "local_signature"}
+        ):
+            document = create_self_service_employee_document(
+                self.employee,
+                {
+                    "category_id": self.category.id,
+                    "title": "Unsafe PAN",
+                    "file": _upload(content=infected_content),
+                    "document_number": "ABCDE1234F",
+                    "issued_on": None,
+                    "expires_on": None,
+                },
+            )
+
+        self.assertEqual(document.artifact.malware_scan_status, DocumentMalwareScanStatus.QUARANTINED)
+        self.assertFalse(document_artifact_is_downloadable(document.artifact))
+        self.assertNotIn("EICAR", str(document.artifact.metadata))
+
+    def test_required_external_scanner_fails_closed(self):
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root), patch.dict(
+            "os.environ", {"HRMS_DOCUMENT_MALWARE_SCAN_MODE": "required_external"}
+        ):
+            document = create_self_service_employee_document(
+                self.employee,
+                {
+                    "category_id": self.category.id,
+                    "title": "Held PAN",
+                    "file": _upload(),
+                    "document_number": "ABCDE1234F",
+                    "issued_on": None,
+                    "expires_on": None,
+                },
+            )
+
+        self.assertEqual(document.artifact.malware_scan_status, DocumentMalwareScanStatus.ERROR)
+        self.assertFalse(document_artifact_is_downloadable(document.artifact))
+        with self.assertRaisesMessage(ValidationError, "malware scanning"):
+            save_hr_admin_employee_document(
+                self.hr_employee,
+                {"verification_status": VerificationStatus.VERIFIED},
+                item=document,
+            )

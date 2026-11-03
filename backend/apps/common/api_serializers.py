@@ -4972,6 +4972,9 @@ class HrAdminDocumentCategorySerializer(serializers.Serializer):
     requires_verification = serializers.BooleanField()
     allow_employee_upload = serializers.BooleanField()
     allow_multiple_files = serializers.BooleanField()
+    replacement_policy = serializers.CharField()
+    accepted_mime_types = serializers.ListField(child=serializers.CharField())
+    max_upload_size_bytes = serializers.IntegerField(allow_null=True)
     visibility_rules = serializers.JSONField()
 
 
@@ -4986,7 +4989,17 @@ class HrAdminDocumentCategoryWriteSerializer(serializers.Serializer):
     requires_verification = serializers.BooleanField(required=False, default=True)
     allow_employee_upload = serializers.BooleanField(required=False, default=True)
     allow_multiple_files = serializers.BooleanField(required=False, default=False)
+    replacement_policy = serializers.ChoiceField(choices=["allowed", "hr_only", "prohibited"], required=False, default="allowed")
+    accepted_mime_types = serializers.ListField(child=serializers.CharField(max_length=120), required=False, allow_empty=True)
+    max_upload_size_bytes = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     visibility_rules = serializers.JSONField(required=False)
+
+    def validate_accepted_mime_types(self, value):
+        normalized = sorted({item.strip().lower() for item in value if item.strip()})
+        for item in normalized:
+            if "/" not in item or any(character.isspace() for character in item):
+                raise serializers.ValidationError("Enter valid MIME types such as application/pdf.")
+        return normalized
 
 
 class HrAdminDocumentRequirementRuleSerializer(serializers.Serializer):
@@ -5036,7 +5049,12 @@ class HrAdminEmployeeDocumentSerializer(serializers.Serializer):
     category_name = serializers.CharField()
     artifact_id = serializers.UUIDField(allow_null=True)
     is_downloadable = serializers.BooleanField()
+    malware_scan_status = serializers.CharField()
+    malware_scanner_ref = serializers.CharField(allow_blank=True)
+    malware_scanned_at = serializers.DateTimeField(allow_null=True)
+    quarantine_reason = serializers.CharField(allow_blank=True)
     previous_document_id = serializers.UUIDField(allow_null=True)
+    previous_document = serializers.JSONField(allow_null=True)
     replaced_by_document_id = serializers.UUIDField(allow_null=True)
     version_number = serializers.IntegerField()
     title = serializers.CharField()
@@ -5066,6 +5084,7 @@ class HrAdminEmployeeDocumentSerializer(serializers.Serializer):
     reupload_requested_by_identifier = serializers.CharField(allow_blank=True)
     version_history = serializers.JSONField()
     review_history = serializers.JSONField()
+    lifecycle_events = serializers.JSONField()
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
 
@@ -5200,6 +5219,9 @@ class MeDocumentRequirementItemSerializer(serializers.Serializer):
     allow_employee_upload = serializers.BooleanField()
     requires_verification = serializers.BooleanField()
     requires_expiry_date = serializers.BooleanField()
+    accepted_mime_types = serializers.ListField(child=serializers.CharField())
+    max_upload_size_bytes = serializers.IntegerField()
+    replacement_policy = serializers.CharField()
     current_document_id = serializers.UUIDField(allow_null=True)
     current_document_title = serializers.CharField(allow_blank=True)
     current_verification_status = serializers.CharField(allow_blank=True)
@@ -5213,6 +5235,9 @@ class MeDocumentRequirementItemSerializer(serializers.Serializer):
     current_review_owner_label = serializers.CharField(allow_blank=True)
     current_review_status_label = serializers.CharField()
     current_uploaded_at = serializers.DateTimeField(allow_null=True)
+    pending_replacement_id = serializers.UUIDField(allow_null=True)
+    pending_replacement_title = serializers.CharField(allow_blank=True)
+    pending_replacement_uploaded_at = serializers.DateTimeField(allow_null=True)
 
 
 class MeDocumentSummarySerializer(serializers.Serializer):

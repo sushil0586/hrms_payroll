@@ -43,8 +43,22 @@ class LetterType(models.TextChoices):
 
 class EmployeeDocumentStatus(models.TextChoices):
     ACTIVE = "active", "Active"
+    PENDING_REPLACEMENT = "pending_replacement", "Pending replacement"
     ARCHIVED = "archived", "Archived"
     REPLACED = "replaced", "Replaced"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+class GeneratedLetterStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    ARCHIVED = "archived", "Archived"
+    REPLACED = "replaced", "Replaced"
+
+
+class DocumentReplacementPolicy(models.TextChoices):
+    ALLOWED = "allowed", "Employee and HR"
+    HR_ONLY = "hr_only", "HR only"
+    PROHIBITED = "prohibited", "Not allowed"
 
 
 class DocumentArtifactSourceKind(models.TextChoices):
@@ -56,6 +70,14 @@ class DocumentStorageProvider(models.TextChoices):
     LOCAL = "local", "Local"
     S3_COMPATIBLE = "s3_compatible", "S3 Compatible"
     OTHER = "other", "Other"
+
+
+class DocumentMalwareScanStatus(models.TextChoices):
+    NOT_REQUIRED = "not_required", "Not required"
+    PENDING = "pending", "Pending"
+    CLEAN = "clean", "Clean"
+    QUARANTINED = "quarantined", "Quarantined"
+    ERROR = "error", "Scanner error"
 
 
 def document_artifact_upload_to(instance: "DocumentArtifact", filename: str) -> str:
@@ -84,6 +106,13 @@ class DocumentCategory(UUIDPrimaryKeyModel, TimeStampedModel):
     requires_verification = models.BooleanField(default=True)
     allow_employee_upload = models.BooleanField(default=True)
     allow_multiple_files = models.BooleanField(default=False)
+    replacement_policy = models.CharField(
+        max_length=20,
+        choices=DocumentReplacementPolicy.choices,
+        default=DocumentReplacementPolicy.ALLOWED,
+    )
+    accepted_mime_types = models.JSONField(default=list, blank=True)
+    max_upload_size_bytes = models.PositiveBigIntegerField(blank=True, null=True)
     visibility_rules = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -181,6 +210,14 @@ class DocumentArtifact(UUIDPrimaryKeyModel, TimeStampedModel):
     mime_type = models.CharField(max_length=120, blank=True)
     file_size_bytes = models.PositiveBigIntegerField(default=0)
     checksum_sha256 = models.CharField(max_length=64, blank=True)
+    malware_scan_status = models.CharField(
+        max_length=20,
+        choices=DocumentMalwareScanStatus.choices,
+        default=DocumentMalwareScanStatus.PENDING,
+    )
+    malware_scanner_ref = models.CharField(max_length=180, blank=True)
+    malware_scanned_at = models.DateTimeField(blank=True, null=True)
+    quarantine_reason = models.CharField(max_length=180, blank=True)
     created_by_identifier = models.CharField(max_length=120, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
@@ -188,6 +225,9 @@ class DocumentArtifact(UUIDPrimaryKeyModel, TimeStampedModel):
         ordering = ["-created_at"]
         verbose_name = "Document Artifact"
         verbose_name_plural = "Document Artifacts"
+        indexes = [
+            models.Index(fields=["tenant", "malware_scan_status", "created_at"], name="doc_artifact_scan_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.tenant.code}:{self.original_filename}"
@@ -250,6 +290,13 @@ class EmployeeDocument(UUIDPrimaryKeyModel, TimeStampedModel):
         ordering = ["-created_at"]
         verbose_name = "Employee Document"
         verbose_name_plural = "Employee Documents"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "previous_document"],
+                condition=models.Q(status=EmployeeDocumentStatus.PENDING_REPLACEMENT, verification_status=VerificationStatus.PENDING),
+                name="unique_pending_document_replacement",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.employee} - {self.title}"
@@ -282,6 +329,42 @@ class DocumentVerificationLog(UUIDPrimaryKeyModel, TimeStampedModel):
         return f"{self.employee_document} - {self.new_status}"
 
 
+class DocumentLifecycleEventType(models.TextChoices):
+    UPLOADED = "uploaded", "Uploaded"
+    REPLACEMENT_SUBMITTED = "replacement_submitted", "Replacement submitted"
+    REPLACEMENT_APPROVED = "replacement_approved", "Replacement approved"
+    REPLACEMENT_REJECTED = "replacement_rejected", "Replacement rejected"
+    REPLACEMENT_WITHDRAWN = "replacement_withdrawn", "Replacement withdrawn"
+    VERIFICATION_UPDATED = "verification_updated", "Verification updated"
+
+
+class DocumentLifecycleAuditEvent(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Immutable business-transition evidence for an employee document."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="document_lifecycle_audit_events")
+    employee_document = models.ForeignKey(
+        EmployeeDocument,
+        on_delete=models.CASCADE,
+        related_name="lifecycle_events",
+    )
+    event_type = models.CharField(max_length=40, choices=DocumentLifecycleEventType.choices)
+    actor_identifier = models.CharField(max_length=120, blank=True)
+    previous_record_status = models.CharField(max_length=20, choices=EmployeeDocumentStatus.choices, blank=True)
+    new_record_status = models.CharField(max_length=20, choices=EmployeeDocumentStatus.choices)
+    previous_verification_status = models.CharField(max_length=20, choices=VerificationStatus.choices, blank=True)
+    new_verification_status = models.CharField(max_length=20, choices=VerificationStatus.choices)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "employee_document", "created_at"], name="doc_lifecycle_lookup_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.employee_document} - {self.event_type}"
+
+
 class GeneratedLetter(UUIDPrimaryKeyModel, TimeStampedModel):
     """Generated HR letter or downloadable record."""
 
@@ -305,7 +388,7 @@ class GeneratedLetter(UUIDPrimaryKeyModel, TimeStampedModel):
     letter_type = models.CharField(max_length=30, choices=LetterType.choices, default=LetterType.OTHER)
     title = models.CharField(max_length=255)
     template_code = models.CharField(max_length=80, blank=True)
-    status = models.CharField(max_length=20, choices=EmployeeDocumentStatus.choices, default=EmployeeDocumentStatus.ACTIVE)
+    status = models.CharField(max_length=20, choices=GeneratedLetterStatus.choices, default=GeneratedLetterStatus.ACTIVE)
     issue_date = models.DateField(blank=True, null=True)
     file_name = models.CharField(max_length=255, blank=True)
     file_url = models.URLField(blank=True)

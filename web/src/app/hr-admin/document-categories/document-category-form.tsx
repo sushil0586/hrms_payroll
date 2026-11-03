@@ -18,7 +18,7 @@ type Props = {
   onCancel?: ()=>void;
 };
 
-type DocumentCategoryField = "code" | "name" | "visibility_rules";
+type DocumentCategoryField = "code" | "name" | "accepted_mime_types" | "max_upload_size_mb" | "visibility_rules";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save document category.";
@@ -35,6 +35,7 @@ function categoryOutcomeLabel(formValue: HrAdminDocumentCategoryWriteInput) {
   outcomes.push(formValue.requires_verification ? "HR verification required" : "Auto-accepted by policy");
   if (formValue.requires_expiry_date) outcomes.push("Expiry date required");
   if (formValue.allow_multiple_files) outcomes.push("Multiple files allowed");
+  outcomes.push(formValue.replacement_policy === "allowed" ? "Employee replacement allowed" : formValue.replacement_policy === "hr_only" ? "HR-only replacement" : "Replacement prohibited");
   return outcomes.join(" • ");
 }
 
@@ -66,6 +67,15 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId, comp
       name: requireText(formValue.name, "Enter the document category name."),
     };
 
+    const acceptedMimeTypes = [...new Set(formValue.accepted_mime_types.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean))];
+    if (acceptedMimeTypes.some((value) => !value.includes("/") || /\s/.test(value))) {
+      nextErrors.accepted_mime_types = "Enter comma-separated MIME types such as application/pdf and image/png.";
+    }
+    const maxUploadSizeMb = formValue.max_upload_size_mb.trim() ? Number(formValue.max_upload_size_mb) : null;
+    if (maxUploadSizeMb !== null && (!Number.isFinite(maxUploadSizeMb) || maxUploadSizeMb <= 0)) {
+      nextErrors.max_upload_size_mb = "Maximum upload size must be greater than zero.";
+    }
+
     let parsedVisibilityRules: unknown = {};
     try {
       parsedVisibilityRules = formValue.visibility_rules.trim() ? JSON.parse(formValue.visibility_rules) : {};
@@ -85,7 +95,13 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId, comp
       response = await fetch(mode === "create" ? "/api/hr-admin/document-categories" : `/api/hr-admin/document-categories/${itemId}`, {
         method: mode === "create" ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formValue, visibility_rules: parsedVisibilityRules }),
+        body: JSON.stringify({
+          ...formValue,
+          accepted_mime_types: acceptedMimeTypes,
+          max_upload_size_bytes: maxUploadSizeMb === null ? null : Math.round(maxUploadSizeMb * 1024 * 1024),
+          visibility_rules: parsedVisibilityRules,
+          max_upload_size_mb: undefined,
+        }),
       });
     } catch {
       setError("Save outcome could not be confirmed. Check the list before retrying; your draft is retained.");
@@ -120,7 +136,10 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId, comp
             <div className="form-field"><label className="muted" htmlFor="document-categories-field-2">Name</label><input maxLength={255} id="document-categories-field-2" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? "document-categories-field-2-error" : undefined} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span id="document-categories-field-2-error" className="field-error-text">{fieldErrors.name}</span> : null}</div>
             <div className="form-field"><label className="muted" htmlFor="document-categories-field-3">Category type</label><select id="document-categories-field-3" className="input-control" value={formValue.category_type} onChange={(e) => update("category_type", e.target.value)}>{options.document_category_types.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
             <div className="form-field"><label className="muted" htmlFor="document-categories-field-4">Description</label><input id="document-categories-field-4" className="input-control" value={formValue.description} onChange={(e) => update("description", e.target.value)} /></div>
-            <div className="form-field form-field--full"><label className="muted" htmlFor="document-categories-field-5">Visibility rules JSON</label><textarea id="document-categories-field-5" aria-invalid={Boolean(fieldErrors.visibility_rules)} aria-describedby={fieldErrors.visibility_rules ? "document-categories-field-5-error" : undefined} className="input-control" rows={5} value={formValue.visibility_rules} onChange={(e) => update("visibility_rules", e.target.value)} />{fieldErrors.visibility_rules ? <span id="document-categories-field-5-error" className="field-error-text">{fieldErrors.visibility_rules}</span> : null}</div>
+            <div className="form-field"><label className="muted" htmlFor="document-categories-field-5">Accepted file types</label><input id="document-categories-field-5" aria-invalid={Boolean(fieldErrors.accepted_mime_types)} aria-describedby={fieldErrors.accepted_mime_types ? "document-categories-field-5-error" : "document-categories-field-5-help"} className="input-control" placeholder="application/pdf, image/png" value={formValue.accepted_mime_types} onChange={(e) => update("accepted_mime_types", e.target.value)} /><span className="field-help-text" id="document-categories-field-5-help">Comma-separated MIME types. Leave blank to use the platform file checks.</span>{fieldErrors.accepted_mime_types ? <span id="document-categories-field-5-error" className="field-error-text">{fieldErrors.accepted_mime_types}</span> : null}</div>
+            <div className="form-field"><label className="muted" htmlFor="document-categories-field-6">Maximum upload size (MB)</label><input id="document-categories-field-6" aria-invalid={Boolean(fieldErrors.max_upload_size_mb)} aria-describedby={fieldErrors.max_upload_size_mb ? "document-categories-field-6-error" : "document-categories-field-6-help"} className="input-control" min="0.1" step="0.1" type="number" value={formValue.max_upload_size_mb} onChange={(e) => update("max_upload_size_mb", e.target.value)} /><span className="field-help-text" id="document-categories-field-6-help">The platform-wide upload limit remains the upper ceiling.</span>{fieldErrors.max_upload_size_mb ? <span id="document-categories-field-6-error" className="field-error-text">{fieldErrors.max_upload_size_mb}</span> : null}</div>
+            <div className="form-field"><label className="muted" htmlFor="document-categories-field-7">Replacement policy</label><select id="document-categories-field-7" className="input-control" value={formValue.replacement_policy} onChange={(e) => update("replacement_policy", e.target.value as HrAdminDocumentCategoryWriteInput["replacement_policy"])}><option value="allowed">Employee and HR</option><option value="hr_only">HR only</option><option value="prohibited">Not allowed</option></select><span className="field-help-text">Controls who may replace an existing active document.</span></div>
+            <details className="form-field form-field--full"><summary>Advanced visibility rules</summary><label className="muted" htmlFor="document-categories-field-8">Visibility rules JSON</label><textarea id="document-categories-field-8" aria-invalid={Boolean(fieldErrors.visibility_rules)} aria-describedby={fieldErrors.visibility_rules ? "document-categories-field-8-error" : undefined} className="input-control" rows={5} value={formValue.visibility_rules} onChange={(e) => update("visibility_rules", e.target.value)} />{fieldErrors.visibility_rules ? <span id="document-categories-field-8-error" className="field-error-text">{fieldErrors.visibility_rules}</span> : null}</details>
           </div>
           <div className="document-decision-effect">
             <strong>Category impact</strong>

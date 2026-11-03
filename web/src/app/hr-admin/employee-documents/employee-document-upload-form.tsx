@@ -93,7 +93,9 @@ export function EmployeeDocumentUploadForm({ employees, options, categories, onC
   const isDirty = !receipt && documentUploadSnapshot(formValue) !== documentUploadSnapshot(INITIAL_VALUE);
   const guard = useDocumentUploadDraft(isDirty, isSubmitting);
   const category = categories.find((item) => item.id === formValue.category_id);
-  const acceptedMimes = category && typeof category.visibility_rules === "object" && category.visibility_rules !== null && Array.isArray(category.visibility_rules.accepted_mime_types) ? category.visibility_rules.accepted_mime_types.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
+  const legacyAcceptedMimes = category && typeof category.visibility_rules === "object" && category.visibility_rules !== null && Array.isArray(category.visibility_rules.accepted_mime_types) ? category.visibility_rules.accepted_mime_types.filter((value): value is string => typeof value === "string" && Boolean(value.trim())) : [];
+  const acceptedMimes = category?.accepted_mime_types.length ? category.accepted_mime_types : legacyAcceptedMimes;
+  const effectiveMaxUploadBytes = category?.max_upload_size_bytes ? Math.min(category.max_upload_size_bytes, options.max_upload_size_bytes) : options.max_upload_size_bytes;
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   useEffect(() => { if (receipt) receiptRef.current?.focus(); }, [receipt]);
 
@@ -126,8 +128,8 @@ export function EmployeeDocumentUploadForm({ employees, options, categories, onC
       expires_on: (category?.requires_expiry_date ? requireValue(formValue.expires_on, "Enter the expiry date for this category.") : undefined) ?? validateDateOrder(formValue.issued_on, formValue.expires_on, "Expiry date cannot be earlier than issued on date."),
       file: validateUploadFile(formValue.file, {
         blockedTypeMessage: "Executable or script files are not allowed. Upload a PDF, image, or document file.",
-        maxSizeBytes: options.max_upload_size_bytes,
-        maxSizeMessage: `File is too large. Maximum upload size is ${formatFileSize(options.max_upload_size_bytes)}.`,
+        maxSizeBytes: effectiveMaxUploadBytes,
+        maxSizeMessage: `File is too large. Maximum upload size is ${formatFileSize(effectiveMaxUploadBytes)}.`,
         requiredMessage: "Attach the employee document file.",
       }),
     };

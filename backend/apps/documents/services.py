@@ -7,8 +7,9 @@ import os
 from pathlib import Path
 
 from django.core.files.uploadedfile import UploadedFile
+from django.utils import timezone
 
-from apps.documents.models import DocumentArtifact, DocumentArtifactSourceKind, DocumentStorageProvider
+from apps.documents.models import DocumentArtifact, DocumentArtifactSourceKind, DocumentMalwareScanStatus, DocumentStorageProvider
 from apps.employees.models import Employee
 from apps.tenants.models import Tenant
 
@@ -33,6 +34,62 @@ DOCUMENT_SIGNATURES = {
     ".doc": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
     ".docx": (b"PK\x03\x04",),
 }
+LOCAL_MALWARE_SIGNATURES = (b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE",)
+
+
+def get_document_malware_scan_mode() -> str:
+    mode = os.getenv("HRMS_DOCUMENT_MALWARE_SCAN_MODE", "disabled").strip().lower()
+    return mode if mode in {"disabled", "local_signature", "required_external"} else "required_external"
+
+
+def document_artifact_is_downloadable(artifact: DocumentArtifact | None) -> bool:
+    if not artifact:
+        return False
+    return artifact.malware_scan_status in {
+        DocumentMalwareScanStatus.NOT_REQUIRED,
+        DocumentMalwareScanStatus.CLEAN,
+    }
+
+
+def scan_document_artifact(artifact: DocumentArtifact) -> DocumentArtifact:
+    mode = get_document_malware_scan_mode()
+    if mode == "disabled":
+        artifact.malware_scan_status = DocumentMalwareScanStatus.NOT_REQUIRED
+        artifact.malware_scanner_ref = "disabled-by-local-policy"
+        artifact.malware_scanned_at = timezone.now()
+        artifact.quarantine_reason = ""
+    elif mode == "required_external":
+        artifact.malware_scan_status = DocumentMalwareScanStatus.ERROR
+        artifact.malware_scanner_ref = os.getenv("HRMS_DOCUMENT_MALWARE_SCANNER_REF", "").strip()
+        artifact.malware_scanned_at = timezone.now()
+        artifact.quarantine_reason = "Required malware scanner is unavailable."
+    else:
+        artifact.malware_scanner_ref = "local-signature-v1"
+        artifact.malware_scanned_at = timezone.now()
+        try:
+            with artifact.stored_file.open("rb") as stored_file:
+                content = stored_file.read()
+                infected = any(signature in content for signature in LOCAL_MALWARE_SIGNATURES)
+        except Exception:
+            artifact.malware_scan_status = DocumentMalwareScanStatus.ERROR
+            artifact.quarantine_reason = "Stored object could not be scanned."
+        else:
+            artifact.malware_scan_status = (
+                DocumentMalwareScanStatus.QUARANTINED if infected else DocumentMalwareScanStatus.CLEAN
+            )
+            artifact.quarantine_reason = "Malware test signature detected." if infected else ""
+    metadata = dict(artifact.metadata or {})
+    metadata["malware_scan"] = {
+        "status": artifact.malware_scan_status,
+        "scanner_ref": artifact.malware_scanner_ref,
+        "scanned_at": artifact.malware_scanned_at.isoformat() if artifact.malware_scanned_at else "",
+    }
+    artifact.metadata = metadata
+    artifact.save(update_fields=[
+        "malware_scan_status", "malware_scanner_ref", "malware_scanned_at",
+        "quarantine_reason", "metadata", "updated_at",
+    ])
+    return artifact
 
 
 def get_document_upload_max_bytes() -> int:
@@ -53,8 +110,13 @@ def get_document_storage_provider() -> str:
     return DocumentStorageProvider.OTHER if configured else DocumentStorageProvider.LOCAL
 
 
-def validate_uploaded_document_file(uploaded_file: UploadedFile, *, accepted_mime_types: list[str] | None = None) -> None:
-    max_upload_bytes = get_document_upload_max_bytes()
+def validate_uploaded_document_file(
+    uploaded_file: UploadedFile,
+    *,
+    accepted_mime_types: list[str] | None = None,
+    max_upload_bytes: int | None = None,
+) -> None:
+    max_upload_bytes = max_upload_bytes or get_document_upload_max_bytes()
     file_size = int(getattr(uploaded_file, "size", 0) or 0)
     if file_size <= 0:
         raise ValueError("Uploaded file is empty.")
@@ -115,6 +177,7 @@ def store_document_artifact(
         artifact.stored_file.save(artifact.original_filename, uploaded_file, save=False)
         artifact.storage_key = artifact.stored_file.name
         artifact.save()
+        scan_document_artifact(artifact)
     except Exception:
         if artifact.stored_file.name:
             artifact.stored_file.storage.delete(artifact.stored_file.name)

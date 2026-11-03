@@ -157,10 +157,13 @@ function validateUploadForm(
   errors.title = requireText(formValue.title, "Enter a clear document title.");
   errors.file = validateUploadFile(formValue.file, {
     blockedTypeMessage: "Executable or script files are not allowed. Upload a PDF, image, or document file.",
-    maxSizeBytes: maxUploadSizeBytes,
-    maxSizeMessage: `File is too large. Maximum upload size is ${formatFileSize(maxUploadSizeBytes)}.`,
+    maxSizeBytes: selectedRequirement?.max_upload_size_bytes ?? maxUploadSizeBytes,
+    maxSizeMessage: `File is too large. Maximum upload size is ${formatFileSize(selectedRequirement?.max_upload_size_bytes ?? maxUploadSizeBytes)}.`,
     requiredMessage: "Attach the file HR needs.",
   });
+  if (formValue.file && selectedRequirement?.accepted_mime_types?.length && !selectedRequirement.accepted_mime_types.includes(formValue.file.type.toLowerCase())) {
+    errors.file = `This category accepts: ${selectedRequirement.accepted_mime_types.join(", ")}.`;
+  }
   errors.expires_on =
     (selectedRequirement?.requires_expiry_date ? requireValue(formValue.expires_on, "Enter the expiry date for this document category.") : undefined) ??
     validateDateOrder(formValue.issued_on, formValue.expires_on, "Expiry date cannot be earlier than issued on date.") ??
@@ -218,6 +221,8 @@ function requirementTone(item: EssDocumentRequirementItem) {
 }
 
 function documentTone(item: HrAdminEmployeeDocument) {
+  if (item.malware_scan_status === "quarantined" || item.malware_scan_status === "error") return "danger";
+  if (item.malware_scan_status === "pending") return "warning";
   if (item.reupload_requested || item.verification_status === "rejected") return "danger";
   if (item.verification_status === "verified") return "success";
   if (item.expiry_label?.toLowerCase().includes("expir")) return "warning";
@@ -225,6 +230,9 @@ function documentTone(item: HrAdminEmployeeDocument) {
 }
 
 function documentReviewLabel(item: HrAdminEmployeeDocument) {
+  if (item.malware_scan_status === "quarantined") return "Quarantined";
+  if (item.malware_scan_status === "error") return "Security scan unavailable";
+  if (item.malware_scan_status === "pending") return "Security scan pending";
   if (item.reupload_requested || item.verification_status === "rejected") return "Returned";
   if (item.verification_status === "verified") return "Verified";
   if (item.verification_status === "expired") return "Expired";
@@ -232,7 +240,7 @@ function documentReviewLabel(item: HrAdminEmployeeDocument) {
   return item.verification_status.replaceAll("_", " ");
 }
 
-function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument; onClose: () => void }) {
+function DocumentDetailModal({ item, onClose, onWithdraw }: { item: HrAdminEmployeeDocument; onClose: () => void; onWithdraw: (item: HrAdminEmployeeDocument) => void }) {
   return (
     <HrAdminActionModal
       className="accerio-dialog"
@@ -242,6 +250,7 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
       eyebrow="Document detail"
       footer={(
         <>
+          {item.status === "pending_replacement" && item.verification_status === "pending" ? <button className="button button--danger" onClick={() => onWithdraw(item)} type="button">Withdraw replacement</button> : null}
           {item.is_downloadable ? <AsyncDownloadButton href={`/api/me/employee-documents/${item.id}/download`} fileName={item.file_name || "employee-document"}>Download file</AsyncDownloadButton> : null}
           <button className="button button--primary" onClick={onClose} type="button">Close</button>
         </>
@@ -258,10 +267,10 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
             </div>
             <WorkspaceStatusBadge tone={documentTone(item)}>{documentReviewLabel(item)}</WorkspaceStatusBadge>
           </div>
-          <WorkspaceInformation fields={[["Version", `v${item.version_number}`], ["Document number", item.document_number || "Not set"], ["File name", item.file_name || "Not available"], ["File size", formatFileSize(item.file_size_bytes)], ["Issued on", formatDate(item.issued_on)], ["Expires on", item.expires_on || "No expiry"], ["Expiry state", item.expiry_label], ["Review owner", item.review_owner_label || "Not assigned"], ["Review status", item.review_status_label || item.verification_status]]} />
+          <WorkspaceInformation fields={[["Version", `v${item.version_number}`], ["Document number", item.document_number || "Not set"], ["File name", item.file_name || "Not available"], ["File size", formatFileSize(item.file_size_bytes)], ["Security scan", item.malware_scan_status.replaceAll("_", " ")], ["Issued on", formatDate(item.issued_on)], ["Expires on", item.expires_on || "No expiry"], ["Expiry state", item.expiry_label], ["Review owner", item.review_owner_label || "Not assigned"], ["Review status", item.review_status_label || item.verification_status]]} />
         </section>
 
-        {!item.is_downloadable ? <p className="notice">No stored file is available for this record.</p> : null}
+        {!item.is_downloadable ? <p className="notice" role="alert">{item.malware_scan_status === "quarantined" ? "This file is quarantined and cannot be opened." : item.malware_scan_status === "pending" || item.malware_scan_status === "error" ? "This file is held until its security scan completes successfully." : "No stored file is available for this record."}</p> : null}
         <details className="ess-document-versions"><summary tabIndex={0}>Category file history ({item.version_history.length})</summary>
           <ul>{item.version_history.map((version) => <li key={version.id}>v{version.version_number} · {version.title} · {version.status}</li>)}</ul>
         </details>
@@ -327,7 +336,11 @@ function UploadDocumentModal({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   selectedRequirement: EssDocumentRequirementItem | undefined;
 }) {
-  const canSubmit = Boolean(formValue.category_id && formValue.title.trim() && formValue.file && !isSubmitting);
+  const replacementUnavailable = Boolean(
+    selectedRequirement?.current_document_id &&
+      (selectedRequirement.pending_replacement_id || selectedRequirement.replacement_policy !== "allowed"),
+  );
+  const canSubmit = Boolean(formValue.category_id && formValue.title.trim() && formValue.file && !isSubmitting && !replacementUnavailable);
   const formId = "ess-document-upload-form";
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (feedback?.tone === "error") errorRef.current?.focus(); }, [feedback]);
@@ -352,7 +365,7 @@ function UploadDocumentModal({
       )}
       labelledBy="ess-document-upload-title"
       onClose={onClose}
-      title={selectedRequirement?.current_document_id && !selectedRequirement.is_compliant ? "Replace document" : "Upload document"}
+      title={selectedRequirement?.current_document_id ? "Replace document" : "Upload document"}
     >
 
         {selectedRequirement ? (
@@ -365,7 +378,8 @@ function UploadDocumentModal({
           </div>
         ) : null}
 
-        {selectedRequirement?.current_document_id && !selectedRequirement.is_compliant ? <p className="section-copy">This creates a new version. The previous record is retained, and the new file follows the category review policy.</p> : null}
+        {selectedRequirement?.current_document_id ? <p className="section-copy">This creates a new version. The current approved file remains authoritative until HR approves the replacement.</p> : null}
+        {replacementUnavailable ? <div className="notice notice--warning" role="status"><strong>Employee replacement unavailable.</strong><span>{selectedRequirement?.pending_replacement_id ? "A replacement is already awaiting HR review." : selectedRequirement?.replacement_policy === "hr_only" ? "This category can only be replaced by HR." : "Replacement is disabled for this category."}</span></div> : null}
         <form className="ess-document-modal-form" id={formId} noValidate onSubmit={onSubmit}>
           <div className="form-field">
             <label className="muted" htmlFor="ess-upload-1">Category <strong aria-hidden="true">*</strong></label>
@@ -432,6 +446,7 @@ function UploadDocumentModal({
           <div className="form-field form-field--full">
             <label className="muted" htmlFor="ess-upload-6">File <strong aria-hidden="true">*</strong></label>
             <input id="ess-upload-6"
+              accept={selectedRequirement?.accepted_mime_types?.length ? selectedRequirement.accepted_mime_types.join(",") : undefined}
               aria-label="File"
               aria-invalid={Boolean(fieldErrors.file)} aria-describedby={fieldErrors.file ? "ess-upload-6-error" : undefined}
               className="input-control"
@@ -612,6 +627,8 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
   const receiptRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (pageFeedback?.tone === "success") receiptRef.current?.focus(); }, [pageFeedback]);
   const [selectedDocument, setSelectedDocument] = useState<HrAdminEmployeeDocument | null>(null);
+  const [withdrawDocument, setWithdrawDocument] = useState<HrAdminEmployeeDocument | null>(null);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [selectedRequirementDetail, setSelectedRequirementDetail] = useState<EssDocumentRequirementItem | null>(null);
   const selectedRequirement = centerData.requirement_items.find((item) => item.category_id === formValue.category_id);
   const reuploadItems = centerData.requirement_items.filter((item) => item.current_rejection_reason && !item.is_compliant);
@@ -639,7 +656,21 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
           ) : null}
 
           {selectedDocument ? createPortal(
-            <DocumentDetailModal item={selectedDocument} onClose={() => setSelectedDocument(null)} />,
+            <DocumentDetailModal item={selectedDocument} onClose={() => setSelectedDocument(null)} onWithdraw={(item) => { setSelectedDocument(null); setWithdrawDocument(item); }} />,
+            document.body,
+          ) : null}
+
+          {withdrawDocument ? createPortal(
+            <HrAdminActionModal
+              className="accerio-dialog accerio-dialog--compact"
+              closeHref="/ess/documents"
+              description="The approved document remains active. Only this pending replacement will be withdrawn."
+              eyebrow="Confirm withdrawal"
+              footer={<><button className="button button--secondary" disabled={isWithdrawing} onClick={() => setWithdrawDocument(null)} type="button">Keep replacement</button><button className="button button--danger" disabled={isWithdrawing} onClick={handleWithdrawReplacement} type="button">{isWithdrawing ? "Withdrawing…" : "Withdraw replacement"}</button></>}
+              labelledBy="withdraw-document-title"
+              onClose={() => { if (!isWithdrawing) setWithdrawDocument(null); }}
+              title="Withdraw pending replacement?"
+            ><p>This removes the candidate from HR review and records an audit event. The previously approved file is not changed.</p></HrAdminActionModal>,
             document.body,
           ) : null}
 
@@ -671,6 +702,26 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
     setFormValue(initial);
     setUploadBaseline(documentUploadSnapshot(initial));
     setIsUploadOpen(true);
+  }
+
+  async function handleWithdrawReplacement() {
+    if (!withdrawDocument || isWithdrawing) return;
+    setIsWithdrawing(true);
+    try {
+      const result = await fetch(`/api/me/employee-documents/${withdrawDocument.id}/withdraw`, { method: "POST" });
+      const payload = await result.json().catch(() => ({}));
+      if (!result.ok) throw new Error(String(payload.detail || "The replacement could not be withdrawn."));
+      setWithdrawDocument(null);
+      setSelectedDocument(null);
+      const message = "The pending replacement was withdrawn. Your approved document remains active.";
+      setPageFeedback({ tone: "success", message });
+      setToast({ title: "Replacement withdrawn.", message, tone: "success" });
+      await loadDocumentCenter(appliedFilters, "none");
+    } catch (error) {
+      setToast({ title: "Withdrawal failed.", message: error instanceof Error ? error.message : "The replacement could not be withdrawn.", tone: "error" });
+    } finally {
+      setIsWithdrawing(false);
+    }
   }
 
   function draftFilters(page = 1): DocumentCenterFilters {
@@ -718,7 +769,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
 
     const body = new FormData();
     body.set("category_id", formValue.category_id);
-    if (selectedRequirement?.current_document_id && !selectedRequirement.is_compliant) {
+    if (selectedRequirement?.current_document_id) {
       body.set("replace_document_id", selectedRequirement.current_document_id);
     }
     body.set("title", formValue.title);
@@ -834,7 +885,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
                       </td>
                       <td>
                         <WorkspaceStatusBadge tone={requirementTone(item)}>{getRequirementStatus(item)}</WorkspaceStatusBadge>
-                        <span className="workspace-table__secondary">{!item.allow_employee_upload && !item.current_document_id ? "HR upload required" : item.current_rejection_reason ? "Re-upload requested" : item.current_review_status_label || item.current_verification_status || "Pending upload"}</span>
+                        <span className="workspace-table__secondary">{item.pending_replacement_id ? "Replacement pending HR review" : !item.allow_employee_upload && !item.current_document_id ? "HR upload required" : item.current_rejection_reason ? "Re-upload requested" : item.current_review_status_label || item.current_verification_status || "Pending upload"}</span>
                       </td>
                       <td>
                         <strong>{item.due_on || "No deadline"}</strong>
@@ -848,8 +899,8 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
                         <span className="table-actions">
                           <button className="button button--secondary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); setSelectedRequirementDetail(item); }} type="button">View</button>
                           {item.allow_employee_upload ? (
-                            <button className="button button--primary" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openUpload(item); }} type="button">
-                              {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
+                            <button className="button button--primary" disabled={Boolean(item.pending_replacement_id || (item.current_document_id && item.replacement_policy !== "allowed"))} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openUpload(item); }} type="button">
+                              {item.pending_replacement_id ? "Under review" : item.current_document_id && item.replacement_policy === "hr_only" ? "HR managed" : item.current_document_id && item.replacement_policy === "prohibited" ? "Replacement unavailable" : item.current_document_id ? "Replace" : "Upload"}
                             </button>
                           ) : null}
                         </span>

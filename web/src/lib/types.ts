@@ -1577,6 +1577,9 @@ export type HrAdminDocumentCategory = {
   requires_verification: boolean;
   allow_employee_upload: boolean;
   allow_multiple_files: boolean;
+  replacement_policy: "allowed" | "hr_only" | "prohibited";
+  accepted_mime_types: string[];
+  max_upload_size_bytes: number | null;
   visibility_rules: Record<string, unknown>;
 };
 
@@ -1591,6 +1594,9 @@ export type HrAdminDocumentCategoryWriteInput = {
   requires_verification: boolean;
   allow_employee_upload: boolean;
   allow_multiple_files: boolean;
+  replacement_policy: "allowed" | "hr_only" | "prohibited";
+  accepted_mime_types: string;
+  max_upload_size_mb: string;
   visibility_rules: string;
 };
 
@@ -1636,7 +1642,15 @@ export type HrAdminEmployeeDocument = {
   category_name: string;
   artifact_id: string | null;
   is_downloadable: boolean;
+  malware_scan_status: "not_required" | "pending" | "clean" | "quarantined" | "error";
+  malware_scanner_ref: string;
+  malware_scanned_at: string | null;
+  quarantine_reason: string;
   previous_document_id: string | null;
+  previous_document: {
+    id: string; title: string; file_name: string; status: string; verification_status: string;
+    version_number: number; is_downloadable: boolean; created_at: string;
+  } | null;
   replaced_by_document_id: string | null;
   version_number: number;
   title: string;
@@ -1680,6 +1694,10 @@ export type HrAdminEmployeeDocument = {
     actor_identifier: string;
     comment: string;
     created_at: string;
+  }>;
+  lifecycle_events: Array<{
+    id: string; event_type: string; actor_identifier: string; previous_record_status: string;
+    new_record_status: string; previous_verification_status: string; new_verification_status: string; created_at: string;
   }>;
   created_at: string;
   updated_at: string;
@@ -5970,6 +5988,9 @@ export type EssDocumentRequirementItem = {
   allow_employee_upload: boolean;
   requires_verification: boolean;
   requires_expiry_date: boolean;
+  accepted_mime_types?: string[];
+  max_upload_size_bytes?: number;
+  replacement_policy?: "allowed" | "hr_only" | "prohibited";
   current_document_id: string | null;
   current_document_title: string;
   current_verification_status: string;
@@ -5983,6 +6004,9 @@ export type EssDocumentRequirementItem = {
   current_review_owner_label: string;
   current_review_status_label: string;
   current_uploaded_at: string | null;
+  pending_replacement_id?: string | null;
+  pending_replacement_title?: string;
+  pending_replacement_uploaded_at?: string | null;
 };
 
 export type EssDocumentSummary = {
