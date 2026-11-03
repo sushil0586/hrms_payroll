@@ -4727,6 +4727,40 @@ select.input-control {
   line-height: 1;
 }
 
+.inspect-action {
+  display: inline-flex;
+  position: relative;
+}
+
+.inspect-action__tooltip {
+  position: absolute;
+  z-index: 30;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(240px, calc(100vw - 32px));
+  padding: 7px 9px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 6px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  visibility: hidden;
+}
+
+.inspect-action:hover .inspect-action__tooltip,
+.inspect-action:focus-within .inspect-action__tooltip {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+}
+
 .workspace-tone--hr .attendance-review-workbench--with-detail {
   grid-template-columns: minmax(0, 1.75fr) minmax(380px, 0.75fr);
   align-items: start;
@@ -6721,6 +6755,10 @@ select.input-control {
   border-radius: 15px;
   background: #fff;
   box-shadow: 0 16px 32px -28px rgba(15, 23, 42, 0.34);
+}
+
+.ess-leave-balance-card {
+  border-top: 3px solid var(--leave-type-color, #0b6e4f);
 }
 
 .workspace-summary-card > div:first-child {

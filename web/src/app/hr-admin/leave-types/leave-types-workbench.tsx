@@ -198,7 +198,12 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes, pending, on
                           {item.is_approval_required ? "Approval" : "No approval"} · {item.requires_attachment ? "Attachment" : "No attachment"}
                         </span>
                       </td>
-                      <td><button aria-label="Inspect" title={`Inspect ${item.name}`} ref={(node) => { if (isSelected && node) inspectTriggerRef.current = node; }} className="button button--secondary button--compact button--icon" onClick={(event) => { focusActionTrigger(event); inspectTriggerRef.current = event.currentTarget; event.stopPropagation(); setSelectedId(item.id); }} type="button">...</button></td>
+                      <td>
+                        <span className="inspect-action">
+                          <button aria-describedby={`leave-type-inspect-tooltip-${item.id}`} aria-label="Inspect" title={`Inspect ${item.name}`} ref={(node) => { if (isSelected && node) inspectTriggerRef.current = node; }} className="button button--secondary button--compact button--icon" onClick={(event) => { focusActionTrigger(event); inspectTriggerRef.current = event.currentTarget; event.stopPropagation(); setSelectedId(item.id); }} type="button">...</button>
+                          <span className="inspect-action__tooltip" id={`leave-type-inspect-tooltip-${item.id}`} role="tooltip">Inspect {item.name}</span>
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}

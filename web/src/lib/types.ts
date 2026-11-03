@@ -5646,6 +5646,7 @@ export type EssLeaveTypeOption = {
   short_code: string;
   category: string;
   unit: string;
+  color_code: string;
   requires_attachment: boolean;
   allow_negative_balance: boolean;
 };

@@ -5945,6 +5945,7 @@ class LeaveTypeOptionSerializer(serializers.Serializer):
     short_code = serializers.CharField(allow_blank=True)
     category = serializers.CharField()
     unit = serializers.CharField()
+    color_code = serializers.CharField(allow_blank=True)
     requires_attachment = serializers.BooleanField()
     allow_negative_balance = serializers.BooleanField()
 

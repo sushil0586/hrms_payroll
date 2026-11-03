@@ -7091,6 +7091,7 @@ class MeLeaveTypeListView(EmployeeContextMixin, APIView):
                 "short_code": leave_type.short_code,
                 "category": leave_type.category,
                 "unit": leave_type.unit,
+                "color_code": leave_type.color_code,
                 "requires_attachment": leave_type.requires_attachment,
                 "allow_negative_balance": leave_type.allow_negative_balance,
             }
@@ -21599,7 +21600,10 @@ class MeLeaveRequestListCreateView(EmployeeContextMixin, APIView):
         total_count = items.count()
         offset = (page - 1) * page_size
         ids = list(items.values_list("id", flat=True)[offset:offset + page_size])
-        payload = {"items": get_employee_leave_requests(employee, request_ids=ids), "total_count": total_count,
+        serialized_items = get_employee_leave_requests(employee, request_ids=ids)
+        item_by_id = {str(item["id"]): item for item in serialized_items}
+        ordered_items = [item_by_id[str(item_id)] for item_id in ids if str(item_id) in item_by_id]
+        payload = {"items": ordered_items, "total_count": total_count,
             "page": page, "page_size": page_size, "has_next": offset + page_size < total_count,
             "has_previous": page > 1, "status_counts": status_counts,
             "filter_types": [{"code": code, "name": name} for code, name in all_items.order_by(

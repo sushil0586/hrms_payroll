@@ -17,6 +17,11 @@ class EmployeeLeaveHistoryQuery(serializers.Serializer):
     date_to = serializers.DateField(required=False)
     day = serializers.DateField(required=False)
     month = serializers.RegexField(r"^\d{4}-(0[1-9]|1[0-2])$", required=False)
+    sort = serializers.ChoiceField(
+        required=False,
+        choices=["newest", "oldest", "leave_type", "status"],
+        default="newest",
+    )
 
     def validate(self, attrs):
         if attrs.get("date_from") and attrs.get("date_to") and attrs["date_to"] < attrs["date_from"]:
@@ -54,7 +59,13 @@ def filter_employee_leave_history(queryset, filters, status_filter):
         queryset = queryset.filter(end_date__gte=start)
     if end := filters.get("date_to"):
         queryset = queryset.filter(start_date__lte=end)
-    return queryset
+    ordering = {
+        "newest": ("-created_at", "-id"),
+        "oldest": ("created_at", "id"),
+        "leave_type": ("leave_type__name", "-created_at", "-id"),
+        "status": ("status", "-created_at", "-id"),
+    }
+    return queryset.order_by(*ordering[filters.get("sort", "newest")])
 
 
 def employee_leave_calendar(queryset, month):

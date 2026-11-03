@@ -61,6 +61,7 @@ type LeaveQuery = {
   date_to: string;
   month: string;
   day: string;
+  sort: string;
   requestId: string;
 };
 
@@ -111,6 +112,7 @@ function leaveQueryFromParams(params: URLSearchParams, fallback?: LeaveQuery): L
     date_to: params.get("date_to") || "",
     month: params.get("month") || "",
     day: params.get("day") || "",
+    sort: ["oldest", "leave_type", "status"].includes(params.get("sort") || "") ? params.get("sort")! : "newest",
     requestId: params.get("requestId") || fallback?.requestId || "",
   };
 }
@@ -122,7 +124,12 @@ function leaveQueryParams(query: LeaveQuery) {
   for (const key of ["q", "leave_type", "period", "date_from", "date_to", "month", "day", "requestId"] as const) {
     if (query[key]) params.set(key, query[key]);
   }
+  if (query.sort !== "newest") params.set("sort", query.sort);
   return params;
+}
+
+function safeLeaveColor(value: string | undefined) {
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value : "#0b6e4f";
 }
 
 function leaveReadError(payload: unknown) {
@@ -896,10 +903,12 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
       {operationMessage ? <div className="notice notice--success" role="status">{operationMessage}</div> : null}
       <WorkspaceStandardPanel title="Your entitlements" description="Current policy balances. Contact HR for leave-year dates, expiry and applicable holidays.">
         <div className="workspace-summary-grid" role="group" aria-label="Leave balance cards">
-          {balances.map((balance, index) => <article className="workspace-standard-panel workspace-summary-card" key={`${balance.leave_type}-${index}`}>
+          {balances.map((balance, index) => {
+            const leaveType = leaveTypes.find((item) => item.name.toLowerCase() === balance.leave_type.toLowerCase() || item.code.toLowerCase() === balance.leave_type.toLowerCase());
+            return <article className="workspace-standard-panel workspace-summary-card ess-leave-balance-card" style={{ "--leave-type-color": safeLeaveColor(leaveType?.color_code) } as React.CSSProperties} key={`${balance.leave_type}-${index}`}>
             <h3>{balance.leave_type}</h3><strong>{getPrimaryBalanceLabel(balance)}</strong><p>{balance.policy_name || "Policy not provided"}</p>
             <WorkspaceInformation fields={[["Used", balance.consumed_amount], ["Reserved", balance.reserved_amount]]} />
-          </article>)}
+          </article>})}
           {!balances.length ? <p role="status">No leave balance is assigned yet. Ask HR to review your leave policies.</p> : null}
         </div>
       </WorkspaceStandardPanel>
@@ -935,6 +944,7 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
                 period: String(data.get("period") || "") === "all" ? "" : String(data.get("period") || ""),
                 date_from: String(data.get("date_from") || ""),
                 date_to: String(data.get("date_to") || ""),
+                sort: String(data.get("sort") || "newest"),
                 page: 1,
                 requestId: "",
               });
@@ -948,10 +958,13 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
               <label className="form-field"><span>Date period</span><select className="input-control" name="period" defaultValue={appliedQuery.period || "all"}>
                 <option value="all">All periods</option><option value="upcoming">Upcoming (UTC)</option><option value="past">Past (UTC)</option><option value="current">In progress (UTC)</option><option value="this_year">Calendar year (UTC)</option>
               </select></label>
+              <label className="form-field"><span>Sort by</span><select className="input-control" name="sort" defaultValue={appliedQuery.sort}>
+                <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="leave_type">Leave type</option><option value="status">Status</option>
+              </select></label>
               <label className="form-field"><span>From date</span><input className="input-control" type="date" name="date_from" defaultValue={appliedQuery.date_from} onChange={() => setFilterError("")} /></label>
               <label className="form-field"><span>Through date</span><input className="input-control" type="date" name="date_to" defaultValue={appliedQuery.date_to} onChange={() => setFilterError("")} aria-invalid={Boolean(filterError)} aria-describedby={filterError ? "leave-filter-error" : undefined} />{filterError ? <span className="field-error-text" id="leave-filter-error" role="alert">{filterError}</span> : null}</label>
               <button className="button button--primary" type="submit">Apply filters</button>
-              <a data-navigation-mode="local" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setFilterError(""); setOperationMessage(""); void leaveResource.load({ ...appliedQuery, q: "", leave_type: "", period: "", date_from: "", date_to: "", day: "", page: 1, requestId: "" }); }} className="button button--secondary" href={buildHref(queryParams, { q: undefined, leave_type: undefined, period: undefined, date_from: undefined, date_to: undefined, day: undefined, page: "1" })}>Clear filters</a>
+              <a data-navigation-mode="local" onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setFilterError(""); setOperationMessage(""); void leaveResource.load({ ...appliedQuery, q: "", leave_type: "", period: "", date_from: "", date_to: "", day: "", sort: "newest", page: 1, requestId: "" }); }} className="button button--secondary" href={buildHref(queryParams, { q: undefined, leave_type: undefined, period: undefined, date_from: undefined, date_to: undefined, day: undefined, sort: undefined, page: "1" })}>Clear filters</a>
             </WorkspaceFilterForm>
           </div>
           <button className="button button--secondary" type="button" disabled={!hydrated || leaveResource.isPending} onClick={() => void leaveResource.load({ ...appliedQuery, month: calendarVisible ? "" : new Date().toISOString().slice(0, 7), day: "", page: 1, requestId: "" })}>{calendarVisible ? "Hide calendar" : "Show calendar"}</button>
@@ -961,7 +974,7 @@ export function LeaveWorkspace({ balances: initialBalances, linkedDetail: initia
               const data = new FormData(event.currentTarget);
               void leaveResource.load({ ...appliedQuery, month: String(data.get("month") || ""), day: "", page: 1, requestId: "" });
             }}>
-              {(["status", "q", "leave_type", "period", "date_from", "date_to"] as const).map(key => <input key={key} type="hidden" name={key} value={appliedQuery[key]} />)}
+              {(["status", "q", "leave_type", "period", "date_from", "date_to", "sort"] as const).map(key => <input key={key} type="hidden" name={key} value={appliedQuery[key]} />)}
               <input type="hidden" name="page" value="1" />
               <label className="form-field"><span>Calendar month</span><input className="input-control" type="month" name="month" required defaultValue={calendarMonth} /></label>
               <button className="button button--secondary" type="submit">Apply month</button>

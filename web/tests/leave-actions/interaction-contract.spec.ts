@@ -48,6 +48,8 @@ test("leave type Inspect, Close, Cancel, Save, and removal controls work", async
   await page.goto("/hr-admin/leave-types");
   const inspect = page.getByRole("button", { name: "Inspect", exact: true }).first();
   await expect(inspect).toHaveAttribute("title", /Inspect .+/);
+  await inspect.hover();
+  await expect(page.getByRole("tooltip").first()).toBeVisible();
   await inspect.click();
   await expect(page.getByRole("dialog", { name: "Leave type detail", exact: true })).toBeVisible();
   await expect(detail(page, "Leave type detail")).toBeVisible();
@@ -109,6 +111,31 @@ test("leave type filters apply on submit and sorting is stable", async ({ page }
   await filters.getByRole("button", { name: "Apply filters" }).click();
   const names = await table.locator("tbody tr .workspace-table__primary-cell strong").allTextContents();
   expect(names).toEqual([...names].sort((left, right) => right.localeCompare(left)));
+  await expect(page.locator(".pagination-panel")).toBeVisible();
+});
+
+test("leave type create validation is consolidated and success feedback is durable", async ({ page }) => {
+  await page.goto("/hr-admin/leave-types");
+  await page.getByRole("button", { name: "Create leave type", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "Create leave type", exact: true });
+  await modal.getByLabel("Color code", { exact: true }).fill("invalid");
+  await modal.getByRole("button", { name: "Create leave type", exact: true }).click();
+  await expect(modal.getByRole("alert")).toHaveCount(1);
+  await expect(modal.getByText("Enter a unique leave type code.", { exact: true })).toBeVisible();
+  await expect(modal.getByText("Enter the leave type name.", { exact: true })).toBeVisible();
+  await expect(modal.getByText("Enter a color in #RRGGBB format.", { exact: true })).toBeVisible();
+
+  const suffix = Date.now().toString(36);
+  const name = `QA toast ${suffix}`;
+  await modal.getByLabel("Code", { exact: true }).fill(`qa-toast-${suffix}`);
+  await modal.getByLabel("Name", { exact: true }).fill(name);
+  await modal.getByLabel("Color code", { exact: true }).fill("#5546b7");
+  await modal.getByRole("button", { name: "Create leave type", exact: true }).click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Leave type saved." })).toBeVisible();
+  await expect(page.locator(".notice--success").filter({ hasText: "Leave type created and available in this list." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("table", { name: "Leave types", exact: true })).toContainText(name);
 });
 
 test("leave policy Inspect, Close, Edit, Save, Cancel, and removal cancellation work", async ({ page }) => {
@@ -286,8 +313,10 @@ test("ESS leave filters submit on Enter and request details close back to their 
   const filters = page.getByRole("form", { name: "Leave history filters", exact: true });
   const search = filters.getByRole("textbox", { name: "Search leave history", exact: true });
   await search.fill("synthetic");
+  await filters.getByRole("combobox", { name: "Sort by", exact: true }).selectOption("oldest");
   await search.press("Enter");
   await expect(page).toHaveURL(/q=synthetic/);
+  await expect(page).toHaveURL(/sort=oldest/);
   await expect(page.getByRole("status").filter({ hasText: "Loading leave requests" })).toHaveCount(0);
 
   await page.getByRole("link", { name: "Clear filters", exact: true }).click();
