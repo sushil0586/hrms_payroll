@@ -28,7 +28,9 @@ export default async function EssDocumentsPage({ searchParams }: PageProps) {
   const categoryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawCategory) ? rawCategory : "";
   const rawExpiry = normalizeParam(currentParams.expiry_filter) ?? "";
   const expiryFilter = ["expired", "expiring", "missing_expiry"].includes(rawExpiry) ? rawExpiry : "";
-  const filters = { page, page_size: pageSize, q, verification_status: verificationStatus || undefined, category_id: categoryId || undefined, expiry_filter: expiryFilter || undefined };
+  const rawSort = normalizeParam(currentParams.sort) ?? "uploaded_desc";
+  const sort = ["uploaded_desc", "uploaded_asc", "title_asc", "title_desc", "category_asc", "category_desc", "status_asc", "status_desc", "expiry_asc", "expiry_desc"].includes(rawSort) ? rawSort : "uploaded_desc";
+  const filters = { page, page_size: pageSize, q, verification_status: verificationStatus || undefined, category_id: categoryId || undefined, expiry_filter: expiryFilter || undefined, sort };
   let result: Awaited<ReturnType<typeof getEssDocumentCenter>>;
   try {
     result = await getEssDocumentCenter(filters);
@@ -55,6 +57,7 @@ export default async function EssDocumentsPage({ searchParams }: PageProps) {
           verification_status: verificationStatus,
           category_id: categoryId,
           expiry_filter: expiryFilter,
+          sort,
           page: result.data.page,
           page_size: pageSize,
         }}

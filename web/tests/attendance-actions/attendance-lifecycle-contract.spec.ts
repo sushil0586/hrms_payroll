@@ -129,7 +129,7 @@ test("ESS correction validates time order, submits once, persists, and restores 
   expect((await submitted).status()).toBe(201);
   expect(successfulWrites).toBe(1);
   await expect(dialog).toHaveCount(0);
-  const submittedStatus = page.locator('[role="status"]', { hasText: "Attendance regularization submitted" });
+  const submittedStatus = page.locator('p.notice[role="status"]', { hasText: "Attendance regularization submitted" });
   await expect(submittedStatus).toBeFocused();
 
   const payload = await employeeRegularizations(page);

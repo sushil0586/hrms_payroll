@@ -6,7 +6,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.employees.models import Employee
-from apps.leave_management.models import LeaveRequest, LeavePolicyAssignment, LeaveType, LeaveBalanceTransaction
+from apps.leave_management.models import LeaveRequest, LeavePolicyAssignment, LeavePolicyStatus, LeaveType, LeaveBalanceTransaction
 from tests.test_hr_admin_leave_report_population import source
 
 pytestmark = pytest.mark.django_db
@@ -278,3 +278,64 @@ def test_bulk_assignment_does_not_hide_unrelated_integrity_errors(scope):
     with patch('apps.common.api_views.save_hr_admin_leave_policy_assignment',side_effect=IntegrityError('Unexpected integrity failure')):
         with pytest.raises(IntegrityError):client.post('/api/v1/hr-admin/leave-policy-assignments/bulk-import/',payload,format='json')
     assert LeavePolicyAssignment.objects.count()==0
+
+
+def test_leave_request_import_rolls_back_valid_rows_when_any_row_is_invalid(scope):
+    tenant, policy, employee, other, client, _ = scope
+    policy.status = LeavePolicyStatus.ACTIVE
+    policy.leave_type.allow_negative_balance = True
+    policy.leave_type.save(update_fields=["allow_negative_balance", "updated_at"])
+    policy.save(update_fields=["status", "updated_at"])
+    LeavePolicyAssignment.objects.create(
+        tenant=tenant,
+        employee=employee,
+        leave_policy=policy,
+        priority=100,
+        is_active=True,
+    )
+    valid_row = {
+        "employee_id": str(employee.id),
+        "leave_type_id": str(policy.leave_type_id),
+        "start_date": "2027-02-01",
+        "end_date": "2027-02-01",
+        "start_day_portion": "full_day",
+        "end_day_portion": "full_day",
+        "reason": "Atomic import verification",
+    }
+    invalid_row = {**valid_row, "employee_id": str(other.id)}
+
+    response = client.post(
+        "/api/v1/hr-admin/leave-requests/bulk-import/",
+        {"rows": [valid_row, invalid_row]},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.data["created_count"] == 0
+    assert response.data["failed_count"] == 1
+    assert response.data["errors"][0]["row"] == 2
+    assert response.data["rolled_back"] is True
+    assert not LeaveRequest.objects.filter(tenant=tenant, reason="Atomic import verification").exists()
+
+
+def test_leave_request_import_rejects_reversed_dates_before_schedule_resolution(scope):
+    tenant, policy, employee, _, client, _ = scope
+    response = client.post(
+        "/api/v1/hr-admin/leave-requests/bulk-import/",
+        {
+            "rows": [{
+                "employee_id": str(employee.id),
+                "leave_type_id": str(policy.leave_type_id),
+                "start_date": "2027-02-01",
+                "end_date": "2027-01-31",
+                "reason": "Invalid date range",
+            }],
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.data["created_count"] == 0
+    assert response.data["errors"][0]["row"] == 1
+    assert response.data["errors"][0]["message"]["end_date"] == ["End date must be on or after start date."]
+    assert not LeaveRequest.objects.filter(tenant=tenant, reason="Invalid date range").exists()

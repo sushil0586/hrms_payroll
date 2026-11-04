@@ -6,9 +6,10 @@ import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-tabl
 
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 
 import { DocumentReviewDialog } from "@/app/hr-admin/employee-documents/document-review-dialog";
+import { ActionToast } from "@/components/patterns/action-toast";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminDocumentOptions, HrAdminEmployeeDocument, HrAdminEnumOption, HrAdminOptionItem } from "@/lib/types";
 
@@ -23,6 +24,7 @@ type Props = {
     status: string;
     category_id: string;
     expiry_filter: string;
+    sort: string;
     page: number;
     page_size: number;
   };
@@ -124,6 +126,7 @@ export function EmployeeDocumentQueue({
   const [recordStatus, setRecordStatus] = useState(currentFilters.status || "all");
   const [categoryId, setCategoryId] = useState(currentFilters.category_id || "all");
   const [expiryFilter, setExpiryFilter] = useState(currentFilters.expiry_filter || "all");
+  const [sort, setSort] = useState(currentFilters.sort || "uploaded_desc");
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSubmittingReminder, setIsSubmittingReminder] = useState(false);
@@ -148,6 +151,11 @@ export function EmployeeDocumentQueue({
   const pageEnd = pagination.total_count === 0 ? 0 : Math.min(pagination.page * numericPageSize, pagination.total_count);
   const displayActionNotice = actionNotice || initialActionNotice;
   const displayActionNoticeTitle = actionNotice ? actionNoticeTitle : initialActionNoticeTitle;
+  useEffect(() => {
+    if (!actionNotice) return;
+    const timeout = window.setTimeout(() => setActionNotice(""), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [actionNotice]);
 
   function toggleOne(itemId: string) {
     setSelectedIds((current) => (current.includes(itemId) ? current.filter((value) => value !== itemId) : [...current, itemId]));
@@ -166,6 +174,7 @@ export function EmployeeDocumentQueue({
       status: applyDraft ? (recordStatus !== "all" ? recordStatus : "") : currentFilters.status,
       category_id: applyDraft ? (categoryId !== "all" ? categoryId : "") : currentFilters.category_id,
       expiry_filter: applyDraft ? (expiryFilter !== "all" ? expiryFilter : "") : currentFilters.expiry_filter,
+      sort: applyDraft ? sort : currentFilters.sort,
       page,
       page_size: applyDraft ? Number(pageSize) : numericPageSize,
     });
@@ -178,6 +187,7 @@ export function EmployeeDocumentQueue({
       status: currentFilters.status || undefined,
       category_id: currentFilters.category_id || undefined,
       expiry_filter: currentFilters.expiry_filter || undefined,
+      sort: currentFilters.sort || undefined,
       page: pagination.page,
       page_size: numericPageSize,
       ...params,
@@ -226,6 +236,9 @@ export function EmployeeDocumentQueue({
 
   return (
     <section className="section queue-layout document-queue-layout" aria-busy={pending || undefined}>
+      {actionNotice ? <ActionToast title={actionNoticeTitle === "Reminder action complete." ? "Reminder sent." : actionNoticeTitle} message={actionNotice} tone="success" /> : null}
+      {pending ? <div className="notice notice--quiet" role="status"><strong>Updating document queue…</strong><span>The current results remain visible while the latest data loads.</span></div> : null}
+      {displayActionNotice ? <div className="notice notice--success" role="status"><strong>{displayActionNoticeTitle}</strong><span>{displayActionNotice}</span></div> : null}
       <div className="hr-employee-summary-strip document-summary-strip">
         <span><strong>{pagination.total_count}</strong> matching documents</span>
         <span><strong>{summary.categoriesConfigured}</strong> categories</span>
@@ -276,6 +289,12 @@ export function EmployeeDocumentQueue({
                 </select>
               </label>
               <label className="form-field">
+                <span className="muted">Sort by</span>
+                <select className="input-control" onChange={(event) => setSort(event.target.value)} value={sort}>
+                  <option value="uploaded_desc">Newest upload</option><option value="uploaded_asc">Oldest upload</option><option value="employee_asc">Employee A-Z</option><option value="employee_desc">Employee Z-A</option><option value="title_asc">Title A-Z</option><option value="title_desc">Title Z-A</option><option value="category_asc">Category A-Z</option><option value="category_desc">Category Z-A</option><option value="status_asc">Verification status A-Z</option><option value="status_desc">Verification status Z-A</option><option value="expiry_asc">Expiry earliest</option><option value="expiry_desc">Expiry latest</option>
+                </select>
+              </label>
+              <label className="form-field">
                 <span className="muted">Expiry focus</span>
                 <select className="input-control" onChange={(event) => setExpiryFilter(event.target.value)} value={expiryFilter}>
                   <option value="all">All documents</option>
@@ -295,12 +314,13 @@ export function EmployeeDocumentQueue({
             setRecordStatus("all");
             setCategoryId("all");
             setExpiryFilter("all");
+            setSort("uploaded_desc");
             setPageSize("25");
             setSelectedIds([]);
             setActionError("");
             setActionNotice("");
             setActionNoticeTitle("Action complete.");
-            onQuery({ q: "", verification_status: "", status: "", category_id: "", expiry_filter: "", page: 1, page_size: 25 });
+            onQuery({ q: "", verification_status: "", status: "", category_id: "", expiry_filter: "", sort: "uploaded_desc", page: 1, page_size: 25 });
            }} type="button">Clear filters</button>
           {canManageDocuments ? (
             <>
@@ -314,7 +334,6 @@ export function EmployeeDocumentQueue({
           ) : null}
         </div>
         {!canManageDocuments ? <div className="notice"><strong>Read-only document queue.</strong><span className="muted">Reminder actions require documents.manage.</span></div> : null}
-        {displayActionNotice ? <div className="notice"><strong>{displayActionNoticeTitle}</strong><span className="muted">{displayActionNotice}</span></div> : null}
         {actionError ? <div className="notice notice--error" role="alert"><strong>Reminder action failed.</strong><span className="muted">{actionError}</span></div> : null}
       </section>
 
@@ -398,11 +417,11 @@ export function EmployeeDocumentQueue({
               </div>
               <div className="record-card__actions">
                 <button className="button button--ghost button--compact" onClick={() => { setSelectedDocumentId(""); window.requestAnimationFrame(() => detailTrigger.current?.focus({ preventScroll: true })); }} type="button">Close</button>
-                {canExportDocuments && selectedDocument.is_downloadable ? <Link className="button button--ghost button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.id}/download`}>Download</Link> : null}
-                {canVerifyDocuments ? (
+                {canExportDocuments && selectedDocument.is_downloadable ? <AsyncDownloadButton className="button button--ghost button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.id}/download`} fileName={selectedDocument.file_name || "employee-document"}>Download</AsyncDownloadButton> : null}
+                {canVerifyDocuments && selectedDocument.status !== "withdrawn" ? (
                   <button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openReviewModal(selectedDocument.id); }} type="button">Review</button>
                 ) : (
-                  <button className="button button--secondary button--compact" disabled title="Requires documents.verify permission." type="button">Review</button>
+                  <button className="button button--secondary button--compact" disabled title={selectedDocument.status === "withdrawn" ? "Withdrawn documents are read-only." : "Requires documents.verify permission."} type="button">Review</button>
                 )}
               </div>
             </div>
@@ -457,7 +476,7 @@ export function EmployeeDocumentQueue({
                   <div className="detail-row"><span className="detail-label">Review steps</span><span className="detail-value">{selectedDocument.review_history.length}</span></div>
                 </div>
               </details>
-              {selectedDocument.previous_document ? <details className="employee-detail-section" open><summary>Replacement comparison</summary><div className="employee-detail-section__grid"><div className="detail-row"><span className="detail-label">Candidate</span><span className="detail-value">v{selectedDocument.version_number} · {selectedDocument.file_name}</span></div><div className="detail-row"><span className="detail-label">Approved current</span><span className="detail-value">v{selectedDocument.previous_document.version_number} · {selectedDocument.previous_document.file_name}</span></div>{canExportDocuments && selectedDocument.previous_document.is_downloadable ? <Link className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.previous_document.id}/download`}>Download approved version</Link> : null}</div></details> : null}
+              {selectedDocument.previous_document ? <details className="employee-detail-section" open><summary>Replacement comparison</summary><div className="employee-detail-section__grid"><div className="detail-row"><span className="detail-label">Candidate</span><span className="detail-value">v{selectedDocument.version_number} · {selectedDocument.file_name}</span></div><div className="detail-row"><span className="detail-label">Approved current</span><span className="detail-value">v{selectedDocument.previous_document.version_number} · {selectedDocument.previous_document.file_name}</span></div>{canExportDocuments && selectedDocument.previous_document.is_downloadable ? <AsyncDownloadButton className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${selectedDocument.previous_document.id}/download`} fileName={selectedDocument.previous_document.file_name || "approved-document"}>Download approved version</AsyncDownloadButton> : null}</div></details> : null}
             </div>
 
             {selectedDocument.rejection_reason ? <div className="notice"><strong>Latest review note.</strong><span className="muted">{selectedDocument.rejection_reason}</span></div> : null}
@@ -466,18 +485,17 @@ export function EmployeeDocumentQueue({
         ) : null}
       </div>
 
-      <section className="card panel pagination-panel document-pagination-panel">
+      {pagination.total_count > 0 ? <section className="card panel pagination-panel document-pagination-panel">
         <div className="pagination-bar">
           <div className="pagination-bar__summary">
             <span className="queue-summary-chip"><strong>{pageStart}-{pageEnd}</strong> of {pagination.total_count} documents</span>
             <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> of {totalPages}</span>
             <label className="document-page-size-control lifecycle-page-size-control">
               <span>Rows</span>
-              <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+              <select className="input-control" onChange={(event) => { setPageSize(event.target.value); onQuery({ ...currentFilters, page: 1, page_size: Number(event.target.value) }); }} value={pageSize}>
                 {Array.from(new Set([10, 25, 50, 100, currentFilters.page_size])).sort((a, b) => a - b).map((value) => <option key={value} value={String(value)}>{value}</option>)}
               </select>
             </label>
-            <button className="button button--secondary button--compact" onClick={() => goToPage(1, true)} type="button">Apply</button>
           </div>
           {totalPages > 1 ? (
             <div className="pagination-bar__actions">
@@ -488,7 +506,7 @@ export function EmployeeDocumentQueue({
             </div>
           ) : null}
         </div>
-      </section>
+      </section> : null}
       {modalReviewDocument ? (
         <DocumentReviewDialog
           document={modalReviewDocument}

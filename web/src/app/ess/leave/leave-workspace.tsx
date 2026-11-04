@@ -474,6 +474,7 @@ function LeaveApplyModal({
   );
   const attachmentRequired = Boolean(selectedLeaveType?.requires_attachment);
   const evidenceReady = !attachmentRequired || Boolean(selectedFile || evidenceReference.trim());
+  const completedDateRangeInvalid = Boolean(startDate && endDate && !requestEstimate.valid);
   const fileSizeLabel = selectedFile ? `${Math.max(1, Math.ceil(selectedFile.size / 1024))} KB` : null;
 
   function clearFieldError(field: LeaveApplyField) {
@@ -554,9 +555,6 @@ function LeaveApplyModal({
       submittingRef.current = false;
       return;
     }
-    const message = "Leave request submitted. Refreshing your history.";
-    setFeedback({ tone: "success", message });
-    setToast({ title: "Submitted successfully.", message, tone: "success" });
     const reconciled = await onSubmitted(typeof payload.id === "string" ? payload.id : "");
     if (!reconciled) {
       const refreshMessage = "The request was saved, but updated leave data could not be loaded. Do not submit it again; retry the workspace refresh.";
@@ -686,7 +684,7 @@ function LeaveApplyModal({
               <span className="muted">After you submit, approval goes to your manager when required.</span>
               <AsyncActionButton
                 className="button button--primary"
-                disabled={submitting || !leaveTypes.length}
+                disabled={submitting || !leaveTypes.length || completedDateRangeInvalid || !evidenceReady}
                 pending={submitting}
                 pendingLabel="Submitting leave"
                 type="submit"

@@ -105,6 +105,16 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes, pending, on
     });
   }
 
+  function submitFilters(form: HTMLFormElement) {
+    const data = new FormData(form);
+    commitFilters({
+      q: String(data.get("q") ?? ""),
+      status: String(data.get("status") ?? "all"),
+      category: String(data.get("category") ?? "all"),
+      sort: String(data.get("sort") ?? "name-asc"),
+    });
+  }
+
 
 
   return (
@@ -127,7 +137,7 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes, pending, on
             <span className="queue-summary-chip"><strong>{selectedItem ? "1" : "0"}</strong> selected</span>
           </div>
         </div>
-        <WorkspaceFilterForm action="/hr-admin/leave-types" label="Leave type filters" className="workspace-filter-form--three" pending={filterPending || pending} updateMode="scoped" onSubmit={(event) => { event.preventDefault(); commitFilters(draft); }}>
+        <WorkspaceFilterForm action="/hr-admin/leave-types" label="Leave type filters" className="workspace-filter-form--three" pending={filterPending || pending} updateMode="scoped" onSubmit={(event) => { event.preventDefault(); submitFilters(event.currentTarget); }}>
           <label className="form-field">
             <span>Search</span>
             <input className="input-control" name="q" placeholder="Name, code, category" type="search" value={draft.q} onChange={(event) => setDraft((current) => ({ ...current, q: event.target.value }))} />

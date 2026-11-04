@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -119,3 +120,18 @@ def prepare(manifest_path: str) -> None:
         "policy_assignment_id": str(policy_assignment.pk), "roster_id": str(roster.pk),
     }
     path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        raise SystemExit("Usage: attendance_family.py <workspace-manifest>")
+
+    backend_root = Path(__file__).resolve().parents[2]
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.base")
+
+    import django
+
+    django.setup()
+    prepare(sys.argv[1])

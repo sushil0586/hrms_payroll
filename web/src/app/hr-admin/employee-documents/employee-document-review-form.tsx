@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
 import type { HrAdminDocumentOptions, HrAdminEmployeeDocument, HrAdminEmployeeDocumentWriteInput } from "@/lib/types";
 
 type Props = {
@@ -68,6 +69,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
   }
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (document.status === "withdrawn") { setError("Withdrawn documents are read-only and cannot be reviewed."); return; }
     if (submitting.current) return;
     const data = new FormData(event.currentTarget);
     const body = { title: String(data.get("title") ?? ""), verification_status: String(data.get("verification_status") ?? ""), document_number: String(data.get("document_number") ?? ""), issued_on: String(data.get("issued_on") ?? "") || null, expires_on: String(data.get("expires_on") ?? "") || null, reupload_requested: data.get("reupload_requested") === "true", rejection_reason: String(data.get("rejection_reason") ?? "") };
@@ -112,11 +114,12 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       <div><strong>{document.employee_name} · {document.employee_code}</strong><p>{document.category_name} · {document.file_name}</p></div>
       <WorkspaceStatusBadge tone={tone(document.verification_status)}>{humanize(document.verification_status)}</WorkspaceStatusBadge>
       <p>{document.review_status_label} · {document.expires_on ? `Expires ${document.expires_on}` : "No expiry recorded"}</p>
-      {canDownload && document.is_downloadable ? <a className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${itemId}/download`}>Download current file</a> : <p className="muted">{document.is_downloadable ? "Downloading requires document export access." : "No stored file is available for this record."}</p>}
-      {document.previous_document ? <div className="notice"><strong>Compare with approved version v{document.previous_document.version_number}</strong><span>{document.previous_document.title} · {document.previous_document.file_name}. This approved version remains authoritative until the candidate is accepted.</span>{canDownload && document.previous_document.is_downloadable ? <a className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${document.previous_document.id}/download`}>Download approved version</a> : null}</div> : null}
+      {canDownload && document.is_downloadable ? <AsyncDownloadButton className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${itemId}/download`} fileName={document.file_name || "employee-document"}>Download current file</AsyncDownloadButton> : <p className="muted">{document.is_downloadable ? "Downloading requires document export access." : "No stored file is available for this record."}</p>}
+      {document.previous_document ? <div className="notice"><strong>Compare with approved version v{document.previous_document.version_number}</strong><span>{document.previous_document.title} · {document.previous_document.file_name}. This approved version remains authoritative until the candidate is accepted.</span>{canDownload && document.previous_document.is_downloadable ? <AsyncDownloadButton className="button button--secondary button--compact" href={`/api/hr-admin/employee-documents/${document.previous_document.id}/download`} fileName={document.previous_document.file_name || "approved-document"}>Download approved version</AsyncDownloadButton> : null}</div> : null}
     </section>
     {error ? <div className="notice notice--error" role="alert" ref={errorRef} tabIndex={-1}><strong>Review not confirmed</strong><span>{error}</span></div> : null}
-    <fieldset disabled={busy || !ready} className="document-review-fields">
+    {document.status === "withdrawn" ? <div className="notice notice--warning" role="status"><strong>Review unavailable.</strong><span>This document was withdrawn and is retained as read-only history.</span></div> : null}
+    <fieldset disabled={busy || !ready || document.status === "withdrawn"} className="document-review-fields">
       <legend>Review decision</legend>
       <div className="form-grid">
         <div className="form-field"><label htmlFor="review-verification_status">Verification status</label><select className="input-control" id="review-verification_status" name="verification_status" value={verification} onChange={e => setVerification(e.target.value)} {...invalid("verification_status")}>{options.verification_statuses.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>{fieldError("verification_status")}</div>
@@ -139,6 +142,6 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       <h3>Version history</h3>{document.version_history.length ? <ul>{document.version_history.map(v => <li key={v.id}>Version {v.version_number} · {v.file_name} · {humanize(v.verification_status)}</li>)}</ul> : <p>No version history recorded.</p>}
       <h3>Review history</h3>{document.review_history.length ? <ul>{document.review_history.map(h => <li key={h.id}>{h.previous_status || "new"} → {h.new_status} · {h.actor_identifier || "Unknown"} · {h.created_at}<p>{h.comment || "No comment"}</p></li>)}</ul> : <p>No review history yet.</p>}
     </details>
-    <footer className="document-review-footer"><span className="muted">Saving returns to the document queue.</span><button className="button button--secondary" type="button" disabled={busy} onClick={cancel}>Cancel</button><button className="button button--primary" type="submit" disabled={busy || !ready}>{busy ? "Saving review…" : "Save review"}</button></footer>
+    <footer className="document-review-footer"><span className="muted">{document.status === "withdrawn" ? "Withdrawn records cannot be changed." : "Saving returns to the document queue."}</span><button className="button button--secondary" type="button" disabled={busy} onClick={cancel}>Cancel</button><button className="button button--primary" type="submit" disabled={busy || !ready || document.status === "withdrawn"}>{busy ? "Saving review…" : "Save review"}</button></footer>
   </form>;
 }

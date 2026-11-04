@@ -6320,6 +6320,18 @@ class LeaveRequestCreateSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)
     attachment_reference = serializers.CharField(required=False, allow_blank=True)
 
+    def validate(self, attrs):
+        if attrs["end_date"] < attrs["start_date"]:
+            raise serializers.ValidationError({"end_date": "End date must be on or after start date."})
+        if (
+            attrs["start_date"] == attrs["end_date"]
+            and attrs["start_day_portion"] != attrs["end_day_portion"]
+        ):
+            raise serializers.ValidationError(
+                {"end_day_portion": "Single-day leave must use the same day portion for start and end."}
+            )
+        return attrs
+
 
 class HrAdminLeaveRequestCreateSerializer(LeaveRequestCreateSerializer):
     employee_id = serializers.UUIDField()

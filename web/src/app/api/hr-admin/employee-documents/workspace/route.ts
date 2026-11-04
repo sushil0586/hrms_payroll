@@ -31,6 +31,7 @@ export async function GET(request: Request) {
         status: url.searchParams.get("status") || undefined,
         category_id: url.searchParams.get("category_id") || undefined,
         expiry_filter: url.searchParams.get("expiry_filter") || undefined,
+        sort: url.searchParams.get("sort") || undefined,
       }),
       getHrAdminDocumentOptions(),
       reviewDocument ? getHrAdminEmployeeDocument(reviewDocument) : null,

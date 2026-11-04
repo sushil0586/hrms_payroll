@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin, requestWithBrowserSession } from "../helpers/staging-auth";
 
 test.describe("Phase 7B leave-attendance collision report certification", () => {
   test("HR admin can certify collision filters, export evidence, manifest, and drilldowns", async ({ page }) => {
@@ -45,21 +45,21 @@ test.describe("Phase 7B leave-attendance collision report certification", () => 
     await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/leave-attendance-collisions\?.*sort=severity/);
     const filteredExportHref = await filteredExportLink.getAttribute("href");
     expect(filteredExportHref).toBeTruthy();
-    const filteredExportResponse = await page.request.get(filteredExportHref ?? "");
-    expect(filteredExportResponse.status()).toBe(200);
-    expect(filteredExportResponse.headers()["content-type"]).toContain("text/csv");
-    expect(filteredExportResponse.headers()["x-hrms-report-key"]).toBe("leave-attendance-collisions");
-    expect(filteredExportResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
-    const filteredExportBody = await filteredExportResponse.text();
+    const filteredExportResponse = await requestWithBrowserSession(page, filteredExportHref ?? "");
+    expect(filteredExportResponse.status).toBe(200);
+    expect(filteredExportResponse.headers["content-type"]).toContain("text/csv");
+    expect(filteredExportResponse.headers["x-hrms-report-key"]).toBe("leave-attendance-collisions");
+    expect(filteredExportResponse.headers["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    const filteredExportBody = filteredExportResponse.body;
     expect(filteredExportBody).toContain("leave_request_id");
     expect(filteredExportBody).toContain("attendance_record_id");
     expect(filteredExportBody).toContain("payroll_blocking");
 
     const manifestHref = await report.getByRole("link", { name: "Manifest" }).getAttribute("href");
     expect(manifestHref).toBeTruthy();
-    const manifestResponse = await page.request.get(manifestHref ?? "");
-    expect(manifestResponse.status()).toBe(200);
-    const manifest = await manifestResponse.json();
+    const manifestResponse = await requestWithBrowserSession(page, manifestHref ?? "");
+    expect(manifestResponse.status).toBe(200);
+    const manifest = JSON.parse(manifestResponse.body);
     expect(manifest.source_endpoints).toContain("/hr-admin/leave-requests/");
     expect(manifest.evidence_columns).toContain("leave_request_id");
     expect(manifest.evidence_columns).toContain("attendance_record_id");

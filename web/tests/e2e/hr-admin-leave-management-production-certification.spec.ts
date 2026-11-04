@@ -400,8 +400,7 @@ test.describe("HR Admin Leave Management production certification", () => {
       dialog.getByRole("button", { name: "Submit leave" }).click(),
     ]);
     expect(leaveResponse.status()).toBe(201);
-    await page.waitForURL(/submitted=[0-9a-f-]+/);
-    const leaveRequestId = new URL(page.url()).searchParams.get("submitted");
+    const leaveRequestId = ((await leaveResponse.json()) as LeaveRequestPayload).id;
     expect(leaveRequestId).toMatch(/^[0-9a-f-]{36}$/);
     const createdRequests = await apiGet<LeaveRequestPayload[] | { items?: LeaveRequestPayload[]; results?: LeaveRequestPayload[] }>(
       page,

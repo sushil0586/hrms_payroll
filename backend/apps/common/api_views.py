@@ -7374,6 +7374,7 @@ def _build_employee_document_center_payload(employee: Employee, request) -> dict
     search_value = (request.query_params.get("q") or "").strip()
     verification_status_filter = (request.query_params.get("verification_status") or "").strip()
     category_id_filter = (request.query_params.get("category_id") or "").strip()
+    sort_value = (request.query_params.get("sort") or "uploaded_desc").strip()
     joining_date = employee.date_of_joining
 
     summary = _get_employee_document_requirement_summary(employee, joining_date=joining_date)
@@ -7395,7 +7396,19 @@ def _build_employee_document_center_payload(employee: Employee, request) -> dict
         )
         queryset = queryset.filter(search_query)
 
-    document_list = list(queryset.order_by("-created_at"))
+    sort_fields = {
+        "uploaded_desc": ("-created_at", "-id"),
+        "uploaded_asc": ("created_at", "id"),
+        "title_asc": ("title", "id"),
+        "title_desc": ("-title", "-id"),
+        "category_asc": ("category__name", "title", "id"),
+        "category_desc": ("-category__name", "-title", "-id"),
+        "status_asc": ("verification_status", "-created_at", "-id"),
+        "status_desc": ("-verification_status", "-created_at", "-id"),
+        "expiry_asc": ("expires_on", "-created_at", "-id"),
+        "expiry_desc": ("-expires_on", "-created_at", "-id"),
+    }
+    document_list = list(queryset.order_by(*sort_fields.get(sort_value, sort_fields["uploaded_desc"])))
     if expiry_filter:
         filtered_documents = []
         for document in document_list:
@@ -17660,7 +17673,7 @@ class HrAdminLeaveRequestBulkImportView(HrAdminContextMixin, APIView):
         leave_type_ids = {str(row.get("leave_type_id")) for row in rows if isinstance(row, dict) and row.get("leave_type_id")}
         target_employees = {str(item.id): item for item in Employee.objects.filter(tenant=tenant, id__in=employee_ids)}
         leave_types = {str(item.id): item for item in LeaveType.objects.filter(tenant=tenant, id__in=leave_type_ids)}
-        created = []
+        prepared_rows = []
         errors = []
         for index, row in enumerate(rows, start=1):
             serializer = HrAdminLeaveRequestCreateSerializer(data=row)
@@ -17676,19 +17689,55 @@ class HrAdminLeaveRequestBulkImportView(HrAdminContextMixin, APIView):
             if not leave_type:
                 errors.append({"row": index, "message": {"leave_type_id": "Leave type not found."}})
                 continue
-            try:
-                leave_request = submit_leave_request(employee=target_employee, leave_type=leave_type, **payload)
-                created.append({"id": str(leave_request.id), "status": leave_request.status})
-            except DjangoValidationError as exc:
-                errors.append({"row": index, "message": getattr(exc, "message_dict", None) or (exc.messages[0] if exc.messages else "Invalid leave request.")})
+            prepared_rows.append((index, target_employee, leave_type, payload))
+
+        if errors:
+            return response.Response(
+                {
+                    "created_count": 0,
+                    "failed_count": len(errors),
+                    "created": [],
+                    "errors": errors,
+                    "rolled_back": True,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created = []
+        with transaction.atomic():
+            for index, target_employee, leave_type, payload in prepared_rows:
+                try:
+                    leave_request = submit_leave_request(employee=target_employee, leave_type=leave_type, **payload)
+                    created.append({"id": str(leave_request.id), "status": leave_request.status})
+                except DjangoValidationError as exc:
+                    errors.append({
+                        "row": index,
+                        "message": getattr(exc, "message_dict", None)
+                        or (exc.messages[0] if exc.messages else "Invalid leave request."),
+                    })
+                    transaction.set_rollback(True)
+                    break
+
+        if errors:
+            return response.Response(
+                {
+                    "created_count": 0,
+                    "failed_count": len(errors),
+                    "created": [],
+                    "errors": errors,
+                    "rolled_back": True,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return response.Response(
             {
                 "created_count": len(created),
-                "failed_count": len(errors),
+                "failed_count": 0,
                 "created": created,
-                "errors": errors,
+                "errors": [],
+                "rolled_back": False,
             },
-            status=status.HTTP_201_CREATED if not errors else status.HTTP_207_MULTI_STATUS,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -19779,6 +19828,7 @@ class HrAdminEmployeeDocumentListView(HrAdminContextMixin, APIView):
         record_status_filter = (request.query_params.get("status") or "").strip()
         category_id_filter = (request.query_params.get("category_id") or "").strip()
         expiry_filter = (request.query_params.get("expiry_filter") or "").strip()
+        sort_value = (request.query_params.get("sort") or "uploaded_desc").strip()
 
         queryset = EmployeeDocument.objects.filter(tenant=employee.tenant).select_related("employee", "category", "artifact")
 
@@ -19802,7 +19852,21 @@ class HrAdminEmployeeDocumentListView(HrAdminContextMixin, APIView):
             )
             queryset = queryset.filter(search_query)
 
-        documents = list(queryset.order_by("-created_at"))
+        sort_fields = {
+            "uploaded_desc": ("-created_at", "-id"),
+            "uploaded_asc": ("created_at", "id"),
+            "employee_asc": ("employee__first_name", "employee__last_name", "employee__employee_code", "id"),
+            "employee_desc": ("-employee__first_name", "-employee__last_name", "-employee__employee_code", "-id"),
+            "title_asc": ("title", "id"),
+            "title_desc": ("-title", "-id"),
+            "category_asc": ("category__name", "title", "id"),
+            "category_desc": ("-category__name", "-title", "-id"),
+            "status_asc": ("verification_status", "-created_at", "-id"),
+            "status_desc": ("-verification_status", "-created_at", "-id"),
+            "expiry_asc": ("expires_on", "-created_at", "-id"),
+            "expiry_desc": ("-expires_on", "-created_at", "-id"),
+        }
+        documents = list(queryset.order_by(*sort_fields.get(sort_value, sort_fields["uploaded_desc"])))
         if expiry_filter:
             filtered_documents = []
             for document in documents:
@@ -19869,6 +19933,11 @@ class HrAdminEmployeeDocumentDetailView(HrAdminContextMixin, APIView):
         item = EmployeeDocument.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee", "category", "artifact").first()
         if not item:
             return response.Response({"detail": "Employee document not found."}, status=status.HTTP_404_NOT_FOUND)
+        if item.status == EmployeeDocumentStatus.WITHDRAWN:
+            return response.Response(
+                {"detail": "Withdrawn documents are read-only and cannot be reviewed."},
+                status=status.HTTP_409_CONFLICT,
+            )
         serializer = HrAdminEmployeeDocumentWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_employee_document(employee, serializer.validated_data, item=item)

@@ -20,6 +20,7 @@ type Query = {
   status: string;
   category_id: string;
   expiry_filter: string;
+  sort: string;
   page: number;
   page_size: number;
   reviewDocument: string;
@@ -47,6 +48,7 @@ function fromLocation(): Query {
     status: params.get("status") || "",
     category_id: params.get("category_id") || "",
     expiry_filter: params.get("expiry_filter") || "",
+    sort: params.get("sort") || "uploaded_desc",
     page: positive("page", 1),
     page_size: Math.min(positive("page_size", 25), 100),
     reviewDocument: params.get("reviewDocument") || "",
@@ -91,7 +93,7 @@ export function EmployeeDocumentWorkspace({ initialData, initialQuery, canVerify
     fallbackError: "Employee document queue could not be updated. The last confirmed queue is still shown.",
   });
   const query = resource.query;
-  const filters = { q: query.q, verification_status: query.verification_status, status: query.status, category_id: query.category_id, expiry_filter: query.expiry_filter, page: query.page, page_size: query.page_size };
+  const filters = { q: query.q, verification_status: query.verification_status, status: query.status, category_id: query.category_id, expiry_filter: query.expiry_filter, sort: query.sort, page: query.page, page_size: query.page_size };
   const refresh = useCallback(async () => (await resource.load(query, "none")).ok, [query, resource]);
   const closeReview = useCallback(() => { void resource.load({ ...query, reviewDocument: "" }, "push"); }, [query, resource]);
   const reviewSaved = useCallback(async () => {

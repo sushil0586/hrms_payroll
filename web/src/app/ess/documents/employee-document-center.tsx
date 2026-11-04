@@ -41,6 +41,7 @@ type Props = {
     verification_status: string;
     category_id: string;
     expiry_filter: string;
+    sort: string;
     page: number;
     page_size: number;
   };
@@ -91,11 +92,13 @@ function filtersFromSearchParams(params: URLSearchParams, fallback: DocumentCent
   const verificationStatus = params.get("verification_status") || "";
   const categoryId = params.get("category_id") || "";
   const expiryFilter = params.get("expiry_filter") || "";
+  const sort = params.get("sort") || "uploaded_desc";
   return {
     q: params.get("q") || "",
     verification_status: ["pending", "verified", "rejected", "expired"].includes(verificationStatus) ? verificationStatus : "",
     category_id: /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|dc-\d+)$/i.test(categoryId) ? categoryId : "",
     expiry_filter: ["expired", "expiring", "missing_expiry"].includes(expiryFilter) ? expiryFilter : "",
+    sort: ["uploaded_desc", "uploaded_asc", "title_asc", "title_desc", "category_asc", "category_desc", "status_asc", "status_desc", "expiry_asc", "expiry_desc"].includes(sort) ? sort : "uploaded_desc",
     page: Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
     page_size: [5, 10, 25].includes(requestedSize) ? requestedSize : fallback.page_size,
   };
@@ -559,6 +562,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
   const [verificationStatus, setVerificationStatus] = useState(currentFilters.verification_status || "all");
   const [categoryId, setCategoryId] = useState(currentFilters.category_id || "all");
   const [expiryFilter, setExpiryFilter] = useState(currentFilters.expiry_filter || "all");
+  const [sort, setSort] = useState(currentFilters.sort || "uploaded_desc");
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const requestDocumentCenter = useCallback(async (filters: DocumentCenterFilters, signal: AbortSignal) => {
     const response = await fetch(`/api/me/document-center${documentCenterQuery(filters)}`, {
@@ -585,6 +589,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
     setVerificationStatus(filters.verification_status || "all");
     setCategoryId(filters.category_id || "all");
     setExpiryFilter(filters.expiry_filter || "all");
+    setSort(filters.sort || "uploaded_desc");
     setPageSize(String(filters.page_size));
   }, []);
   const onUnauthorized = useCallback(() => router.replace("/login"), [router]);
@@ -730,6 +735,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
       verification_status: verificationStatus !== "all" ? verificationStatus : "",
       category_id: categoryId !== "all" ? categoryId : "",
       expiry_filter: expiryFilter !== "all" ? expiryFilter : "",
+      sort,
       page_size: Number(pageSize) || appliedFilters.page_size,
       page,
     };
@@ -758,7 +764,6 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
       const message = "Review the highlighted document fields and try again.";
       setFieldErrors(nextFieldErrors);
       setFeedback({ tone: "error", message });
-      setToast({ title: "Upload failed.", message, tone: "error" });
       return;
     }
 
@@ -792,7 +797,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
         }
         setFieldErrors(fields);
         setFeedback({ tone: "error", message });
-        setToast({ title: "Upload failed.", message, tone: "error" });
+        if (response.status >= 500) setToast({ title: "Upload failed.", message, tone: "error" });
         return;
       }
       storedDocument = storedEmployeeDocument(response.payload);
@@ -826,22 +831,22 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 3500);
+    const timeout = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
   return (
     <fieldset className="queue-list ess-document-center" disabled={!mounted} data-hydrated={mounted} aria-label="Employee documents">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <WorkspaceStandardPanel title="Document status" description="Track your assigned requirements and HR review." actions={<button className="button button--primary" disabled={centerData.uploadable_categories.length === 0} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openUpload(); }} type="button">Upload document</button>}>
-        <div>
-        {centerData.uploadable_categories.length === 0 ? <p className="ess-section-note">Employee uploads are unavailable for your assigned categories.</p> : null}
-        {pageFeedback ? (
+      {pageFeedback ? (
           <div ref={receiptRef} tabIndex={-1} className={`notice ${pageFeedback.tone === "success" ? "notice--success" : "notice--error"}`} role={pageFeedback.tone === "success" ? "status" : "alert"}>
             <strong>{pageFeedback.tone === "success" ? "Document uploaded successfully." : "Document upload failed."}</strong>
             <span className="muted">{pageFeedback.message}</span>
           </div>
-        ) : null}
+      ) : null}
+      <WorkspaceStandardPanel title="Document status" description="Track your assigned requirements and HR review." actions={<button className="button button--primary" disabled={centerData.uploadable_categories.length === 0} onClick={(triggerEvent) => { focusActionTrigger(triggerEvent); openUpload(); }} type="button">Upload document</button>}>
+        <div>
+        {centerData.uploadable_categories.length === 0 ? <p className="ess-section-note">Employee uploads are unavailable for your assigned categories.</p> : null}
         <div className="attendance-summary-strip" aria-label="All your documents">
           <span><strong>{centerData.summary.missing_required_document_count}</strong> missing required</span>
           <span><strong>{centerData.summary.pending_documents}</strong> pending review</span>
@@ -960,6 +965,12 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
                 </select>
               </label>
               <label className="form-field">
+                <span className="muted">Sort by</span>
+                <select className="input-control" disabled={isFiltering} name="sort" onChange={(event) => setSort(event.target.value)} value={sort}>
+                  <option value="uploaded_desc">Newest upload</option><option value="uploaded_asc">Oldest upload</option><option value="title_asc">Title A-Z</option><option value="title_desc">Title Z-A</option><option value="category_asc">Category A-Z</option><option value="category_desc">Category Z-A</option><option value="status_asc">Verification status A-Z</option><option value="status_desc">Verification status Z-A</option><option value="expiry_asc">Expiry earliest</option><option value="expiry_desc">Expiry latest</option>
+                </select>
+              </label>
+              <label className="form-field">
                 <span className="muted">Rows per page</span>
                 <select className="input-control" disabled={isFiltering} name="page_size" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
                   {[5, 10, 25].map((value) => (
@@ -976,8 +987,9 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
                   setVerificationStatus("all");
                   setCategoryId("all");
                   setExpiryFilter("all");
+                  setSort("uploaded_desc");
                   setPageSize("10");
-                  void loadDocumentCenter({ q: "", verification_status: "", category_id: "", expiry_filter: "", page: 1, page_size: 10 });
+                  void loadDocumentCenter({ q: "", verification_status: "", category_id: "", expiry_filter: "", sort: "uploaded_desc", page: 1, page_size: 10 });
                 }}
                 type="button"
               >
@@ -1039,7 +1051,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
             ) : null}
         </WorkspaceStandardPanel>
 
-        <PaginationBar
+        {centerData.total_count > 0 ? <PaginationBar
           hasNext={!isFiltering && centerData.has_next}
           hasPrevious={!isFiltering && centerData.has_previous}
           firstHref={documentCenterHref({ ...appliedFilters, page: 1 })}
@@ -1055,7 +1067,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
           pending={isFiltering}
           previousHref={documentCenterHref({ ...appliedFilters, page: centerData.page - 1 })}
           totalCount={centerData.total_count}
-        />
+        /> : null}
       </section>
 
       {modal}

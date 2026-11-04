@@ -268,7 +268,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
           <aside id="leave-request-detail" tabIndex={-1} aria-label="Leave request detail">
             <div className="queue-toolbar__header">
               <div>
-                <h2 className="section-heading-soft">Leave request detail</h2>
+                <h3 className="section-heading-soft">Request context</h3>
                 <p className="section-copy section-copy-soft">Focused policy, approval, collision, and balance context.</p>
               </div>
               <button className="button button--secondary button--compact" onClick={() => { setSelectedId(""); window.requestAnimationFrame(() => inspectTriggerRef.current?.focus({ preventScroll: true })); }} type="button">Close</button>

@@ -19040,6 +19040,59 @@ def test_hr_admin_can_request_document_reupload(api_client: APIClient, bootstrap
 
 
 @pytest.mark.django_db
+def test_hr_admin_cannot_review_withdrawn_employee_document(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(employee_code="EMP-0042", tenant=tenant)
+    category = DocumentCategory.objects.create(
+        tenant=tenant, code="withdrawn-review-guard", name="Withdrawn review guard",
+        category_type=DocumentCategoryType.IDENTITY, requires_verification=True,
+        allow_employee_upload=True, is_active=True,
+    )
+    document = EmployeeDocument.objects.create(
+        tenant=tenant, employee=employee, category=category, title="Withdrawn proof",
+        file_name="withdrawn-proof.pdf", status=EmployeeDocumentStatus.WITHDRAWN,
+        verification_status=VerificationStatus.PENDING, uploaded_by_identifier="EMP-0042",
+    )
+
+    response = api_client.patch(
+        f"/api/v1/hr-admin/employee-documents/{document.id}/",
+        {"verification_status": VerificationStatus.VERIFIED}, format="json",
+    )
+
+    assert response.status_code == 409, response.json()
+    document.refresh_from_db()
+    assert document.status == EmployeeDocumentStatus.WITHDRAWN
+    assert document.verification_status == VerificationStatus.PENDING
+
+
+@pytest.mark.django_db
+def test_hr_admin_document_list_supports_stable_title_sort(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(employee_code="EMP-0042", tenant=tenant)
+    category = DocumentCategory.objects.create(
+        tenant=tenant, code="document-sort-contract", name="Document sort contract",
+        category_type=DocumentCategoryType.POLICY, requires_verification=False,
+        allow_employee_upload=True, is_active=True,
+    )
+    for title in ["Zulu proof", "Alpha proof"]:
+        EmployeeDocument.objects.create(
+            tenant=tenant, employee=employee, category=category, title=title,
+            file_name=f"{title.lower().replace(' ', '-')}.pdf", status=EmployeeDocumentStatus.ACTIVE,
+            verification_status=VerificationStatus.VERIFIED, uploaded_by_identifier="EMP-0042",
+        )
+
+    response = api_client.get("/api/v1/hr-admin/employee-documents/?q=proof&sort=title_asc&page_size=100")
+
+    assert response.status_code == 200, response.json()
+    titles = [item["title"] for item in response.json()["items"]]
+    assert titles == sorted(titles)
+
+
+@pytest.mark.django_db
 def test_hr_admin_document_list_exposes_expiry_runtime_and_filters_expired(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -19150,6 +19203,98 @@ def test_hr_admin_document_reminder_action_creates_expiry_attention_notification
     assert notification is not None
     assert notification.payload["expiry_state"] == "expired"
     assert notification.payload["employee_code"] == employee.employee_code
+
+
+@pytest.mark.django_db
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="Nexora HRMS <notifications@verified-domain.example>",
+)
+def test_hr_admin_document_reminder_delivers_configured_email(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(employee_code="EMP-0042", tenant=tenant)
+    category = DocumentCategory.objects.create(
+        tenant=tenant,
+        code="expiry-email-reminder-doc",
+        name="Expiry Email Reminder Doc",
+        category_type=DocumentCategoryType.POLICY,
+        requires_verification=False,
+        allow_employee_upload=True,
+        is_active=True,
+    )
+    expired_document = EmployeeDocument.objects.create(
+        tenant=tenant,
+        employee=employee,
+        category=category,
+        title="Expired email reminder target",
+        file_name="expired-email-reminder.pdf",
+        status=EmployeeDocumentStatus.ACTIVE,
+        verification_status=VerificationStatus.VERIFIED,
+        expires_on=timezone.localdate() - timedelta(days=1),
+        uploaded_by_identifier=employee.employee_code,
+    )
+    template = NotificationTemplate.objects.create(
+        tenant=tenant,
+        code="document-expiry-email-certification",
+        name="Document expiry email certification",
+        channel="email",
+        status="active",
+        subject_template="Document expiry reminder",
+        title_template="Document expiry reminder",
+        body_template="A document requires attention. Sign in to review it securely.",
+    )
+    NotificationEventDefinition.objects.filter(
+        tenant=tenant,
+        module="documents",
+        trigger_key="documents.employee.expiry_attention",
+    ).update(is_active=False)
+    NotificationEventDefinition.objects.create(
+        tenant=tenant,
+        code="document-expiry-email-certification",
+        name="Document expiry email certification",
+        module="documents",
+        trigger_key="documents.employee.expiry_attention",
+        audience_type="employee",
+        channel="email",
+        template=template,
+        is_active=True,
+        priority=NotificationPriority.HIGH,
+    )
+    config = NotificationChannelConfiguration.objects.get(tenant=tenant, channel="email")
+    config.is_enabled = True
+    config.backend_key = NotificationDeliveryBackend.EMAIL_SMTP
+    config.sender_address = "Nexora HRMS <notifications@verified-domain.example>"
+    config.save(update_fields=["is_enabled", "backend_key", "sender_address", "updated_at"])
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    response = api_client.post(
+        "/api/v1/hr-admin/employee-documents/reminders/",
+        {"document_ids": [str(expired_document.id)]},
+        format="json",
+    )
+    assert response.status_code == 200, response.json()
+    assert response.json()["reminder_count"] == 1
+
+    mail.outbox = []
+    call_command("process_notifications", tenant_code=tenant.code, channels=["email"])
+
+    notification = Notification.objects.get(
+        tenant=tenant,
+        subject_identifier=str(expired_document.id),
+        channel="email",
+    )
+    assert notification.status == NotificationStatus.DELIVERED
+    assert notification.recipient_address == employee.work_email
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].to == [employee.work_email]
+    assert mail.outbox[0].subject == "Document expiry reminder"
+    rendered_message = f"{mail.outbox[0].subject}\n{mail.outbox[0].body}".lower()
+    assert employee.employee_code.lower() not in rendered_message
+    assert all(secret not in rendered_message for secret in ["password", "authorization", "token", "cookie"])
+    delivery_log = NotificationDeliveryLog.objects.get(notification=notification)
+    assert delivery_log.status == NotificationStatus.DELIVERED
+    assert delivery_log.provider_name == NotificationDeliveryBackend.EMAIL_SMTP
 
 
 @pytest.mark.django_db

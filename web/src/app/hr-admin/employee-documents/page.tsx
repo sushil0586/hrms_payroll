@@ -34,6 +34,7 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
   const status = normalizeParam(currentParams.status) ?? "";
   const categoryId = normalizeParam(currentParams.category_id) ?? "";
   const expiryFilter = normalizeParam(currentParams.expiry_filter) ?? "";
+  const sort = normalizeParam(currentParams.sort) ?? "uploaded_desc";
   const reviewDocumentId = normalizeParam(currentParams.reviewDocument) ?? "";
   const uploadDocument = normalizeParam(currentParams.uploadDocument) === "create" ? "create" : "";
   const canUploadDocuments = canManageDocuments && sessionHasPermission(sessionUser, "employees.view");
@@ -47,11 +48,12 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
       status: status || undefined,
       category_id: categoryId || undefined,
       expiry_filter: expiryFilter || undefined,
+      sort,
     }),
     getHrAdminDocumentOptions(),
   ]);
   const lastPage = Math.max(1, Math.ceil(result.data.total_count / result.data.page_size));
-  if (result.data.page > lastPage) result = await getHrAdminEmployeeDocuments({ page: lastPage, page_size: pageSize, q, verification_status: verificationStatus || undefined, status: status || undefined, category_id: categoryId || undefined, expiry_filter: expiryFilter || undefined });
+  if (result.data.page > lastPage) result = await getHrAdminEmployeeDocuments({ page: lastPage, page_size: pageSize, q, verification_status: verificationStatus || undefined, status: status || undefined, category_id: categoryId || undefined, expiry_filter: expiryFilter || undefined, sort });
   const [reviewDocumentResult, employeesResult, uploadCategoriesResult] = await Promise.all([
     canVerifyDocuments && reviewDocumentId ? getHrAdminEmployeeDocument(reviewDocumentId) : null,
     canUploadDocuments && uploadDocument ? getHrAdminEmployees() : null,
@@ -85,6 +87,7 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
           status,
           category_id: categoryId,
           expiry_filter: expiryFilter,
+          sort,
           page: result.data.page,
           page_size: pageSize,
           reviewDocument: reviewDocumentId,

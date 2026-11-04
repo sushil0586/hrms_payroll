@@ -287,6 +287,35 @@ test("HR leave request inspection, review cancellation, filters, and sorting wor
   await expect(page).toHaveURL(/sort=employee/);
 });
 
+test("leave request import reports an atomic rollback without false created rows", async ({ page }) => {
+  await page.goto("/hr-admin/leave-requests");
+  await page.getByText("Import leave requests", { exact: true }).click();
+  const workbench = page.getByTestId("leave-request-import-workbench");
+  await workbench.getByRole("button", { name: "Load sample template", exact: true }).click();
+  const csv = workbench.getByRole("textbox", { name: "Leave request CSV data", exact: true });
+  const sample = await csv.inputValue();
+  const firstRow = sample.trim().split("\n")[1];
+  await csv.fill(`${sample.trim()}\n${firstRow.replaceAll("2026-04-03", "2026-04-07").replace("Phase 9 leave attendance collision", "Atomic rollback second row")}`);
+  await workbench.getByRole("button", { name: "Preview leave import", exact: true }).click();
+  await expect(workbench.getByRole("button", { name: "Commit ready leave rows", exact: true })).toBeEnabled();
+
+  await page.route("**/api/hr-admin/leave-requests/bulk-import", (route) => route.fulfill({
+    status: 400,
+    contentType: "application/json",
+    body: JSON.stringify({
+      detail: "No leave requests were created.",
+      rolled_back: true,
+      errors: [{ row: 2, message: "Synthetic concurrent validation failure." }],
+    }),
+  }), { times: 1 });
+  await workbench.getByRole("button", { name: "Commit ready leave rows", exact: true }).click();
+
+  await expect(workbench.getByRole("alert")).toContainText("Some leave rows failed");
+  await expect(workbench.getByRole("table")).toContainText("Batch rolled back because another row failed validation.");
+  await expect(workbench.getByRole("table")).toContainText("Synthetic concurrent validation failure.");
+  await expect(workbench.getByText("created", { exact: true })).toHaveCount(0);
+});
+
 test("ESS request filters submit explicitly, show scoped loading, and hide empty pagination", async ({ page }) => {
   await loginAsEmployee(page);
   await page.goto("/ess/requests");
@@ -354,8 +383,7 @@ test("ESS Apply Leave exposes complete validation once and remains usable on mob
   await startDate.fill("2026-12-18");
   await endDate.fill("2026-12-17");
   await reason.fill("Synthetic invalid range");
-  await modal.getByRole("button", { name: "Submit leave", exact: true }).click();
-  await expect(modal.getByText("End date must be the same as or after the start date.", { exact: true })).toBeVisible();
+  await expect(modal.getByRole("button", { name: "Submit leave", exact: true })).toBeDisabled();
   await expect(modal.locator(".notice--warning").filter({ hasText: "Check dates" })).toBeVisible();
 
   await endDate.fill("2026-12-18");

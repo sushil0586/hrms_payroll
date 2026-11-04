@@ -339,6 +339,7 @@ export async function getEssDocumentCenter(params?: {
   verification_status?: string;
   category_id?: string;
   expiry_filter?: string;
+  sort?: string;
 }) {
   return apiGet<EssDocumentCenterResponse>(`/me/document-center/${buildQueryString(params ?? {})}`, 15_000);
 }
@@ -1080,6 +1081,7 @@ export async function getHrAdminEmployeeDocuments(params?: {
   status?: string;
   category_id?: string;
   expiry_filter?: string;
+  sort?: string;
 }) {
   return apiGet<HrAdminEmployeeDocumentListResponse>(`/hr-admin/employee-documents/${buildQueryString(params ?? {})}`);
 }

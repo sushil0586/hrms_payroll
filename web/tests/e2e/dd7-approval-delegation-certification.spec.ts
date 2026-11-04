@@ -67,7 +67,9 @@ test("DD-WF-004 failed decision and browser refresh preserve the current step fo
       });
     }, { times: 1 });
     await dialog.getByRole("button", { name: "Approve request" }).click();
-    await expect(dialog.getByRole("alert")).toContainText("Synthetic upstream interruption.");
+    await expect(dialog.getByRole("alert")).toContainText(
+      "We could not confirm the outcome. Check the latest records before trying again to avoid submitting twice.",
+    );
     await expect(dialog.getByLabel("Decision note")).toHaveValue(decisionNote);
 
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -79,7 +81,7 @@ test("DD-WF-004 failed decision and browser refresh preserve the current step fo
     await dialog.getByRole("button", { name: "Approve request" }).dblclick();
     const response = await responsePromise;
     expect(response.status()).toBe(200);
-    await expect(dialog.locator(".notice--success")).toContainText("Request approved.");
+    await expect(dialog.locator(".notice--success")).toContainText("Leave request approved.");
     const approvedPayload = await response.json() as { id: string; status: string; workflow_reference: string };
     expect(approvedPayload).toMatchObject({ id: leaveRequestId, status: "approved" });
 

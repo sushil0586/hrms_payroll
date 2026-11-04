@@ -1,16 +1,14 @@
 import {test,expect,type Page} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
-import {readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 const repoRoot=path.resolve(__dirname,'../../..');
 import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona,type IsolatedQaWorkspace} from '../helpers/isolated-qa-workspace';
 let fixture:IsolatedQaWorkspace,foreign:IsolatedQaWorkspace;
 let closedId:string;
-const faultFile=path.join(repoRoot,"docs/qa/evidence/hr-admin-standardization/a1/load-fault.json");
-test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repoRoot,'.venv/bin/python'),[path.join(repoRoot,'docs/qa/evidence/hr-admin-standardization/a1/seed.py'),fixture.manifestPath],{env:process.env,cwd:repoRoot});closedId=JSON.parse(readFileSync(fixture.manifestPath,"utf8")).a1.closed_id;foreign=await provisionIsolatedQaWorkspace({...info,title:"foreign-attendance",workerIndex:info.workerIndex} as typeof info)});
+test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repoRoot,'.venv/bin/python'),[path.join(repoRoot,'backend/tests/fixtures/attendance_family.py'),fixture.manifestPath],{env:process.env,cwd:repoRoot});closedId=JSON.parse(readFileSync(fixture.manifestPath,"utf8")).a1.closed_id;foreign=await provisionIsolatedQaWorkspace({...info,title:"foreign-attendance",workerIndex:info.workerIndex} as typeof info);execFileSync(path.join(repoRoot,'.venv/bin/python'),[path.join(repoRoot,'backend/tests/fixtures/attendance_family.py'),foreign.manifestPath],{env:process.env,cwd:repoRoot})});
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(foreign);await cleanupIsolatedQaWorkspace(fixture)});
 test.beforeEach(async({page})=>{const p=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:p.username,password:p.password}})).status()).toBe(200)});
-test.afterEach(()=>{rmSync(faultFile,{force:true})});
 const toolbar=(p:Page)=>p.getByTestId('attendance-records-toolbar');
 const status=(p:Page)=>toolbar(p).getByRole('combobox',{name:/^Status/});
 async function start(p:Page){await p.goto('/hr-admin/attendance-records?page_size=10');await expect(p.getByRole('heading',{name:'Attendance records',exact:true}).first()).toBeVisible()}
@@ -30,14 +28,17 @@ test('HA-F03 pagination ignores unapplied draft filters',async({page})=>{
 const table=(p:Page)=>p.getByRole('table',{name:'Attendance records',exact:true});
 const dataRows=(p:Page)=>table(p).locator('tbody tr[data-record-id]');
 const filterForm=(p:Page)=>p.getByRole('form',{name:'Attendance filters'});
-async function readRecord(p:Page,id:string|null){const response=await p.request.get('/api/hr-admin/attendance-records?page_size=100');expect(response.status()).toBe(200);const record=(await response.json()).items.find((item:{id:string})=>item.id===id);expect(record).toBeTruthy();return record}
+async function readList(p:Page){return p.evaluate(async()=>{const response=await fetch('/api/hr-admin/attendance-records?page_size=100');return {status:response.status,payload:await response.json()}})}
+async function readRecord(p:Page,id:string|null){const response=await readList(p);expect(response.status).toBe(200);const record=response.payload.items.find((item:{id:string})=>item.id===id);expect(record).toBeTruthy();return record}
+async function browserRequest(p:Page,url:string,method:string,body?:object){return p.evaluate(async({url,method,body})=>{const response=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});return {status:response.status,payload:await response.json().catch(()=>({}))}}, {url,method,body})}
 
 
 test('page size retains committed scope, clears selection and normalizes invalid page',async({page})=>{
  await start(page);await dataRows(page).first().getByRole('checkbox').check();await status(page).selectOption('absent');
  const pager=page.getByRole('form',{name:'Attendance pagination'});await pager.getByRole('combobox').selectOption('25');await pager.getByRole('button',{name:'Apply',exact:true}).click();
  await expect(page).not.toHaveURL(/status=absent/);await expect(status(page)).toHaveValue('');await expect(dataRows(page)).toHaveCount(25);await expect(toolbar(page).getByRole('button',{name:'Set status (0)',exact:true})).toBeDisabled();
- await page.goto('/hr-admin/attendance-records?page=999&page_size=10');await expect(page).toHaveURL(/page=3/);await expect(dataRows(page)).toHaveCount(7);
+ const total=(await readList(page)).payload.total_count;const lastPage=Math.ceil(total/10);const lastPageCount=total-(lastPage-1)*10;
+ await page.goto('/hr-admin/attendance-records?page=999&page_size=10');await expect(page).toHaveURL(new RegExp(`page=${lastPage}(?:&|$)`));await expect(dataRows(page)).toHaveCount(lastPageCount);
 });
 
 test('combined filters, date validation, refresh, empty and reset',async({page})=>{
@@ -49,7 +50,7 @@ test('combined filters, date validation, refresh, empty and reset',async({page})
  await f.getByLabel('To date',{exact:true}).fill('2032-03-03');await f.getByRole('checkbox',{name:'Late rows only',exact:true}).check();await f.getByRole('button',{name:'Apply filters',exact:true}).click();
  await expect(dataRows(page)).toHaveCount(1);await expect(dataRows(page)).toContainText('10 min late');await page.reload();await expect(f.getByLabel('From date',{exact:true})).toHaveValue('2032-03-03');
  await f.getByRole('textbox',{name:'Search',exact:true}).fill('no-synthetic-match');await f.getByRole('textbox',{name:'Search',exact:true}).press('Enter');await expect(page.getByText('No attendance rows match the current filters.',{exact:true})).toBeVisible();
- await f.getByRole('link',{name:'Clear filters',exact:true}).click();await expect(dataRows(page)).toHaveCount(25);
+ await f.getByRole('button',{name:'Clear filters',exact:true}).click();await expect(dataRows(page)).toHaveCount(10);
  await page.goto('/hr-admin/attendance-records?from_date=2032-02-31');await expect(toolbar(page).getByRole('alert')).toContainText('valid calendar date');await expect(table(page)).toHaveCount(0);
 });
 
@@ -73,16 +74,18 @@ test('closed-period bulk denial is actionable and preserves historical status',a
 });
 
 test('ownership rejection and read-only attendance role',async({page})=>{
- const foreignList=await page.request.get('/api/hr-admin/attendance-records?page_size=100');const ids=(await foreignList.json()).items.map((x:{id:string})=>x.id);
- const loginForeign=await page.context().browser()!.newContext({baseURL:'http://127.0.0.1:3201'});const user=workspacePersona(foreign,'hr_admin');expect((await loginForeign.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);const foreignId=(await (await loginForeign.request.get('/api/hr-admin/attendance-records?page_size=10')).json()).items[0].id;await loginForeign.close();
- expect(ids).not.toContain(foreignId);expect((await page.request.patch(`/api/hr-admin/attendance-records/${foreignId}`,{data:{notes:'Forbidden synthetic cross-tenant change'}})).status()).toBe(404);const scoped=await page.request.post('/api/hr-admin/attendance-records/bulk-actions',{data:{action:'lock',record_ids:[foreignId]}});expect(scoped.status()).toBe(200);expect((await scoped.json()).updated_count).toBe(0);
- await page.request.post('/api/auth/logout');const p=workspacePersona(fixture,'hr_checker');expect((await page.request.post('/api/auth/login',{data:{identifier:p.username,password:p.password}})).status()).toBe(200);
- await start(page);await expect(toolbar(page).getByText('Read-only attendance view.',{exact:true})).toBeVisible();await expect(table(page).getByRole('checkbox')).toHaveCount(0);expect((await page.request.post('/api/hr-admin/attendance-records/bulk-actions',{data:{action:'lock',record_ids:[closedId]}})).status()).toBe(403);
+ await start(page);
+ const ids=(await readList(page)).payload.items.map((x:{id:string})=>x.id);
+ const loginForeign=await page.context().browser()!.newContext({baseURL:new URL(page.url()).origin});const user=workspacePersona(foreign,'hr_admin');expect((await loginForeign.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);const foreignPage=await loginForeign.newPage();await foreignPage.goto('/hr-admin/attendance-records?page_size=10');const foreignId=(await readList(foreignPage)).payload.items[0].id;await loginForeign.close();
+ expect(ids).not.toContain(foreignId);expect((await browserRequest(page,`/api/hr-admin/attendance-records/${foreignId}`,'PATCH',{notes:'Forbidden synthetic cross-tenant change'})).status).toBe(404);const scoped=await browserRequest(page,'/api/hr-admin/attendance-records/bulk-actions','POST',{action:'lock',record_ids:[foreignId]});expect(scoped.status).toBe(200);expect(scoped.payload.updated_count).toBe(0);
+ await browserRequest(page,'/api/auth/logout','POST');const p=workspacePersona(fixture,'hr_checker');expect((await browserRequest(page,'/api/auth/login','POST',{identifier:p.username,password:p.password})).status).toBe(200);
+ await start(page);await expect(toolbar(page).getByText('Read-only attendance view.',{exact:true})).toBeVisible();await expect(table(page).getByRole('checkbox')).toHaveCount(0);expect((await browserRequest(page,'/api/hr-admin/attendance-records/bulk-actions','POST',{action:'lock',record_ids:[closedId]})).status).toBe(403);
 });
 
-test('server load failure, honest error and retry',async({page},info)=>{
- writeFileSync(faultFile,JSON.stringify({q:fixture.manifest.credentials.employee.employee_code}));await page.goto(`/hr-admin/attendance-records?q=${fixture.manifest.credentials.employee.employee_code}`);
- await expect(page.getByRole('heading',{name:'Attendance records could not be loaded',exact:true})).toBeVisible();await page.screenshot({path:`../docs/qa/evidence/hr-admin-standardization/a1/${info.project.name}-error.png`,fullPage:true});await page.getByRole('button',{name:'Retry workspace',exact:true}).click();await expect(table(page)).toBeVisible();await expect(dataRows(page).first()).toContainText('QA-EMP-001');
+test('scoped load failure keeps confirmed data and supports retry',async({page})=>{
+ await start(page);let failed=false;await page.route('**/api/hr-admin/attendance-records/workspace?*',async route=>{if(!failed){failed=true;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'Synthetic attendance workspace outage.'})});return}await route.continue()});
+ await filterForm(page).getByRole('textbox',{name:'Search',exact:true}).fill(fixture.manifest.credentials.employee.employee_code);await filterForm(page).getByRole('button',{name:'Apply filters',exact:true}).click();
+ await expect(page.locator('main').getByRole('alert')).toContainText('Synthetic attendance workspace outage.');await expect(dataRows(page)).toHaveCount(10);await page.getByRole('button',{name:'Retry',exact:true}).click();await expect(page.locator('main').getByRole('alert')).toHaveCount(0);await expect(dataRows(page).first()).toContainText('QA-EMP-001');
 });
 
 test('responsive renders, keyboard table scrolling and inspection',async({page},info)=>{
@@ -92,7 +95,7 @@ test('responsive renders, keyboard table scrolling and inspection',async({page},
   if(width<600){await region.press('ArrowRight');expect(await region.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);await region.press('ArrowLeft');for(const control of await filterForm(page).getByRole('combobox').all())expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(43.99)}
   expect((await toolbar(page).getByRole('button',{name:'Select page',exact:true}).boundingBox())!.height).toBeLessThan(65);
   await page.evaluate(()=>window.scrollTo({top:0,behavior:"instant"}));
-  await page.screenshot({path:`../docs/qa/evidence/hr-admin-standardization/a1/${info.project.name}-${width}.png`,fullPage:true});
+  await page.screenshot({path:info.outputPath(`attendance-records-${width}.png`),fullPage:true});
  }
  await dataRows(page).first().getByRole('button',{name:'Inspect',exact:true}).press('Enter');await expect(page.getByRole('complementary',{name:'Attendance record detail',exact:true})).toBeVisible();
  await page.getByRole('complementary',{name:'Attendance record detail',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await expect(page.getByRole('complementary',{name:'Attendance record detail',exact:true})).toHaveCount(0);
@@ -105,7 +108,7 @@ test('automated accessibility and neighboring employee ESS queues',async({page},
 
 test('permitted record edit keeps notes, timings and return navigation',async({page})=>{
  await start(page);const row=dataRows(page).first();const id=await row.getAttribute('data-record-id');const before=await readRecord(page,id);
- await row.getByRole('button',{name:'Inspect',exact:true}).click();const panel=page.getByRole('complementary',{name:'Attendance record detail',exact:true});await panel.getByRole('link',{name:'Edit record',exact:true}).click();
+ await row.getByRole('button',{name:'Inspect',exact:true}).click();const panel=page.getByRole('complementary',{name:'Attendance record detail',exact:true});await panel.getByRole('button',{name:'Edit record',exact:true}).click();
  const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();await dialog.getByRole('textbox',{name:'Notes',exact:true}).fill('A1 isolated attendance review');
  const submit=dialog.getByRole('button',{name:/Save/});await submit.click();await expect(dialog).toHaveCount(0);
  const after=await readRecord(page,id);expect(after.notes).toBe('A1 isolated attendance review');expect(after.check_in_at).toBe(before.check_in_at);expect(after.check_out_at).toBe(before.check_out_at);expect(after.work_duration_hours).toBe(before.work_duration_hours);

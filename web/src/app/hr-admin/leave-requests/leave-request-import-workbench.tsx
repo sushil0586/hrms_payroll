@@ -227,7 +227,7 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes, o
       row_count: nextRows.length,
       ready_count: nextRows.filter((row) => row.status === "ready").length,
       blocked_count: nextRows.filter((row) => row.status === "blocked").length,
-      rollback_supported: false,
+      rollback_supported: true,
       evidence_snapshot: { headers, ui: "leave-request-import-workbench" },
       row_errors: nextRows.filter((row) => row.status === "blocked").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
     });
@@ -244,21 +244,25 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes, o
       body: JSON.stringify({ rows: readyIndexes.map((index) => nextRows[index].payload) }),
     });
     const payload = response.payload;
-    if (response.ok || response.status === 207) {
-      const failedRows = new Map<number, string>((payload.errors ?? []).map((item: { row: number; message: unknown }) => [item.row, typeof item.message === "string" ? item.message : JSON.stringify(item.message)]));
+    const failedRows = new Map<number, string>((payload.errors ?? []).map((item: { row: number; message: unknown }) => [item.row, typeof item.message === "string" ? item.message : JSON.stringify(item.message)]));
+    if (response.ok) {
       const createdRows = payload.created ?? [];
       readyIndexes.forEach((rowIndex, resultIndex) => {
-        const failure = failedRows.get(resultIndex + 1);
         const createdStatus = createdRows[resultIndex]?.status ?? "workflow";
         nextRows[rowIndex] = {
           ...nextRows[rowIndex],
-          status: failure ? "failed" : "created",
-          message: failure || `Leave request created with ${createdStatus} status.`,
+          status: "created",
+          message: `Leave request created with ${createdStatus} status.`,
         };
       });
     } else {
-      readyIndexes.forEach((rowIndex) => {
-        nextRows[rowIndex] = { ...nextRows[rowIndex], status: "failed", message: payload.detail || Object.values(payload).flat().join(" ") || "Create failed." };
+      readyIndexes.forEach((rowIndex, resultIndex) => {
+        const rowMessage = failedRows.get(resultIndex + 1);
+        nextRows[rowIndex] = {
+          ...nextRows[rowIndex],
+          status: "failed",
+          message: rowMessage || (payload.rolled_back ? "Batch rolled back because another row failed validation." : payload.detail || "Create failed."),
+        };
       });
     }
     setRows([...nextRows]);
@@ -268,7 +272,7 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes, o
       : "Commit complete. Open leave-attendance collisions or Time to Payroll to verify impact.");
     await recordImportBatchAudit({
       import_type: "leave_requests",
-      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
+      status: nextRows.some((row) => row.status === "failed") ? "failed" : "committed",
       file_name: "leave-request-import.csv",
       source_hash: await sha256Hex(csvText),
       row_count: nextRows.length,
@@ -276,7 +280,7 @@ export function LeaveRequestImportWorkbench({ requests, employees, leaveTypes, o
       created_count: nextRows.filter((row) => row.status === "created").length,
       blocked_count: nextRows.filter((row) => row.status === "blocked").length,
       failed_count: nextRows.filter((row) => row.status === "failed").length,
-      rollback_supported: false,
+      rollback_supported: true,
       evidence_snapshot: { headers, ui: "leave-request-import-workbench" },
       row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
     });

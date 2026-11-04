@@ -26,8 +26,11 @@ test.describe("HR Admin leave request operations certification", () => {
       await expect(requestTable).toContainText(/Pending approval from|Approved|Rejected|Cancelled|Withdrawn/i);
       await expect(requestTable).toContainText(/Collision clear|collision/i);
       await page.getByRole("button", { name: "Inspect" }).first().click();
-      await expect(page.getByRole("heading", { name: "Leave request detail" })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Open balance" }).first()).toHaveAttribute("href", /\/hr-admin\/leave-balances\?q=/);
+      const detailDialog = page.getByRole("dialog", { name: "Leave request detail" });
+      await expect(detailDialog).toBeVisible();
+      await expect(detailDialog.getByRole("link", { name: "Open balance" })).toHaveAttribute("href", /\/hr-admin\/leave-balances\?q=/);
+      await detailDialog.getByRole("button", { name: "Close" }).first().click();
+      await expect(detailDialog).toHaveCount(0);
     } else {
       await expect(page.getByText("No leave requests match the current filters.")).toBeVisible();
     }

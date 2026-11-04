@@ -252,7 +252,7 @@ export function ShiftRosterTemplatesWorkbench({
               </tbody>
             </table>
           </WorkspaceTableScrollRegion>
-          <div className="panel-card-soft attendance-pagination-panel">
+          {totalCount > 0 ? <div className="panel-card-soft attendance-pagination-panel">
             <PaginationBar
               navigationMode={onQueryChange ? "scoped" : undefined}
               pending={pending}
@@ -279,7 +279,7 @@ export function ShiftRosterTemplatesWorkbench({
               <label className="form-field attendance-pagination-rows"><span className="muted">Rows</span><select className="input-control" name="page_size" defaultValue={String(pageSize)}><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
               <button className="button button--secondary" type="submit">Apply</button>
             </WorkspaceFilterForm>
-          </div>
+          </div> : null}
         </section>
 
         {selectedItem ? (

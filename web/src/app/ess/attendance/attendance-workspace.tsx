@@ -314,7 +314,6 @@ function AttendanceRegularizationModal({
       const message = "Review the highlighted attendance fields and try again.";
       setFieldErrors(nextErrors);
       setFeedback({ tone: "error", message });
-      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
@@ -356,7 +355,7 @@ function AttendanceRegularizationModal({
     if (!response.ok) {
       const message = getErrorMessage(payload);
       setFeedback({ tone: "error", message });
-      setToast({ title: "Submission failed.", message, tone: "error" });
+      if (response.status >= 500) setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
@@ -372,7 +371,7 @@ function AttendanceRegularizationModal({
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 3500);
+    const timeout = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -541,11 +540,17 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
   const [clickedRegularization, setClickedRegularization] = useState<AttendanceRegularizationItem | null>(null);
   const [dismissedRequestId, setDismissedRequestId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submissionToast, setSubmissionToast] = useState(false);
   const searchParams = useSearchParams();
   useEffect(() => {
     if (!submitted) return;
     window.requestAnimationFrame(() => submittedStatusRef.current?.focus({ preventScroll: true }));
   }, [submitted]);
+  useEffect(() => {
+    if (!submissionToast) return;
+    const timeout = window.setTimeout(() => setSubmissionToast(false), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [submissionToast]);
   const initialAttendanceQuery: AttendanceQuery = {
     month: normalizeParam(currentParams.month) ?? "",
     page: initialAttendance.page,
@@ -695,6 +700,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
 
   return (
     <main className="shell shell--workspace ess-experience-shell ess-compact ess-attendance accerio-page" data-hydrated={hydrated}>
+      {submissionToast ? <ActionToast message="Track the approval in Regularizations below." title="Attendance regularization submitted." tone="success" /> : null}
       <WorkspaceStandardHeader title="Attendance" description="Review your recorded days and request an authorized correction." actions={<><button className="button button--primary" disabled={!eligible.length || isDemo || isRefreshing || Boolean(refreshError)} ref={correctionActionRef} onClick={(event) => requestCorrection(undefined, event.currentTarget)} type="button">Regularize attendance</button><a data-navigation-mode="document" className="button button--secondary" href="/ess">Overview</a></>} />
       <p className="sr-only" id="ess-attendance-table-scroll-help">When this table region is focused, use Left and Right arrow keys to scroll its columns.</p>
       {invalidMonth ? <p className="notice notice--error" role="alert">The requested month is invalid. Showing the current tenant month; choose a month below to continue.</p> : null}
@@ -708,6 +714,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
       </div>
       <WorkspaceStandardPanel title="Attendance period" description={`${formatDate(attendance.period_start)} – ${formatDate(attendance.period_end)} · Times: ${attendance.timezone} · Today: ${formatDate(attendance.today)}`}>
         <div aria-busy={attendanceResource.isPending}>
+        {attendanceResource.isPending ? <div className="notice notice--quiet" role="status"><strong>Updating attendance period…</strong><span>The last confirmed records remain visible.</span></div> : null}
         {attendanceResource.error ? <div role="alert" className="notice notice--error"><p>{attendanceResource.error}</p><button className="button button--secondary" disabled={attendanceResource.isPending} onClick={() => void attendanceResource.load(attendanceResource.query, "none")} type="button">Retry period</button></div> : null}
         <WorkspaceFilterForm action="/ess/attendance" className="ess-attendance-toolbar" label="Attendance period filters" pending={attendanceResource.isPending} updateMode="scoped" onSubmit={(event) => {
           event.preventDefault();
@@ -733,7 +740,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
           return { date: day, number: index + 1, status: record ? formatStatus(record.status) : "No record", shortStatus: record ? calendarStatusCode[record.status] ?? "?" : "—", finalized: Boolean(record?.is_locked), selected: day === selectedDate, href: href({ day }), label: `${day}: ${record ? formatStatus(record.status) : "No record"}${record?.is_locked ? ", finalized" : ""}` };
         })} /> : <>
           <div className="workspace-table-scroll" role="region" aria-label="Attendance records" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance days"><thead><tr><th scope="col">Day</th><th scope="col">Status</th><th scope="col">Shift</th><th scope="col">Recorded hours</th><th scope="col">Protection</th></tr></thead><tbody>{attendance.items.map((day) => <tr key={day.id} className={day.attendance_date === selectedDate ? "is-selected" : ""}><th scope="row"><a data-navigation-mode="local" onClick={(event) => selectLocal(event, { day: day.attendance_date })} aria-current={day.attendance_date === selectedDate ? "date" : undefined} href={href({ day: day.attendance_date })}>{formatDate(day.attendance_date)}</a></th><td>{formatStatus(day.status)}</td><td>{day.shift || "Not recorded"}</td><td>{day.work_duration_hours}</td><td>{day.is_locked ? "Finalized" : "Not finalized"}</td></tr>)}</tbody></table></div>
-          <div aria-label="Attendance pagination"><PaginationBar navigationMode="scoped" pending={attendanceResource.isPending} page={attendance.page} pageSize={attendance.page_size} totalCount={attendance.total_count} hasNext={attendance.has_next} hasPrevious={attendance.has_previous} firstHref={href({ page: "1" })} lastHref={href({ page: String(attendance.total_pages) })} previousHref={href({ page: String(Math.max(1, attendance.page - 1)) })} nextHref={href({ page: String(attendance.page + 1) })} onFirst={() => void attendanceResource.load({ ...attendanceResource.query, page: 1 })} onLast={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.total_pages })} onPrevious={() => void attendanceResource.load({ ...attendanceResource.query, page: Math.max(1, attendance.page - 1) })} onNext={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.page + 1 })} /></div>
+          {attendance.total_count > 0 ? <div aria-label="Attendance pagination"><PaginationBar navigationMode="scoped" pending={attendanceResource.isPending} page={attendance.page} pageSize={attendance.page_size} totalCount={attendance.total_count} hasNext={attendance.has_next} hasPrevious={attendance.has_previous} firstHref={href({ page: "1" })} lastHref={href({ page: String(attendance.total_pages) })} previousHref={href({ page: String(Math.max(1, attendance.page - 1)) })} nextHref={href({ page: String(attendance.page + 1) })} onFirst={() => void attendanceResource.load({ ...attendanceResource.query, page: 1 })} onLast={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.total_pages })} onPrevious={() => void attendanceResource.load({ ...attendanceResource.query, page: Math.max(1, attendance.page - 1) })} onNext={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.page + 1 })} /></div> : null}
         </>}
         </div>
       </WorkspaceStandardPanel>
@@ -748,14 +755,15 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
       </WorkspaceStandardPanel>
       <WorkspaceStandardPanel title="Regularizations" description={`All periods · ${pending} awaiting approval. View request details and the recorded decision.`}>
         <div aria-busy={regularizationResource.isPending}>
+        {regularizationResource.isPending ? <div className="notice notice--quiet" role="status"><strong>Updating regularization history…</strong><span>The last confirmed requests remain visible.</span></div> : null}
         {regularizationResource.error ? <div role="alert" className="notice notice--error"><p>{regularizationResource.error}</p><button className="button button--secondary" disabled={regularizationResource.isPending} onClick={() => void regularizationResource.load(regularizationResource.query, "none")} type="button">Retry history</button></div> : null}
         <nav className="ess-attendance-toolbar" aria-label="Regularization status">{["all", "pending", "approved", "rejected"].map((item) => <a data-navigation-mode="local" key={item} href={href({ status: item, reg_page: "1", regId: undefined })} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void regularizationResource.load({ ...regularizationResource.query, status: item, page: 1 }); }} aria-current={status === item ? "page" : undefined}>{formatStatus(item)} ({regularizations.status_counts[item as keyof typeof regularizations.status_counts] ?? 0})</a>)}</nav>
         <div className="workspace-table-scroll" role="region" aria-label="Correction history" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance regularization history"><thead><tr><th scope="col">Day</th><th scope="col">Requested status</th><th scope="col">Approval status</th><th scope="col">Approver / note</th><th scope="col">Details</th></tr></thead><tbody>{regularizations.items.map((item) => <tr key={item.id}><th scope="row">{formatDate(item.attendance_date)}</th><td>{formatStatus(item.requested_status)}</td><td><WorkspaceStatusBadge tone={statusTone(item.status)}>{formatStatus(item.status)}</WorkspaceStatusBadge></td><td>{getRegularizationOwnerLabel(item)}<br />{item.manager_comment || item.rejection_reason || getApprovalWaitingLabel(item)}</td><td><button className="button button--secondary" type="button" onClick={(event) => { event.currentTarget.focus(); setDismissedRequestId(null); setClickedRegularization(item); }}>View</button></td></tr>)}</tbody></table></div>
         {!regularizations.items.length ? <p className="ess-empty">No regularizations in this view.</p> : null}
-        <div aria-label="Regularization pagination"><PaginationBar navigationMode="scoped" pending={regularizationResource.isPending} page={regularizations.page} pageSize={regularizations.page_size} totalCount={regularizations.total_count} hasNext={regularizations.has_next} hasPrevious={regularizations.has_previous} firstHref={href({ reg_page: "1", regId: undefined })} lastHref={href({ reg_page: String(Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size))), regId: undefined })} previousHref={href({ reg_page: String(Math.max(1, regularizations.page - 1)), regId: undefined })} nextHref={href({ reg_page: String(regularizations.page + 1), regId: undefined })} onFirst={() => void regularizationResource.load({ ...regularizationResource.query, page: 1 })} onLast={() => void regularizationResource.load({ ...regularizationResource.query, page: Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size)) })} onPrevious={() => void regularizationResource.load({ ...regularizationResource.query, page: Math.max(1, regularizations.page - 1) })} onNext={() => void regularizationResource.load({ ...regularizationResource.query, page: regularizations.page + 1 })} /></div>
+        {regularizations.total_count > 0 ? <div aria-label="Regularization pagination"><PaginationBar navigationMode="scoped" pending={regularizationResource.isPending} page={regularizations.page} pageSize={regularizations.page_size} totalCount={regularizations.total_count} hasNext={regularizations.has_next} hasPrevious={regularizations.has_previous} firstHref={href({ reg_page: "1", regId: undefined })} lastHref={href({ reg_page: String(Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size))), regId: undefined })} previousHref={href({ reg_page: String(Math.max(1, regularizations.page - 1)), regId: undefined })} nextHref={href({ reg_page: String(regularizations.page + 1), regId: undefined })} onFirst={() => void regularizationResource.load({ ...regularizationResource.query, page: 1 })} onLast={() => void regularizationResource.load({ ...regularizationResource.query, page: Math.max(1, Math.ceil(regularizations.total_count / regularizations.page_size)) })} onPrevious={() => void regularizationResource.load({ ...regularizationResource.query, page: Math.max(1, regularizations.page - 1) })} onNext={() => void regularizationResource.load({ ...regularizationResource.query, page: regularizations.page + 1 })} /></div> : null}
         </div>
       </WorkspaceStandardPanel>
-      {hydrated && regularizeOpen ? createPortal(<AttendanceRegularizationModal attendanceRecords={eligible} initialRecordId={initialRecordId} isDemo={isDemo} onClose={() => setRegularizeOpen(false)} onSubmitted={() => { setSubmitted(true); void refreshRecords(); }} />, document.body) : null}
+      {hydrated && regularizeOpen ? createPortal(<AttendanceRegularizationModal attendanceRecords={eligible} initialRecordId={initialRecordId} isDemo={isDemo} onClose={() => setRegularizeOpen(false)} onSubmitted={() => { setSubmitted(true); setSubmissionToast(true); void refreshRecords(); }} />, document.body) : null}
       {hydrated && selectedRequest ? createPortal(<AttendanceDetailModal item={selectedRequest} onClose={() => { setDismissedRequestId(selectedRequest.id); setClickedRegularization(null); }} />, document.body) : null}
     </main>
   );
