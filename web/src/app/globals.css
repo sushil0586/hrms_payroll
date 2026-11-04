@@ -32377,6 +32377,12 @@ body {
 }
 .document-setup-form .form-field { min-width: 0; }
 .document-setup-form .form-field > label { font-weight: 600; }
+.document-setup-form details.form-field > summary {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  cursor: pointer;
+}
 .document-setup-form .notice:focus { outline: 2px solid var(--ds-brand, #4f46e5); outline-offset: 2px; }
 @media (max-width: 640px) {
   .document-setup-form .document-setup-switches { grid-template-columns: minmax(0, 1fr); }

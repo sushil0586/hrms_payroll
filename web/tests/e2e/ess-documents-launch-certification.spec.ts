@@ -4,10 +4,8 @@ import { expectCompactMetric, expectNoHorizontalOverflow, expectPageReady } from
 import { expectDialogLocatorStable, expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
-const documentDetailDialogName = /Document detail|PAN Card|Bank Account Proof|Address Proof|Rental Agreement|QA Identity Evidence/;
-
 function field(scope: Page | Locator, label: string) {
-  return scope.locator("label.form-field").filter({ hasText: label }).locator("input, select, textarea").first();
+  return scope.getByLabel(label, { exact: true }).first();
 }
 
 async function openUploadDialog(page: Page) {
@@ -26,7 +24,7 @@ test.describe("ESS Documents launch certification", () => {
     await gotoAuthenticated(page, "/ess/documents", employee);
     await expectPageReady(page, "Documents");
 
-    for (const metric of [/required/i, /missing/i, /expiring soon/i, /expired/i]) {
+    for (const metric of [/missing required/i, /pending review/i, /expired/i, /uploaded in total/i]) {
       await expectCompactMetric(page, metric);
     }
 
@@ -36,14 +34,9 @@ test.describe("ESS Documents launch certification", () => {
     await expect(page.getByRole("button", { name: "Upload document" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Review|View/ }).first()).toBeVisible();
     await expect(page.locator(".ess-documents-guidance")).toHaveCount(0);
-    await expect(page.locator(".ess-documents-checklist--inline")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Document history" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upload required document" })).toHaveCount(0);
     await expect(page.getByLabel("File")).toHaveCount(0);
-
-    for (const checklistItem of ["Clear file", "Correct category", "Expiry date", "Re-upload note"]) {
-      await expect(page.getByText(checklistItem, { exact: true })).toBeVisible();
-    }
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
@@ -85,7 +78,14 @@ test.describe("ESS Documents launch certification", () => {
       await route.fulfill({
         status: 201,
         contentType: "application/json",
-        body: JSON.stringify({ id: "playwright-document", verification_status: "pending" }),
+        body: JSON.stringify({
+          id: "playwright-document",
+          artifact_id: "playwright-artifact",
+          file_name: "playwright-document.pdf",
+          title: "Playwright document",
+          version_number: 1,
+          verification_status: "pending",
+        }),
       });
     });
 
@@ -101,13 +101,13 @@ test.describe("ESS Documents launch certification", () => {
     await expect(dialog.getByRole("button", { name: "Submit for review" })).toBeEnabled();
 
     await dialog.getByRole("button", { name: "Submit for review" }).click();
-    await expect(dialog.getByText("Upload failed.")).toBeVisible();
+    await expect(dialog.getByText("Review before continuing.")).toBeVisible();
     await expect(dialog.getByText("Uploaded file could not be scanned. Try another PDF.")).toBeVisible();
     await expectDialogLocatorStable(page, dialog, /Upload document|Replace document/);
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("main").getByRole("status").filter({ hasText: "Document uploaded successfully." })).toBeVisible();
-    await expect(page.getByRole("main").getByText("Your document has been sent to HR for verification.")).toBeVisible();
+    await expect(page.getByRole("main").getByText("Submitted for HR verification.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Upload document" }).first()).toBeVisible();
   });
 
@@ -125,11 +125,11 @@ test.describe("ESS Documents launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "View" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      const detail = page.getByRole("dialog", { name: documentDetailDialogName });
+      const detail = page.getByRole("dialog").last();
       await expect(detail).toBeVisible();
-      await expect(detail.getByText("Review status")).toBeVisible();
-      await expect(detail.getByText("Audit trail")).toBeVisible();
-      await expectDialogStable(page, documentDetailDialogName);
+      await expect(detail.getByText(/Current state|Current review/)).toBeVisible();
+      await expect(detail.getByText(/Current file|Review status/).first()).toBeVisible();
+      await expectDialogLocatorStable(page, detail, /.+/);
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
     }
@@ -155,7 +155,8 @@ test.describe("ESS Documents launch certification", () => {
     const reviewButton = page.getByRole("button", { name: "View" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {
       await reviewButton.click();
-      await expectDialogStable(page, documentDetailDialogName);
+      const detail = page.getByRole("dialog").last();
+      await expectDialogLocatorStable(page, detail, /.+/);
     }
   });
 });

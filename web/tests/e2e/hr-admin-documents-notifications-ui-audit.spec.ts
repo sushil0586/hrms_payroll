@@ -247,9 +247,17 @@ async function auditLinkedDocumentsNotificationsRoute(
   await gotoAuthenticated(page, sourceRoute);
   const action = page.getByRole("link", { name: actionName, exact: true }).first();
   if (!(await action.isVisible().catch(() => false))) {
-    const disabledAction = page.getByRole("button", { name: actionName, exact: true }).first();
-    if (await disabledAction.isVisible().catch(() => false)) {
-      await expect(disabledAction, `${sourceRoute} should keep ${routeName} safely permission-gated`).toBeDisabled();
+    const panelAction = page.getByRole("button", { name: actionName, exact: true }).first();
+    if (await panelAction.isVisible().catch(() => false)) {
+      if (await panelAction.isDisabled()) {
+        await expect(panelAction, `${sourceRoute} should keep ${routeName} safely permission-gated`).toBeDisabled();
+        return;
+      }
+      await panelAction.click();
+      const dialog = page.getByRole("dialog").last();
+      await expect(dialog, `${sourceRoute} should open ${routeName} in a dialog`).toBeVisible();
+      await expect(dialog.getByRole("heading").first()).toBeVisible();
+      await expectNoHorizontalOverflow(page);
     }
     return;
   }

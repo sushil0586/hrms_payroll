@@ -796,7 +796,10 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
           if (["category_id", "title", "document_number", "issued_on", "expires_on", "file"].includes(key)) fields[key as keyof UploadFormValue] = Array.isArray(value) ? String(value[0]) : String(value);
         }
         setFieldErrors(fields);
-        setFeedback({ tone: "error", message });
+        setFeedback({
+          tone: "error",
+          message: Object.keys(fields).length > 0 ? "Review the highlighted document fields and try again." : message,
+        });
         if (response.status >= 500) setToast({ title: "Upload failed.", message, tone: "error" });
         return;
       }
