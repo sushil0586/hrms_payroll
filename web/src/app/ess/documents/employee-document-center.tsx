@@ -636,7 +636,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [selectedRequirementDetail, setSelectedRequirementDetail] = useState<EssDocumentRequirementItem | null>(null);
   const selectedRequirement = centerData.requirement_items.find((item) => item.category_id === formValue.category_id);
-  const reuploadItems = centerData.requirement_items.filter((item) => item.current_rejection_reason && !item.is_compliant);
+  const reuploadItems = centerData.requirement_items.filter((item) => item.current_rejection_reason);
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const uploadInFlight = useRef(false);
   const uploadIdempotencyKey = useRef(`ess-document-upload:${crypto.randomUUID()}`);
