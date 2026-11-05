@@ -10,8 +10,19 @@ const evidence=process.env.HRMS_MASTER_EVIDENCE_ROOT
  : fixtureRoot;
 let fixture:IsolatedQaWorkspace;
 let ids:Record<string,string>;
-const routes=JSON.parse(readFileSync(path.join(fixtureRoot,'routes.json'),'utf8')) as string[];
-test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repo,'.venv/bin/python'),[path.join(fixtureRoot,'seed.py'),fixture.manifestPath],{env:process.env,cwd:repo});const m=JSON.parse(readFileSync(fixture.manifestPath,'utf8'));ids={shifts:m.attendance.shift_id,'attendance-policies':m.attendance.policy_id,'attendance-records':m.a1.closed_id,'attendance-regularizations':m.fixtures.attendance_regularization_id,'holiday-calendars':m.family.calendar_id,'employee-shift-assignments':m.family.assignment_id,'attendance-policy-assignments':m.family.policy_assignment_id,'shift-roster-templates':m.family.roster_id};});
+const routes=[
+ 'attendance-close','attendance-operations','attendance-policies/[itemId]/edit','attendance-policies/new','attendance-policies',
+ 'attendance-policy-assignments/[itemId]/edit','attendance-policy-assignments/new','attendance-policy-assignments',
+ 'attendance-records/[itemId]/edit','attendance-records','attendance-regularizations/[itemId]/review','attendance-regularizations',
+ 'employee-shift-assignments/[itemId]/edit','employee-shift-assignments/new','employee-shift-assignments',
+ 'holiday-calendars/[itemId]/edit','holiday-calendars/new','holiday-calendars',
+ 'reports/attendance-derivation-exceptions','reports/attendance-exceptions','reports/attendance-register','reports/attendance',
+ 'reports/leave-attendance-collisions','reports/roster-rollout-audit',
+ 'shift-roster-templates/[itemId]/edit','shift-roster-templates/new','shift-roster-templates',
+ 'shifts/[itemId]/edit','shifts/new','shifts',
+].map(route=>`web/src/app/hr-admin/${route}/page.tsx`);
+const seed=path.join(repo,'backend/tests/fixtures/attendance_family.py');
+test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repo,'.venv/bin/python'),[seed,fixture.manifestPath],{env:process.env,cwd:repo});const m=JSON.parse(readFileSync(fixture.manifestPath,'utf8'));ids={shifts:m.attendance.shift_id,'attendance-policies':m.attendance.policy_id,'attendance-records':m.a1.closed_id,'attendance-regularizations':m.fixtures.attendance_regularization_id,'holiday-calendars':m.family.calendar_id,'employee-shift-assignments':m.family.assignment_id,'attendance-policy-assignments':m.family.policy_assignment_id,'shift-roster-templates':m.family.roster_id};});
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(fixture)});
 test.beforeEach(async({page})=>{const p=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:p.username,password:p.password}})).status()).toBe(200)});
 function route(source:string){let url=source.replace('web/src/app','').replace('/page.tsx','');if(url.includes('[itemId]'))url=url.replace('[itemId]',ids[url.split('/')[2]]);return url;}
@@ -45,7 +56,7 @@ for(const catalog of ['shifts','holiday-calendars','attendance-policies','attend
 test('regularization pagination uses committed filters, history and validation',async({page})=>{
  await ready(page,'/hr-admin/attendance-regularizations?page_size=10');const form=page.getByRole('form',{name:'Regularization filters'});
  await form.getByRole('combobox',{name:'Request status',exact:true}).selectOption('draft');await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page).toHaveURL(/page=2/);expect(new URL(page.url()).searchParams.get('status')).toBeNull();
- await form.getByRole('combobox',{name:'Request status',exact:true}).selectOption('draft');await Promise.all([page.waitForEvent('domcontentloaded'),form.getByRole('button',{name:'Apply filters'}).click()]);await expect(page).toHaveURL(/status=draft/);await expect(form.getByRole('combobox',{name:'Request status',exact:true})).toHaveValue('draft');
+ await form.getByRole('combobox',{name:'Request status',exact:true}).selectOption('draft');await form.getByRole('button',{name:'Apply filters'}).click();await expect(page).toHaveURL(/status=draft/);await expect(form.getByRole('combobox',{name:'Request status',exact:true})).toHaveValue('draft');
  await page.goBack({waitUntil:'domcontentloaded'});await page.reload();await expect(form.getByRole('combobox',{name:'Request status',exact:true})).toHaveValue('');
  await form.getByText('More filters',{exact:true}).click();await form.getByLabel('From date',{exact:true}).fill('2032-03-20');await form.getByLabel('To date',{exact:true}).fill('2032-03-01');await form.getByRole('button',{name:'Apply filters'}).click();await expect(page.locator('main').getByRole('alert')).toContainText('From date');
 });
@@ -54,12 +65,20 @@ test('register includes records beyond page 500 and matches audited export',asyn
  const response=await page.request.get('/api/hr-admin/reports/attendance-register?q=QA%20beyond-page-500');expect(response.status()).toBe(200);expect(await response.text()).toContain('QA beyond-page-500');
  const manifest=await page.request.get('/api/hr-admin/reports/attendance-register?q=QA%20beyond-page-500&format=manifest');expect(manifest.status()).toBe(200);
 });
-for(const catalog of ['shifts','holiday-calendars','attendance-policies','attendance-policy-assignments','employee-shift-assignments','shift-roster-templates']){
+for(const catalog of ['shifts','holiday-calendars','attendance-policies','attendance-policy-assignments','shift-roster-templates']){
  test(`${catalog} existing permitted edit saves through real API`,async({page})=>{
   await ready(page,`/hr-admin/${catalog}/${ids[catalog]}/edit`);const response=page.waitForResponse(r=>r.url().includes(`/api/hr-admin/${catalog}/`)&&['PUT','PATCH'].includes(r.request().method()));
   await page.getByRole('button',{name:'Save changes',exact:true}).click();expect((await response).status()).toBe(200);await expect(page).toHaveURL(new RegExp(`/hr-admin/${catalog}(\\?|$)`));
  });
 }
+test('closed-period employee shift assignment remains historically protected',async({page})=>{
+ await ready(page,`/hr-admin/employee-shift-assignments/${ids['employee-shift-assignments']}/edit`);
+ const response=page.waitForResponse(r=>r.url().includes('/api/hr-admin/employee-shift-assignments/')&&r.request().method()==='PATCH');
+ await page.getByRole('button',{name:'Save changes',exact:true}).click();
+ expect((await response).status()).toBe(400);
+ await expect(page.locator('main .notice[role="alert"]')).toContainText('overlaps a closed attendance period');
+ await expect(page).toHaveURL(/\/hr-admin\/employee-shift-assignments\/.+\/edit/);
+});
 test('close history retry, filtered URL and governed dialog focus restore',async({page})=>{
  await page.route('**/api/hr-admin/attendance-closes',route=>route.abort(),{times:1});await ready(page,'/hr-admin/attendance-close');await expect(page.locator('main').getByRole('alert')).toBeVisible();await page.getByRole('button',{name:'Retry history'}).click();await expect(page.getByRole('button',{name:'Reopen',exact:true})).toBeVisible();
  const reopen=page.getByRole('button',{name:'Reopen',exact:true});await reopen.click();const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();await expect(dialog.getByRole('textbox',{name:'Reason for reopen'})).toBeFocused();await dialog.press('Escape');await expect(dialog).toHaveCount(0);await expect(reopen).toBeFocused();

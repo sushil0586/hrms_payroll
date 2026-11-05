@@ -9,7 +9,7 @@ let closedId:string;
 const evidenceRoot=process.env.HRMS_MASTER_EVIDENCE_ROOT
  ? path.resolve(repoRoot,process.env.HRMS_MASTER_EVIDENCE_ROOT)
  : path.join(repoRoot,"docs/qa/evidence/hr-admin-standardization/attendance-family");
-test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repoRoot,'.venv/bin/python'),[path.join(repoRoot,'docs/qa/evidence/hr-admin-standardization/attendance-family/seed.py'),fixture.manifestPath],{env:process.env,cwd:repoRoot});closedId=JSON.parse(readFileSync(fixture.manifestPath,"utf8")).a1.closed_id;foreign=await provisionIsolatedQaWorkspace({...info,title:"foreign-attendance",workerIndex:info.workerIndex} as typeof info)});
+test.beforeAll(async({},info)=>{test.setTimeout(180000);fixture=await provisionIsolatedQaWorkspace(info);execFileSync(path.join(repoRoot,'.venv/bin/python'),[path.join(repoRoot,'backend/tests/fixtures/attendance_family.py'),fixture.manifestPath],{env:process.env,cwd:repoRoot});closedId=JSON.parse(readFileSync(fixture.manifestPath,"utf8")).a1.closed_id;foreign=await provisionIsolatedQaWorkspace({...info,title:"foreign-attendance",workerIndex:info.workerIndex} as typeof info)});
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(foreign);await cleanupIsolatedQaWorkspace(fixture)});
 test.beforeEach(async({page})=>{const p=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:p.username,password:p.password}})).status()).toBe(200)});
 const toolbar=(p:Page)=>p.getByTestId('attendance-records-toolbar');
@@ -51,7 +51,7 @@ test('combined filters, date validation, refresh, empty and reset',async({page})
  await f.getByLabel('To date',{exact:true}).fill('2032-03-03');await f.getByRole('checkbox',{name:'Late rows only',exact:true}).check();await f.getByRole('button',{name:'Apply filters',exact:true}).click();
  await expect(dataRows(page)).toHaveCount(1);await expect(dataRows(page)).toContainText('10 min late');await page.reload();await expect(f.getByLabel('From date',{exact:true})).toHaveValue('2032-03-03');
  await f.getByRole('textbox',{name:'Search',exact:true}).fill('no-synthetic-match');await f.getByRole('textbox',{name:'Search',exact:true}).press('Enter');await expect(page.getByText('No attendance rows match the current filters.',{exact:true})).toBeVisible();
- await f.getByRole('link',{name:'Clear filters',exact:true}).click();await expect(dataRows(page)).toHaveCount(25);
+ await f.getByRole('button',{name:'Clear filters',exact:true}).click();await expect(dataRows(page)).toHaveCount(10);
  await page.goto('/hr-admin/attendance-records?from_date=2032-02-31');await expect(toolbar(page).getByRole('alert')).toContainText('valid calendar date');await expect(table(page)).toHaveCount(0);
 });
 
@@ -107,7 +107,7 @@ test('automated accessibility and neighboring employee ESS queues',async({page},
 
 test('permitted record edit keeps notes, timings and return navigation',async({page})=>{
  await start(page);const row=dataRows(page).first();const id=await row.getAttribute('data-record-id');const before=await readRecord(page,id);
- await row.getByRole('button',{name:'Inspect',exact:true}).click();const panel=page.getByRole('complementary',{name:'Attendance record detail',exact:true});await panel.getByRole('link',{name:'Edit record',exact:true}).click();
+ await row.getByRole('button',{name:'Inspect',exact:true}).click();const panel=page.getByRole('complementary',{name:'Attendance record detail',exact:true});await panel.getByRole('button',{name:'Edit record',exact:true}).click();
  const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();await dialog.getByRole('textbox',{name:'Notes',exact:true}).fill('A1 isolated attendance review');
  const submit=dialog.getByRole('button',{name:/Save/});await submit.click();await expect(dialog).toHaveCount(0);
  const after=await readRecord(page,id);expect(after.notes).toBe('A1 isolated attendance review');expect(after.check_in_at).toBe(before.check_in_at);expect(after.check_out_at).toBe(before.check_out_at);expect(after.work_duration_hours).toBe(before.work_duration_hours);

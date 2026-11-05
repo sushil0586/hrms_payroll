@@ -4,11 +4,12 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona,type IsolatedQaWorkspace} from '../helpers/isolated-qa-workspace';
 const repo=path.resolve(__dirname,'../../..'),evidence=path.join(repo,'docs/qa/evidence/leave-policy-auto-approval');
+const workerFixture=path.join(repo,'backend/tests/fixtures/leave_policy_auto_approval.py');
 let fixture:IsolatedQaWorkspace,errors:string[],submissionBody:string|undefined;
 test.beforeEach(async({page},info)=>{errors=[];submissionBody=undefined;fixture=await provisionIsolatedQaWorkspace(info);await page.route('**/api/me/leave-requests',async route=>{if(route.request().method()!=='POST')return route.continue();const upstream=await route.fetch();const bytes=await upstream.body();submissionBody=bytes.toString('utf8');await route.fulfill({response:upstream,body:bytes});});page.on('pageerror',e=>errors.push(e.message));await login(page,'hr_admin');});
 test.afterEach(async()=>{try{expect(errors).toEqual([]);}finally{await cleanupIsolatedQaWorkspace(fixture);}});
 async function login(page:Page,role:'hr_admin'|'employee'){const u=workspacePersona(fixture,role);expect((await page.request.post('/api/auth/login',{data:{identifier:u.username,password:u.password}})).status()).toBe(200);}
-function worker(action:string,id?:string){return JSON.parse(execFileSync(path.join(repo,'.venv/bin/python'),[path.join(evidence,'worker-fixture.py'),fixture.manifestPath,action,...(id?[id]:[])],{cwd:repo,env:process.env}).toString());}
+function worker(action:string,id?:string){return JSON.parse(execFileSync(path.join(repo,'.venv/bin/python'),[workerFixture,fixture.manifestPath,action,...(id?[id]:[])],{cwd:repo,env:process.env}).toString());}
 const flag=(p:Page)=>p.getByRole('checkbox',{name:'Enable automatic approval',exact:true});
 const hours=(p:Page)=>p.getByRole('spinbutton',{name:'Automatic approval waiting hours',exact:true});
 async function openRouting(p:Page){const panel=p.locator('details.form-section-card').filter({has:p.getByRole('heading',{name:'Advanced routing and evidence rules',exact:true})});await expect(panel).toBeVisible();if(await panel.getAttribute('open')===null)await panel.locator('summary').click();}
