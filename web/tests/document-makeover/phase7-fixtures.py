@@ -1,8 +1,10 @@
 import json
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from django.core.files.base import ContentFile
+from django.utils import timezone
 
 from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentRequirementRule, EmployeeDocument, EmployeeDocumentStatus, VerificationStatus
 from apps.documents.services import store_document_artifact
@@ -65,5 +67,43 @@ else:
         uploaded_by_identifier=employee.employee_code,
         verified_by_identifier="qa-phase7-hr",
     )
-    context = {"category": str(category.id), "base": str(base.id), "employee": str(employee.id)}
+    reminder_category = DocumentCategory.objects.create(
+        tenant=tenant,
+        code="phase7-expiry-reminder",
+        name="QA Expiry Reminder",
+        requires_expiry_date=True,
+        requires_verification=True,
+        allow_employee_upload=True,
+        accepted_mime_types=["text/plain"],
+        max_upload_size_bytes=1024 * 1024,
+    )
+    reminder_artifact = store_document_artifact(
+        tenant=tenant,
+        employee=employee,
+        uploaded_file=ContentFile(b"Phase 7 expiring evidence.\n", name="phase7-expiring.txt"),
+        actor_identifier="qa-phase7",
+    )
+    reminder_document = EmployeeDocument.objects.create(
+        tenant=tenant,
+        employee=employee,
+        category=reminder_category,
+        artifact=reminder_artifact,
+        title="QA Expiring Evidence",
+        file_name=reminder_artifact.original_filename,
+        file_path=reminder_artifact.storage_key,
+        mime_type=reminder_artifact.mime_type,
+        file_size_bytes=reminder_artifact.file_size_bytes,
+        status=EmployeeDocumentStatus.ACTIVE,
+        verification_status=VerificationStatus.VERIFIED,
+        version_number=1,
+        expires_on=timezone.localdate() + timedelta(days=10),
+        uploaded_by_identifier=employee.employee_code,
+        verified_by_identifier="qa-phase7-hr",
+    )
+    context = {
+        "category": str(category.id),
+        "base": str(base.id),
+        "employee": str(employee.id),
+        "reminder_document": str(reminder_document.id),
+    }
     Path(os.environ["QA_PHASE7_MANIFEST"]).with_name("phase7-context.json").write_text(json.dumps(context))

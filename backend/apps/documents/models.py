@@ -336,6 +336,7 @@ class DocumentLifecycleEventType(models.TextChoices):
     REPLACEMENT_REJECTED = "replacement_rejected", "Replacement rejected"
     REPLACEMENT_WITHDRAWN = "replacement_withdrawn", "Replacement withdrawn"
     VERIFICATION_UPDATED = "verification_updated", "Verification updated"
+    DOWNLOADED = "downloaded", "Downloaded"
 
 
 class DocumentLifecycleAuditEvent(UUIDPrimaryKeyModel, TimeStampedModel):

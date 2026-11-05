@@ -3254,6 +3254,20 @@ def _stored_artifact_download_response(artifact, *, filename: str, missing_detai
     return response_file
 
 
+def _record_employee_document_download(*, document: EmployeeDocument, actor_identifier: str, audience: str) -> None:
+    DocumentLifecycleAuditEvent.objects.create(
+        tenant=document.tenant,
+        employee_document=document,
+        event_type=DocumentLifecycleEventType.DOWNLOADED,
+        actor_identifier=actor_identifier,
+        previous_record_status=document.status,
+        new_record_status=document.status,
+        previous_verification_status=document.verification_status,
+        new_verification_status=document.verification_status,
+        metadata={"audience": audience, "artifact_id": str(document.artifact_id)},
+    )
+
+
 def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
     artifact = item.artifact
     replaced_by = item.replacement_versions.order_by("-created_at").first()
@@ -7516,11 +7530,18 @@ class MeEmployeeDocumentDownloadView(EmployeeContextMixin, APIView):
         if not item or not item.artifact_id or not item.artifact or not item.artifact.stored_file:
             return response.Response({"detail": "Document file not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        return _stored_artifact_download_response(
+        download_response = _stored_artifact_download_response(
             item.artifact,
             filename=item.artifact.original_filename or item.file_name or f"{item.title}.bin",
             missing_detail="Document file not found.",
         )
+        if isinstance(download_response, FileResponse):
+            _record_employee_document_download(
+                document=item,
+                actor_identifier=employee.employee_code,
+                audience="employee",
+            )
+        return download_response
 
 
 class MeEmployeeDocumentWithdrawView(EmployeeContextMixin, APIView):
@@ -19967,11 +19988,18 @@ class HrAdminEmployeeDocumentDownloadView(HrAdminContextMixin, APIView):
         if not item or not item.artifact_id or not item.artifact or not item.artifact.stored_file:
             return response.Response({"detail": "Document file not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        return _stored_artifact_download_response(
+        download_response = _stored_artifact_download_response(
             item.artifact,
             filename=item.artifact.original_filename or item.file_name or f"{item.title}.bin",
             missing_detail="Document file not found.",
         )
+        if isinstance(download_response, FileResponse):
+            _record_employee_document_download(
+                document=item,
+                actor_identifier=_hr_admin_actor_identifier(employee),
+                audience="hr_admin",
+            )
+        return download_response
 
 
 class HrAdminEmployeeDocumentReminderActionView(HrAdminContextMixin, APIView):

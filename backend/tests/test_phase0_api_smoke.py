@@ -58,7 +58,7 @@ from apps.attendance.models import (
     RegularizationStatus,
     Shift,
 )
-from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentCategoryType, DocumentRequirementRule, EmployeeDocument, EmployeeDocumentStatus, GeneratedLetter, VerificationStatus
+from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentCategoryType, DocumentLifecycleAuditEvent, DocumentLifecycleEventType, DocumentRequirementRule, EmployeeDocument, EmployeeDocumentStatus, GeneratedLetter, VerificationStatus
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.employee_lifecycle.effective_services import initialize_employment_timeline
 from apps.employee_lifecycle.models import EmployeeExit, EmployeeLifecycleEvent, ExitStatus, LifecycleEventStatus, LifecycleEventType, OnboardingStatus, ProbationDecision
@@ -18868,6 +18868,37 @@ def test_hr_admin_can_upload_and_download_employee_document_artifact(api_client:
     assert download_response["Content-Type"] == "application/pdf"
     assert "attachment;" in download_response["Content-Disposition"]
     assert b"phase4 storage smoke" in b"".join(download_response.streaming_content)
+    download_event = DocumentLifecycleAuditEvent.objects.get(
+        employee_document=document,
+        event_type=DocumentLifecycleEventType.DOWNLOADED,
+    )
+    assert download_event.tenant == tenant
+    assert download_event.actor_identifier == "nisha.rao"
+    assert download_event.metadata == {"audience": "hr_admin", "artifact_id": str(artifact.id)}
+
+    original_scan_status = artifact.malware_scan_status
+    artifact.malware_scan_status = "quarantined"
+    artifact.quarantine_reason = "Synthetic quarantine reason that must not be disclosed."
+    artifact.save(update_fields=["malware_scan_status", "quarantine_reason", "updated_at"])
+    quarantined_response = api_client.get(f"/api/v1/hr-admin/employee-documents/{document.id}/download/")
+    assert quarantined_response.status_code == 423
+    assert quarantined_response.json() == {"detail": "The file is quarantined and cannot be downloaded."}
+    assert DocumentLifecycleAuditEvent.objects.filter(
+        employee_document=document,
+        event_type=DocumentLifecycleEventType.DOWNLOADED,
+    ).count() == 1
+
+    artifact.malware_scan_status = original_scan_status
+    artifact.quarantine_reason = ""
+    artifact.save(update_fields=["malware_scan_status", "quarantine_reason", "updated_at"])
+    artifact.stored_file.delete(save=False)
+    missing_response = api_client.get(f"/api/v1/hr-admin/employee-documents/{document.id}/download/")
+    assert missing_response.status_code == 404
+    assert missing_response.json() == {"detail": "Stored file is no longer available."}
+    assert DocumentLifecycleAuditEvent.objects.filter(
+        employee_document=document,
+        event_type=DocumentLifecycleEventType.DOWNLOADED,
+    ).count() == 1
 
 
 @pytest.mark.django_db
@@ -20403,6 +20434,13 @@ def test_employee_can_upload_and_download_allowed_document(api_client: APIClient
     assert download_response.status_code == 200
     assert download_response["Content-Type"] == "application/pdf"
     assert b"employee self upload" in b"".join(download_response.streaming_content)
+    assert DocumentLifecycleAuditEvent.objects.filter(
+        employee_document=document,
+        event_type=DocumentLifecycleEventType.DOWNLOADED,
+        actor_identifier=employee.employee_code,
+        metadata__audience="employee",
+        metadata__artifact_id=str(document.artifact_id),
+    ).exists()
 
     manager_token = login(api_client, "karan.mehta")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {manager_token}")

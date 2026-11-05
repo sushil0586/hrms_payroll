@@ -8,7 +8,7 @@ import { cleanupIsolatedQaWorkspace, provisionIsolatedQaWorkspace, workspacePers
 const repo = path.resolve(__dirname, "../../..");
 const evidenceRoot = process.env.QA_DOCUMENT_EVIDENCE_ROOT ?? path.join(repo, "docs/qa/evidence/document-lifecycle-phase7-2026-11-03");
 let fixture: IsolatedQaWorkspace;
-let context: { category: string; base: string; employee: string };
+let context: { category: string; base: string; employee: string; reminder_document: string };
 
 function fixtureScript(cleanup = false) {
   execFileSync(path.join(repo, ".venv/bin/python"), ["backend/manage.py", "shell", "-c", "exec(open('web/tests/document-makeover/phase7-fixtures.py').read())"], {
@@ -161,4 +161,54 @@ test("document lifecycle dialogs remain contained and keyboard reachable on mobi
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(row.getByRole("button", { name: "Replace", exact: true })).toBeFocused();
+});
+
+test("withdrawn review lockout, approved download completion and reminder replay are truthful", async ({ page }, testInfo) => {
+  await login(page);
+  const candidate = await uploadReplacement(page, `Phase 7 controls ${testInfo.project.name}`);
+  await open(page, `/ess/documents?q=${encodeURIComponent(candidate.title)}`);
+  const historyRow = page.getByRole("table", { name: "Document history", exact: true }).getByRole("row").filter({ hasText: candidate.title });
+  await historyRow.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Withdraw replacement", exact: true }).click();
+  const confirmation = page.getByRole("dialog");
+  await confirmation.getByRole("button", { name: "Withdraw replacement", exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
+
+  await login(page, "hr_admin");
+  await open(page, `/hr-admin/employee-documents?q=${encodeURIComponent(candidate.title)}`);
+  await page.getByRole("row").filter({ hasText: candidate.title }).getByRole("button", { name: "Inspect", exact: true }).click();
+  const disabledReview = page.getByRole("button", { name: "Review", exact: true });
+  await expect(disabledReview).toBeDisabled();
+  await expect(disabledReview).toHaveAttribute("title", "Withdrawn documents are read-only.");
+
+  await open(page, `/hr-admin/employee-documents?q=${encodeURIComponent("QA Approved Identity")}`);
+  const baseRow = page.getByRole("row").filter({ hasText: "QA Approved Identity" });
+  await baseRow.getByRole("button", { name: "Inspect", exact: true }).click();
+  await page.getByRole("button", { name: "Review", exact: true }).click();
+  const reviewDialog = page.getByRole("dialog");
+  const download = reviewDialog.getByRole("link", { name: "Download current file", exact: true });
+  const browserDownload = page.waitForEvent("download");
+  await download.click();
+  await browserDownload;
+  await expect(download).toHaveText("Download current file");
+  await expect(download).not.toHaveAttribute("aria-busy", "true");
+  await reviewDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await open(page, `/hr-admin/employee-documents?q=${encodeURIComponent("QA Expiring Evidence")}`);
+  const reminderCheckbox = page.getByRole("checkbox", { name: "Select QA Expiring Evidence for reminder follow-up", exact: true });
+  await reminderCheckbox.check();
+  await page.getByRole("button", { name: "Send reminder (1)", exact: true }).click();
+  await expect(page.locator(".action-toast").filter({ hasText: "1 reminder sent, 0 skipped." })).toBeVisible();
+  await reminderCheckbox.check();
+  await page.getByRole("button", { name: "Send reminder (1)", exact: true }).click();
+  await expect(page.locator(".action-toast").filter({ hasText: "0 reminders sent, 1 skipped." })).toBeVisible();
+
+  appendFileSync(path.join(evidenceRoot, "lifecycle-proof.jsonl"), JSON.stringify({
+    browser: testInfo.project.name,
+    action: "controls",
+    withdrawn: candidate.id,
+    approved_download: context.base,
+    reminder_document: context.reminder_document,
+    reminder_replay_skipped: true,
+  }) + "\n");
 });
