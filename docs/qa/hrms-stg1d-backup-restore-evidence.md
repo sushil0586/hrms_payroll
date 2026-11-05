@@ -50,3 +50,14 @@ PASS requires zero restore errors, matching hashes/counts, expected migration st
 - Cleanup owner: exact disposable resource teardown.
 
 No recovery reference can be entered in the Batch-1 approval record until this rehearsal passes.
+
+## Superseding Evidence
+
+The blocked decision above records the historical STG-1D observation from
+2026-10-26. It is superseded for the bounded staging document/recovery scope by
+`docs/qa/hrms-document-download-recovery-e2e-certification-2026-11-05.md`.
+That later run produced an encrypted, versioned off-host backup, verified
+checksums, a successful isolated PostgreSQL 16 restore, protected-media
+reconciliation, 30-day Governance retention, and centrally delivered CloudTrail
+object-access evidence. The superseding bounded verdict is PASS; production and
+unrelated application scopes remain outside that verdict.
