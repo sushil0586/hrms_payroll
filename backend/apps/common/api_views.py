@@ -3985,6 +3985,7 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
     compliant_category_ids = set()
     current_documents_by_category_id: dict = {}
     pending_replacements_by_category_id: dict = {}
+    rejected_replacements_by_category_id: dict = {}
     if category_ids:
         document_queryset = EmployeeDocument.objects.filter(
             tenant=employee.tenant,
@@ -4006,6 +4007,16 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
         ).order_by("-created_at")
         for document in pending_replacement_queryset:
             pending_replacements_by_category_id.setdefault(document.category_id, document)
+        rejected_replacement_queryset = EmployeeDocument.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            category_id__in=category_ids,
+            status=EmployeeDocumentStatus.ARCHIVED,
+            verification_status=VerificationStatus.REJECTED,
+            reupload_requested=True,
+        ).order_by("-created_at")
+        for document in rejected_replacement_queryset:
+            rejected_replacements_by_category_id.setdefault(document.category_id, document)
 
     runtime_items = []
     for category_id, rule in rules_by_category_id.items():
@@ -4015,6 +4026,7 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
         is_future_due = bool(due_on and due_on > today)
         current_document = current_documents_by_category_id.get(category_id)
         pending_replacement = pending_replacements_by_category_id.get(category_id)
+        rejected_replacement = rejected_replacements_by_category_id.get(category_id)
         current_expiry_runtime = _get_employee_document_expiry_runtime(current_document) if current_document else {
             "state": "no_document",
             "label": "No document",
@@ -4056,7 +4068,7 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
                 "current_days_until_expiry": current_expiry_runtime["days_until_expiry"],
                 "current_is_expired": current_expiry_runtime["is_expired"],
                 "current_is_expiring_soon": current_expiry_runtime["is_expiring_soon"],
-                "current_rejection_reason": current_document.rejection_reason if current_document else "",
+                "current_rejection_reason": rejected_replacement.rejection_reason if rejected_replacement else (current_document.rejection_reason if current_document else ""),
                 "current_review_owner_label": current_review_runtime["owner_label"],
                 "current_review_status_label": current_review_runtime["status_label"],
                 "current_uploaded_at": current_document.created_at if current_document else None,

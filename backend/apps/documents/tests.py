@@ -247,6 +247,12 @@ class EmployeeDocumentWorkflowTests(TestCase):
         self.assertEqual(replacement.status, EmployeeDocumentStatus.ACTIVE)
 
     def test_rejected_replacement_preserves_approved_document(self):
+        DocumentRequirementRule.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            is_mandatory=True,
+            priority=1,
+        )
         current = create_self_service_employee_document(
             self.employee,
             {
@@ -287,6 +293,9 @@ class EmployeeDocumentWorkflowTests(TestCase):
         self.assertEqual(current.verification_status, VerificationStatus.VERIFIED)
         self.assertEqual(replacement.status, EmployeeDocumentStatus.ARCHIVED)
         self.assertEqual(replacement.verification_status, VerificationStatus.REJECTED)
+        requirement = _get_employee_document_requirement_runtime(self.employee)[0]
+        self.assertEqual(requirement["current_document_id"], current.id)
+        self.assertEqual(requirement["current_rejection_reason"], "Unreadable.")
 
     def test_employee_can_withdraw_pending_replacement_without_changing_approved_document(self):
         current = create_self_service_employee_document(
