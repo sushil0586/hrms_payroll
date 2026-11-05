@@ -63,9 +63,9 @@ were removed after verification.
 | Transport | PASS | Bucket policy denies insecure transport |
 | Versioning | PASS | Enabled |
 | Lifecycle | PASS | Current versions 120 days; noncurrent versions 90 days retaining 10 newer versions; incomplete uploads 7 days |
-| Immutability | PASS | Object Lock enabled; default Governance retention 30 days |
+| Immutability | PASS | Object Lock enabled; certified artifacts carry explicit 30-day Governance retention |
 | Checkpoint retention | PASS | All five checkpoint objects retained in Governance mode through `2026-12-05T02:54:21Z` |
-| Server access logging | CONFIGURED | Target `accerio-hrms-staging-audit-logs-227022022984-ap-south-1`, partitioned `s3-access/` prefix; first asynchronous delivery was not yet present during the observation window |
+| Server access logging | PASS | Target `accerio-hrms-staging-audit-logs-227022022984-ap-south-1`, partitioned `s3-access/` prefix; 17 server-access objects observed after asynchronous delivery |
 | CloudTrail data audit | PASS | Multi-region trail `accerio-hrms-staging-backup-audit` active with log-file validation and S3 object events limited to `hrms/staging/` |
 | Central audit delivery | PASS | Signed digest and event files delivered to the private audit bucket |
 | Operator evidence access | PASS | Managed policy `HRMSBackupGovernanceReadOnly` grants only six required read-only S3 governance actions |
@@ -89,13 +89,86 @@ centrally delivered object-access evidence all passed.
 
 Residual operational observations:
 
-1. Confirm the first S3 server-access-log object during the next routine audit;
-   CloudTrail object-level audit delivery is already proven and remains the
-   authoritative access evidence.
-2. Governance mode permits an explicitly privileged bypass. Production policy
+1. Governance mode permits an explicitly privileged bypass. Production policy
    may require Compliance mode or a longer retention period after legal approval.
-3. This report does not close unrelated malware-provider, document-visibility,
+2. This report does not close unrelated malware-provider, document-visibility,
    or production-readiness decisions recorded in DD-2.
 
 No application deployment, database migration, payroll processing, employee
 communication, or production mutation occurred during the governance closure.
+
+## Automated Recovery Qualification
+
+The staging host now runs two bounded systemd timers:
+
+| Timer | Schedule | Verified behavior |
+|---|---|---|
+| `hrms-staging-backup.timer` | Daily, approximately 01:30 UTC with randomized delay | PostgreSQL custom dump, private-media archive, source counts, metadata, and SHA-256 manifest uploaded to the scheduled prefix |
+| `hrms-staging-restore-rehearsal.timer` | First Sunday monthly, approximately 03:30 UTC with randomized delay | Latest scheduled artifact downloaded, checksummed, restored into a network-isolated PostgreSQL 16 container, reconciled, and removed |
+
+Both timers are enabled. Failed units trigger the local failure recorder and do
+not replace the previous success record. The host identity has an inline policy
+limited to `hrms/staging/scheduled/*`, the existing backup KMS key, and the
+object-retention operations required for that prefix.
+
+Qualified scheduled backup:
+`s3://accerio-hrms-staging-backups-227022022984-ap-south-1/hrms/staging/scheduled/20261105T032938Z/`
+
+- manifest SHA-256: `26a693038dffea8d3187740861b68a2d6ce885243e4f2ffabd97bb8e3a120937`
+- all four objects: SSE-KMS and Governance Object Lock through
+  `2026-12-05T03:29:38Z`
+- restore duration: 8 seconds
+- reconciled counts: 3 tenants, 18 memberships, 73 employee documents, 32
+  document lifecycle events, and 136 migrations
+- private-media archive entries: 96
+- disposable restore containers remaining: zero
+
+The initial automation qualification deliberately preserved three failed-run
+causes: obsolete membership table name, unavailable `postgres` shell binary,
+and missing KMS permission. A fourth rehearsal exposed the PostgreSQL image's
+temporary initialization-server race. The final scripts use the canonical
+membership table, `pg_dump --version`, least-privilege KMS access, retained
+`s3api put-object` uploads, and a stable two-phase PostgreSQL readiness gate.
+
+## Document Lifecycle Regression
+
+PostgreSQL-backed qualification passed **34/34** focused tests. Coverage
+included upload policy and signatures, malware clean/detected/error states,
+replacement lineage, withdrawal, rejection and re-upload, concurrent upload
+serialization, employee/tenant ownership, physical-file cleanup, notifications,
+audit events, and download authorization.
+
+The production-built browser qualification covered the 15-case document slice
+on Chromium, Firefox, and WebKit. The first run used the production default
+`Secure` cookie on a plain-HTTP local URL, producing 401s in API-context calls
+and broad WebKit session rejection. This was a local harness configuration
+defect, not a product-code defect. With `HRMS_COOKIE_SECURE=false` limited to
+the local HTTP harness:
+
+- Chromium/Firefox failed-contract rerun: **8/8 passed**
+- WebKit complete slice: **15/15 passed**
+- browser tests were unchanged
+- HR upload, review, employee download, cross-employee denial, replacement
+  lineage, report persistence/export, responsive layouts, keyboard focus,
+  pagination, validation, and duplicate suppression passed
+
+Static verification also passed: TypeScript, ESLint, Django system checks,
+migration drift, shell syntax, unit-file verification, and Git whitespace checks.
+
+## Production Control Handoff
+
+Staging is certified for the bounded document lifecycle and recovery scope.
+Production activation still requires owner-approved values rather than inferred
+defaults:
+
+1. legal/security approval for Governance versus Compliance Object Lock and the
+   production retention duration;
+2. a production KMS key and separate backup/restore identities scoped to the
+   production bucket and prefix;
+3. an external malware-scanner availability and fail-closed operating decision;
+4. production RPO/RTO targets, named recovery owner, and alert destination;
+5. a production recovery rehearsal in an approved isolated account or network.
+
+Authenticated application streaming remains the approved staging download
+mechanism. It preserves authorization checks and download audit attribution;
+switching to direct signed URLs is not required for staging certification.

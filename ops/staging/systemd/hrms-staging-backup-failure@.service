@@ -1,0 +1,10 @@
+[Unit]
+Description=Record HRMS staging backup or restore failure for %i
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'logger -p authpriv.err -t hrms-backup "HRMS staging recovery job failed: %i"'
+User=root
+Group=root
+PrivateTmp=true
+NoNewPrivileges=true

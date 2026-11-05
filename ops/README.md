@@ -83,6 +83,15 @@ ops/backup_restore_rehearsal.sh
 
 Archive the generated JSON evidence beside the final production audit report.
 
+Staging uses `ops/staging/backup_to_s3.sh` and
+`ops/staging/restore_rehearsal_from_s3.sh` for the complete PostgreSQL and
+private-media recovery set. The matching systemd units under
+`ops/staging/systemd/` schedule daily backups and a monthly isolated restore.
+Configure `/etc/hrms/staging-backup.env` outside Git with the private bucket,
+approved KMS key, region, and optional prefix. The jobs use locking, upload
+checksums and metadata, verify S3 encryption/Object Lock evidence, retain a
+local status record, and fail non-zero for journald/monitoring integration.
+
 ## Monitoring
 
 `ops/monitoring/prometheus-rules.yml` contains the minimum production alert

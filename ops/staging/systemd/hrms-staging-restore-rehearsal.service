@@ -1,0 +1,19 @@
+[Unit]
+Description=HRMS staging isolated restore rehearsal
+After=docker.service network-online.target
+Wants=network-online.target
+OnFailure=hrms-staging-backup-failure@%n.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/hrms/staging-backup.env
+ExecStart=/usr/local/sbin/hrms-staging-restore-rehearsal
+User=root
+Group=root
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hrms-backup
+NoNewPrivileges=true

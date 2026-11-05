@@ -1,0 +1,11 @@
+[Unit]
+Description=Run HRMS staging isolated restore rehearsal monthly
+
+[Timer]
+OnCalendar=Sun *-*-01..07 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=hrms-staging-restore-rehearsal.service
+
+[Install]
+WantedBy=timers.target
