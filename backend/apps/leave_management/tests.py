@@ -18,7 +18,7 @@ from apps.attendance.models import (
     Shift,
 )
 from apps.common.api_views import save_hr_admin_leave_policy_assignment
-from apps.common.selectors import get_employee_leave_requests, get_manager_leave_decision_history, get_manager_leave_request_detail, get_manager_pending_leave_requests
+from apps.common.selectors import get_employee_leave_requests, get_manager_leave_decision_history, get_manager_leave_request_detail, get_manager_pending_leave_requests, get_manager_team_summary
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
 from apps.leave_management.models import LeaveBalance, LeaveBalanceTransaction, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType, LeaveRequestStatus
@@ -1131,6 +1131,14 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         )
 
         self.assertEqual(get_manager_leave_decision_history(self.manager), [])
+        workflow.refresh_from_db()
+        self.assertEqual(workflow.status, "cancelled")
+        self.assertFalse(
+            WorkflowAssignment.objects.filter(
+                step_instance__workflow_instance=workflow,
+                step_instance__status__in=["pending", "in_progress"],
+            ).exists()
+        )
 
     def test_manager_history_follows_decision_actor_after_reporting_manager_change(self):
         monday = _next_weekday(0)
@@ -1155,6 +1163,96 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
 
         self.assertEqual(get_manager_leave_decision_history(self.manager)[0]["id"], leave_request.id)
         self.assertEqual(get_manager_leave_decision_history(self.second_manager), [])
+
+    def test_pending_manager_assignment_follows_reporting_manager_change(self):
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Manager reassignment coverage",
+        )
+
+        self.assertEqual([item["id"] for item in get_manager_pending_leave_requests(self.manager)], [leave_request.id])
+        self.employee.reporting_manager = self.second_manager
+        self.employee.save(update_fields=["reporting_manager", "updated_at"])
+
+        self.assertEqual(get_manager_pending_leave_requests(self.manager), [])
+        self.assertEqual([item["id"] for item in get_manager_pending_leave_requests(self.second_manager)], [leave_request.id])
+        self.assertEqual(get_manager_team_summary(self.manager)["pending_leave_approvals_count"], 0)
+        self.assertEqual(get_manager_team_summary(self.second_manager)["pending_leave_approvals_count"], 1)
+        assignments = WorkflowAssignment.objects.filter(
+            step_instance__workflow_instance_id=leave_request.workflow_reference,
+            step_instance__status="pending",
+        )
+        self.assertTrue(assignments.filter(membership=self.second_manager_membership).exists())
+        self.assertFalse(assignments.filter(membership=self.manager_membership).exists())
+        self.assertTrue(
+            WorkflowActionLog.objects.filter(
+                workflow_instance_id=leave_request.workflow_reference,
+                payload__event="manager_assignment_reassigned",
+            ).exists()
+        )
+
+    def test_manager_queue_combines_workflow_and_legacy_pending_requests(self):
+        monday = _next_weekday(0)
+        workflow_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Workflow-backed request",
+        )
+        legacy_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday + timedelta(days=1),
+            end_date=monday + timedelta(days=1),
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Legacy request",
+        )
+        legacy_request.workflow_reference = ""
+        legacy_request.save(update_fields=["workflow_reference", "updated_at"])
+
+        pending_ids = {item["id"] for item in get_manager_pending_leave_requests(self.manager)}
+        self.assertEqual(pending_ids, {workflow_request.id, legacy_request.id})
+        self.assertEqual(get_manager_team_summary(self.manager)["pending_leave_approvals_count"], 2)
+
+    def test_removing_reporting_manager_revokes_pending_queue_access_without_deleting_history(self):
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Manager removal coverage",
+        )
+
+        self.employee.reporting_manager = None
+        self.employee.save(update_fields=["reporting_manager", "updated_at"])
+
+        self.assertEqual(get_manager_pending_leave_requests(self.manager), [])
+        assignments = WorkflowAssignment.objects.filter(
+            step_instance__workflow_instance_id=leave_request.workflow_reference,
+            step_instance__status="pending",
+        )
+        self.assertFalse(assignments.filter(membership=self.manager_membership).exists())
+        self.assertTrue(assignments.filter(membership__isnull=True, actor_identifier="").exists())
+        self.assertTrue(
+            WorkflowActionLog.objects.filter(
+                workflow_instance_id=leave_request.workflow_reference,
+                payload__event="manager_assignment_reassigned",
+                payload__new_membership_id=None,
+            ).exists()
+        )
 
     def test_manager_history_preserves_approval_after_later_cancellation(self):
         self.leave_policy.config_snapshot = {

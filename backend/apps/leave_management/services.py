@@ -26,7 +26,7 @@ from apps.leave_management.models import (
 )
 from apps.employee_lifecycle.effective_services import resolve_employment_scope
 from apps.notifications.services import trigger_notification_event
-from apps.workflows.models import WorkflowActorType, WorkflowAction, WorkflowInstanceStatus, WorkflowModule
+from apps.workflows.models import WorkflowActorType, WorkflowAction, WorkflowInstance, WorkflowInstanceStatus, WorkflowModule
 from apps.workflows.services import create_workflow_instance, resolve_workflow_action
 
 LEAVE_APPROVAL_ROUTES = {
@@ -2428,6 +2428,19 @@ def withdraw_leave_request(*, leave_request: LeaveRequest, actor_employee, reaso
         raise ValidationError(
             {"attachment_reference": f"{runtime['withdraw_attachment_label'].capitalize()} is required to withdraw this leave request."}
         )
+
+    if leave_request.workflow_reference:
+        workflow_instance = WorkflowInstance.objects.filter(id=leave_request.workflow_reference).first()
+        if workflow_instance and workflow_instance.status in {
+            WorkflowInstanceStatus.PENDING,
+            WorkflowInstanceStatus.IN_PROGRESS,
+        }:
+            resolve_workflow_action(
+                instance=workflow_instance,
+                actor_identifier=str(actor_employee.membership.user_id) if actor_employee.membership else str(actor_employee.id),
+                action=WorkflowAction.CANCEL,
+                comment="Leave request withdrawn by employee.",
+            )
 
     if not _release_governed_request_reservations(leave_request=leave_request):
         _release_reserved_leave_balance(

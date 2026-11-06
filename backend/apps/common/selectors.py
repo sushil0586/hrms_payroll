@@ -3823,10 +3823,7 @@ def get_manager_team_summary(manager: Employee) -> dict:
         start_date__lte=today,
         end_date__gte=today,
     ).count()
-    pending_leave_approvals = LeaveRequest.objects.filter(
-        employee__reporting_manager=manager,
-        status=LeaveRequestStatus.PENDING,
-    ).count()
+    pending_leave_approvals = _get_manager_pending_leave_request_queryset(manager).count()
     pending_regularizations = AttendanceRegularization.objects.filter(
         employee__reporting_manager=manager,
         status=RegularizationStatus.PENDING,
@@ -6229,9 +6226,8 @@ def get_employee_attendance_regularization_detail(employee: Employee, regulariza
     }
 
 
-def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None = None) -> list[dict]:
-    """Returns workflow-assigned pending leave approvals for MSS inbox screens."""
-
+def _get_manager_pending_leave_request_queryset(manager: Employee):
+    """Build the authoritative actionable leave queue for a manager."""
     assigned_workflow_ids = _get_pending_workflow_instance_ids_for_actor(manager, subject_type="leave_request")
     queryset = (
         LeaveRequest.objects.filter(
@@ -6240,10 +6236,16 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
         .select_related("employee__department", "employee__designation", "leave_type", "leave_policy")
         .order_by("start_date", "created_at")
     )
+    scope = Q(employee__reporting_manager=manager, workflow_reference="")
     if assigned_workflow_ids:
-        queryset = queryset.filter(workflow_reference__in=assigned_workflow_ids)
-    else:
-        queryset = queryset.filter(employee__reporting_manager=manager, workflow_reference="")
+        scope |= Q(workflow_reference__in=assigned_workflow_ids)
+    return queryset.filter(scope)
+
+
+def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None = None) -> list[dict]:
+    """Returns workflow-assigned pending leave approvals for MSS inbox screens."""
+
+    queryset = _get_manager_pending_leave_request_queryset(manager)
     if limit:
         queryset = queryset[:limit]
 

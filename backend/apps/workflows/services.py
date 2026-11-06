@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.iam.models import TenantMembership
 from apps.workflows.models import (
     WorkflowAction,
+    WorkflowActionLog,
     WorkflowActorType,
     WorkflowAssignment,
     WorkflowInstance,
@@ -20,6 +21,64 @@ from apps.workflows.models import (
     WorkflowStepInstance,
     WorkflowTemplate,
 )
+
+
+@transaction.atomic
+def reassign_pending_manager_workflows(
+    *,
+    tenant_id,
+    employee_id,
+    previous_manager_membership_id,
+    new_manager_membership: TenantMembership | None,
+    eligible_workflow_ids,
+) -> int:
+    """Move unresolved direct-manager assignments after a reporting change."""
+
+    eligible_workflow_ids = [str(item) for item in eligible_workflow_ids if item]
+    if not previous_manager_membership_id or not eligible_workflow_ids:
+        return 0
+    assignments = list(
+        WorkflowAssignment.objects.select_for_update()
+        .select_related("step_instance__workflow_instance")
+        .filter(
+            membership_id=previous_manager_membership_id,
+            actor_type=WorkflowActorType.MANAGER,
+            responded_at__isnull=True,
+            step_instance__status__in=[WorkflowInstanceStatus.PENDING, WorkflowInstanceStatus.IN_PROGRESS],
+            step_instance__workflow_instance__tenant_id=tenant_id,
+            step_instance__workflow_instance__employee_identifier=str(employee_id),
+            step_instance__workflow_instance_id__in=eligible_workflow_ids,
+            step_instance__workflow_instance__status__in=[
+                WorkflowInstanceStatus.PENDING,
+                WorkflowInstanceStatus.IN_PROGRESS,
+            ],
+        )
+    )
+    for assignment in assignments:
+        previous_membership_id = assignment.membership_id
+        if new_manager_membership:
+            assignment.membership = new_manager_membership
+            assignment.actor_identifier = str(new_manager_membership.user_id)
+        else:
+            assignment.membership = None
+            assignment.actor_identifier = ""
+        assignment.save(update_fields=["membership", "actor_identifier", "updated_at"])
+        WorkflowActionLog.objects.create(
+            workflow_instance=assignment.step_instance.workflow_instance,
+            step_instance=assignment.step_instance,
+            action=WorkflowAction.COMMENT,
+            actor_identifier="system:reporting-manager-change",
+            comment="Pending manager assignment synchronized after reporting-manager change.",
+            from_status=assignment.step_instance.workflow_instance.status,
+            to_status=assignment.step_instance.workflow_instance.status,
+            payload={
+                "event": "manager_assignment_reassigned",
+                "employee_id": str(employee_id),
+                "previous_membership_id": str(previous_membership_id),
+                "new_membership_id": str(new_manager_membership.id) if new_manager_membership else None,
+            },
+        )
+    return len(assignments)
 
 
 def _create_step_assignment(*, step_instance: WorkflowStepInstance, actor_type: str, membership=None, role=None, actor_identifier: str = ""):
