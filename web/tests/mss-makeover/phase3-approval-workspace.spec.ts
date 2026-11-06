@@ -81,7 +81,9 @@ test("queue tabs support keyboard activation and browser history restores select
   await history.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/queue=history/);
-  await expect(page.getByText("Completed-decision history is not available in this workspace.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Completed decisions" })).toBeVisible();
+  await expect(page.getByText("Read-only leave and attendance decisions recorded for your manager identity.")).toBeVisible();
+  await expect(page.getByRole("form", { name: "Decision history filters" })).toBeVisible();
   await expect(page.getByText("No completed manager decisions are available yet.")).toBeVisible();
   await expectNoDocumentOverflow(page);
   await axeScan(page, "approval-history");

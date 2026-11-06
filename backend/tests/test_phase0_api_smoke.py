@@ -1921,7 +1921,7 @@ def test_custom_leave_approver_role_gates_manager_leave_decisions(api_client: AP
 
     session_response = api_client.get("/api/v1/auth/session/")
     assert session_response.status_code == 200
-    assert session_response.json()["workspace_access"]["mss"] is False
+    assert session_response.json()["workspace_access"]["mss"] is True
     assert session_response.json()["effective_permissions"] == ["leave.view"]
 
     queue_response = api_client.get("/api/v1/manager/leave-requests/pending/?page=1&page_size=5")
@@ -2026,7 +2026,7 @@ def test_custom_attendance_reviewer_role_gates_manager_regularization_decisions(
 
     session_response = api_client.get("/api/v1/auth/session/")
     assert session_response.status_code == 200
-    assert session_response.json()["workspace_access"]["mss"] is False
+    assert session_response.json()["workspace_access"]["mss"] is True
     assert session_response.json()["effective_permissions"] == ["attendance.view"]
 
     queue_response = api_client.get("/api/v1/manager/attendance-regularizations/pending/?page=1&page_size=5")
