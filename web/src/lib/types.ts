@@ -132,6 +132,7 @@ export type HrAdminEmployeeFormOptions = {
 };
 
 export type HrAdminEmployeeWriteInput = {
+  expected_updated_at?: string;
   employee_code: string;
   first_name: string;
   middle_name: string;
@@ -335,6 +336,7 @@ export type HrAdminGovernanceFields = {
 
 export type HrAdminLeaveType = HrAdminGovernanceFields & {
   id: string;
+  updated_at: string;
   code: string;
   name: string;
   short_code: string;
@@ -349,6 +351,7 @@ export type HrAdminLeaveType = HrAdminGovernanceFields & {
 };
 
 export type HrAdminLeaveTypeWriteInput = {
+  expected_updated_at?: string;
   code: string;
   name: string;
   short_code: string;
@@ -457,6 +460,13 @@ export type HrAdminShift = HrAdminGovernanceFields & {
 };
 
 export type HrAdminEmployeeShiftAssignment = {
+  lifecycle_state?: "future" | "active" | "historical" | "cancelled";
+  lifecycle_action?: "cancel" | "end" | "";
+  lifecycle_unavailable_reason?: string;
+  schedule_today?: string;
+  schedule_timezone?: string;
+  cancelled_at?: string | null;
+  lifecycle_snapshot?: { reason?: string; changed_at?: string };
   id: string;
   employee_id: string;
   employee: string;
@@ -1003,6 +1013,7 @@ export type HrAdminLeavePolicyPreview = {
 
 export type HrAdminLeavePolicy = HrAdminGovernanceFields & {
   id: string;
+  updated_at: string;
   leave_type_id: string;
   leave_type: string;
   code: string;
@@ -1156,6 +1167,7 @@ export type HrAdminLeavePolicyImpact = {
 };
 
 export type HrAdminLeavePolicyWriteInput = {
+  expected_updated_at?: string;
   leave_type_id: string | null;
   code: string;
   name: string;
@@ -5790,6 +5802,13 @@ export type ManagerTeamSummary = {
   pending_leave_approvals_count: number;
   pending_attendance_regularizations_count: number;
   attendance_exceptions_today: number;
+  reportees: Array<{
+    employee_id: string;
+    employee_code: string;
+    employee_name: string;
+    department: string | null;
+    designation: string | null;
+  }>;
 };
 
 export type PaginatedListResponse<T> = {

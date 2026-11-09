@@ -59,9 +59,13 @@ from apps.attendance.models import (
     Shift,
 )
 from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentCategoryType, DocumentLifecycleAuditEvent, DocumentLifecycleEventType, DocumentRequirementRule, EmployeeDocument, EmployeeDocumentStatus, GeneratedLetter, VerificationStatus
-from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
+from apps.employees.models import (
+    Employee,
+    EmployeeBankAccount,
+    EmploymentStatus,
+)
 from apps.employee_lifecycle.effective_services import initialize_employment_timeline
-from apps.employee_lifecycle.models import EmployeeExit, EmployeeLifecycleEvent, ExitStatus, LifecycleEventStatus, LifecycleEventType, OnboardingStatus, ProbationDecision
+from apps.employee_lifecycle.models import EmployeeExit, EmployeeLifecycleEvent, EmployeeMovement, EmployeeOnboarding, ExitStatus, LifecycleEventStatus, LifecycleEventType, OnboardingStatus, ProbationDecision, ProbationReview
 from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
 from apps.leave_management.models import LeaveBalance, LeaveBalanceTransaction, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
 from apps.notifications.models import (
@@ -753,6 +757,63 @@ def test_import_batch_audits_enforce_governed_permission_and_tenant_ownership(ap
     assert listed.status_code == 200
     assert listed.json()["count"] == 1
     assert listed.json()["items"][0]["id"] == str(audit.id)
+
+
+@pytest.mark.django_db
+def test_employee_import_claim_is_durable_finalizable_and_audits_denial(api_client: APIClient, bootstrapped_workspace, caplog):
+    source_hash = "d" * 64
+    payload = {
+        "import_type": "employees",
+        "status": "claimed",
+        "file_name": "employees.csv",
+        "source_hash": source_hash,
+        "source_ref": "hrms.bulk_import.browser.v2",
+        "row_count": 2,
+        "ready_count": 2,
+    }
+
+    employee_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
+    with caplog.at_level("INFO", logger="hrms.security.employee_import"):
+        denied = api_client.post(
+            "/api/v1/hr-admin/import-batches/",
+            payload,
+            format="json",
+            HTTP_X_REQUEST_ID="el1l-denied-import",
+        )
+    assert denied.status_code == 403
+    denied_record = next(record for record in caplog.records if getattr(record, "correlation_id", "") == "el1l-denied-import")
+    assert denied_record.outcome == "denied"
+    assert denied_record.reason in {"workspace_access", "missing_permission"}
+    assert denied_record.actor_ref
+    assert not hasattr(denied_record, "authorization")
+
+    hr_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {hr_token}")
+    first = api_client.post("/api/v1/hr-admin/import-batches/", payload, format="json")
+    replay = api_client.post("/api/v1/hr-admin/import-batches/", payload, format="json")
+    assert first.status_code == 201
+    assert first["Idempotency-Replayed"] == "false"
+    assert replay.status_code == 200
+    assert replay["Idempotency-Replayed"] == "true"
+    assert replay.json()["id"] == first.json()["id"]
+    assert HrmsImportBatchAudit.objects.filter(
+        import_type="employees", source_hash=source_hash, source_ref="hrms.bulk_import.browser.v2",
+    ).count() == 1
+
+    finalized = api_client.patch(
+        f"/api/v1/hr-admin/import-batches/{first.json()['id']}/",
+        {**payload, "status": "committed", "ready_count": 0, "created_count": 2},
+        format="json",
+    )
+    assert finalized.status_code == 200, finalized.json()
+    assert finalized.json()["status"] == "committed"
+    assert finalized.json()["created_count"] == 2
+
+    replay_after_finalize = api_client.post("/api/v1/hr-admin/import-batches/", payload, format="json")
+    assert replay_after_finalize.status_code == 200
+    assert replay_after_finalize["Idempotency-Replayed"] == "true"
+    assert replay_after_finalize.json()["status"] == "committed"
 
 
 @pytest.mark.django_db
@@ -2309,6 +2370,109 @@ def test_hr_admin_leave_type_and_assignment_writes_are_audited(api_client: APICl
     )
     assert assignment_update_event.event_snapshot["previous_state"]["priority"] == 991
     assert assignment_update_event.event_snapshot["new_state"]["priority"] == 992
+
+
+@pytest.mark.django_db
+def test_leave_setup_rejects_stale_edits_and_invalid_policy_boundaries(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    leave_type = bootstrapped_workspace["earned_leave_type"]
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    suffix = uuid4().hex[:8]
+
+    type_create = api_client.post(
+        "/api/v1/hr-admin/leave-types/",
+        {"code": f"versioned-type-{suffix}", "name": "Versioned type", "category": "paid", "unit": "day"},
+        format="json",
+    )
+    assert type_create.status_code == 201, type_create.json()
+    type_payload = type_create.json()
+    first_type_edit = api_client.patch(
+        f"/api/v1/hr-admin/leave-types/{type_payload['id']}/",
+        {"name": "Current type name", "expected_updated_at": type_payload["updated_at"]},
+        format="json",
+    )
+    assert first_type_edit.status_code == 200, first_type_edit.json()
+    type_audit_count = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_type_updated",
+        event_snapshot__leave_type_id=type_payload["id"],
+    ).count()
+    stale_type_edit = api_client.patch(
+        f"/api/v1/hr-admin/leave-types/{type_payload['id']}/",
+        {"name": "Stale type name", "expected_updated_at": type_payload["updated_at"]},
+        format="json",
+    )
+    assert stale_type_edit.status_code == 409, stale_type_edit.json()
+    assert "changed after you opened" in stale_type_edit.json()["detail"]
+    assert LeaveType.objects.get(id=type_payload["id"]).name == "Current type name"
+    assert SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_type_updated",
+        event_snapshot__leave_type_id=type_payload["id"],
+    ).count() == type_audit_count
+
+    policy_create = api_client.post(
+        "/api/v1/hr-admin/leave-policies/",
+        {
+            "leave_type_id": str(leave_type.id),
+            "code": f"versioned-policy-{suffix}",
+            "name": "Versioned policy",
+            "status": LeavePolicyStatus.DRAFT,
+            "effective_from": "2030-01-01",
+            "effective_to": "2030-12-31",
+            "annual_entitlement": "12.00",
+            "min_days_per_request": "0.50",
+            "max_consecutive_days": "5.00",
+        },
+        format="json",
+    )
+    assert policy_create.status_code == 201, policy_create.json()
+    policy_payload = policy_create.json()
+    first_policy_edit = api_client.patch(
+        f"/api/v1/hr-admin/leave-policies/{policy_payload['id']}/",
+        {"name": "Current policy name", "expected_updated_at": policy_payload["updated_at"]},
+        format="json",
+    )
+    assert first_policy_edit.status_code == 200, first_policy_edit.json()
+    policy_audit_count = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_policy_updated",
+        event_snapshot__leave_policy_id=policy_payload["id"],
+    ).count()
+
+    stale_policy_edit = api_client.patch(
+        f"/api/v1/hr-admin/leave-policies/{policy_payload['id']}/",
+        {"name": "Stale policy name", "expected_updated_at": policy_payload["updated_at"]},
+        format="json",
+    )
+    assert stale_policy_edit.status_code == 409, stale_policy_edit.json()
+    invalid_date_edit = api_client.patch(
+        f"/api/v1/hr-admin/leave-policies/{policy_payload['id']}/",
+        {"effective_from": "2031-01-01", "effective_to": "2030-12-31"},
+        format="json",
+    )
+    assert invalid_date_edit.status_code == 400, invalid_date_edit.json()
+    assert "effective_to" in invalid_date_edit.json()
+    invalid_numeric_edit = api_client.patch(
+        f"/api/v1/hr-admin/leave-policies/{policy_payload['id']}/",
+        {"annual_entitlement": "-1.00", "notice_days_required": -1},
+        format="json",
+    )
+    assert invalid_numeric_edit.status_code == 400, invalid_numeric_edit.json()
+    assert {"annual_entitlement", "notice_days_required"}.issubset(invalid_numeric_edit.json())
+
+    policy = LeavePolicy.objects.get(id=policy_payload["id"])
+    assert policy.name == "Current policy name"
+    assert policy.effective_from.isoformat() == "2030-01-01"
+    assert policy.effective_to.isoformat() == "2030-12-31"
+    assert str(policy.annual_entitlement) == "12.00"
+    assert policy.notice_days_required == 0
+    assert SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_policy_updated",
+        event_snapshot__leave_policy_id=policy_payload["id"],
+    ).count() == policy_audit_count
 
 
 @pytest.mark.django_db
@@ -5805,6 +5969,24 @@ def test_employee_can_create_update_and_submit_own_statutory_declaration(api_cli
         name="India Tax ESS FY2027",
         status=PayrollConfigStatus.ACTIVE,
         effective_from="2027-04-01",
+        config_snapshot={
+            "declaration_catalog": {
+                "financial_years": [{
+                    "value": "FY2027-28",
+                    "label": "FY 2027-28",
+                    "is_open": True,
+                    "declaration_profile_ref": "india.tax.declaration.employee-editable.v1",
+                    "proof_window_ref": "tenant.proof-window.fy2027.q4",
+                }],
+                "sections": [{
+                    "code": "80C",
+                    "label": "Investments",
+                    "item_kinds": [PayrollStatutoryDeclarationItemKind.INVESTMENT],
+                    "component_codes": ["LIC"],
+                    "proof_required": False,
+                }],
+            }
+        },
     )
     profile = EmployeeStatutoryProfile.objects.create(
         tenant=tenant,
@@ -5823,8 +6005,6 @@ def test_employee_can_create_update_and_submit_own_statutory_declaration(api_cli
         {
             "employee_statutory_profile_id": str(profile.id),
             "financial_year_code": "fy2027-28",
-            "declaration_profile_ref": "india.tax.declaration.employee-editable.v1",
-            "proof_window_ref": "tenant.proof-window.fy2027.q4",
             "tax_regime": PayrollTaxRegime.OLD,
             "config_snapshot": {"submission_policy_ref": "employee.tax.proof.self-service.v1"},
         },
@@ -5844,15 +6024,14 @@ def test_employee_can_create_update_and_submit_own_statutory_declaration(api_cli
             "component_code": "lic",
             "name": "Life Insurance Premium",
             "declared_amount": "60000.00",
-            "proof_document_ref": "employee-document:lic-premium-fy2027",
             "config_snapshot": {"proof_category_ref": "tax.investment.80c"},
         },
         format="json",
     )
     assert item_response.status_code == 201, item_response.json()
     item_payload = item_response.json()
-    assert item_payload["proof_status"] == PayrollStatutoryProofStatus.SUBMITTED
-    assert item_payload["proof_submitted_at"] is not None
+    assert item_payload["proof_status"] == PayrollStatutoryProofStatus.NOT_REQUIRED
+    assert item_payload["proof_submitted_at"] is None
     assert item_payload["section_code"] == "80C"
     item_id = item_payload["id"]
 
@@ -5982,7 +6161,8 @@ def test_employee_statutory_declaration_proof_upload_creates_document_and_links_
     replacement_document = EmployeeDocument.objects.get(id=replacement_response.json()["document"]["id"])
     document.refresh_from_db()
     declaration_item.refresh_from_db()
-    assert document.status == EmployeeDocumentStatus.REPLACED
+    assert document.status == EmployeeDocumentStatus.ACTIVE
+    assert replacement_document.status == EmployeeDocumentStatus.PENDING_REPLACEMENT
     assert replacement_document.previous_document_id == document.id
     assert declaration_item.proof_document_ref == f"employee-document:{replacement_document.id}"
     assert declaration_item.proof_status == PayrollStatutoryProofStatus.SUBMITTED
@@ -14459,6 +14639,8 @@ def test_attendance_submission_and_manager_rejection_replay_canonical_results(ap
     submit_payload = {
         "attendance_record_id": str(record.id),
         "requested_status": "present",
+        "requested_check_in_at": f"{record.attendance_date.isoformat()}T09:00:00+00:00",
+        "requested_check_out_at": f"{record.attendance_date.isoformat()}T18:00:00+00:00",
         "reason": "DD-6A attendance replay.",
     }
     first = api_client.post("/api/v1/me/attendance-regularizations/", submit_payload, format="json", HTTP_IDEMPOTENCY_KEY=submit_key)
@@ -15408,6 +15590,8 @@ def test_employee_leave_request_uses_resolved_multi_field_policy_assignment(api_
     )
 
     start_date = timezone.localdate() + timedelta(days=20)
+    while start_date.weekday() >= 5:
+        start_date += timedelta(days=1)
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -16037,7 +16221,7 @@ def test_employee_can_submit_attendance_regularization(api_client: APIClient, bo
         "/api/v1/me/attendance-regularizations/",
         {
             "attendance_record_id": str(bootstrapped_workspace["riya_today_record"].id),
-            "requested_status": "present",
+            "requested_status": "absent",
             "requested_check_in_at": f"{timezone.localdate().isoformat()}T09:05:00+05:30",
             "requested_check_out_at": f"{timezone.localdate().isoformat()}T18:10:00+05:30",
             "reason": "Phase 0 API smoke test regularization.",
@@ -16064,7 +16248,7 @@ def test_employee_cannot_submit_regularization_for_locked_attendance_record(api_
         "/api/v1/me/attendance-regularizations/",
         {
             "attendance_record_id": str(record.id),
-            "requested_status": "present",
+            "requested_status": "absent",
             "requested_check_in_at": f"{timezone.localdate().isoformat()}T09:05:00+05:30",
             "requested_check_out_at": f"{timezone.localdate().isoformat()}T18:10:00+05:30",
             "reason": "Trying to regularize a locked attendance row.",
@@ -16096,7 +16280,7 @@ def test_employee_cannot_submit_duplicate_pending_regularization_for_same_record
         "/api/v1/me/attendance-regularizations/",
         {
             "attendance_record_id": str(record.id),
-            "requested_status": "present",
+            "requested_status": "absent",
             "requested_check_in_at": f"{timezone.localdate().isoformat()}T09:05:00+05:30",
             "requested_check_out_at": f"{timezone.localdate().isoformat()}T18:10:00+05:30",
             "reason": "Trying to create a duplicate pending regularization.",
@@ -16705,7 +16889,7 @@ def test_manager_regularization_derives_absent_when_punches_are_missing(api_clie
         "/api/v1/me/attendance-regularizations/",
         {
             "attendance_record_id": str(record.id),
-            "requested_status": "present",
+            "requested_status": "absent",
             "reason": "Submitting without punches to use missing-punch derivation.",
         },
         format="json",
@@ -16732,7 +16916,7 @@ def test_manager_regularization_derives_absent_when_punches_are_missing(api_clie
 
 
 @pytest.mark.django_db
-def test_manager_regularization_uses_rotation_shift_weekly_off_derivation(api_client: APIClient, bootstrapped_workspace):
+def test_rotation_shift_weekly_off_blocks_regularization_submission(api_client: APIClient, bootstrapped_workspace):
     employee = Employee.objects.get(employee_code="EMP-0042")
     attendance_date = timezone.localdate() + timedelta(days=(6 - timezone.localdate().weekday()) % 7 or 7)
     week_off_shift = Shift.objects.create(
@@ -16801,29 +16985,18 @@ def test_manager_regularization_uses_rotation_shift_weekly_off_derivation(api_cl
         "/api/v1/me/attendance-regularizations/",
         {
             "attendance_record_id": str(record.id),
-            "requested_status": "present",
+            "requested_status": "absent",
             "reason": "Marking weekly off through rotation-derived shift.",
         },
         format="json",
     )
 
-    assert submit_response.status_code == 201, submit_response.json()
-    regularization_id = submit_response.json()["id"]
-
-    manager_token = login(api_client, "karan.mehta")
-    api_client.credentials(HTTP_AUTHORIZATION=f"Token {manager_token}")
-    approve_response = api_client.post(
-        f"/api/v1/manager/attendance-regularizations/{regularization_id}/approve/",
-        {"comment": "Approved with rotation weekly-off resolution."},
-        format="json",
-    )
-
-    assert approve_response.status_code == 200, approve_response.json()
+    assert submit_response.status_code == 400, submit_response.json()
+    assert submit_response.json()["detail"] == "Attendance corrections are unavailable on a scheduled weekly off day."
+    assert not AttendanceRegularization.objects.filter(attendance_record=record).exists()
     record.refresh_from_db()
-
-    assert record.shift_id == week_off_shift.id
-    assert record.status == AttendanceStatus.WEEKLY_OFF
-    assert record.is_regularized is True
+    assert record.status == AttendanceStatus.UNKNOWN
+    assert record.is_regularized is False
 
 
 @pytest.mark.django_db
@@ -16993,7 +17166,7 @@ def test_manager_regularization_prefers_holiday_over_weekly_off_when_both_match(
         "/api/v1/me/attendance-regularizations/",
         {
             "attendance_record_id": str(record.id),
-            "requested_status": "present",
+            "requested_status": "absent",
             "reason": "Holiday should win over weekly off.",
         },
         format="json",
@@ -17760,6 +17933,61 @@ def test_hr_admin_employee_detail_exposes_direct_report_count(api_client: APICli
 
 
 @pytest.mark.django_db
+def test_manager_team_summary_lists_only_current_direct_reportees(api_client: APIClient, bootstrapped_workspace):
+    manager = Employee.objects.get(employee_code="EMP-0002")
+    direct_report = Employee.objects.get(employee_code="EMP-0042")
+    assert direct_report.reporting_manager_id == manager.id
+
+    token = login(api_client, "karan.mehta")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    response = api_client.get("/api/v1/manager/team-summary/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    reportee_ids = {item["employee_id"] for item in payload["reportees"]}
+    assert str(direct_report.id) in reportee_ids
+    assert str(manager.id) not in reportee_ids
+    assert payload["team_size"] == len(payload["reportees"])
+
+
+@pytest.mark.django_db
+def test_hr_admin_employee_stale_revision_is_rejected_without_overwrite(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    employee = Employee.objects.get(employee_code="EMP-0042")
+    stale_revision = employee.updated_at.isoformat().replace("+00:00", "Z")
+
+    accepted = api_client.patch(
+        f"/api/v1/hr-admin/employees/{employee.id}/",
+        {"preferred_name": "Concurrent committed value", "expected_updated_at": stale_revision},
+        format="json",
+    )
+    stale = api_client.patch(
+        f"/api/v1/hr-admin/employees/{employee.id}/",
+        {"preferred_name": "Stale overwrite", "expected_updated_at": stale_revision},
+        format="json",
+    )
+
+    assert accepted.status_code == 200, accepted.json()
+    assert stale.status_code == 400, stale.json()
+    assert "changed after the form was opened" in str(stale.json()["expected_updated_at"])
+    employee.refresh_from_db()
+    assert employee.preferred_name == "Concurrent committed value"
+
+
+@pytest.mark.django_db
+def test_hr_admin_employee_hard_delete_is_not_supported(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    employee = Employee.objects.get(employee_code="EMP-0042")
+
+    response = api_client.delete(f"/api/v1/hr-admin/employees/{employee.id}/")
+
+    assert response.status_code == 405
+    assert Employee.objects.filter(id=employee.id).exists()
+
+
+@pytest.mark.django_db
 def test_hr_admin_employee_form_options_expose_relation_metadata(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -18041,6 +18269,90 @@ def test_hr_admin_cannot_assign_employee_as_their_own_manager(api_client: APICli
 
     assert response.status_code == 400
     assert response.json()["reporting_manager_id"] == "An employee cannot report to themselves."
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("payload", "field"),
+    [
+        ({"employee_code": "INVALID CODE!", "first_name": "Format"}, "employee_code"),
+        ({"employee_code": "EMP-FORMAT-PHONE", "first_name": "Format", "phone_number": "12-ABC"}, "phone_number"),
+        ({"employee_code": "   ", "first_name": "Whitespace"}, "employee_code"),
+        ({"employee_code": "E" * 51, "first_name": "Length"}, "employee_code"),
+        ({"employee_code": "EMP-WHITESPACE-NAME", "first_name": "   "}, "first_name"),
+    ],
+)
+def test_hr_admin_rejects_invalid_employee_identifier_formats_without_mutation(
+    api_client: APIClient,
+    bootstrapped_workspace,
+    payload,
+    field,
+):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    before = Employee.objects.count()
+
+    response = api_client.post("/api/v1/hr-admin/employees/", payload, format="json")
+
+    assert response.status_code == 400
+    assert field in response.json()
+    assert Employee.objects.count() == before
+
+
+@pytest.mark.django_db
+def test_hr_admin_employee_optional_values_can_be_cleared_without_losing_required_data(
+    api_client: APIClient,
+    bootstrapped_workspace,
+):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    create_response = api_client.post(
+        "/api/v1/hr-admin/employees/",
+        {
+            "employee_code": "EMP-OPTIONAL-CLEAR",
+            "first_name": "Optional",
+            "middle_name": "Middle",
+            "last_name": "Person",
+            "preferred_name": "Preferred",
+            "personal_email": "optional@example.invalid",
+            "phone_number": "+91 98765 43210",
+            "date_of_birth": "1990-01-02",
+            "date_of_joining": "2026-01-02",
+            "probation_end_date": "2026-04-02",
+            "confirmation_date": "2026-04-03",
+        },
+        format="json",
+    )
+    assert create_response.status_code == 201, create_response.json()
+    employee_id = create_response.json()["id"]
+
+    update_response = api_client.patch(
+        f"/api/v1/hr-admin/employees/{employee_id}/",
+        {
+            "middle_name": "",
+            "last_name": "",
+            "preferred_name": "",
+            "personal_email": "",
+            "phone_number": "",
+            "date_of_birth": None,
+            "probation_end_date": None,
+            "confirmation_date": None,
+        },
+        format="json",
+    )
+
+    assert update_response.status_code == 200, update_response.json()
+    employee = Employee.objects.get(id=employee_id)
+    assert employee.first_name == "Optional"
+    assert employee.date_of_joining.isoformat() == "2026-01-02"
+    assert employee.middle_name == ""
+    assert employee.last_name == ""
+    assert employee.preferred_name == ""
+    assert employee.personal_email == ""
+    assert employee.phone_number == ""
+    assert employee.date_of_birth is None
+    assert employee.probation_end_date is None
+    assert employee.confirmation_date is None
 
 
 @pytest.mark.django_db
@@ -18330,6 +18642,220 @@ def test_hr_admin_cannot_save_employee_access_without_roles(api_client: APIClien
 
 
 @pytest.mark.django_db
+def test_hr_admin_cannot_escalate_employee_to_tenant_admin(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    hr_membership = TenantMembership.objects.get(tenant=tenant, user__username="nisha.rao")
+    hr_membership.membership_roles.filter(role__code="tenant-admin").delete()
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    tenant_admin_role = Role.objects.get(tenant=tenant, code="tenant-admin")
+    before_role_ids = set(employee.membership.membership_roles.values_list("role_id", flat=True))
+    audit_count = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="employee_access_updated",
+    ).count()
+
+    response = api_client.patch(
+        f"/api/v1/hr-admin/employees/{employee.id}/access/",
+        {"role_ids": [str(tenant_admin_role.id)]},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["role_ids"] == "One or more selected roles cannot be assigned by this administrator."
+    assert set(employee.membership.membership_roles.values_list("role_id", flat=True)) == before_role_ids
+    assert SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="employee_access_updated",
+    ).count() == audit_count
+
+
+@pytest.mark.django_db
+def test_hr_admin_employee_access_update_is_audited_without_credentials(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    employee_role = Role.objects.get(tenant=tenant, code="employee")
+    response = api_client.patch(
+        f"/api/v1/hr-admin/employees/{employee.id}/access/",
+        {"role_ids": [str(employee_role.id)], "display_name": "Access Audit Employee"},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.json()
+    event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="employee_access_updated",
+    ).latest("created_at")
+    assert event.actor_identifier == "nisha.rao"
+    assert event.event_snapshot["employee_id"] == str(employee.id)
+    assert event.event_snapshot["new_state"]["role_ids"] == [str(employee_role.id)]
+    serialized = str(event.event_snapshot).casefold()
+    assert "password" not in serialized
+    assert "credential" not in serialized
+
+
+@pytest.mark.django_db
+def test_hr_admin_employee_bank_account_lifecycle_is_validated_and_audited(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    payload = {
+        "account_holder_name": "Synthetic Employee",
+        "bank_name": "Certification Bank",
+        "account_number": "EL1F00000001",
+        "ifsc_code": "HDFC0001234",
+        "branch_name": "Certification Branch",
+        "is_primary": True,
+    }
+
+    create_response = api_client.post(
+        f"/api/v1/hr-admin/employees/{employee.id}/bank-accounts/",
+        payload,
+        format="json",
+    )
+
+    assert create_response.status_code == 201, create_response.json()
+    item_id = create_response.json()["id"]
+    item = EmployeeBankAccount.objects.get(id=item_id)
+    assert item.account_number == payload["account_number"]
+    assert item.is_primary is True
+    event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="employee_bank_account_created",
+    ).latest("created_at")
+    assert event.actor_identifier == "nisha.rao"
+    assert event.event_snapshot["employee_id"] == str(employee.id)
+    assert event.event_snapshot["new_state"]["account_last_four"] == "0001"
+    serialized = str(event.event_snapshot)
+    assert payload["account_number"] not in serialized
+    assert "password" not in serialized.casefold()
+
+    duplicate_response = api_client.post(
+        f"/api/v1/hr-admin/employees/{employee.id}/bank-accounts/",
+        {**payload, "bank_name": "Duplicate Bank"},
+        format="json",
+    )
+    assert duplicate_response.status_code == 400
+    assert duplicate_response.json()["account_number"] == "This account number is already configured for the employee."
+    assert EmployeeBankAccount.objects.filter(employee=employee, account_number=payload["account_number"]).count() == 1
+
+    invalid_ifsc_response = api_client.post(
+        f"/api/v1/hr-admin/employees/{employee.id}/bank-accounts/",
+        {**payload, "account_number": "EL1F00000002", "ifsc_code": "INVALID"},
+        format="json",
+    )
+    assert invalid_ifsc_response.status_code == 400
+    assert invalid_ifsc_response.json()["ifsc_code"] == ["Enter a valid IFSC code."]
+
+    update_response = api_client.patch(
+        f"/api/v1/hr-admin/employees/{employee.id}/bank-accounts/{item_id}/",
+        {"branch_name": "Updated Certification Branch"},
+        format="json",
+    )
+    assert update_response.status_code == 200, update_response.json()
+    item.refresh_from_db()
+    assert item.branch_name == "Updated Certification Branch"
+    update_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="employee_bank_account_updated",
+    ).latest("created_at")
+    assert update_event.event_snapshot["previous_state"]["branch_name"] == "Certification Branch"
+    assert update_event.event_snapshot["new_state"]["branch_name"] == "Updated Certification Branch"
+    assert payload["account_number"] not in str(update_event.event_snapshot)
+
+
+@pytest.mark.django_db
+def test_hr_admin_employee_bank_accounts_reject_cross_tenant_employee(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    foreign_tenant = Tenant.objects.create(
+        code=f"bank-foreign-{uuid4().hex[:8]}",
+        name="Bank Foreign Tenant",
+        status="active",
+        is_sandbox=True,
+    )
+    foreign_employee = Employee.objects.create(
+        tenant=foreign_tenant,
+        employee_code="FOREIGN-BANK-001",
+        first_name="Foreign",
+        last_name="Employee",
+        work_email="foreign.bank@example.test",
+    )
+    before_audits = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="employee_bank_account_created",
+    ).count()
+
+    response = api_client.post(
+        f"/api/v1/hr-admin/employees/{foreign_employee.id}/bank-accounts/",
+        {
+            "account_holder_name": "Foreign Employee",
+            "bank_name": "Foreign Bank",
+            "account_number": "FOREIGN0001",
+            "ifsc_code": "HDFC0001234",
+            "is_primary": True,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 404
+    assert not EmployeeBankAccount.objects.filter(employee=foreign_employee).exists()
+    assert SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="employee_bank_account_created",
+    ).count() == before_audits
+
+
+@pytest.mark.django_db(transaction=True)
+def test_employee_bank_account_database_constraints_prevent_duplicate_and_multiple_primary(bootstrapped_workspace):
+    employee = Employee.objects.get(
+        tenant=bootstrapped_workspace["pending_leave"].tenant,
+        employee_code="EMP-0042",
+    )
+    first = EmployeeBankAccount.objects.create(
+        employee=employee,
+        account_holder_name="Synthetic Employee",
+        bank_name="Primary Bank",
+        account_number="EL1F-CONSTRAINT-001",
+        ifsc_code="HDFC0001234",
+        is_primary=True,
+    )
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            EmployeeBankAccount.objects.create(
+                employee=employee,
+                account_holder_name="Synthetic Employee",
+                bank_name="Duplicate Bank",
+                account_number=first.account_number,
+                ifsc_code="HDFC0001234",
+                is_primary=False,
+            )
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            EmployeeBankAccount.objects.create(
+                employee=employee,
+                account_holder_name="Synthetic Employee",
+                bank_name="Second Primary Bank",
+                account_number="EL1F-CONSTRAINT-002",
+                ifsc_code="HDFC0001234",
+                is_primary=True,
+            )
+
+    assert EmployeeBankAccount.objects.filter(employee=employee).count() == 1
+    assert EmployeeBankAccount.objects.filter(employee=employee, is_primary=True).count() == 1
+
+
+@pytest.mark.django_db
 def test_hr_admin_cannot_keep_active_access_for_inactive_employee(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -18523,7 +19049,283 @@ def test_hr_admin_confirmed_probation_updates_employee_confirmation_dates(api_cl
 
 
 @pytest.mark.django_db
-def test_hr_admin_completed_movement_updates_employee_structure(api_client: APIClient, bootstrapped_workspace):
+def test_hr_admin_onboarding_transition_lifecycle_is_guarded_and_audited(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="EL1G-ONBOARD-001",
+        first_name="Onboarding",
+        last_name="Certification",
+        work_email="el1g.onboarding@example.test",
+        employment_status=EmploymentStatus.DRAFT,
+    )
+
+    created = api_client.post(
+        "/api/v1/hr-admin/onboardings/",
+        {
+            "employee_id": str(employee.id),
+            "status": OnboardingStatus.NOT_STARTED,
+            "expected_joining_date": "2026-12-01",
+            "checklist_snapshot": [{"code": "offer", "label": "Offer accepted", "done": False}],
+        },
+        format="json",
+    )
+    assert created.status_code == 201, created.json()
+    onboarding_id = created.json()["id"]
+
+    missing_reason = api_client.patch(
+        f"/api/v1/hr-admin/onboardings/{onboarding_id}/",
+        {"status": OnboardingStatus.BLOCKED, "notes": ""},
+        format="json",
+    )
+    assert missing_reason.status_code == 400
+    assert missing_reason.json()["notes"] == "Record a reason before blocking onboarding."
+
+    blocked = api_client.patch(
+        f"/api/v1/hr-admin/onboardings/{onboarding_id}/",
+        {"status": OnboardingStatus.BLOCKED, "notes": "Waiting for synthetic joining evidence."},
+        format="json",
+    )
+    assert blocked.status_code == 200, blocked.json()
+    resumed = api_client.patch(
+        f"/api/v1/hr-admin/onboardings/{onboarding_id}/",
+        {"status": OnboardingStatus.IN_PROGRESS},
+        format="json",
+    )
+    assert resumed.status_code == 200, resumed.json()
+    cancelled = api_client.patch(
+        f"/api/v1/hr-admin/onboardings/{onboarding_id}/",
+        {"status": OnboardingStatus.CANCELLED},
+        format="json",
+    )
+    assert cancelled.status_code == 200, cancelled.json()
+    invalid_resume = api_client.patch(
+        f"/api/v1/hr-admin/onboardings/{onboarding_id}/",
+        {"status": OnboardingStatus.IN_PROGRESS},
+        format="json",
+    )
+    assert invalid_resume.status_code == 400
+    assert "cannot move" in invalid_resume.json()["status"]
+
+    duplicate = api_client.post(
+        "/api/v1/hr-admin/onboardings/",
+        {"employee_id": str(employee.id), "status": OnboardingStatus.NOT_STARTED},
+        format="json",
+    )
+    assert duplicate.status_code == 400
+    assert duplicate.json()["employee_id"] == "An onboarding record already exists for this employee."
+    events = EmployeeLifecycleEvent.objects.filter(
+        tenant=tenant,
+        employee=employee,
+        event_type=LifecycleEventType.ONBOARDING,
+    ).order_by("created_at")
+    assert list(events.values_list("payload__current_value", flat=True)) == [
+        OnboardingStatus.NOT_STARTED,
+        OnboardingStatus.BLOCKED,
+        OnboardingStatus.IN_PROGRESS,
+        OnboardingStatus.CANCELLED,
+    ]
+    assert all(event.payload["actor"] == "nisha.rao" for event in events)
+
+
+@pytest.mark.django_db
+def test_hr_admin_onboarding_rejects_foreign_owner_and_inactive_template(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="EL1G-SCOPE-001",
+        first_name="Scope",
+        last_name="Certification",
+        work_email="el1g.scope@example.test",
+    )
+    foreign_tenant = Tenant.objects.create(
+        code=f"el1g-foreign-{uuid4().hex[:8]}",
+        name="EL1G Foreign Tenant",
+        status="active",
+        is_sandbox=True,
+    )
+    foreign_employee = Employee.objects.create(
+        tenant=foreign_tenant,
+        employee_code="EL1G-FOREIGN-OWNER",
+        first_name="Foreign",
+        last_name="Owner",
+        work_email="el1g.foreign.owner@example.test",
+    )
+
+    foreign_owner = api_client.post(
+        "/api/v1/hr-admin/onboardings/",
+        {
+            "employee_id": str(employee.id),
+            "owner_value": f"employee:{foreign_employee.id}",
+        },
+        format="json",
+    )
+    assert foreign_owner.status_code == 400
+    assert foreign_owner.json()["owner_value"] == "Invalid selection."
+    inactive_template = api_client.post(
+        "/api/v1/hr-admin/onboardings/",
+        {
+            "employee_id": str(employee.id),
+            "onboarding_template_code": "missing-or-inactive-template",
+        },
+        format="json",
+    )
+    assert inactive_template.status_code == 400
+    assert inactive_template.json()["onboarding_template_code"] == "Select an active lifecycle workflow template."
+    assert not EmployeeOnboarding.objects.filter(employee=employee).exists()
+
+
+@pytest.mark.django_db
+def test_hr_admin_probation_decisions_are_terminal_audited_and_separation_opens_exit(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    extended_employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="EL1G-PROB-EXTEND",
+        first_name="Probation",
+        last_name="Extension",
+        work_email="el1g.extend@example.test",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=date(2026, 1, 1),
+        probation_end_date=date(2026, 6, 30),
+    )
+    invalid_extension = api_client.post(
+        "/api/v1/hr-admin/probation-reviews/",
+        {
+            "employee_id": str(extended_employee.id),
+            "review_date": "2026-06-30",
+            "probation_end_date": "2026-06-30",
+            "decision": ProbationDecision.EXTEND,
+            "extension_end_date": "2026-06-30",
+        },
+        format="json",
+    )
+    assert invalid_extension.status_code == 400
+    valid_extension = api_client.post(
+        "/api/v1/hr-admin/probation-reviews/",
+        {
+            "employee_id": str(extended_employee.id),
+            "review_date": "2026-06-30",
+            "probation_end_date": "2026-06-30",
+            "decision": ProbationDecision.EXTEND,
+            "extension_end_date": "2026-09-30",
+        },
+        format="json",
+    )
+    assert valid_extension.status_code == 201, valid_extension.json()
+    extended_employee.refresh_from_db()
+    assert extended_employee.probation_end_date == date(2026, 9, 30)
+    changed_terminal = api_client.patch(
+        f"/api/v1/hr-admin/probation-reviews/{valid_extension.json()['id']}/",
+        {"decision": ProbationDecision.CONFIRM},
+        format="json",
+    )
+    assert changed_terminal.status_code == 400
+    assert "cannot change" in changed_terminal.json()["decision"]
+
+    separated_employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="EL1G-PROB-SEPARATE",
+        first_name="Probation",
+        last_name="Separation",
+        work_email="el1g.separate@example.test",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=date(2026, 1, 1),
+    )
+    separated = api_client.post(
+        "/api/v1/hr-admin/probation-reviews/",
+        {
+            "employee_id": str(separated_employee.id),
+            "review_date": "2026-07-01",
+            "decision": ProbationDecision.SEPARATE,
+            "remarks": "Synthetic probation separation review.",
+        },
+        format="json",
+    )
+    assert separated.status_code == 201, separated.json()
+    exit_record = EmployeeExit.objects.get(employee=separated_employee)
+    assert exit_record.status == ExitStatus.DRAFT
+    assert exit_record.exit_reason == "probation_separation"
+    separated_employee.refresh_from_db()
+    assert separated_employee.employment_status == EmploymentStatus.ACTIVE
+    event = EmployeeLifecycleEvent.objects.filter(
+        employee=separated_employee,
+        event_type=LifecycleEventType.PROBATION,
+    ).latest("created_at")
+    assert event.payload["current_value"] == ProbationDecision.SEPARATE
+    assert event.payload["actor"] == "nisha.rao"
+
+
+@pytest.mark.django_db
+def test_employee_cannot_read_or_mutate_hr_lifecycle_records(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="EL1G-DENIED-001",
+        first_name="Denied",
+        last_name="Lifecycle",
+        work_email="el1g.denied@example.test",
+    )
+
+    list_response = api_client.get("/api/v1/hr-admin/onboardings/")
+    create_response = api_client.post(
+        "/api/v1/hr-admin/onboardings/",
+        {"employee_id": str(employee.id)},
+        format="json",
+    )
+    probation_response = api_client.post(
+        "/api/v1/hr-admin/probation-reviews/",
+        {"employee_id": str(employee.id), "review_date": "2026-12-01"},
+        format="json",
+    )
+    exit_response = api_client.get("/api/v1/hr-admin/exits/")
+
+    assert list_response.status_code == 403
+    assert create_response.status_code == 403
+    assert probation_response.status_code == 403
+    assert exit_response.status_code == 403
+    assert not EmployeeOnboarding.objects.filter(employee=employee).exists()
+    assert not ProbationReview.objects.filter(employee=employee).exists()
+
+
+@pytest.mark.django_db
+def test_onboarding_creation_rolls_back_when_lifecycle_audit_write_fails(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    api_client.raise_request_exception = False
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="EL1G-ROLLBACK-001",
+        first_name="Rollback",
+        last_name="Certification",
+        work_email="el1g.rollback@example.test",
+    )
+
+    with patch(
+        "apps.common.api_views.EmployeeLifecycleEvent.objects.create",
+        side_effect=DatabaseError("forced lifecycle audit failure"),
+    ):
+        response = api_client.post(
+            "/api/v1/hr-admin/onboardings/",
+            {"employee_id": str(employee.id)},
+            format="json",
+        )
+
+    assert response.status_code == 500
+    assert not EmployeeOnboarding.objects.filter(employee=employee).exists()
+    assert not EmployeeLifecycleEvent.objects.filter(employee=employee).exists()
+
+
+@pytest.mark.django_db
+def test_hr_admin_completed_movement_updates_employee_structure(api_client: APIClient, bootstrapped_workspace, django_capture_on_commit_callbacks):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
@@ -18552,27 +19354,204 @@ def test_hr_admin_completed_movement_updates_employee_structure(api_client: APIC
         approved_source_reference="phase0-explicit-fixture-baseline",
         effective_from=employee.date_of_joining,
     )
-    movement_effective_date = employee.date_of_joining + timedelta(days=30)
+    movement_effective_date = timezone.localdate()
 
-    response = api_client.post(
-        "/api/v1/hr-admin/movements/",
-        {
-            "employee_id": str(employee.id),
-            "movement_type": "promotion",
-            "status": LifecycleEventStatus.COMPLETED,
-            "effective_date": movement_effective_date.isoformat(),
-            "to_department_id": str(department.id),
-            "to_designation_id": str(designation.id),
-            "to_manager_id": str(new_manager.id),
-        },
-        format="json",
-    )
+    with django_capture_on_commit_callbacks(execute=True):
+        response = api_client.post(
+            "/api/v1/hr-admin/movements/",
+            {
+                "employee_id": str(employee.id),
+                "movement_type": "promotion",
+                "status": LifecycleEventStatus.COMPLETED,
+                "effective_date": movement_effective_date.isoformat(),
+                "to_department_id": str(department.id),
+                "to_designation_id": str(designation.id),
+                "to_manager_id": str(new_manager.id),
+            },
+            format="json",
+        )
 
     assert response.status_code == 201, response.json()
     employee.refresh_from_db()
     assert employee.department_id == department.id
     assert employee.designation_id == designation.id
     assert employee.reporting_manager_id == new_manager.id
+    movement = EmployeeMovement.objects.get(id=response.json()["id"])
+    assert movement.resulting_assignment_id is not None
+    assert EmployeeLifecycleEvent.objects.filter(
+        employee=employee,
+        workflow_reference=f"employee-lifecycle:{movement.id}",
+        status=LifecycleEventStatus.COMPLETED,
+    ).count() == 1
+    notification = Notification.objects.get(subject_type="employee_movement", subject_identifier=str(movement.id))
+    assert notification.recipient_membership_id == employee.membership_id
+    assert notification.recipient_address == employee.work_email
+    assert notification.payload["movement_type"] == "promotion"
+    assert notification.payload["effective_date"] == movement_effective_date.isoformat()
+
+    replay = api_client.patch(
+        f"/api/v1/hr-admin/movements/{movement.id}/",
+        {"status": LifecycleEventStatus.COMPLETED},
+        format="json",
+    )
+    assert replay.status_code == 200
+    assert EmployeeMovement.objects.get(id=movement.id).resulting_assignment_id == movement.resulting_assignment_id
+    assert EmployeeLifecycleEvent.objects.filter(
+        employee=employee,
+        workflow_reference=f"employee-lifecycle:{movement.id}",
+    ).count() == 1
+    assert Notification.objects.filter(subject_type="employee_movement", subject_identifier=str(movement.id)).count() == 1
+
+    terminal_rewrite = api_client.patch(
+        f"/api/v1/hr-admin/movements/{movement.id}/",
+        {"reason": "Attempted rewrite after completion"},
+        format="json",
+    )
+    assert terminal_rewrite.status_code == 400
+    assert terminal_rewrite.json()["status"] == "A terminal movement record cannot be changed."
+    movement.refresh_from_db()
+    assert movement.reason == ""
+
+
+@pytest.mark.django_db
+def test_employee_notification_queue_failure_is_observable_without_rolling_back_update(
+    api_client: APIClient,
+    bootstrapped_workspace,
+    django_capture_on_commit_callbacks,
+    caplog,
+):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    employee = Employee.objects.get(tenant=bootstrapped_workspace["pending_leave"].tenant, employee_code="EMP-0042")
+    original_name = employee.preferred_name
+    replacement = "Queue Failure Safe"
+
+    with patch("apps.common.api_views.trigger_notification_event", side_effect=DatabaseError("synthetic notification queue failure")):
+        with caplog.at_level("ERROR", logger="hrms.lifecycle.notifications"):
+            with django_capture_on_commit_callbacks(execute=True):
+                result = api_client.patch(
+                    f"/api/v1/hr-admin/employees/{employee.id}/",
+                    {"preferred_name": replacement},
+                    format="json",
+                )
+
+    assert result.status_code == 200, result.json()
+    employee.refresh_from_db()
+    assert employee.preferred_name == replacement
+    assert any(record.message == "employee_lifecycle_notification_queue_failed" for record in caplog.records)
+    employee.preferred_name = original_name
+    employee.save(update_fields=["preferred_name", "updated_at"])
+
+@pytest.mark.django_db
+def test_hr_admin_movement_rejects_stale_snapshot_terminal_rewrite_and_ess_access(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    business_unit = BusinessUnit.objects.get(tenant=tenant, code="corporate")
+    target = Department.objects.create(
+        tenant=tenant,
+        code="el1h-stale-target",
+        name="EL1H Stale Target",
+        business_unit=business_unit,
+        is_active=True,
+    )
+    initialize_employment_timeline(
+        employee_id=employee.id,
+        actor_identifier="EMP-0001",
+        approved_source_reference="el1h-stale-baseline",
+        effective_from=employee.date_of_joining,
+    )
+    draft = api_client.post(
+        "/api/v1/hr-admin/movements/",
+        {
+            "employee_id": str(employee.id),
+            "movement_type": "transfer",
+            "status": LifecycleEventStatus.DRAFT,
+            "effective_date": (timezone.localdate() + timedelta(days=10)).isoformat(),
+            "reason": "EL1H stale approval test",
+            "to_department_id": str(target.id),
+        },
+        format="json",
+    )
+    assert draft.status_code == 201, draft.json()
+    movement = EmployeeMovement.objects.get(id=draft.json()["id"])
+    movement.current_snapshot = {"assignment_id": str(uuid4())}
+    movement.save(update_fields=["current_snapshot", "updated_at"])
+
+    stale = api_client.patch(
+        f"/api/v1/hr-admin/movements/{movement.id}/",
+        {"status": LifecycleEventStatus.COMPLETED},
+        format="json",
+    )
+    assert stale.status_code == 400
+    assert "changed after this movement was prepared" in stale.json()["current_snapshot"]
+    movement.refresh_from_db()
+    assert movement.status == LifecycleEventStatus.DRAFT
+    assert movement.resulting_assignment_id is None
+
+    ess_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {ess_token}")
+    denied_list = api_client.get("/api/v1/hr-admin/movements/")
+    denied_write = api_client.post(
+        "/api/v1/hr-admin/movements/",
+        {
+            "employee_id": str(employee.id),
+            "movement_type": "transfer",
+            "status": LifecycleEventStatus.DRAFT,
+            "effective_date": timezone.localdate().isoformat(),
+            "to_department_id": str(target.id),
+        },
+        format="json",
+    )
+    assert denied_list.status_code == 403
+    assert denied_write.status_code == 403
+    assert EmployeeMovement.objects.filter(employee=employee).count() == 1
+
+
+@pytest.mark.django_db
+def test_hr_admin_movement_rolls_back_when_lifecycle_audit_write_fails(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    api_client.raise_request_exception = False
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    business_unit = BusinessUnit.objects.get(tenant=tenant, code="corporate")
+    target = Department.objects.create(
+        tenant=tenant,
+        code="el1h-audit-rollback",
+        name="EL1H Audit Rollback",
+        business_unit=business_unit,
+        is_active=True,
+    )
+    initialize_employment_timeline(
+        employee_id=employee.id,
+        actor_identifier="EMP-0001",
+        approved_source_reference="el1h-audit-rollback-baseline",
+        effective_from=employee.date_of_joining,
+    )
+    assignment_count = employee.employment_assignments.count()
+
+    with patch(
+        "apps.common.api_views.EmployeeLifecycleEvent.objects.create",
+        side_effect=DatabaseError("forced lifecycle audit failure"),
+    ):
+        response = api_client.post(
+            "/api/v1/hr-admin/movements/",
+            {
+                "employee_id": str(employee.id),
+                "movement_type": "transfer",
+                "status": LifecycleEventStatus.COMPLETED,
+                "effective_date": timezone.localdate().isoformat(),
+                "to_department_id": str(target.id),
+            },
+            format="json",
+        )
+
+    assert response.status_code == 500
+    assert not EmployeeMovement.objects.filter(employee=employee).exists()
+    assert employee.employment_assignments.count() == assignment_count
+    assert not EmployeeLifecycleEvent.objects.filter(employee=employee).exists()
 
 
 @pytest.mark.django_db
@@ -20372,13 +21351,13 @@ def test_employee_reupload_replaces_previous_document_version(api_client: APICli
     assert payload["previous_document_id"] == str(first_document.id)
 
     first_document.refresh_from_db()
-    assert first_document.status == EmployeeDocumentStatus.REPLACED
+    assert first_document.status == EmployeeDocumentStatus.ACTIVE
     assert first_document.reupload_requested is False
 
     second_document = EmployeeDocument.objects.get(id=payload["id"])
     assert second_document.previous_document == first_document
     assert second_document.version_number == 2
-    assert second_document.status == EmployeeDocumentStatus.ACTIVE
+    assert second_document.status == EmployeeDocumentStatus.PENDING_REPLACEMENT
 
 
 @pytest.mark.django_db

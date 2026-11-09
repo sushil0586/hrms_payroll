@@ -1,3 +1,4 @@
+import { ActionFeedbackProvider } from "@/components/patterns/action-feedback-provider";
 import { HrAdminChrome } from "@/components/shell/hr-admin-chrome";
 import type { WorkspaceNavGroup } from "@/components/shell/workspace-chrome";
 import { getHrAdminSaasCommercialControl } from "@/lib/api";
@@ -122,5 +123,5 @@ export default async function HrAdminLayout({ children }: { children: React.Reac
   const canonicalNavGroups = filterNavGroupsByPermission(sessionUser, hrAdminNavigation);
   const navGroups = await getCommercialAwareHrAdminNavigation(sessionUser, canonicalNavGroups);
 
-  return <HrAdminChrome navGroups={navGroups} quickLinks={menuSource.quickLinks} userLabel={userLabel}>{children}</HrAdminChrome>;
+  return <HrAdminChrome navGroups={navGroups} quickLinks={menuSource.quickLinks} userLabel={userLabel}><ActionFeedbackProvider scopeKey={`${sessionUser?.id ?? "anonymous"}:${sessionUser?.default_membership?.id ?? "none"}:hr-admin`}>{children}</ActionFeedbackProvider></HrAdminChrome>;
 }

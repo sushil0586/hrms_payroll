@@ -1,0 +1,11 @@
+import {checkSearch} from './search-check';
+import {test,expect} from '@playwright/test';import fs from 'node:fs';import path from 'node:path';
+const docs=process.env.C02S_DOCS!,evidence=process.env.C02S_EVIDENCE!;const [own]=JSON.parse(fs.readFileSync(path.join(process.env.C02S_STATE!,'fixtures.json'),'utf8'));const cells=JSON.parse(fs.readFileSync(path.join(docs,'ui-cells.json'),'utf8'));
+for(const cell of cells){test(cell.id+' '+cell.page+' default ['+cell.profile+']',async({page,browser},info)=>{
+ test.skip(info.project.name!==cell.profile,'Cell belongs to exact engine/viewport profile');
+ await page.context().addCookies([{name:'hrms_access_token',value:own.tokens.hr_admin,domain:'127.0.0.1',path:'/'}]);await page.route('**/*',r=>['127.0.0.1','localhost'].includes(new URL(r.request().url()).hostname)?r.continue():r.abort());const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(cell.page,{waitUntil:"domcontentloaded"});await expect(page.locator('main h1').first()).toBeVisible();await page.evaluate(()=>document.fonts.ready);await expect(page.locator('[data-local-update-hydrated="true"]').first()).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});const axe=await page.evaluate(async()=>await (window as any).axe.run());await info.attach('axe-default',{body:JSON.stringify(axe.violations),contentType:'application/json'});
+ const dir=path.join(evidence,'screenshots');fs.mkdirSync(dir,{recursive:true});const output=path.join(dir,cell.id+'.png');await page.screenshot({path:output,fullPage:true,animations:'disabled'});await info.attach('default-screen',{path:output,contentType:'image/png'});await info.attach('cell-identity',{body:JSON.stringify({cell:cell.id,route:cell.page,engine:info.project.use.browserName,version:browser.version(),viewport:page.viewportSize(),errors}),contentType:'application/json'});await checkSearch(page,info,cell.id);expect(errors).toEqual([]);expect(axe.violations).toEqual([]);
+ });}

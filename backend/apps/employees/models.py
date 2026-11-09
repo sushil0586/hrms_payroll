@@ -214,6 +214,17 @@ class EmployeeBankAccount(UUIDPrimaryKeyModel, TimeStampedModel):
         ordering = ["employee", "-is_primary", "bank_name"]
         verbose_name = "Employee Bank Account"
         verbose_name_plural = "Employee Bank Accounts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["employee", "account_number"],
+                name="employee_bank_account_number_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["employee"],
+                condition=models.Q(is_primary=True),
+                name="employee_single_primary_bank_account",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.employee} - {self.bank_name}"

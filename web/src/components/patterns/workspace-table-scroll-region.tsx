@@ -11,10 +11,12 @@ export function WorkspaceTableScrollRegion({
   label,
   className,
   children,
+  emptyState,
 }: {
   label: string;
   className: string;
   children: ReactNode;
+  emptyState?: ReactNode;
 }) {
   const interactive = useSyncExternalStore(subscribeToHydration, clientReady, serverReady);
 
@@ -22,6 +24,7 @@ export function WorkspaceTableScrollRegion({
   // only once its handler is attached, so the first arrow key is not lost
   // during selective hydration (notably in WebKit).
   return (
+    <>
     <div
       className={className}
       role={interactive ? "region" : undefined}
@@ -46,5 +49,11 @@ export function WorkspaceTableScrollRegion({
     >
       {children}
     </div>
+    {emptyState !== undefined ? (
+      <div role="status" aria-live="polite" aria-atomic="true" className={emptyState ? "notice notice--compact workspace-empty-state" : undefined}>
+        {emptyState}
+      </div>
+    ) : null}
+    </>
   );
 }

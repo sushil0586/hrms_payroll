@@ -356,6 +356,8 @@ class EmployeeShiftAssignment(UUIDPrimaryKeyModel, TimeStampedModel):
     effective_to = models.DateField(blank=True, null=True)
     is_primary = models.BooleanField(default=True)
     config_snapshot = models.JSONField(default=dict, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
+    lifecycle_snapshot = models.JSONField(default=dict, blank=True, editable=False)
 
     class Meta:
         ordering = ["employee", "-effective_from"]

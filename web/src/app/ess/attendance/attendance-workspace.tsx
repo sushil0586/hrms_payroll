@@ -39,7 +39,7 @@ type Feedback = {
   message: string;
 };
 
-type AttendanceRegularizationField = "attendance_record_id" | "requested_check_out_at" | "reason";
+type AttendanceRegularizationField = "attendance_record_id" | "requested_check_in_at" | "requested_check_out_at" | "reason";
 type AttendanceQuery = { month: string; page: number; page_size: number };
 type RegularizationQuery = { status: string; page: number; page_size: number };
 
@@ -53,6 +53,13 @@ function scrollAttendanceTable(event: ReactKeyboardEvent<HTMLDivElement>) {
   if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
   event.preventDefault();
   region.scrollBy({ left: (event.key === "ArrowRight" ? 1 : -1) * Math.max(80, Math.round(region.clientWidth * 0.7)), behavior: "instant" });
+}
+
+function formatRecordedHours(value: string) {
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours < 0) return "Not available";
+  const minutes = Math.round(hours * 60);
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -304,7 +311,8 @@ function AttendanceRegularizationModal({
     setFieldErrors({});
     const nextErrors: FieldErrors<AttendanceRegularizationField> = {
       attendance_record_id: requireValue(selectedRecordId, "Select the attendance day that needs correction."),
-      requested_check_out_at: validateDateOrder(checkIn ? `${checkIn}Z` : "", checkOut ? `${checkOut}Z` : "", "Requested check-out cannot be earlier than requested check-in."),
+      requested_check_in_at: requestedStatus !== "absent" ? requireValue(checkIn, "Enter the requested check-in.") : undefined,
+      requested_check_out_at: (requestedStatus !== "absent" ? requireValue(checkOut, "Enter the requested check-out.") : undefined) || validateDateOrder(checkIn ? `${checkIn}Z` : "", checkOut ? `${checkOut}Z` : "", "Requested check-out cannot be earlier than requested check-in."),
       reason: requireText(reason, "Enter the reason for this attendance correction."),
     };
     if (selectedRecord?.is_locked) {
@@ -401,7 +409,7 @@ function AttendanceRegularizationModal({
             </label>
             <label className="form-field">
               <span className="muted">Requested status</span>
-              <select className="input-control" name="requested_status" onChange={(event) => setRequestedStatus(event.target.value)} value={requestedStatus}>
+              <select className="input-control" name="requested_status" onChange={(event) => { setRequestedStatus(event.target.value); clearFieldError("requested_check_in_at"); clearFieldError("requested_check_out_at"); }} value={requestedStatus}>
                 <option value="present">Present</option>
                 <option value="absent">Absent</option>
                 <option value="half_day">Half day</option>
@@ -411,12 +419,13 @@ function AttendanceRegularizationModal({
             </label>
             <label className="form-field">
               <span className="muted">Requested check-in</span>
-              <input className="input-control" name="requested_check_in_at" onChange={(event) => { setCheckIn(event.target.value); clearFieldError("requested_check_out_at"); }} type="datetime-local" value={checkIn} />
+              <input aria-invalid={Boolean(fieldErrors.requested_check_in_at)} aria-describedby={fieldErrors.requested_check_in_at ? "requested-check-in-error" : undefined} className="input-control" name="requested_check_in_at" onChange={(event) => { setCheckIn(event.target.value); clearFieldError("requested_check_in_at"); clearFieldError("requested_check_out_at"); }} required={requestedStatus !== "absent"} type="datetime-local" value={checkIn} />
+              {fieldErrors.requested_check_in_at ? <span className="field-error-text" id="requested-check-in-error" role="alert">{fieldErrors.requested_check_in_at}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Requested check-out</span>
-              <input aria-invalid={Boolean(fieldErrors.requested_check_out_at)} className="input-control" name="requested_check_out_at" onChange={(event) => { setCheckOut(event.target.value); clearFieldError("requested_check_out_at"); }} type="datetime-local" value={checkOut} />
-              {fieldErrors.requested_check_out_at ? <span className="field-error-text" role="alert">{fieldErrors.requested_check_out_at}</span> : null}
+              <input aria-invalid={Boolean(fieldErrors.requested_check_out_at)} aria-describedby={fieldErrors.requested_check_out_at ? "requested-check-out-error" : undefined} required={requestedStatus !== "absent"} className="input-control" name="requested_check_out_at" onChange={(event) => { setCheckOut(event.target.value); clearFieldError("requested_check_out_at"); }} type="datetime-local" value={checkOut} />
+              {fieldErrors.requested_check_out_at ? <span className="field-error-text" id="requested-check-out-error" role="alert">{fieldErrors.requested_check_out_at}</span> : null}
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason</span>
@@ -430,19 +439,19 @@ function AttendanceRegularizationModal({
               </div>
             ) : null}
             {!attendanceRecords.length ? (
-              <div className="notice form-field--full" role="status">
+              <div className="notice notice--warning form-field--full" role="status">
                 <strong>No attendance day is available.</strong>
                 <span className="muted">Ask HR to generate attendance records before requesting a correction.</span>
               </div>
             ) : null}
             {selectedRecord?.is_locked ? (
-              <div className="notice form-field--full" role="status">
+              <div className="notice notice--warning form-field--full" role="status">
                 <strong>Record locked.</strong>
                 <span className="muted">Payroll or attendance cutoff has locked this day. Contact HR for changes.</span>
               </div>
             ) : null}
             {!reason.trim() ? (
-              <div className="notice form-field--full" role="status">
+              <div className="notice notice--warning form-field--full" role="status">
                 <strong>Reason required.</strong>
                 <span className="muted">Explain the correction clearly so your manager can approve it without follow-up.</span>
               </div>
@@ -484,7 +493,7 @@ function AttendanceRegularizationModal({
               <span>Manager approval is required before HR or payroll uses the correction.</span>
             </div>
             {hasTimeOrderRisk ? (
-              <div className="notice">
+              <div className="notice notice--warning">
                 <strong>Check time order.</strong>
                 <span className="muted">Requested check-out is earlier than requested check-in.</span>
               </div>
@@ -739,7 +748,7 @@ export function AttendanceWorkspace({ invalidMonth, linkedRequest: linkedDetail,
           const record = attendance.days.find((item) => item.attendance_date === day);
           return { date: day, number: index + 1, status: record ? formatStatus(record.status) : "No record", shortStatus: record ? calendarStatusCode[record.status] ?? "?" : "—", finalized: Boolean(record?.is_locked), selected: day === selectedDate, href: href({ day }), label: `${day}: ${record ? formatStatus(record.status) : "No record"}${record?.is_locked ? ", finalized" : ""}` };
         })} /> : <>
-          <div className="workspace-table-scroll" role="region" aria-label="Attendance records" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance days"><thead><tr><th scope="col">Day</th><th scope="col">Status</th><th scope="col">Shift</th><th scope="col">Recorded hours</th><th scope="col">Protection</th></tr></thead><tbody>{attendance.items.map((day) => <tr key={day.id} className={day.attendance_date === selectedDate ? "is-selected" : ""}><th scope="row"><a data-navigation-mode="local" onClick={(event) => selectLocal(event, { day: day.attendance_date })} aria-current={day.attendance_date === selectedDate ? "date" : undefined} href={href({ day: day.attendance_date })}>{formatDate(day.attendance_date)}</a></th><td>{formatStatus(day.status)}</td><td>{day.shift || "Not recorded"}</td><td>{day.work_duration_hours}</td><td>{day.is_locked ? "Finalized" : "Not finalized"}</td></tr>)}</tbody></table></div>
+          <div className="workspace-table-scroll" role="region" aria-label="Attendance records" aria-describedby="ess-attendance-table-scroll-help" onKeyDown={scrollAttendanceTable} tabIndex={0}><table className="workspace-table ess-attendance-table" aria-label="Attendance days"><thead><tr><th scope="col">Day</th><th scope="col">Status</th><th scope="col">Shift</th><th scope="col">Recorded hours</th><th scope="col">Protection</th></tr></thead><tbody>{attendance.items.map((day) => <tr key={day.id} className={day.attendance_date === selectedDate ? "is-selected" : ""}><th scope="row"><a data-navigation-mode="local" onClick={(event) => selectLocal(event, { day: day.attendance_date })} aria-current={day.attendance_date === selectedDate ? "date" : undefined} href={href({ day: day.attendance_date })}>{formatDate(day.attendance_date)}</a></th><td>{formatStatus(day.status)}</td><td>{day.shift || "Not recorded"}</td><td>{formatRecordedHours(day.work_duration_hours)}</td><td>{day.is_locked ? "Finalized" : "Not finalized"}</td></tr>)}</tbody></table></div>
           {attendance.total_count > 0 ? <div aria-label="Attendance pagination"><PaginationBar navigationMode="scoped" pending={attendanceResource.isPending} page={attendance.page} pageSize={attendance.page_size} totalCount={attendance.total_count} hasNext={attendance.has_next} hasPrevious={attendance.has_previous} firstHref={href({ page: "1" })} lastHref={href({ page: String(attendance.total_pages) })} previousHref={href({ page: String(Math.max(1, attendance.page - 1)) })} nextHref={href({ page: String(attendance.page + 1) })} onFirst={() => void attendanceResource.load({ ...attendanceResource.query, page: 1 })} onLast={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.total_pages })} onPrevious={() => void attendanceResource.load({ ...attendanceResource.query, page: Math.max(1, attendance.page - 1) })} onNext={() => void attendanceResource.load({ ...attendanceResource.query, page: attendance.page + 1 })} /></div> : null}
         </>}
         </div>

@@ -1,0 +1,5 @@
+import {test,expect} from '@playwright/test';import fs from 'node:fs';import path from 'node:path';import {checkSearch} from './search-check';
+const [own]=JSON.parse(fs.readFileSync(path.join(process.env.C02R_STATE!,'fixtures.json'),'utf8'));
+for(const engine of ['chromium','firefox','webkit'])for(const width of [320,1440])for(const [route,role]of [['/ess','employee'],['/mss','manager_b']]){
+ const profile=engine+'-'+width;test('B2R-SHARED-'+role+' '+route+' ['+profile+']',async({page},info)=>{await page.context().addCookies([{name:'hrms_access_token',value:own.tokens[role],domain:'127.0.0.1',path:'/'}]);await page.route('**/*',r=>['127.0.0.1','localhost'].includes(new URL(r.request().url()).hostname)?r.continue():r.abort());await page.goto(route,{waitUntil:"domcontentloaded"});await expect(page.locator('main h1').first()).toBeVisible();await page.waitForLoadState('load',{timeout:30000});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(null)))));await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});await checkSearch(page,info,role+'-'+profile);});
+}

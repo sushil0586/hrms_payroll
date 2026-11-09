@@ -1,0 +1,10 @@
+import {test,expect,login,shot,axe} from './helpers';
+test('F-R01 final shared search date and scroll regressions',async({page,owned},info)=>{
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ for(const [role,route]of [['hr_admin','/hr-admin/employees'],['employee','/ess/profile'],['manager','/mss/notifications'],['tenant_admin','/tenant-admin/users'],['platform','/platform-admin/tenants']]as const){
+  await login(page,owned,role);await page.goto(route,{waitUntil:'networkidle'});const search=page.getByRole('searchbox',{name:'Workspace search',exact:true});await search.focus();await expect(page.getByRole('region',{name:'Workspace search results',exact:true})).toBeVisible();await shot(page,info,role+'-keyboard-search');await axe(page,info,'axe-'+role+'-search');await page.keyboard.press('Escape');await expect(page.getByRole('region',{name:'Workspace search results',exact:true})).toBeHidden();
+ }
+ await login(page,owned,'hr_admin');await page.goto('/docs',{waitUntil:'networkidle'});const docs=page.getByRole('region',{name:/documentation table/}).first();await expect(docs).toHaveAttribute('tabindex','0');await docs.focus();const geometry=await docs.evaluate(el=>({width:el.clientWidth,scrollWidth:el.scrollWidth,left:el.scrollLeft}));await page.keyboard.press('ArrowRight');if(geometry.scrollWidth>geometry.width)await expect.poll(()=>docs.evaluate(el=>el.scrollLeft)).toBeGreaterThan(geometry.left);await shot(page,info,'guide-keyboard-table');await axe(page,info,'axe-guide-keyboard');
+ await login(page,owned,'manager');await page.goto('/mss',{waitUntil:'networkidle'});const team=page.getByRole('region',{name:'Current reportees table',exact:true});await expect(team).toHaveAttribute('tabindex','0');await team.focus();await page.keyboard.press('ArrowRight');await shot(page,info,'manager-keyboard-reportees');await axe(page,info,'axe-manager-keyboard');
+ await info.attach('runtime-errors',{body:JSON.stringify(errors),contentType:'application/json'});expect(errors).toEqual([]);
+});

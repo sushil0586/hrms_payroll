@@ -1,0 +1,56 @@
+/* This report owns its print layout; other reports and workspaces are unchanged. */
+.document-compliance-print-meta { display: none; }
+@page document-compliance { size: A4 landscape; margin: 12mm; }
+@media print {
+  body:has(.document-compliance-print-page) { margin: 0 !important; background: white !important; }
+  .app-shell:has(.document-compliance-print-page),
+  .app-shell:has(.document-compliance-print-page) .app-main,
+  .app-shell:has(.document-compliance-print-page) .app-content {
+    display: block !important; width: auto !important; max-width: none !important;
+    min-height: 0 !important; margin: 0 !important; padding: 0 !important;
+    background: white !important;
+  }
+  .app-shell:has(.document-compliance-print-page) .app-sidebar,
+  .app-shell:has(.document-compliance-print-page) .app-topbar,
+  .app-shell:has(.document-compliance-print-page) .workspace-shell-footer,
+  body:has(.document-compliance-print-page) .action-toast,
+  .document-compliance-print-page .workspace-standard-header__actions,
+  .document-compliance-print-page .report-command-panel__actions,
+  .document-compliance-print-page .report-filter-panel,
+  .document-compliance-print-page .report-catalog-summary,
+  .document-compliance-print-page .pagination-bar,
+  .document-compliance-print-page .report-row-actions,
+  .document-compliance-print-page th:last-child,
+  .document-compliance-print-page td:last-child:not([colspan]) { display: none !important; }
+  .document-compliance-print-page {
+    page: document-compliance; width: 100% !important; max-width: none !important;
+    margin: 0 !important; padding: 0 !important; color: #111827 !important;
+  }
+  .document-compliance-print-page .workspace-standard-header { display: block !important; margin: 0 0 3mm !important; break-after: avoid; }
+  .document-compliance-print-page h1 { font-size: 18pt !important; }
+  .document-compliance-print-meta { display: block; margin: 0 0 3mm; font-size: 9pt; overflow-wrap: anywhere; }
+  .document-compliance-print-page .document-report-ready { min-inline-size: 0; border: 0; padding: 0; }
+  .document-compliance-print-page .report-catalog-workspace,
+  .document-compliance-print-page .report-command-panel { display: block !important; width: 100%; margin: 0 0 3mm; padding: 0; border: 0 !important; box-shadow: none !important; }
+  .document-compliance-print-page .report-command-panel h2 { font-size: 12pt; }
+  .document-compliance-print-page .report-catalog-table-wrap { display: block; width: 100%; overflow: visible !important; max-height: none; border: 0; }
+  .document-compliance-print-page table { width: 100% !important; min-width: 0 !important; table-layout: fixed; border-collapse: collapse; }
+  .document-compliance-print-page thead { display: table-header-group; }
+  .document-compliance-print-page tr { break-inside: avoid-page; }
+  .document-compliance-print-page th,
+  .document-compliance-print-page td {
+    min-width: 0 !important; max-width: none !important; padding: 2mm !important;
+    font-size: 9pt !important; line-height: 1.35; vertical-align: top;
+    white-space: normal !important; overflow: visible !important; overflow-wrap: anywhere; word-break: normal;
+    border: 1px solid #cbd5e1;
+  }
+  .document-compliance-print-page th:nth-child(1) { width: 15%; }
+  .document-compliance-print-page th:nth-child(2) { width: 25%; }
+  .document-compliance-print-page th:nth-child(3) { width: 15%; }
+  .document-compliance-print-page th:nth-child(4) { width: 15%; }
+  .document-compliance-print-page th:nth-child(5) { width: 18%; }
+  .document-compliance-print-page th:nth-child(6) { width: 12%; }
+  .document-compliance-print-page td strong,
+  .document-compliance-print-page td span,
+  .document-compliance-print-page .record-chip { white-space: normal !important; overflow: visible !important; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; }
+}

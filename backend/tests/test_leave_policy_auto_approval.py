@@ -141,7 +141,7 @@ def test_resolved_withdrawn_and_cancellation_requests_are_not_auto_decided(actio
     with patch("django.utils.timezone.now", return_value=START+timedelta(hours=1)):
         if action == "withdraw":withdraw_leave_request(leave_request=request, actor_employee=employee, reason="Withdraw")
         else:
-            resolve_leave_request(leave_request=request, actor_employee=manager, approve=action!="reject")
+            resolve_leave_request(leave_request=request, actor_employee=manager, approve=action!="reject",comment="Synthetic manual decision")
             if action == "cancel":cancel_leave_request(leave_request=request, actor_employee=employee, reason="Cancel")
     request.refresh_from_db(); before = request.status, balances(employee), LeaveBalanceTransaction.objects.count()
     assert process()["approved_steps"] == 0
@@ -210,7 +210,7 @@ def test_concurrent_manual_and_automatic_decisions_preserve_one_ledger_outcome(c
             if which=="worker":return process()
             with patch("django.utils.timezone.now",return_value=DUE):
                 if which=="withdraw":withdraw_leave_request(leave_request=request,actor_employee=employee,reason="Concurrent")
-                else:resolve_leave_request(leave_request=request,actor_employee=manager,approve=which=="approve")
+                else:resolve_leave_request(leave_request=request,actor_employee=manager,approve=which=="approve",comment="Synthetic competing manual decision")
             return "manual"
         except ValidationError:return "stale"
         finally:close_old_connections()

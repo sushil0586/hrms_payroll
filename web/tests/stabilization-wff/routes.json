@@ -1,0 +1,1780 @@
+[
+  {
+    "id": "F-P001",
+    "template": "/access-denied",
+    "route": "/access-denied",
+    "role": "employee",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P002",
+    "template": "/docs/[[...slug]]",
+    "route": "/docs/[[...slug]]",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P003",
+    "template": "/ess/notifications",
+    "route": "/ess/notifications",
+    "role": "employee",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P004",
+    "template": "/ess",
+    "route": "/ess",
+    "role": "employee",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P005",
+    "template": "/ess/profile",
+    "route": "/ess/profile",
+    "role": "employee",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P006",
+    "template": "/ess/settings",
+    "route": "/ess/settings",
+    "role": "employee",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P007",
+    "template": "/forgot-password",
+    "route": "/forgot-password",
+    "role": "public",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P008",
+    "template": "/hr-admin/audit",
+    "route": "/hr-admin/audit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P009",
+    "template": "/hr-admin/employees/[employeeId]/access",
+    "route": "/hr-admin/employees/[employeeId]/access",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P010",
+    "template": "/hr-admin/employees/[employeeId]/bank-accounts",
+    "route": "/hr-admin/employees/[employeeId]/bank-accounts",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P011",
+    "template": "/hr-admin/employees/[employeeId]/edit",
+    "route": "/hr-admin/employees/[employeeId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P012",
+    "template": "/hr-admin/employees/new",
+    "route": "/hr-admin/employees/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P013",
+    "template": "/hr-admin/employees",
+    "route": "/hr-admin/employees",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P014",
+    "template": "/hr-admin/exits/[itemId]/edit",
+    "route": "/hr-admin/exits/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P015",
+    "template": "/hr-admin/exits/new",
+    "route": "/hr-admin/exits/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P016",
+    "template": "/hr-admin/exits",
+    "route": "/hr-admin/exits",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P017",
+    "template": "/hr-admin/import-history",
+    "route": "/hr-admin/import-history",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P018",
+    "template": "/hr-admin/launch-remediation",
+    "route": "/hr-admin/launch-remediation",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P019",
+    "template": "/hr-admin/lifecycle",
+    "route": "/hr-admin/lifecycle",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P020",
+    "template": "/hr-admin/movements/[itemId]/edit",
+    "route": "/hr-admin/movements/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P021",
+    "template": "/hr-admin/movements/new",
+    "route": "/hr-admin/movements/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P022",
+    "template": "/hr-admin/movements",
+    "route": "/hr-admin/movements",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P023",
+    "template": "/hr-admin/notification-delivery",
+    "route": "/hr-admin/notification-delivery",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P024",
+    "template": "/hr-admin/notification-diagnostics",
+    "route": "/hr-admin/notification-diagnostics",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P025",
+    "template": "/hr-admin/notification-events/[itemId]/edit",
+    "route": "/hr-admin/notification-events/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P026",
+    "template": "/hr-admin/notification-events/new",
+    "route": "/hr-admin/notification-events/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P027",
+    "template": "/hr-admin/notification-events",
+    "route": "/hr-admin/notification-events",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P028",
+    "template": "/hr-admin/notification-templates/[itemId]/edit",
+    "route": "/hr-admin/notification-templates/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P029",
+    "template": "/hr-admin/notification-templates/new",
+    "route": "/hr-admin/notification-templates/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P030",
+    "template": "/hr-admin/notification-templates",
+    "route": "/hr-admin/notification-templates",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P031",
+    "template": "/hr-admin/notifications/[itemId]/review",
+    "route": "/hr-admin/notifications/[itemId]/review",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P032",
+    "template": "/hr-admin/notifications",
+    "route": "/hr-admin/notifications",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P033",
+    "template": "/hr-admin/notifications-admin",
+    "route": "/hr-admin/notifications-admin",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P034",
+    "template": "/hr-admin/onboardings/[itemId]/edit",
+    "route": "/hr-admin/onboardings/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P035",
+    "template": "/hr-admin/onboardings/new",
+    "route": "/hr-admin/onboardings/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P036",
+    "template": "/hr-admin/onboardings",
+    "route": "/hr-admin/onboardings",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P037",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/legal_entities/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P038",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/locations/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P039",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/branches/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P040",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/business_units/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P041",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/departments/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P042",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/cost_centers/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P043",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/grades/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P044",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/designations/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P045",
+    "template": "/hr-admin/organization/[section]/[itemId]/edit",
+    "route": "/hr-admin/organization/employment_types/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P046",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/legal_entities/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P047",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/locations/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P048",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/branches/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P049",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/business_units/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P050",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/departments/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P051",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/cost_centers/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P052",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/grades/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P053",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/designations/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P054",
+    "template": "/hr-admin/organization/[section]/new",
+    "route": "/hr-admin/organization/employment_types/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P055",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=legal_entities",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P056",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=locations",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P057",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=branches",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P058",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=business_units",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P059",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=departments",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P060",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=cost_centers",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P061",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=grades",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P062",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=designations",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P063",
+    "template": "/hr-admin/organization",
+    "route": "/hr-admin/organization?section=employment_types",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P064",
+    "template": "/hr-admin",
+    "route": "/hr-admin",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P065",
+    "template": "/hr-admin/probation-reviews/[itemId]/edit",
+    "route": "/hr-admin/probation-reviews/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P066",
+    "template": "/hr-admin/probation-reviews/new",
+    "route": "/hr-admin/probation-reviews/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P067",
+    "template": "/hr-admin/probation-reviews",
+    "route": "/hr-admin/probation-reviews",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P068",
+    "template": "/hr-admin/reports/export-audits",
+    "route": "/hr-admin/reports/export-audits",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P069",
+    "template": "/hr-admin/reports/hr-core",
+    "route": "/hr-admin/reports/hr-core",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P070",
+    "template": "/hr-admin/reports/lifecycle-aging",
+    "route": "/hr-admin/reports/lifecycle-aging",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P071",
+    "template": "/hr-admin/reports/lifecycle-queue",
+    "route": "/hr-admin/reports/lifecycle-queue",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P072",
+    "template": "/hr-admin/reports",
+    "route": "/hr-admin/reports",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P073",
+    "template": "/hr-admin/reports/workforce",
+    "route": "/hr-admin/reports/workforce",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P074",
+    "template": "/hr-admin/saas-control-plane",
+    "route": "/hr-admin/saas-control-plane",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P075",
+    "template": "/hr-admin/saas-operations",
+    "route": "/hr-admin/saas-operations",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P076",
+    "template": "/hr-admin/saas-resilience",
+    "route": "/hr-admin/saas-resilience",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P077",
+    "template": "/hr-admin/saas-sla-operations",
+    "route": "/hr-admin/saas-sla-operations",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P078",
+    "template": "/hr-admin/workflow-template-assignments/[itemId]/edit",
+    "route": "/hr-admin/workflow-template-assignments/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P079",
+    "template": "/hr-admin/workflow-template-assignments/new",
+    "route": "/hr-admin/workflow-template-assignments/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P080",
+    "template": "/hr-admin/workflow-template-assignments",
+    "route": "/hr-admin/workflow-template-assignments",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P081",
+    "template": "/hr-admin/workflow-templates/[itemId]/edit",
+    "route": "/hr-admin/workflow-templates/[itemId]/edit",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P082",
+    "template": "/hr-admin/workflow-templates/new",
+    "route": "/hr-admin/workflow-templates/new",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P083",
+    "template": "/hr-admin/workflow-templates",
+    "route": "/hr-admin/workflow-templates",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P084",
+    "template": "/hr-admin/workflows",
+    "route": "/hr-admin/workflows",
+    "role": "hr_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P085",
+    "template": "/login",
+    "route": "/login",
+    "role": "public",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P086",
+    "template": "/mss/notifications",
+    "route": "/mss/notifications",
+    "role": "manager",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P087",
+    "template": "/",
+    "route": "/",
+    "role": "public",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": false
+  },
+  {
+    "id": "F-P088",
+    "template": "/platform-admin/admins",
+    "route": "/platform-admin/admins",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P089",
+    "template": "/platform-admin/audit-logs",
+    "route": "/platform-admin/audit-logs",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P090",
+    "template": "/platform-admin/data-governance",
+    "route": "/platform-admin/data-governance",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P091",
+    "template": "/platform-admin/launch",
+    "route": "/platform-admin/launch",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P092",
+    "template": "/platform-admin/leads",
+    "route": "/platform-admin/leads",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P093",
+    "template": "/platform-admin/onboarding",
+    "route": "/platform-admin/onboarding",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P094",
+    "template": "/platform-admin",
+    "route": "/platform-admin",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P095",
+    "template": "/platform-admin/permissions",
+    "route": "/platform-admin/permissions",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P096",
+    "template": "/platform-admin/policy-packs",
+    "route": "/platform-admin/policy-packs",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P097",
+    "template": "/platform-admin/tenants",
+    "route": "/platform-admin/tenants",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P098",
+    "template": "/reset-password",
+    "route": "/reset-password",
+    "role": "public",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P099",
+    "template": "/support/domain-snapshot",
+    "route": "/support/domain-snapshot",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot",
+      "No granted support scope; authorized console separately NOT RUN"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P100",
+    "template": "/support",
+    "route": "/support",
+    "role": "platform",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot",
+      "No granted support scope; authorized console separately NOT RUN"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P101",
+    "template": "/tenant-admin/data-governance",
+    "route": "/tenant-admin/data-governance",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P102",
+    "template": "/tenant-admin",
+    "route": "/tenant-admin",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P103",
+    "template": "/tenant-admin/plan",
+    "route": "/tenant-admin/plan",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P104",
+    "template": "/tenant-admin/roles",
+    "route": "/tenant-admin/roles",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P105",
+    "template": "/tenant-admin/security-readiness",
+    "route": "/tenant-admin/security-readiness",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P106",
+    "template": "/tenant-admin/settings",
+    "route": "/tenant-admin/settings",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P107",
+    "template": "/tenant-admin/setup",
+    "route": "/tenant-admin/setup",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P108",
+    "template": "/tenant-admin/support-access",
+    "route": "/tenant-admin/support-access",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P109",
+    "template": "/tenant-admin/trust-audit",
+    "route": "/tenant-admin/trust-audit",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P110",
+    "template": "/tenant-admin/users",
+    "route": "/tenant-admin/users",
+    "role": "tenant_admin",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  },
+  {
+    "id": "F-P111",
+    "template": "/workspace-access",
+    "route": "/workspace-access",
+    "role": "public",
+    "states": [
+      "default/populated or valid empty",
+      "keyboard Tab",
+      "automated accessibility",
+      "responsive screenshot"
+    ],
+    "severity": "P2",
+    "expected": "Authorized route renders its implemented heading/form; no runtime failure, document overflow, duplicate h1 or critical/serious axe violations. Denied/parameter-required views recorded without claiming full authorized workflow.",
+    "functional_status": "NOT RUN: full mutation matrix separate",
+    "tested_historically": true
+  }
+]

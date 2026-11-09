@@ -2,17 +2,19 @@
 import { focusActionTrigger } from "@/lib/ui/focus-action-trigger";
 
 
-import { useWorkspaceQueryFilter } from "@/components/patterns/use-workspace-query-filter";
+import { useWorkspaceQueryFilter, useWorkspaceQueryPage, useCorrectedWorkspaceQueryPage } from "@/components/patterns/use-workspace-query-filter";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { createEmptyShiftValue, shiftToFormValue } from "@/app/hr-admin/shifts/form-values";
+import { ShiftRemoveAction } from "./shift-remove-action";
 import { ShiftForm } from "@/app/hr-admin/shifts/shift-form";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type { HrAdminShift } from "@/lib/types";
 
 type Props = {
@@ -25,7 +27,7 @@ type Props = {
   onOpenCreate?: () => void;
   onOpenEdit?: (id: string) => void;
   onCloseModal?: () => void;
-  onReconcile?: () => Promise<boolean> | boolean;
+  onReconcile?: (message: string) => Promise<boolean> | boolean;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -58,6 +60,8 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
   const [query, setQuery] = useWorkspaceQueryFilter("q", "");
   const [status, setStatus] = useWorkspaceQueryFilter("status", "all");
   const [kind, setKind] = useWorkspaceQueryFilter("kind", "all");
+  const [draft, setDraft] = useState({ query, status, kind });
+  const [page, setPage] = useWorkspaceQueryPage();
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
   const inspectionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modalMode = controlledModalMode ?? (searchParams.get("shiftModal") ?? "");
@@ -74,6 +78,10 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
       return matchesQuery && matchesStatus && matchesKind;
     });
   }, [items, query, status, kind]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / 10));
+  const currentPage = useCorrectedWorkspaceQueryPage(page, pageCount);
+  const pageItems = filteredItems.slice((currentPage - 1) * 10, currentPage * 10);
 
   const selectedItem = useMemo(
     () => filteredItems.find((item) => item.id === selectedItemId) ?? null,
@@ -123,11 +131,11 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
         <WorkspaceFilterBar className="attendance-record-filter-bar">
           <label className="form-field">
             <span className="muted">Search</span>
-            <input className="input-control" onChange={(event) => setQuery(event.target.value)} placeholder="Shift name, code, weekly off" value={query} />
+            <input className="input-control" onChange={(event) => setDraft({ ...draft, query: event.target.value })} placeholder="Shift name, code, weekly off" value={draft.query} />
           </label>
           <label className="form-field">
             <span className="muted">Status</span>
-            <select className="input-control" onChange={(event) => setStatus(event.target.value)} value={status}>
+            <select className="input-control" onChange={(event) => setDraft({ ...draft, status: event.target.value })} value={draft.status}>
               <option value="all">All statuses</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
@@ -135,7 +143,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
           </label>
           <label className="form-field">
             <span className="muted">Type</span>
-            <select className="input-control" onChange={(event) => setKind(event.target.value)} value={kind}>
+            <select className="input-control" onChange={(event) => setDraft({ ...draft, kind: event.target.value })} value={draft.kind}>
               <option value="all">All shifts</option>
               <option value="standard">Standard</option>
               <option value="night">Night shift</option>
@@ -144,7 +152,10 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
           </label>
         </WorkspaceFilterBar>
         <div className="queue-toolbar__actions attendance-toolbar-actions">
+          <button className="button button--secondary" disabled={pending} onClick={() => { setQuery(draft.query); setStatus(draft.status); setKind(draft.kind); setPage(1); setSelectedItemId(""); }} type="button">Apply</button>
           <button className="button button--ghost" onClick={() => {
+            setDraft({ query: "", status: "all", kind: "all" });
+            setPage(1);
             setQuery("");
             setStatus("all");
             setKind("all");
@@ -155,7 +166,8 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <section className="panel-card-soft attendance-directory-panel">
-          <WorkspaceTableScrollRegion label="Shifts, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region">
+          <WorkspaceTableScrollRegion label="Shifts, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region"
+            emptyState={filteredItems.length === 0 ? <><strong>No shifts match the current filters.</strong><span className="muted">Clear filters to restore the catalog.</span></> : null}>
             <table className="workspace-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
@@ -168,7 +180,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
                 </tr>
               </thead>
               <tbody>
-                {filteredItems.map((item) => {
+                {pageItems.map((item) => {
                   const isSelected = selectedItem?.id === item.id;
                   return (
                     <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedItemId(item.id)}>
@@ -183,14 +195,10 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
                     </tr>
                   );
                 })}
-                {filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}><strong>No shifts match the current filters.</strong><span>Clear filters to restore the catalog.</span></td>
-                  </tr>
-                ) : null}
               </tbody>
             </table>
           </WorkspaceTableScrollRegion>
+          <PaginationBar navigationMode="scoped" pending={pending} page={currentPage} pageSize={10} totalCount={filteredItems.length} hasPrevious={currentPage > 1} hasNext={currentPage < pageCount} onFirst={() => setPage(1)} onPrevious={() => setPage(currentPage - 1)} onNext={() => setPage(currentPage + 1)} onLast={() => setPage(pageCount)} />
         </section>
 
         {selectedItem ? (
@@ -222,6 +230,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit shift</button>
               )}
+              {canManagePolicies ? <ShiftRemoveAction key={selectedItem.id} item={selectedItem} onRemoved={onReconcile} /> : null}
             </div>
             <details className="record-card" open>
               <summary>Timing</summary>
@@ -256,7 +265,7 @@ export function ShiftsWorkbench({ items, state, canManagePolicies, modalMode: co
           description="Define timing, grace handling, and weekly-off defaults."
           tabs={["Timing", "Behavior", "Weekly off"]}
         >
-          <ShiftForm compact cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyShiftValue()} mode="create" onCancel={onCloseModal} onSaved={onReconcile} />
+          <ShiftForm compact existingCodes={items.map(item => item.code)} cancelHref={queueHref()} successHref={queueHref()} initialValue={createEmptyShiftValue()} mode="create" onCancel={onCloseModal} onSaved={onReconcile} />
         </HrAdminActionModal>
       ) : null}
 

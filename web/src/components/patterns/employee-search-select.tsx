@@ -12,13 +12,16 @@ type Props = {
   hint?: string;
   initialOptions?: HrAdminOptionItem[];
   selectedLabel?: string | null;
+  validationError?: string;
+  errorId?: string;
+  name?: string;
 };
 
 function optionLabel(item: HrAdminOptionItem) {
   return item.employee_code ? `${item.employee_code} - ${item.name}` : item.name;
 }
 
-export function EmployeeSearchSelect({ value, onChange, onOptionSelected, label = "Employee", hint = "Search by employee code, name, or work email.", initialOptions = [], selectedLabel }: Props) {
+export function EmployeeSearchSelect({ value, onChange, onOptionSelected, label = "Employee", hint = "Search by employee code, name, or work email.", initialOptions = [], selectedLabel, validationError, errorId, name }: Props) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<HrAdminOptionItem[]>(initialOptions);
   const [totalCount, setTotalCount] = useState(initialOptions.length);
@@ -98,6 +101,11 @@ export function EmployeeSearchSelect({ value, onChange, onOptionSelected, label 
       <label className="queue-toolbar__search">
         <span className="muted">{label}</span>
         <select
+          name={name}
+          aria-label={name ? label : undefined}
+          aria-required={name === "employee_id" || undefined}
+          aria-invalid={Boolean(validationError)}
+          aria-describedby={validationError ? errorId : undefined}
           className="input-control"
           onFocus={() => {
             if (items.length === 0 && !isLoading) void searchEmployees(query);
@@ -118,6 +126,7 @@ export function EmployeeSearchSelect({ value, onChange, onOptionSelected, label 
           ))}
         </select>
       </label>
+      {validationError ? <span className="field-error-text" id={errorId}>{label}: {validationError}</span> : null}
       {isDebouncing || isLoading ? (
         <span className="field-help-text" role="status" aria-live="polite">
           {isDebouncing ? "Preparing employee search..." : "Updating employee options..."}

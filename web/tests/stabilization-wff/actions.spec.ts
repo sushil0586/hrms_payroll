@@ -1,0 +1,16 @@
+import {test,expect,login,shot,axe,keys} from './helpers';
+test('F-A01 organization create validation save edit feedback',async({page,owned},info)=>{
+ await login(page,owned,'hr_admin');await page.goto('/hr-admin/organization/departments/new');await expect(page.locator('form button[type=submit]')).toBeEnabled();
+ await page.getByLabel('Code (required)',{exact:true}).fill('wff-owned-department');await page.getByLabel('Name (required)',{exact:true}).fill('WF-F Synthetic Department');
+ const response=page.waitForResponse(r=>r.url().includes('/api/hr-admin/organization')&&r.request().method()==='POST');await page.locator('form button[type=submit]').click();expect((await response).status()).toBe(201);await expect(page).toHaveURL(/\/hr-admin\/organization\?/);await expect(page.getByText('WF-F Synthetic Department',{exact:true}).first()).toBeVisible();await expect(page.locator('.action-toast')).toHaveCount(1);await expect(page.locator('.action-toast')).toContainText('Organization record saved.');await expect(page.locator('.action-toast')).toHaveAttribute('role','status');await shot(page,info,'organization-created');await axe(page,info,'axe-organization-created');
+ if(await page.locator('.action-toast').count())await page.locator('.action-toast').getByRole('button',{name:'Dismiss notification'}).click();
+ await page.getByRole('button',{name:'Edit selected record',exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog.locator('form')).toHaveAttribute('data-hydrated','true');await dialog.getByLabel('Name (required)',{exact:true}).fill('WF-F Department Updated');await keys(page);
+ await page.route('**/api/hr-admin/organization/departments/*',r=>r.request().method()==='PATCH'?r.fulfill({status:400,contentType:'application/json',body:JSON.stringify({detail:'WF-F synthetic denied save'})}):r.continue());await dialog.locator('button[type=submit]').click();await expect(dialog.getByRole('alert').first()).toContainText('synthetic denied');await expect(page.locator('.action-toast')).toHaveCount(0);await shot(page,info,'organization-denied-save');await page.unroute('**/api/hr-admin/organization/departments/*');await dialog.locator('button[type=submit]').click();await expect(dialog).toHaveCount(0);await expect(page.locator('.action-toast')).toHaveCount(1);await shot(page,info,'organization-edit-postclose-toast');await axe(page,info,'axe-organization-postclose');
+});
+test('F-A02 ESS contact inbox and HR endpoint isolation',async({page,owned},info)=>{
+ await login(page,owned,'employee');await page.goto('/ess/profile?section=contact');await shot(page,info,'ess-contact');await axe(page,info,'axe-ess-contact');
+ const denied=await page.request.get('/api/hr-admin/employees');expect([401,403]).toContain(denied.status());await page.goto('/ess/notifications');await shot(page,info,'ess-inbox');await axe(page,info,'axe-ess-inbox');
+});
+test('F-A03 HR ESS MSS feedback shell keyboard parity',async({page,owned},info)=>{
+ for(const role of ['hr_admin','employee','manager'] as const){await login(page,owned,role);await page.goto(role==='hr_admin'?'/hr-admin':role==='employee'?'/ess':'/mss');await shot(page,info,role+'-dashboard');await axe(page,info,'axe-'+role+'-dashboard');await page.keyboard.press('Tab');expect(await page.evaluate(()=>document.activeElement?.tagName)).not.toBe('BODY');}
+});

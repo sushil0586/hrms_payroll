@@ -1,0 +1,2 @@
+import {test,expect,login,shot} from './helpers';
+test('before duplicate catalog close controls',async({page,owned},info)=>{await login(page,owned,'hr_admin');for(const route of ['leave-types','leave-policies']){await page.goto('/hr-admin/'+route);await page.getByRole('button',{name:'Inspect',exact:true}).first().click();const d=page.getByRole('dialog');await expect(d).toBeVisible();expect(await d.getByRole('button',{name:/close/i}).count()).toBe(2);await shot(page,info,'before-'+route+'-duplicate-close');}});

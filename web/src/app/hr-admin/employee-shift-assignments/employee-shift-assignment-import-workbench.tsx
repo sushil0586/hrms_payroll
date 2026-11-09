@@ -1,7 +1,7 @@
 "use client";
 
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 
 import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
@@ -15,7 +15,7 @@ type Props = {
   shifts: HrAdminOptionItem[];
 };
 
-type ImportStatus = "ready" | "blocked" | "created" | "failed";
+type ImportStatus = "ready" | "blocked" | "created" | "failed" | "unconfirmed";
 
 type ImportRow = {
   index: number;
@@ -158,12 +158,15 @@ function sampleCsv(employees: HrAdminOptionItem[], shifts: HrAdminOptionItem[], 
   return `${headers.join(",")}\n${rows.map((row) => row.join(",")).join("\n")}`;
 }
 
+const subscribe = () => () => undefined;
+
 export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees, shifts }: Props) {
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
   const resolveLatestEmployeesByCode = useLatestEmployeeCodeResolution();
   const [csvText, setCsvText] = useState(templateCsv());
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [message, setMessage] = useState("");
-  const [lookupFailed, setLookupFailed] = useState(false);
+  const [feedback, setFeedback] = useState<"pending" | "preview" | "error" | "committed">("preview");
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const shiftsByName = useMemo(() => new Map(shifts.map((shift) => [normalize(shift.name), shift])), [shifts]);
@@ -173,18 +176,26 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
   );
   const readyCount = rows.filter((row) => row.status === "ready").length;
   const createdCount = rows.filter((row) => row.status === "created").length;
-  const hasFailedRows = rows.some((row) => row.status === "failed");
+
+  function changeCsv(value: string) {
+    setCsvText(value);
+    setRows([]);
+    setMessage("");
+    setFeedback("preview");
+  }
 
   async function preview() {
+    if (!hydrated || isPreviewing || isCommitting) return;
     const parsed = parseCsv(csvText);
     if (parsed.error) {
       setRows([]);
+      setFeedback("error");
       setMessage(parsed.error);
       return;
     }
 
     setIsPreviewing(true);
-    setLookupFailed(false);
+    setFeedback("pending");
     setMessage("Resolving employee codes for preview...");
     const employeeCodes = Array.from(new Set(parsed.rows.map((row) => normalize(row.employee_code ?? "")).filter(Boolean)));
     const seededEmployeesByCode = new Map(employees.map((employee) => [normalize(employee.employee_code ?? employee.name), employee]));
@@ -194,8 +205,8 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
       resolvedEmployeesByCode = missingEmployeeCodes.length ? await resolveLatestEmployeesByCode(missingEmployeeCodes) : new Map<string, HrAdminOptionItem>();
     } catch {
       setIsPreviewing(false);
-      setLookupFailed(true);
-      setMessage("Employee lookup failed. Check your connection and preview the CSV again.");
+      setFeedback("error");
+      setMessage("Employee lookup failed. Check your permissions, session and connection, then preview the CSV again.");
       return;
     }
     if (!resolvedEmployeesByCode) {
@@ -217,7 +228,8 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
 
     setRows(nextRows);
     setIsPreviewing(false);
-    setMessage("Preview ready. Commit ready shift assignments after checking blocked rows.");
+    setFeedback(nextRows.some((row) => row.status === "blocked") ? "error" : "preview");
+    setMessage("Preview ready. No assignments have been created. Review the rows before committing.");
     await recordImportBatchAudit({
       import_type: "employee_shift_assignments",
       status: "previewed",
@@ -233,7 +245,7 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
   }
 
   async function commitReadyRows() {
-    if (isCommitting) return;
+    if (!hydrated || isCommitting || isPreviewing || !readyCount) return;
     setIsCommitting(true);
     const nextRows = [...rows];
     const readyIndexes = nextRows.flatMap((row, index) => (row.status === "ready" && row.payload ? [index] : []));
@@ -241,7 +253,7 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
       const indexes = readyIndexes.slice(offset, offset + commitBatchSize);
       const results = await Promise.all(indexes.map(async (index) => {
         const row = nextRows[index];
-        if (!row.payload) return { index, ok: false, message: "Shift assignment payload is missing." };
+        if (!row.payload) return { index, ok: false, unconfirmed: false, message: "Shift assignment payload is missing." };
         const response = await submitImportRequest("/api/hr-admin/employee-shift-assignments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -251,13 +263,14 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
         return {
           index,
           ok: response.ok,
-          message: response.ok ? "Shift assignment created." : payload.detail || payload.conflict_check?.summary || Object.values(payload).flat().join(" ") || "Create failed.",
+          unconfirmed: response.status === 0,
+          message: response.status === 0 ? "Creation could not be confirmed. Check current assignments before preparing another import; do not blindly resubmit." : response.ok ? "Shift assignment created." : payload.detail || payload.conflict_check?.summary || Object.values(payload).flat().join(" ") || "Create failed.",
         };
       }));
       for (const result of results) {
         nextRows[result.index] = {
           ...nextRows[result.index],
-          status: result.ok ? "created" : "failed",
+          status: result.ok ? "created" : result.unconfirmed ? "unconfirmed" : "failed",
           message: result.message,
         };
       }
@@ -265,12 +278,15 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
     }
 
     setIsCommitting(false);
-    setMessage(nextRows.some((row) => row.status === "failed")
+    setFeedback(nextRows.some((row) => row.status === "failed" || row.status === "blocked" || row.status === "unconfirmed") ? "error" : "committed");
+    setMessage(nextRows.some((row) => row.status === "unconfirmed")
+      ? "Some rows could not be confirmed. Check current assignments before preparing another import; do not blindly resubmit."
+      : nextRows.some((row) => row.status === "failed")
       ? "Some shift rows failed. Review the row messages, then preview the preserved CSV again."
-      : "Commit complete. The confirmed shift assignment queue is updating now.");
+      : "Ready rows were created. Review any blocked rows before importing them separately.");
     await recordImportBatchAudit({
       import_type: "employee_shift_assignments",
-      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
+      status: nextRows.some((row) => row.status === "failed" || row.status === "unconfirmed") ? "partial" : "committed",
       file_name: "employee-shift-assignment-import.csv",
       source_hash: await sha256Hex(csvText),
       row_count: nextRows.length,
@@ -279,15 +295,15 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
       blocked_count: nextRows.filter((row) => row.status === "blocked").length,
       failed_count: nextRows.filter((row) => row.status === "failed").length,
       rollback_supported: false,
-      evidence_snapshot: { headers, ui: "employee-shift-assignment-import-workbench" },
-      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+      evidence_snapshot: { headers, ui: "employee-shift-assignment-import-workbench", unconfirmed_count: nextRows.filter((row) => row.status === "unconfirmed").length },
+      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed" || row.status === "unconfirmed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
     });
     if (nextRows.some((row) => row.status === "created")) window.dispatchEvent(new Event("hrms:employee-shift-assignments-changed"));
   }
 
   return (
-    <section className="section" data-testid="employee-shift-assignment-import-workbench">
-      <article className="panel-card-soft organization-import-workbench">
+    <section aria-busy={!hydrated || isPreviewing || isCommitting || undefined} className="section" data-local-update-hydrated={hydrated ? "true" : "false"} data-testid="employee-shift-assignment-import-workbench">
+      <fieldset aria-label="Shift assignment import" className="panel-card-soft organization-import-workbench" disabled={!hydrated} style={{ margin: 0, minWidth: 0 }}>
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Shift assignment import</h2>
@@ -302,10 +318,10 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
         <div className="organization-import-grid">
           <label className="form-field">
             <span className="text-label-premium">Shift assignment CSV data</span>
-            <textarea className="input-control organization-import-textarea" value={csvText} onChange={(event) => setCsvText(event.target.value)} />
+            <textarea className="input-control organization-import-textarea" disabled={isPreviewing || isCommitting} value={csvText} onChange={(event) => changeCsv(event.target.value)} />
           </label>
           <div className="organization-import-actions">
-            <button className="button button--secondary" type="button" onClick={() => setCsvText(sampleCsv(employees, shifts, String(Date.now()).slice(-5)))}>
+            <button className="button button--secondary" type="button" disabled={isPreviewing || isCommitting} onClick={() => changeCsv(sampleCsv(employees, shifts, String(Date.now()).slice(-5)))}>
               Load sample template
             </button>
             <button className="button button--secondary" type="button" onClick={() => navigator.clipboard.writeText(templateCsv())}>
@@ -318,23 +334,24 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
               <span>Upload CSV</span>
               <input
                 className="sr-only"
+                disabled={isPreviewing || isCommitting}
                 type="file"
                 accept=".csv,text/csv"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
-                  file.text().then(setCsvText);
+                  file.text().then(changeCsv);
                 }}
               />
             </label>
-            <AsyncActionButton className="button button--primary" type="button" pending={isPreviewing} pendingLabel="Resolving employee codes" onClick={preview}>
+            <AsyncActionButton className="button button--primary" type="button" disabled={isCommitting} pending={isPreviewing} pendingLabel="Resolving employee codes" onClick={preview}>
               Preview shift import
             </AsyncActionButton>
             <AsyncActionButton className="button button--primary" type="button" disabled={!readyCount || isPreviewing} pending={isCommitting} pendingLabel="Committing shift rows" onClick={commitReadyRows}>Commit ready shift rows</AsyncActionButton>
           </div>
         </div>
 
-        {message ? <div className={`notice${hasFailedRows || lookupFailed ? " notice--error" : " notice--success"}`} role={hasFailedRows || lookupFailed ? "alert" : "status"}><strong>{hasFailedRows || lookupFailed ? "Shift import needs attention." : "Shift import update completed."}</strong><span>{message}</span></div> : null}
+        {message ? <div className={`notice${feedback === "error" ? " notice--error" : feedback === "committed" ? " notice--success" : ""}`} role={feedback === "error" ? "alert" : "status"}><strong>{feedback === "error" ? "Shift import needs attention." : feedback === "committed" ? "Shift assignments created." : feedback === "pending" ? "Preparing shift preview." : "Shift import preview ready."}</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
           <WorkspaceTableScrollRegion label="Employee shift assignments, scroll for more columns" className="table-scroll workspace-table-region">
@@ -366,7 +383,7 @@ export function EmployeeShiftAssignmentImportWorkbench({ assignments, employees,
             </table>
           </WorkspaceTableScrollRegion>
         ) : null}
-      </article>
+      </fieldset>
     </section>
   );
 }

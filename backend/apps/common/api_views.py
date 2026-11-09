@@ -41,6 +41,7 @@ from apps.common.api_serializers import (
     HrAdminAttendancePolicyAssignmentResolutionSerializer,
     HrAdminEmployeeShiftAssignmentSerializer,
     HrAdminEmployeeShiftAssignmentWriteSerializer,
+    HrAdminEmployeeShiftAssignmentLifecycleSerializer,
     HrAdminEmployeeShiftAssignmentConflictRequestSerializer,
     HrAdminEmployeeShiftAssignmentConflictSerializer,
     HrAdminEmployeeShiftAssignmentResolutionRequestSerializer,
@@ -457,6 +458,7 @@ from apps.common.selectors import (
     get_hr_admin_dashboard,
     get_hr_admin_document_compliance_export,
     get_hr_admin_employee_detail,
+    get_hr_admin_assignable_access_roles,
     get_hr_admin_employee_access_detail,
     get_hr_admin_employee_access_options,
     get_hr_admin_employee_form_options,
@@ -542,6 +544,7 @@ from apps.attendance.services import (
     preview_attendance_policy_assignment_resolution,
     preview_attendance_policy_configuration,
     preview_employee_shift_assignment_conflicts,
+    lock_employee_shift_assignment_scope,
     preview_employee_shift_assignment_resolution,
     preview_shift_roster_template_rollout,
     refresh_attendance_records_for_employee,
@@ -692,6 +695,8 @@ from apps.employee_lifecycle.models import (
     EmployeeExit,
     EmployeeMovement,
     EmployeeOnboarding,
+    EmploymentAssignmentStatus,
+    EmploymentSpellStatus,
     ExitStatus,
     LifecycleEventStatus,
     LifecycleEventType,
@@ -704,6 +709,7 @@ from apps.employee_lifecycle.effective_services import (
     apply_completed_movement,
     classify_employment_history,
     initialize_employment_timeline,
+    resolve_employment_assignment,
 )
 from apps.notifications.models import (
     Notification,
@@ -746,6 +752,61 @@ from apps.workflows.services import create_workflow_instance
 
 
 logger = logging.getLogger(__name__)
+import_security_logger = logging.getLogger("hrms.security.employee_import")
+lifecycle_notification_logger = logging.getLogger("hrms.lifecycle.notifications")
+REPLAY_PROTECTED_IMPORT_TYPES = {
+    "employees",
+    "reporting_manager_mappings",
+    "employee_bank_accounts",
+    "leave_balance_actions",
+}
+
+
+def _import_security_audit(request, *, outcome: str, reason: str, import_type: str = "", source_hash: str = "") -> None:
+    supplied = request.headers.get("X-Request-ID", "") or request.headers.get("X-Correlation-ID", "")
+    correlation_id = supplied.strip()[:120] if re.fullmatch(r"[A-Za-z0-9._:-]{1,120}", supplied.strip()) else secrets.token_hex(16)
+    actor = getattr(getattr(request, "user", None), "username", "") or getattr(getattr(request, "user", None), "email", "")
+    import_security_logger.info(
+        "employee_import_access",
+        extra={
+            "security_event": "employee_import_access",
+            "outcome": outcome,
+            "reason": reason,
+            "actor_ref": hashlib.sha256(str(actor or "anonymous").encode()).hexdigest()[:24],
+            "import_type": import_type,
+            "source_ref": source_hash[:12],
+            "correlation_id": correlation_id,
+        },
+    )
+
+
+def _queue_employee_lifecycle_notification(*, employee: Employee, trigger_key: str, subject_type: str, subject_identifier: str, title: str, body: str, payload: dict) -> None:
+    try:
+        trigger_notification_event(
+            tenant=employee.tenant,
+            module=WorkflowModule.LIFECYCLE,
+            trigger_key=trigger_key,
+            subject_type=subject_type,
+            subject_identifier=subject_identifier,
+            recipient_membership=employee.membership,
+            recipient_identifier=(employee.membership.user.username if employee.membership_id and employee.membership.user_id else employee.employee_code),
+            recipient_address=employee.work_email or employee.personal_email,
+            fallback_title=title,
+            fallback_subject=title,
+            fallback_body=body,
+            payload={"employee_id": str(employee.id), "employee_code": employee.employee_code, **payload},
+        )
+    except Exception:
+        lifecycle_notification_logger.exception(
+            "employee_lifecycle_notification_queue_failed",
+            extra={
+                "security_event": "employee_lifecycle_notification_queue",
+                "outcome": "failed",
+                "reason": "queue_error",
+                "employee_ref": hashlib.sha256(str(employee.id).encode()).hexdigest()[:24],
+                "trigger_key": trigger_key,
+            },
+        )
 
 
 EMPLOYEE_INACTIVE_STATUSES = {
@@ -935,6 +996,13 @@ def _employee_audit_snapshot(item: Employee) -> dict:
 def save_hr_admin_employee(actor, validated_data, *, item=None):
     tenant = actor.tenant
     is_new = item is None
+    expected_updated_at = validated_data.pop("expected_updated_at", None)
+    if item is not None:
+        item = Employee.objects.select_for_update().get(tenant=tenant, id=item.id)
+        if expected_updated_at is not None and item.updated_at != expected_updated_at:
+            raise serializers.ValidationError(
+                {"expected_updated_at": "This employee changed after the form was opened. Refresh and review the latest values."}
+            )
     previous_state = {} if is_new else _employee_audit_snapshot(item)
     model_map = {
         "legal_entity_id": LegalEntity,
@@ -1040,9 +1108,19 @@ def save_hr_admin_employee(actor, validated_data, *, item=None):
             "new_state": new_state,
         },
     )
+    transaction.on_commit(lambda: _queue_employee_lifecycle_notification(
+        employee=item,
+        trigger_key="lifecycle.employee.created" if is_new else "lifecycle.employee.updated",
+        subject_type="employee",
+        subject_identifier=str(item.id),
+        title="Employee profile created" if is_new else "Employee profile updated",
+        body="Your employee profile has been created." if is_new else "Your employee profile has been updated.",
+        payload={"action": "created" if is_new else "updated"},
+    ))
     return item
 
 
+@transaction.atomic
 def save_hr_admin_employee_access(actor, employee_id, validated_data):
     employee = Employee.objects.filter(tenant=actor.tenant, id=employee_id).select_related("membership__user").first()
     if not employee:
@@ -1064,9 +1142,11 @@ def save_hr_admin_employee_access(actor, employee_id, validated_data):
             )
     if not role_ids:
         raise serializers.ValidationError({"role_ids": "Select at least one role."})
-    valid_roles = list(Role.objects.filter(tenant=actor.tenant, id__in=role_ids, is_active=True))
+    valid_roles = list(get_hr_admin_assignable_access_roles(actor).filter(id__in=role_ids))
     if len(valid_roles) != len(role_ids):
-        raise serializers.ValidationError({"role_ids": "One or more selected roles are invalid."})
+        raise serializers.ValidationError({"role_ids": "One or more selected roles cannot be assigned by this administrator."})
+
+    previous_state = get_hr_admin_employee_access_detail(actor, employee.id)
 
     conflicting_username = User.objects.filter(username__iexact=username)
     conflicting_email = User.objects.filter(email__iexact=email)
@@ -1155,6 +1235,26 @@ def save_hr_admin_employee_access(actor, employee_id, validated_data):
             logger.exception("Failed to queue HR admin employee access invite email for membership %s", membership.id)
 
     payload = get_hr_admin_employee_access_detail(actor, employee.id)
+    _record_hr_admin_setup_audit_event(
+        actor,
+        event_type="employee_access_created" if created_access else "employee_access_updated",
+        source_ref="hrms.employee.access.audit.v1",
+        event_snapshot={
+            "employee_id": str(employee.id),
+            "action": "created" if created_access else "updated",
+            "permission": "employees.access.manage",
+            "previous_state": {
+                "is_user_active": previous_state["is_user_active"] if previous_state else None,
+                "membership_status": previous_state["membership_status"] if previous_state else None,
+                "role_ids": sorted(str(value) for value in (previous_state["role_ids"] if previous_state else [])),
+            },
+            "new_state": {
+                "is_user_active": payload["is_user_active"],
+                "membership_status": payload["membership_status"],
+                "role_ids": sorted(str(value) for value in payload["role_ids"]),
+            },
+        },
+    )
     payload["generated_password"] = generated_password
     payload["password_was_reset"] = bool(password)
     return payload
@@ -1461,6 +1561,7 @@ def _record_hr_admin_setup_audit_event(actor, *, event_type: str, source_ref: st
 def build_hr_admin_leave_type_payload(item: LeaveType) -> dict:
     return {
         "id": item.id,
+        "updated_at": item.updated_at,
         "code": item.code,
         "name": item.name,
         "short_code": item.short_code,
@@ -1871,6 +1972,12 @@ def build_hr_admin_leave_request_payload(item: LeaveRequest) -> dict:
 
 def save_hr_admin_attendance_record(actor, validated_data, *, item: AttendanceRecord):
     tenant = actor.tenant
+    if AttendancePeriodClose.objects.filter(
+        tenant=tenant, legal_entity_id=item.employee.legal_entity_id,
+        status=AttendancePeriodCloseStatus.CLOSED,
+        period_start__lte=item.attendance_date, period_end__gte=item.attendance_date,
+    ).exists():
+        raise serializers.ValidationError({"detail": "Attendance period is closed; use the governed correction process."})
     explicit_status = validated_data.get("status", item.status)
     next_check_in_at = validated_data.get("check_in_at", item.check_in_at)
     next_check_out_at = validated_data.get("check_out_at", item.check_out_at)
@@ -1936,6 +2043,7 @@ def create_hr_admin_attendance_record(actor, validated_data):
 def build_hr_admin_leave_policy_payload(item: LeavePolicy) -> dict:
     return {
         "id": item.id,
+        "updated_at": item.updated_at,
         "leave_type_id": item.leave_type_id,
         "leave_type": item.leave_type.name,
         "code": item.code,
@@ -2386,7 +2494,19 @@ def build_hr_admin_attendance_assignment_governance_payload(*, tenant, item):
     }
 
 
+def _shift_assignment_lifecycle_state(item):
+    today = timezone.localdate()
+    if item.cancelled_at:
+        return "cancelled", "", "Cancelled assignments are preserved and cannot be edited."
+    if item.effective_to and item.effective_to < today:
+        return "historical", "", "Historical assignments cannot be changed."
+    if item.effective_from > today:
+        return "future", "cancel", ""
+    return "active", "end", ""
+
+
 def build_hr_admin_employee_shift_assignment_payload(*, tenant, item):
+    lifecycle_state, lifecycle_action, lifecycle_unavailable_reason = _shift_assignment_lifecycle_state(item)
     conflict_check = preview_employee_shift_assignment_conflicts(
         tenant=tenant,
         employee=item.employee,
@@ -2397,7 +2517,16 @@ def build_hr_admin_employee_shift_assignment_payload(*, tenant, item):
         assignment_kind=item.assignment_kind,
         item_id=str(item.id),
     )
+    if item.cancelled_at:
+        conflict_check.update(candidate_scope=[], conflicts=[], has_blocking_conflict=False, summary="Cancelled assignment retained for history; excluded from schedule resolution.")
     return {
+        "lifecycle_state": lifecycle_state,
+        "lifecycle_action": lifecycle_action,
+        "lifecycle_unavailable_reason": lifecycle_unavailable_reason,
+        "schedule_today": timezone.localdate(),
+        "schedule_timezone": timezone.get_current_timezone_name(),
+        "cancelled_at": item.cancelled_at,
+        "lifecycle_snapshot": item.lifecycle_snapshot,
         "id": item.id,
         "employee_id": item.employee_id,
         "employee": f"{item.employee.first_name} {item.employee.last_name}".strip() or item.employee.employee_code,
@@ -2421,10 +2550,21 @@ def build_hr_admin_employee_shift_assignment_payload(*, tenant, item):
     }
 
 
+@transaction.atomic
 def save_hr_admin_employee_shift_assignment(actor, validated_data, *, item=None):
     tenant = actor.tenant
+    lock_employee_shift_assignment_scope(
+        tenant=tenant,
+        employee_ids=[getattr(item, "employee_id", None), validated_data.get("employee_id")],
+    )
     if item is None:
         item = EmployeeShiftAssignment(tenant=tenant)
+    elif item.cancelled_at or (item.effective_to and item.effective_to < timezone.localdate()):
+        raise serializers.ValidationError({"detail": "Historical or cancelled assignments cannot be edited."})
+    elif item.effective_from <= timezone.localdate():
+        raise serializers.ValidationError({"detail": "Active assignment history cannot be edited. Use End assignment for a future boundary."})
+    elif item.lifecycle_snapshot:
+        raise serializers.ValidationError({"detail": "Use the lifecycle action to shorten this assignment; its recorded history cannot be overwritten."})
 
     if "employee_id" in validated_data:
         employee_item = Employee.objects.filter(tenant=tenant, id=validated_data["employee_id"]).first() if validated_data["employee_id"] else None
@@ -2572,7 +2712,17 @@ def save_hr_admin_shift_roster_template(actor, validated_data, *, item=None):
         if invalid_shift_ids:
             raise serializers.ValidationError({"config_snapshot": f"Invalid rotation shift selection: {', '.join(invalid_shift_ids)}."})
     item.config_snapshot = normalized_config
-    item.save()
+    try:
+        # A savepoint keeps the surrounding mutation/audit transaction usable
+        # when a concurrent writer wins this tenant/code constraint.
+        with transaction.atomic():
+            item.save()
+    except IntegrityError as exc:
+        constraint = getattr(getattr(exc.__cause__, "diag", None), "constraint_name", "") or ""
+        sqlite_duplicate = "attendance_shiftrostertemplate.tenant_id" in str(exc) and "attendance_shiftrostertemplate.code" in str(exc)
+        if constraint.startswith("attendance_shiftrostertemplate_tenant_id_code_") or sqlite_duplicate:
+            raise serializers.ValidationError({"code": "A roster template with this code already exists."}) from exc
+        raise
     return item
 
 
@@ -3118,7 +3268,19 @@ def save_hr_admin_document_category(actor, validated_data, *, item=None):
         visibility_rules["accepted_mime_types"] = item.accepted_mime_types
         item.visibility_rules = visibility_rules
 
-    item.save()
+    duplicate = DocumentCategory.objects.filter(tenant=tenant, code=item.code)
+    if item.pk:
+        duplicate = duplicate.exclude(pk=item.pk)
+    if duplicate.exists():
+        raise serializers.ValidationError({"code": "A document category with this code already exists."})
+    try:
+        with transaction.atomic():
+            item.save()
+    except IntegrityError as exc:
+        constraint = getattr(getattr(exc.__cause__, "diag", None), "constraint_name", "") or ""
+        if constraint.startswith("documents_documentcategory_tenant_id_code_"):
+            raise serializers.ValidationError({"code": "A document category with this code already exists."}) from exc
+        raise
     return item
 
 
@@ -5438,9 +5600,11 @@ def build_hr_admin_onboarding_payload(item: EmployeeOnboarding) -> dict:
     }
 
 
+@transaction.atomic
 def save_hr_admin_onboarding(actor, validated_data, *, item=None):
     tenant = actor.tenant
     is_create = item is None
+    previous_status = item.status if item else ""
     previous_checklist_snapshot = _normalize_onboarding_checklist_snapshot(item.checklist_snapshot) if item else []
     previous_document_attention = (
         _get_employee_document_attention_summary(
@@ -5474,7 +5638,19 @@ def save_hr_admin_onboarding(actor, validated_data, *, item=None):
             setattr(item, field, validated_data[field])
 
     if "owner_value" in validated_data:
-        item.assigned_owner_identifier = _get_lifecycle_owner_identifier(validated_data["owner_value"])
+        owner_value = validated_data["owner_value"]
+        if owner_value and not _resolve_lifecycle_owner_employee(tenant, owner_value):
+            raise serializers.ValidationError({"owner_value": "Invalid selection."})
+        item.assigned_owner_identifier = _get_lifecycle_owner_identifier(owner_value)
+    elif "assigned_owner_identifier" in validated_data and item.assigned_owner_identifier:
+        if not _resolve_lifecycle_owner_employee(tenant, f"identifier:{item.assigned_owner_identifier}"):
+            raise serializers.ValidationError({"assigned_owner_identifier": "Invalid selection."})
+
+    if item.onboarding_template_code and not _get_active_lifecycle_workflow_template(
+        tenant=tenant,
+        trigger_key=item.onboarding_template_code,
+    ):
+        raise serializers.ValidationError({"onboarding_template_code": "Select an active lifecycle workflow template."})
 
     due_context = _build_onboarding_due_context(item)
     hr_owner_membership = _get_lifecycle_hr_owner_membership(
@@ -5537,6 +5713,7 @@ def save_hr_admin_onboarding(actor, validated_data, *, item=None):
     if item.employee_id is None:
         raise serializers.ValidationError({"employee_id": "This field is required."})
 
+    _validate_onboarding_transition(previous_status, item.status)
     _validate_onboarding_status_metadata(item, "status")
     _apply_onboarding_status_metadata(item)
     with transaction.atomic():
@@ -5547,6 +5724,17 @@ def save_hr_admin_onboarding(actor, validated_data, *, item=None):
             tenant=tenant,
             onboarding=item,
             previous_attention=previous_document_attention,
+        )
+        _record_employee_lifecycle_change(
+            actor,
+            employee=item.employee,
+            event_type=LifecycleEventType.ONBOARDING,
+            title="Employee onboarding created" if is_create else "Employee onboarding updated",
+            previous_value=previous_status,
+            current_value=item.status,
+            source_id=item.id,
+            effective_date=item.actual_joining_date or item.expected_joining_date,
+            terminal=item.status in {OnboardingStatus.COMPLETED, OnboardingStatus.CANCELLED},
         )
     return item
 
@@ -5568,8 +5756,11 @@ def build_hr_admin_probation_review_payload(item: ProbationReview) -> dict:
     }
 
 
+@transaction.atomic
 def save_hr_admin_probation_review(actor, validated_data, *, item=None):
     tenant = actor.tenant
+    is_create = item is None
+    previous_decision = item.decision if item else ""
     if item is None:
         item = ProbationReview(tenant=tenant)
 
@@ -5592,13 +5783,20 @@ def save_hr_admin_probation_review(actor, validated_data, *, item=None):
             setattr(item, field, validated_data[field])
 
     if "owner_value" in validated_data:
-        item.reviewer_identifier = _get_lifecycle_owner_identifier(validated_data["owner_value"])
+        owner_value = validated_data["owner_value"]
+        if owner_value and not _resolve_lifecycle_owner_employee(tenant, owner_value):
+            raise serializers.ValidationError({"owner_value": "Invalid selection."})
+        item.reviewer_identifier = _get_lifecycle_owner_identifier(owner_value)
+    elif "reviewer_identifier" in validated_data and item.reviewer_identifier:
+        if not _resolve_lifecycle_owner_employee(tenant, f"identifier:{item.reviewer_identifier}"):
+            raise serializers.ValidationError({"reviewer_identifier": "Invalid selection."})
 
     if item.employee_id is None:
         raise serializers.ValidationError({"employee_id": "This field is required."})
     if item.review_date is None:
         raise serializers.ValidationError({"review_date": "This field is required."})
 
+    _validate_probation_transition(previous_decision, item.decision)
     _validate_probation_decision_metadata(item)
     with transaction.atomic():
         item.save()
@@ -5618,6 +5816,28 @@ def save_hr_admin_probation_review(actor, validated_data, *, item=None):
         elif item.decision == ProbationDecision.EXTEND and item.employee.probation_end_date != item.extension_end_date:
             item.employee.probation_end_date = item.extension_end_date
             item.employee.save(update_fields=["probation_end_date", "updated_at"])
+        elif item.decision == ProbationDecision.SEPARATE:
+            EmployeeExit.objects.get_or_create(
+                tenant=tenant,
+                employee=item.employee,
+                defaults={
+                    "status": ExitStatus.DRAFT,
+                    "exit_reason": "probation_separation",
+                    "exit_reason_detail": "Initiated from a probation separation decision.",
+                    "workflow_reference": item.workflow_reference,
+                },
+            )
+        _record_employee_lifecycle_change(
+            actor,
+            employee=item.employee,
+            event_type=LifecycleEventType.CONFIRMATION if item.decision == ProbationDecision.CONFIRM else LifecycleEventType.PROBATION,
+            title="Probation review created" if is_create else "Probation review updated",
+            previous_value=previous_decision,
+            current_value=item.decision,
+            source_id=item.id,
+            effective_date=item.review_date,
+            terminal=item.decision != ProbationDecision.PENDING,
+        )
     return item
 
 
@@ -5626,6 +5846,81 @@ def _resolve_lifecycle_relation(tenant, model_class, raw_value, field_name):
     if raw_value and not related:
         raise serializers.ValidationError({field_name: "Invalid selection."})
     return related
+
+
+def _validate_onboarding_transition(previous_status: str, current_status: str) -> None:
+    if not previous_status or previous_status == current_status:
+        return
+    allowed = {
+        OnboardingStatus.NOT_STARTED: {
+            OnboardingStatus.IN_PROGRESS,
+            OnboardingStatus.BLOCKED,
+            OnboardingStatus.COMPLETED,
+            OnboardingStatus.CANCELLED,
+        },
+        OnboardingStatus.IN_PROGRESS: {
+            OnboardingStatus.BLOCKED,
+            OnboardingStatus.COMPLETED,
+            OnboardingStatus.CANCELLED,
+        },
+        OnboardingStatus.BLOCKED: {
+            OnboardingStatus.IN_PROGRESS,
+            OnboardingStatus.CANCELLED,
+        },
+        OnboardingStatus.COMPLETED: set(),
+        OnboardingStatus.CANCELLED: set(),
+    }
+    if current_status not in allowed.get(previous_status, set()):
+        raise serializers.ValidationError(
+            {"status": f"Onboarding cannot move from {previous_status.replace('_', ' ')} to {current_status.replace('_', ' ')}."}
+        )
+
+
+def _validate_probation_transition(previous_decision: str, current_decision: str) -> None:
+    if not previous_decision or previous_decision == current_decision:
+        return
+    if previous_decision != ProbationDecision.PENDING:
+        raise serializers.ValidationError(
+            {"decision": f"A completed probation decision cannot change from {previous_decision} to {current_decision}."}
+        )
+
+
+def _record_employee_lifecycle_change(
+    actor,
+    *,
+    employee: Employee,
+    event_type: str,
+    title: str,
+    previous_value: str,
+    current_value: str,
+    source_id,
+    effective_date: date | None,
+    terminal: bool,
+) -> EmployeeLifecycleEvent:
+    now = timezone.now()
+    if current_value == OnboardingStatus.CANCELLED:
+        event_status = LifecycleEventStatus.CANCELLED
+    elif terminal:
+        event_status = LifecycleEventStatus.COMPLETED
+    else:
+        event_status = LifecycleEventStatus.PENDING
+    return EmployeeLifecycleEvent.objects.create(
+        tenant=employee.tenant,
+        employee=employee,
+        event_type=event_type,
+        status=event_status,
+        title=title,
+        effective_date=effective_date,
+        initiated_at=now,
+        completed_at=now if terminal else None,
+        workflow_reference=f"employee-lifecycle:{source_id}",
+        payload={
+            "source_id": str(source_id),
+            "actor": _hr_admin_actor_identifier(actor),
+            "previous_value": previous_value,
+            "current_value": current_value,
+        },
+    )
 
 
 def _apply_onboarding_status_metadata(item: EmployeeOnboarding):
@@ -5700,6 +5995,8 @@ def _get_onboarding_completion_warning(item: EmployeeOnboarding) -> str:
 
 
 def _validate_onboarding_status_metadata(item: EmployeeOnboarding, field_name: str):
+    if item.status == OnboardingStatus.BLOCKED and not item.notes.strip():
+        raise serializers.ValidationError({"notes": "Record a reason before blocking onboarding."})
     if item.status == OnboardingStatus.COMPLETED:
         warning = _get_onboarding_completion_warning(item)
         if warning:
@@ -5867,6 +6164,59 @@ def _validate_movement_metadata(item: EmployeeMovement) -> None:
             raise serializers.ValidationError({"detail": "Movement targets do not change the employee's current structure."})
 
 
+def _validate_movement_transition(previous_status: str, current_status: str) -> None:
+    if not previous_status or previous_status == current_status:
+        return
+    allowed = {
+        LifecycleEventStatus.DRAFT: {
+            LifecycleEventStatus.PENDING,
+            LifecycleEventStatus.APPROVED,
+            LifecycleEventStatus.COMPLETED,
+            LifecycleEventStatus.CANCELLED,
+        },
+        LifecycleEventStatus.PENDING: {
+            LifecycleEventStatus.APPROVED,
+            LifecycleEventStatus.REJECTED,
+            LifecycleEventStatus.CANCELLED,
+        },
+        LifecycleEventStatus.APPROVED: {
+            LifecycleEventStatus.COMPLETED,
+            LifecycleEventStatus.CANCELLED,
+        },
+        LifecycleEventStatus.REJECTED: set(),
+        LifecycleEventStatus.COMPLETED: set(),
+        LifecycleEventStatus.CANCELLED: set(),
+    }
+    if current_status not in allowed.get(previous_status, set()):
+        raise serializers.ValidationError(
+            {"status": f"Movement cannot move from {previous_status.replace('_', ' ')} to {current_status.replace('_', ' ')}."}
+        )
+
+
+def _movement_source_snapshot(employee: Employee, *, as_of: date) -> dict:
+    assignment = resolve_employment_assignment(employee, as_of=as_of)
+    if not assignment:
+        return {}
+    return {
+        "assignment_id": str(assignment.id),
+        "assignment_updated_at": assignment.updated_at.isoformat(),
+        "effective_from": assignment.effective_from.isoformat(),
+    }
+
+
+def _validate_movement_source_snapshot(item: EmployeeMovement) -> None:
+    if item.status not in {LifecycleEventStatus.APPROVED, LifecycleEventStatus.COMPLETED}:
+        return
+    expected_assignment_id = str(item.current_snapshot.get("assignment_id") or "")
+    if not expected_assignment_id:
+        return
+    current = resolve_employment_assignment(item.employee, as_of=item.effective_date)
+    if not current or str(current.id) != expected_assignment_id:
+        raise serializers.ValidationError(
+            {"current_snapshot": "The employee assignment changed after this movement was prepared. Refresh and review the movement again."}
+        )
+
+
 def _apply_movement_to_employee(item: EmployeeMovement) -> None:
     if item.status != LifecycleEventStatus.COMPLETED:
         return
@@ -5914,6 +6264,27 @@ def _validate_exit_metadata(item: EmployeeExit) -> None:
             )
 
 
+def _validate_exit_transition(previous_status: str, current_status: str, clearance_snapshot: dict) -> None:
+    if not previous_status or previous_status == current_status:
+        return
+    allowed = {
+        ExitStatus.DRAFT: {ExitStatus.PENDING_APPROVAL, ExitStatus.APPROVED, ExitStatus.CANCELLED},
+        ExitStatus.PENDING_APPROVAL: {ExitStatus.APPROVED, ExitStatus.CANCELLED},
+        ExitStatus.APPROVED: {ExitStatus.CLEARANCE_IN_PROGRESS, ExitStatus.CANCELLED},
+        ExitStatus.CLEARANCE_IN_PROGRESS: {ExitStatus.COMPLETED, ExitStatus.CANCELLED},
+        ExitStatus.COMPLETED: set(),
+        ExitStatus.CANCELLED: set(),
+    }
+    if current_status not in allowed.get(previous_status, set()):
+        raise serializers.ValidationError(
+            {"status": f"Exit cannot move from {previous_status.replace('_', ' ')} to {current_status.replace('_', ' ')}."}
+        )
+    if current_status == ExitStatus.CANCELLED and any(entry.get("done") for entry in clearance_snapshot.get("items", [])):
+        raise serializers.ValidationError(
+            {"status": "Exit cannot be cancelled after a clearance item has been completed. Use the governed correction process."}
+        )
+
+
 def _ensure_exit_workflow(item: EmployeeExit) -> None:
     clearance_snapshot = _normalize_exit_clearance_snapshot(item.clearance_status_snapshot)
     trigger_key = clearance_snapshot.get("workflow_template_code", "")
@@ -5945,10 +6316,35 @@ def _ensure_exit_workflow(item: EmployeeExit) -> None:
 def _sync_exit_employee_state(item: EmployeeExit) -> None:
     employee = item.employee
     if item.status == ExitStatus.COMPLETED and employee.employment_status != EmploymentStatus.EXITED:
+        exit_date = item.actual_exit_date
+        assignment = employee.employment_assignments.select_for_update().filter(
+            effective_from__lte=exit_date,
+        ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=exit_date)).order_by("-effective_from").first()
+        if assignment:
+            assignment.effective_to = exit_date
+            assignment.status = EmploymentAssignmentStatus.SUPERSEDED
+            assignment.evidence_snapshot = {
+                **assignment.evidence_snapshot,
+                "closed_by_exit_id": str(item.id),
+                "closed_on": exit_date.isoformat(),
+            }
+            assignment.save(update_fields=["effective_to", "status", "evidence_snapshot", "updated_at"])
+            spell = assignment.employment_spell
+            spell.ended_on = exit_date
+            spell.status = EmploymentSpellStatus.CLOSED
+            spell.evidence_snapshot = {
+                **spell.evidence_snapshot,
+                "closed_by_exit_id": str(item.id),
+                "closed_on": exit_date.isoformat(),
+            }
+            spell.save(update_fields=["ended_on", "status", "evidence_snapshot", "updated_at"])
         employee.employment_status = EmploymentStatus.EXITED
         employee.save(update_fields=["employment_status", "updated_at"])
     elif item.status in {ExitStatus.APPROVED, ExitStatus.CLEARANCE_IN_PROGRESS} and employee.employment_status == EmploymentStatus.ACTIVE:
         employee.employment_status = EmploymentStatus.ON_NOTICE
+        employee.save(update_fields=["employment_status", "updated_at"])
+    elif item.status == ExitStatus.CANCELLED and employee.employment_status == EmploymentStatus.ON_NOTICE:
+        employee.employment_status = EmploymentStatus.ACTIVE
         employee.save(update_fields=["employment_status", "updated_at"])
 
 
@@ -6010,8 +6406,20 @@ def build_hr_admin_movement_payload(item: EmployeeMovement) -> dict:
     }
 
 
+@transaction.atomic
 def save_hr_admin_movement(actor, validated_data, *, item=None):
     tenant = actor.tenant
+    is_create = item is None
+    previous_status = item.status if item else ""
+    terminal_statuses = {
+        LifecycleEventStatus.REJECTED,
+        LifecycleEventStatus.COMPLETED,
+        LifecycleEventStatus.CANCELLED,
+    }
+    if item is not None and previous_status in terminal_statuses:
+        if set(validated_data) == {"status"} and validated_data["status"] == previous_status:
+            return item
+        raise serializers.ValidationError({"status": "A terminal movement record cannot be changed."})
     if item is None:
         item = EmployeeMovement(tenant=tenant)
 
@@ -6061,10 +6469,41 @@ def save_hr_admin_movement(actor, validated_data, *, item=None):
     if item.effective_date is None:
         raise serializers.ValidationError({"effective_date": "This field is required."})
 
+    if is_create and not item.current_snapshot:
+        item.current_snapshot = _movement_source_snapshot(item.employee, as_of=item.effective_date)
+
+    _validate_movement_transition(previous_status, item.status)
     _validate_movement_metadata(item)
-    with transaction.atomic():
-        item.save()
-        _apply_movement_to_employee(item)
+    _validate_movement_source_snapshot(item)
+    item.save()
+    _apply_movement_to_employee(item)
+    movement_event_types = {
+        MovementType.TRANSFER: LifecycleEventType.TRANSFER,
+        MovementType.PROMOTION: LifecycleEventType.PROMOTION,
+        MovementType.DESIGNATION_CHANGE: LifecycleEventType.DESIGNATION_CHANGE,
+        MovementType.REPORTING_CHANGE: LifecycleEventType.REPORTING_CHANGE,
+        MovementType.EMPLOYMENT_TYPE_CHANGE: LifecycleEventType.EMPLOYMENT_TYPE_CHANGE,
+    }
+    _record_employee_lifecycle_change(
+        actor,
+        employee=item.employee,
+        event_type=movement_event_types.get(item.movement_type, LifecycleEventType.OTHER),
+        title="Employee movement created" if is_create else "Employee movement updated",
+        previous_value=previous_status,
+        current_value=item.status,
+        source_id=item.id,
+        effective_date=item.effective_date,
+        terminal=item.status in terminal_statuses,
+    )
+    transaction.on_commit(lambda: _queue_employee_lifecycle_notification(
+        employee=item.employee,
+        trigger_key="lifecycle.employee.movement_completed" if item.status == LifecycleEventStatus.COMPLETED else "lifecycle.employee.movement_updated",
+        subject_type="employee_movement",
+        subject_identifier=str(item.id),
+        title="Employment movement completed" if item.status == LifecycleEventStatus.COMPLETED else "Employment movement updated",
+        body="Your employment assignment has been updated. Open ESS to review the current details.",
+        payload={"movement_id": str(item.id), "movement_type": item.movement_type, "status": item.status, "effective_date": item.effective_date.isoformat()},
+    ))
     return item
 
 
@@ -6111,9 +6550,18 @@ def build_hr_admin_exit_payload(item: EmployeeExit) -> dict:
     }
 
 
+@transaction.atomic
 def save_hr_admin_exit(actor, validated_data, *, item=None):
     tenant = actor.tenant
     is_create = item is None
+    if item is not None:
+        item = EmployeeExit.objects.select_for_update().select_related("employee").get(tenant=tenant, id=item.id)
+    previous_status = item.status if item else ""
+    terminal_statuses = {ExitStatus.COMPLETED, ExitStatus.CANCELLED}
+    if item is not None and previous_status in terminal_statuses:
+        if set(validated_data) == {"status"} and validated_data["status"] == previous_status:
+            return item
+        raise serializers.ValidationError({"status": "A terminal exit record cannot be changed."})
     previous_clearance_snapshot = _normalize_exit_clearance_snapshot(item.clearance_status_snapshot) if item else {"items": []}
     if item is None:
         item = EmployeeExit(tenant=tenant)
@@ -6183,11 +6631,23 @@ def save_hr_admin_exit(actor, validated_data, *, item=None):
     if item.employee_id is None:
         raise serializers.ValidationError({"employee_id": "This field is required."})
 
+    item.employee = Employee.objects.select_for_update().get(tenant=tenant, id=item.employee_id)
+    _validate_exit_transition(previous_status, item.status, _normalize_exit_clearance_snapshot(item.clearance_status_snapshot))
     _validate_exit_metadata(item)
-    with transaction.atomic():
-        item.save()
-        _ensure_exit_workflow(item)
-        _sync_exit_employee_state(item)
+    item.save()
+    _ensure_exit_workflow(item)
+    _sync_exit_employee_state(item)
+    _record_employee_lifecycle_change(
+        actor,
+        employee=item.employee,
+        event_type=LifecycleEventType.EXIT,
+        title="Employee exit created" if is_create else "Employee exit updated",
+        previous_value=previous_status,
+        current_value=item.status,
+        source_id=item.id,
+        effective_date=item.actual_exit_date or item.approved_last_working_date or item.proposed_last_working_date,
+        terminal=item.status in terminal_statuses,
+    )
     return item
 
 
@@ -16345,6 +16805,19 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
         "organization": "organization.manage",
     }
 
+    def initial(self, request, *args, **kwargs):
+        try:
+            return super().initial(request, *args, **kwargs)
+        except exceptions.PermissionDenied:
+            _import_security_audit(
+                request,
+                outcome="denied",
+                reason="workspace_access",
+                import_type=str(getattr(request, "data", {}).get("import_type", "")),
+                source_hash=str(getattr(request, "data", {}).get("source_hash", "")),
+            )
+            raise
+
     def require_import_history_access(self, tenant):
         self.require_any_tenant_permission(
             tenant,
@@ -16417,14 +16890,18 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
         import_type = serializer.validated_data["import_type"]
         permission_key = self.IMPORT_PERMISSIONS.get(import_type)
         if not permission_key:
+            _import_security_audit(request, outcome="denied", reason="unsupported_import_type", import_type=import_type)
             raise serializers.ValidationError({"import_type": "This import type is not supported by the governed audit ledger."})
-        self.require_tenant_permission(employee.tenant, permission_key)
+        if permission_key not in self.get_tenant_permission_keys(employee.tenant):
+            _import_security_audit(request, outcome="denied", reason="missing_permission", import_type=import_type, source_hash=serializer.validated_data["source_hash"])
+            raise exceptions.PermissionDenied(f"Missing tenant permission: {permission_key}.")
         values = serializer.validated_data
-        if import_type == "leave_balance_actions":
+        if import_type in REPLAY_PROTECTED_IMPORT_TYPES:
             item = HrmsImportBatchAudit.objects.filter(
                 tenant=employee.tenant,
                 import_type=import_type,
                 source_hash=values["source_hash"],
+                source_ref=values.get("source_ref") or "hrms.bulk_import.browser.v1",
             ).first()
             if item:
                 result = response.Response(
@@ -16441,6 +16918,7 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
                     tenant=employee.tenant,
                     import_type=import_type,
                     source_hash=values["source_hash"],
+                    source_ref=values.get("source_ref") or "hrms.bulk_import.browser.v1",
                 )
                 result = response.Response(
                     HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data,
@@ -16450,6 +16928,7 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
                 return result
             result = response.Response(HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data, status=status.HTTP_201_CREATED)
             result["Idempotency-Replayed"] = "false"
+            _import_security_audit(request, outcome="allowed", reason="source_claimed", import_type=import_type, source_hash=values["source_hash"])
             return result
 
         item = self._create_item(employee, request.user, values)
@@ -16476,6 +16955,33 @@ class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
             evidence_snapshot=values.get("evidence_snapshot") or {},
             row_errors=values.get("row_errors") or [],
         )
+
+
+class HrAdminImportBatchAuditDetailView(HrAdminImportBatchAuditListCreateView):
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = HrmsImportBatchAudit.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Import batch not found."}, status=status.HTTP_404_NOT_FOUND)
+        permission_key = self.IMPORT_PERMISSIONS.get(item.import_type)
+        if not permission_key or permission_key not in self.get_tenant_permission_keys(employee.tenant):
+            _import_security_audit(request, outcome="denied", reason="missing_permission", import_type=item.import_type, source_hash=item.source_hash)
+            raise exceptions.PermissionDenied(f"Missing tenant permission: {permission_key or 'governed import permission'}.")
+        if item.actor_user_id != request.user.id:
+            _import_security_audit(request, outcome="denied", reason="claim_owner_mismatch", import_type=item.import_type, source_hash=item.source_hash)
+            raise exceptions.PermissionDenied("Only the import claim owner can finalize this batch.")
+        serializer = HrAdminImportBatchAuditSerializer(data={**_hrms_import_batch_audit_payload(item), **request.data})
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        if values["status"] not in {HrmsImportBatchStatus.COMMITTED, HrmsImportBatchStatus.PARTIAL, HrmsImportBatchStatus.FAILED, HrmsImportBatchStatus.ROLLBACK_REVIEW}:
+            raise serializers.ValidationError({"status": "A claimed import can only be finalized to a terminal review status."})
+        for field in ["status", "row_count", "ready_count", "created_count", "blocked_count", "failed_count", "rollback_supported", "rollback_status", "evidence_snapshot", "row_errors"]:
+            setattr(item, field, values.get(field, getattr(item, field)))
+        item.save()
+        _import_security_audit(request, outcome="allowed", reason="claim_finalized", import_type=item.import_type, source_hash=item.source_hash)
+        return response.Response(HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data)
 
 
 class HrAdminEmployeeListView(HrAdminContextMixin, APIView):
@@ -16600,6 +17106,17 @@ def build_hr_admin_employee_bank_account_payload(item: EmployeeBankAccount) -> d
     }
 
 
+def _employee_bank_account_audit_snapshot(item: EmployeeBankAccount) -> dict:
+    return {
+        "bank_account_id": str(item.id),
+        "bank_name": item.bank_name,
+        "ifsc_code": item.ifsc_code,
+        "branch_name": item.branch_name,
+        "is_primary": item.is_primary,
+        "account_last_four": item.account_number[-4:],
+    }
+
+
 class HrAdminEmployeeBankAccountListCreateView(HrAdminContextMixin, APIView):
     def get(self, request, employee_id):
         employee = self.get_employee()
@@ -16624,16 +17141,28 @@ class HrAdminEmployeeBankAccountListCreateView(HrAdminContextMixin, APIView):
         serializer = HrAdminEmployeeBankAccountWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        if employee_record.bank_accounts.filter(account_number=data["account_number"]).exists():
+            raise serializers.ValidationError({"account_number": "This account number is already configured for the employee."})
         if data.get("is_primary", True):
             employee_record.bank_accounts.filter(is_primary=True).update(is_primary=False)
-        item = EmployeeBankAccount.objects.create(
-            employee=employee_record,
-            account_holder_name=data["account_holder_name"],
-            bank_name=data["bank_name"],
-            account_number=data["account_number"],
-            ifsc_code=data.get("ifsc_code", ""),
-            branch_name=data.get("branch_name", ""),
-            is_primary=data.get("is_primary", True),
+        try:
+            with transaction.atomic():
+                item = EmployeeBankAccount.objects.create(
+                    employee=employee_record,
+                    account_holder_name=data["account_holder_name"],
+                    bank_name=data["bank_name"],
+                    account_number=data["account_number"],
+                    ifsc_code=data.get("ifsc_code", ""),
+                    branch_name=data.get("branch_name", ""),
+                    is_primary=data.get("is_primary", True),
+                )
+        except IntegrityError as exc:
+            raise serializers.ValidationError({"account_number": "A conflicting bank account update was detected. Refresh and try again."}) from exc
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="employee_bank_account_created",
+            source_ref="hrms.employee.bank-account.audit.v1",
+            event_snapshot={"employee_id": str(employee_record.id), "new_state": _employee_bank_account_audit_snapshot(item)},
         )
         return response.Response(HrAdminEmployeeBankAccountSerializer(build_hr_admin_employee_bank_account_payload(item)).data, status=status.HTTP_201_CREATED)
 
@@ -16658,12 +17187,30 @@ class HrAdminEmployeeBankAccountDetailView(HrAdminContextMixin, APIView):
         serializer = HrAdminEmployeeBankAccountWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        previous_state = _employee_bank_account_audit_snapshot(item)
+        account_number = data.get("account_number", item.account_number)
+        if item.employee.bank_accounts.exclude(id=item.id).filter(account_number=account_number).exists():
+            raise serializers.ValidationError({"account_number": "This account number is already configured for the employee."})
         if data.get("is_primary") is True:
             item.employee.bank_accounts.exclude(id=item.id).filter(is_primary=True).update(is_primary=False)
         for field_name in ["account_holder_name", "bank_name", "account_number", "ifsc_code", "branch_name", "is_primary"]:
             if field_name in data:
                 setattr(item, field_name, data[field_name])
-        item.save()
+        try:
+            with transaction.atomic():
+                item.save()
+        except IntegrityError as exc:
+            raise serializers.ValidationError({"account_number": "A conflicting bank account update was detected. Refresh and try again."}) from exc
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="employee_bank_account_updated",
+            source_ref="hrms.employee.bank-account.audit.v1",
+            event_snapshot={
+                "employee_id": str(item.employee_id),
+                "previous_state": previous_state,
+                "new_state": _employee_bank_account_audit_snapshot(item),
+            },
+        )
         return response.Response(HrAdminEmployeeBankAccountSerializer(build_hr_admin_employee_bank_account_payload(item)).data)
 
 
@@ -17024,6 +17571,7 @@ class HrAdminShiftListCreateView(HrAdminContextMixin, APIView):
         payload = [build_hr_admin_shift_payload(item) for item in Shift.objects.filter(tenant=employee.tenant).order_by("name")]
         return response.Response(HrAdminShiftSerializer(payload, many=True).data)
 
+    @transaction.atomic
     def post(self, request):
         employee = self.get_employee()
         if not employee:
@@ -17058,12 +17606,13 @@ class HrAdminShiftDetailView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Shift not found."}, status=status.HTTP_404_NOT_FOUND)
         return response.Response(HrAdminShiftSerializer(build_hr_admin_shift_payload(item)).data)
 
+    @transaction.atomic
     def patch(self, request, item_id):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
-        item = Shift.objects.filter(tenant=employee.tenant, id=item_id).first()
+        item = Shift.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Shift not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminShiftWriteSerializer(data=request.data, partial=True)
@@ -17086,6 +17635,30 @@ class HrAdminShiftDetailView(HrAdminContextMixin, APIView):
             },
         )
         return response.Response(HrAdminShiftSerializer(build_hr_admin_shift_payload(item)).data)
+
+
+    @transaction.atomic
+    def delete(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
+        item = Shift.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Shift not found."}, status=status.HTTP_404_NOT_FOUND)
+        if item.managed_by_platform:
+            return response.Response({"detail": "Detach the shift from platform governance before removing it."}, status=status.HTTP_409_CONFLICT)
+        # Include SET_NULL references as well as protected references: removing a
+        # used shift must never silently alter attendance or assignment history.
+        for relation in Shift._meta.related_objects:
+            if relation.related_model._base_manager.filter(**{relation.field.name: item}).exists():
+                return response.Response({"detail": "This shift is in use and cannot be removed. Deactivate it instead to preserve existing records."}, status=status.HTTP_409_CONFLICT)
+        snapshot = {"shift_id": str(item.id), "shift_code": item.code, "shift_name": item.name,
+                    "action": "deleted", "permission": "attendance.policies.manage"}
+        item.delete()
+        _record_hr_admin_setup_audit_event(employee, event_type="attendance_shift_deleted",
+                                         source_ref="hrms.rbac.attendance_setup.audit.v1", event_snapshot=snapshot)
+        return response.Response({"detail": "Shift removed."})
 
 
 class HrAdminShiftDetachView(HrAdminContextMixin, APIView):
@@ -17404,13 +17977,14 @@ class HrAdminAttendanceRecordDetailView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Attendance record not found."}, status=status.HTTP_404_NOT_FOUND)
         return response.Response(HrAdminAttendanceRecordSerializer(build_hr_admin_attendance_record_payload(item)).data)
 
+    @transaction.atomic
     def patch(self, request, item_id):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         self.require_tenant_permission(employee.tenant, "attendance.records.manage")
         item = (
-            AttendanceRecord.objects.filter(tenant=employee.tenant, id=item_id)
+            AttendanceRecord.objects.select_for_update(of=("self",)).filter(tenant=employee.tenant, id=item_id)
             .select_related("employee__department", "employee__designation", "shift", "holiday")
             .first()
         )
@@ -17523,6 +18097,14 @@ class HrAdminAttendanceRegularizationDetailView(HrAdminContextMixin, APIView):
         return response.Response(ManagerAttendanceApprovalItemSerializer(build_hr_admin_attendance_regularization_payload(item)).data)
 
 
+def _resolve_attendance_decision(**kwargs):
+    """Expose expected domain rejections as validation on both HR and MSS APIs."""
+    try:
+        return resolve_regularization(**kwargs)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError(getattr(exc, "message_dict", None) or {"detail": exc.messages})
+
+
 class HrAdminAttendanceRegularizationApproveView(HrAdminContextMixin, APIView):
     def post(self, request, item_id):
         actor = self.get_employee()
@@ -17538,7 +18120,7 @@ class HrAdminAttendanceRegularizationApproveView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Attendance regularization not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ManagerDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        regularization = resolve_regularization(
+        regularization = _resolve_attendance_decision(
             regularization=regularization,
             actor_employee=actor,
             approve=True,
@@ -17563,7 +18145,7 @@ class HrAdminAttendanceRegularizationRejectView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Attendance regularization not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ManagerDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        regularization = resolve_regularization(
+        regularization = _resolve_attendance_decision(
             regularization=regularization,
             actor_employee=actor,
             approve=False,
@@ -17830,12 +18412,15 @@ class HrAdminLeaveRequestRejectView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Leave request not found or not pending approval."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ManagerDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        leave_request = resolve_leave_request(
-            leave_request=leave_request,
-            actor_employee=actor,
-            approve=False,
-            comment=serializer.validated_data.get("comment", ""),
-        )
+        try:
+            leave_request = resolve_leave_request(
+                leave_request=leave_request,
+                actor_employee=actor,
+                approve=False,
+                comment=serializer.validated_data.get("comment", ""),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(getattr(exc, "message_dict", None) or {"detail": exc.messages})
         payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
         return response.Response(MutationResultSerializer(payload).data)
 
@@ -17898,8 +18483,15 @@ class HrAdminLeaveTypeDetailView(HrAdminContextMixin, APIView):
             item = LeaveType.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
             if not item:
                 return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
+            validated_data = dict(serializer.validated_data)
+            expected_updated_at = validated_data.pop("expected_updated_at", None)
+            if expected_updated_at is not None and expected_updated_at != item.updated_at:
+                return response.Response(
+                    {"detail": "This leave type changed after you opened it. Refresh and review the latest values before saving."},
+                    status=status.HTTP_409_CONFLICT,
+                )
             previous_snapshot = build_hr_admin_leave_type_payload(item)
-            item = save_hr_admin_leave_type(employee, serializer.validated_data, item=item)
+            item = save_hr_admin_leave_type(employee, validated_data, item=item)
             _record_hr_admin_setup_audit_event(
                 employee,
                 event_type="leave_type_updated",
@@ -17910,9 +18502,9 @@ class HrAdminLeaveTypeDetailView(HrAdminContextMixin, APIView):
                     "leave_type_name": item.name,
                     "action": "updated",
                     "permission": "leave.policies.manage",
-                    "changed_fields": sorted(serializer.validated_data.keys()),
-                    "previous_state": {key: previous_snapshot.get(key) for key in serializer.validated_data},
-                    "new_state": {key: build_hr_admin_leave_type_payload(item).get(key) for key in serializer.validated_data},
+                    "changed_fields": sorted(validated_data.keys()),
+                    "previous_state": {key: previous_snapshot.get(key) for key in validated_data},
+                    "new_state": {key: build_hr_admin_leave_type_payload(item).get(key) for key in validated_data},
                 },
             )
         return response.Response(HrAdminLeaveTypeSerializer(build_hr_admin_leave_type_payload(item)).data)
@@ -18250,8 +18842,29 @@ class HrAdminLeavePolicyDetailView(HrAdminContextMixin, APIView):
             item = LeavePolicy.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
             if not item:
                 return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
+            validated_data = dict(serializer.validated_data)
+            expected_updated_at = validated_data.pop("expected_updated_at", None)
+            if expected_updated_at is not None and expected_updated_at != item.updated_at:
+                return response.Response(
+                    {"detail": "This leave policy changed after you opened it. Refresh and review the latest values before saving."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            effective_from = validated_data.get("effective_from", item.effective_from)
+            effective_to = validated_data.get("effective_to", item.effective_to)
+            if effective_from and effective_to and effective_to < effective_from:
+                return response.Response(
+                    {"effective_to": ["Effective-to date must be on or after effective-from."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            minimum = validated_data.get("min_days_per_request", item.min_days_per_request)
+            maximum = validated_data.get("max_consecutive_days", item.max_consecutive_days)
+            if maximum is not None and minimum is not None and maximum < minimum:
+                return response.Response(
+                    {"max_consecutive_days": ["Maximum consecutive days cannot be less than minimum days per request."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             previous_snapshot = build_hr_admin_leave_policy_payload(item)
-            item = save_hr_admin_leave_policy(employee, serializer.validated_data, item=item)
+            item = save_hr_admin_leave_policy(employee, validated_data, item=item)
             current_snapshot = build_hr_admin_leave_policy_payload(item)
             _record_hr_admin_setup_audit_event(
                 employee,
@@ -18264,9 +18877,9 @@ class HrAdminLeavePolicyDetailView(HrAdminContextMixin, APIView):
                     "leave_type_id": str(item.leave_type_id),
                     "action": "updated",
                     "permission": "leave.policies.manage",
-                    "changed_fields": sorted(serializer.validated_data.keys()),
-                    "previous_state": {key: previous_snapshot.get(key) for key in serializer.validated_data},
-                    "new_state": {key: current_snapshot.get(key) for key in serializer.validated_data},
+                    "changed_fields": sorted(validated_data.keys()),
+                    "previous_state": {key: previous_snapshot.get(key) for key in validated_data},
+                    "new_state": {key: current_snapshot.get(key) for key in validated_data},
                 },
             )
         return response.Response(HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data)
@@ -19193,6 +19806,85 @@ class HrAdminEmployeeShiftAssignmentListCreateView(HrAdminContextMixin, APIView)
 
 
 class HrAdminEmployeeShiftAssignmentDetailView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=404)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
+        serializer = HrAdminEmployeeShiftAssignmentLifecycleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        with transaction.atomic():
+            item = EmployeeShiftAssignment.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+            if not item:
+                return response.Response({"detail": "Employee shift assignment not found."}, status=404)
+            lock_employee_shift_assignment_scope(tenant=employee.tenant, employee_ids=[item.employee_id])
+            if item.updated_at != data["expected_updated_at"]:
+                return response.Response({"detail": "This assignment changed after you opened it. Refresh and review the latest values."}, status=409)
+            state, allowed_action, unavailable = _shift_assignment_lifecycle_state(item)
+            if data["action"] != allowed_action:
+                return response.Response({"detail": unavailable or "This action is not allowed for the current assignment window."}, status=400)
+            previous_to = item.effective_to
+            if allowed_action == "end":
+                last_day = data.get("last_working_date")
+                if not last_day or last_day < timezone.localdate():
+                    raise serializers.ValidationError({"last_working_date": "Choose today or a later last working date."})
+                if last_day == date.max or (previous_to and last_day >= previous_to):
+                    raise serializers.ValidationError({"last_working_date": "The last working date must shorten the existing window."})
+                affected_from = last_day + timedelta(days=1)
+            else:
+                if data.get("last_working_date"):
+                    raise serializers.ValidationError({"last_working_date": "A cancellation retains the original dates; do not supply a last working date."})
+                affected_from = item.effective_from
+            # Lock existing close rows before testing their state. No attendance,
+            # leave, Payroll or roster history is rewritten by this operation.
+            close_rows = AttendancePeriodClose.objects.select_for_update().filter(
+                tenant=employee.tenant, legal_entity_id=item.employee.legal_entity_id,
+                period_end__gte=affected_from,
+            )
+            if previous_to:
+                close_rows = close_rows.filter(period_start__lte=previous_to)
+            locked_records = AttendanceRecord.objects.filter(
+                tenant=employee.tenant, employee_id=item.employee_id,
+                is_locked=True, attendance_date__gte=affected_from,
+            )
+            if previous_to:
+                locked_records = locked_records.filter(attendance_date__lte=previous_to)
+            if locked_records.exists():
+                raise serializers.ValidationError({"detail": "Affected dates contain locked attendance records."})
+            if any(close.status == AttendancePeriodCloseStatus.CLOSED for close in close_rows):
+                raise serializers.ValidationError({"detail": "Affected dates overlap a closed attendance period."})
+            payroll_periods = PayrollPeriod.objects.select_for_update().filter(
+                tenant=employee.tenant, end_date__gte=affected_from,
+            )
+            if previous_to:
+                payroll_periods = payroll_periods.filter(start_date__lte=previous_to)
+            if any(period.status in [PayrollPeriodStatus.LOCKED, PayrollPeriodStatus.CLOSED] for period in payroll_periods):
+                raise serializers.ValidationError({"detail": "Affected dates overlap a locked or closed payroll period."})
+            now = timezone.now()
+            snapshot = {
+                "action": allowed_action, "previous_state": state,
+                "effective_from": item.effective_from.isoformat(),
+                "previous_effective_to": previous_to.isoformat() if previous_to else None,
+                "new_effective_to": data["last_working_date"].isoformat() if allowed_action == "end" else (previous_to.isoformat() if previous_to else None),
+                "affected_from": affected_from.isoformat(), "actor_id": str(employee.id),
+                "reason": data["reason"], "changed_at": now.isoformat(),
+                "previous_updated_at": item.updated_at.isoformat(),
+            }
+            if allowed_action == "cancel":
+                item.cancelled_at = now
+            else:
+                item.effective_to = data["last_working_date"]
+            item.lifecycle_snapshot = snapshot
+            item.save(update_fields=["cancelled_at", "effective_to", "lifecycle_snapshot", "updated_at"])
+            _record_hr_admin_setup_audit_event(
+                employee, event_type="attendance_shift_assignment_cancelled" if allowed_action == "cancel" else "attendance_shift_assignment_ended",
+                source_ref="hrms.rbac.attendance_setup.audit.v1",
+                event_snapshot={"assignment_id": str(item.id), "permission": "attendance.policies.manage", **snapshot, "new_updated_at": item.updated_at},
+            )
+        payload = build_hr_admin_employee_shift_assignment_payload(tenant=employee.tenant, item=item)
+        return response.Response(HrAdminEmployeeShiftAssignmentSerializer(payload).data)
+
     def get(self, request, item_id):
         employee = self.get_employee()
         if not employee:
@@ -19444,6 +20136,28 @@ class HrAdminShiftRosterTemplateDetailView(HrAdminContextMixin, APIView):
             )
         item = ShiftRosterTemplate.objects.select_related("shift").get(id=item.id)
         return response.Response(HrAdminShiftRosterTemplateSerializer(build_hr_admin_shift_roster_template_payload(item)).data)
+
+
+    @transaction.atomic
+    def delete(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
+        item = ShiftRosterTemplate.objects.select_for_update().filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Shift roster template not found."}, status=status.HTTP_404_NOT_FOUND)
+        if item.status == ShiftRosterTemplateStatus.LOCKED:
+            return response.Response({"detail": "Unlock this roster template before removing it."}, status=status.HTTP_409_CONFLICT)
+        for relation in ShiftRosterTemplate._meta.related_objects:
+            if relation.related_model._base_manager.filter(**{relation.field.name: item}).exists():
+                return response.Response({"detail": "This roster template has rollout history and cannot be removed."}, status=status.HTTP_409_CONFLICT)
+        snapshot = {"template_id": str(item.id), "template_code": item.code, "template_name": item.name,
+                    "action": "deleted", "permission": "attendance.policies.manage"}
+        item.delete()
+        _record_hr_admin_setup_audit_event(employee, event_type="attendance_shift_roster_template_deleted",
+                                         source_ref="hrms.rbac.attendance_setup.audit.v1", event_snapshot=snapshot)
+        return response.Response({"detail": "Roster template removed."})
 
 
 class HrAdminShiftRosterTemplateRolloutView(HrAdminContextMixin, APIView):
@@ -20369,6 +21083,7 @@ class HrAdminOnboardingListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "lifecycle.view", "lifecycle.manage")
         try:
             page = max(int(request.query_params.get("page", 1) or 1), 1)
         except (TypeError, ValueError):
@@ -20420,6 +21135,7 @@ class HrAdminOnboardingListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         serializer = HrAdminOnboardingWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_onboarding(employee, serializer.validated_data)
@@ -20432,6 +21148,7 @@ class HrAdminOnboardingDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "lifecycle.view", "lifecycle.manage")
         item = EmployeeOnboarding.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee").first()
         if not item:
             return response.Response({"detail": "Onboarding record not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -20441,6 +21158,7 @@ class HrAdminOnboardingDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         item = EmployeeOnboarding.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Onboarding record not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -20456,6 +21174,7 @@ class HrAdminProbationReviewListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "lifecycle.view", "lifecycle.manage")
         try:
             page = max(int(request.query_params.get("page", 1) or 1), 1)
         except (TypeError, ValueError):
@@ -20506,6 +21225,7 @@ class HrAdminProbationReviewListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         serializer = HrAdminProbationReviewWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_probation_review(employee, serializer.validated_data)
@@ -20518,6 +21238,7 @@ class HrAdminProbationReviewDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "lifecycle.view", "lifecycle.manage")
         item = ProbationReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee").first()
         if not item:
             return response.Response({"detail": "Probation review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -20527,6 +21248,7 @@ class HrAdminProbationReviewDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         item = ProbationReview.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Probation review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -20550,6 +21272,7 @@ class HrAdminMovementListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "lifecycle.view", "lifecycle.manage")
         try:
             page = max(int(request.query_params.get("page", 1) or 1), 1)
         except (TypeError, ValueError):
@@ -20624,6 +21347,7 @@ class HrAdminMovementListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         serializer = HrAdminMovementWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_movement(employee, serializer.validated_data)
@@ -20647,6 +21371,7 @@ class HrAdminMovementDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "lifecycle.view", "lifecycle.manage")
         item = EmployeeMovement.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "employee",
             "from_legal_entity", "to_legal_entity",
@@ -20667,6 +21392,7 @@ class HrAdminMovementDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "lifecycle.manage")
         item = EmployeeMovement.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Movement record not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -22452,7 +23178,7 @@ class ManagerAttendanceRegularizationApproveView(ManagerDecisionMixin, APIView):
         def operation():
             if not self.ensure_manager_scope(regularization.employee):
                 return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
-            result = resolve_regularization(regularization=regularization, actor_employee=actor, approve=True, comment=comment)
+            result = _resolve_attendance_decision(regularization=regularization, actor_employee=actor, approve=True, comment=comment)
             payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
             return response.Response(MutationResultSerializer(payload).data)
         return self.execute_idempotent_decision(request=request, actor=actor, action="mss.attendance.approve", item_id=regularization.id, comment=comment, operation=operation)
@@ -22519,7 +23245,7 @@ class ManagerAttendanceRegularizationRejectView(ManagerDecisionMixin, APIView):
         def operation():
             if not self.ensure_manager_scope(regularization.employee):
                 return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
-            result = resolve_regularization(regularization=regularization, actor_employee=actor, approve=False, comment=comment)
+            result = _resolve_attendance_decision(regularization=regularization, actor_employee=actor, approve=False, comment=comment)
             payload = {"id": result.id, "status": result.status, "workflow_reference": result.workflow_reference or ""}
             return response.Response(MutationResultSerializer(payload).data)
         return self.execute_idempotent_decision(request=request, actor=actor, action="mss.attendance.reject", item_id=regularization.id, comment=comment, operation=operation)

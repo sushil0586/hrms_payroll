@@ -8,6 +8,7 @@ import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
+import { AssignmentLifecycleAction } from "./assignment-lifecycle-action";
 import { EmployeeShiftAssignmentForm } from "@/app/hr-admin/employee-shift-assignments/employee-shift-assignment-form";
 import { createEmptyEmployeeShiftAssignmentValue, employeeShiftAssignmentToFormValue } from "@/app/hr-admin/employee-shift-assignments/form-values";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
@@ -35,7 +36,7 @@ type Props = {
   onOpenCreate?: () => void;
   onOpenEdit?: (id: string) => void;
   onCloseModal?: () => void;
-  onReconcile?: () => Promise<boolean> | boolean;
+  onReconcile?: (message: string) => Promise<boolean> | boolean;
 };
 
 function normalizeParam(value: SearchParamValue) {
@@ -203,7 +204,8 @@ export function EmployeeShiftAssignmentsWorkbench({
 
       <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
         <section className="panel-card-soft attendance-directory-panel">
-          <WorkspaceTableScrollRegion label="Employee shift assignments, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region">
+          <WorkspaceTableScrollRegion label="Employee shift assignments, scroll for more columns" className="attendance-directory-table-wrap workspace-table-region"
+            emptyState={items.length === 0 ? <><strong>No shift assignments match these filters.</strong><span className="muted">Clear filters or search by employee, shift, assignment mode, or risk state.</span></> : null}>
             <table className="workspace-data-table workspace-table attendance-directory-table">
               <thead>
                 <tr>
@@ -222,10 +224,10 @@ export function EmployeeShiftAssignmentsWorkbench({
                     <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedItemId(item.id)}>
                       <td><strong>{item.employee}</strong><span>{item.employee_code}</span></td>
                       <td><strong>{item.shift}</strong><span>{item.scope_labels?.length ? item.scope_labels.join(" · ") : "No scope summary"}</span></td>
-                      <td><WorkspaceStatusBadge tone={item.assignment_kind === "temporary_override" ? "info" : "neutral"}>{formatLabel(item.assignment_kind)}</WorkspaceStatusBadge><span>{item.is_primary ? "Primary" : "Secondary"}</span></td>
+                      <td><WorkspaceStatusBadge tone={item.assignment_kind === "temporary_override" ? "info" : "neutral"}>{formatLabel(item.assignment_kind)}</WorkspaceStatusBadge><span>{item.is_primary ? "Primary" : "Secondary"} · {item.lifecycle_state ?? ""}</span></td>
                       <td><strong>{item.effective_from}</strong><span>to {item.effective_to ?? "open ended"}</span></td>
                       <td><WorkspaceStatusBadge tone={assignmentTone(item)}>{riskLabel(item)}</WorkspaceStatusBadge><span>{item.conflict_summary || "No overlap summary"}</span></td>
-                      <td><button className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
+                      <td><button data-assignment-inspect={item.id} className="button button--secondary button--compact" onClick={(triggerEvent) => { focusActionTrigger(triggerEvent);
                         detailTriggerRef.current = triggerEvent.currentTarget;
                         triggerEvent.stopPropagation();
                         setSelectedItemId(item.id);
@@ -233,11 +235,6 @@ export function EmployeeShiftAssignmentsWorkbench({
                     </tr>
                   );
                 })}
-                {items.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}><strong>No shift assignments match these filters.</strong><span>Clear filters or search by employee, shift, assignment mode, or risk state.</span></td>
-                  </tr>
-                ) : null}
               </tbody>
             </table>
           </WorkspaceTableScrollRegion>
@@ -298,14 +295,15 @@ export function EmployeeShiftAssignmentsWorkbench({
               </div>
             </article>
             <div className="record-card__actions">
-              {canManagePolicies ? (
+              {canManagePolicies && selectedItem.lifecycle_state === "future" ? (
                 onOpenEdit ? <button className="button button--primary" disabled={pending} onClick={(triggerEvent) => {
                   focusActionTrigger(triggerEvent);
                   onOpenEdit(selectedItem.id);
                 }} type="button">Edit assignment</button> : <Link className="button button--primary" href={queueHref({ editAssignment: selectedItem.id })}>Edit assignment</Link>
               ) : (
-                <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit assignment</button>
+                <button className="button button--secondary" disabled title={canManagePolicies ? "Active and historical coverage is preserved; use the eligible lifecycle action." : "Requires attendance.policies.manage permission."} type="button">Edit assignment</button>
               )}
+              {canManagePolicies ? <AssignmentLifecycleAction key={`${selectedItem.id}-${selectedItem.updated_at}`} item={selectedItem} onSaved={onReconcile} /> : null}
             </div>
             <details className="record-card" open>
               <summary>Coverage</summary>
@@ -344,7 +342,7 @@ export function EmployeeShiftAssignmentsWorkbench({
         </HrAdminActionModal>
       ) : null}
 
-      {modalEditItem ? (
+      {modalEditItem && modalEditItem.lifecycle_state === "future" ? (
         <HrAdminActionModal
           className="attendance-policy-modal"
           closeHref={queueHref()}

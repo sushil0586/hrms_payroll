@@ -45,11 +45,17 @@ class Ess1SelfProfileContractTests(TestCase):
             self.assertNotIn("PRIVATE-ACCOUNT", response.content.decode())
             self.assertNotIn("date_of_birth", response.json())
 
-    def test_self_profile_is_read_only_and_preserves_employee_and_bank(self):
+    def test_self_profile_rejects_disallowed_fields_and_preserves_employee_and_bank(self):
         user, employee = self.actors[0]
         self.client.force_authenticate(user)
-        for method in [self.client.patch, self.client.post, self.client.put, self.client.delete]:
-            result = method("/api/v1/me/profile/", {"first_name": "Unauthorized", "account_number": "changed"}, format="json")
+        result = self.client.patch(
+            "/api/v1/me/profile/",
+            {"first_name": "Unauthorized", "account_number": "changed"},
+            format="json",
+        )
+        self.assertEqual(result.status_code, 400)
+        for method in [self.client.post, self.client.put, self.client.delete]:
+            result = method("/api/v1/me/profile/", {"preferred_name": "Unsupported method"}, format="json")
             self.assertEqual(result.status_code, 405)
         employee.refresh_from_db()
         self.assertEqual(employee.first_name, "Synthetic 0 0")

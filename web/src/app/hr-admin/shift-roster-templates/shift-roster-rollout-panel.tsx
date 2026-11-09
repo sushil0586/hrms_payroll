@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { useActionFeedback } from "@/components/patterns/action-feedback-provider";
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import type {
   HrAdminOptionItem,
@@ -87,6 +89,7 @@ export function ShiftRosterRolloutPanel({
   onRolloutPage,
   onApplied,
 }: Props) {
+  const feedback = useActionFeedback();
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [legalEntityId, setLegalEntityId] = useState("");
   const [branchId, setBranchId] = useState("");
@@ -98,8 +101,15 @@ export function ShiftRosterRolloutPanel({
   const [effectiveTo, setEffectiveTo] = useState("");
   const [isPrimary, setIsPrimary] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<HrAdminShiftRosterTemplateRolloutResult | null>(null);
-  const [error, setError] = useState("");
+  // Bind previews and errors to the exact visible input snapshot. A late response
+  // must not present a previous employee/date scope as the current preview.
+  const inputKey = JSON.stringify([templateId, templates.find(item => item.id === templateId)?.updated_at, legalEntityId, branchId, locationId, departmentId, selectedEmployees.map(item => item.id), effectiveFrom, effectiveTo, isPrimary]);
+  const [resultSnapshot, setResultSnapshot] = useState<{ key: string; value: HrAdminShiftRosterTemplateRolloutResult } | null>(null);
+  const [errorSnapshot, setErrorSnapshot] = useState<{ key: string; message: string } | null>(null);
+  const result = resultSnapshot?.key === inputKey ? resultSnapshot.value : null;
+  const error = errorSnapshot?.key === inputKey ? errorSnapshot.message : "";
+  const setResult = (value: HrAdminShiftRosterTemplateRolloutResult | null) => setResultSnapshot(value ? { key: inputKey, value } : null);
+  const setError = (message: string) => setErrorSnapshot({ key: inputKey, message });
   const selectedBranch = options.branches.find((item) => item.id === branchId);
   const filteredBranches = filteredByLegalEntity(options.branches, legalEntityId);
   const filteredLocations = options.locations.filter((item) => {
@@ -174,6 +184,7 @@ export function ShiftRosterRolloutPanel({
       if (!dryRun && onApplied) {
         const reconciled = await onApplied();
         if (!reconciled) setError("The rollout was accepted, but history could not be confirmed. Do not apply it again; retry the history read.");
+        else feedback?.success("Roster rollout confirmed.", `${payload.created_count} assignment(s) created; ${payload.skipped_count} skipped. Review the per-employee results.`);
       }
     } catch {
       setError("Unable to reach the server. Check your connection and try again.");
@@ -234,7 +245,7 @@ export function ShiftRosterRolloutPanel({
           <label className="toggle-field">
             <div>
               <strong>Create as primary assignments</strong>
-              <p className="section-copy">Primary assignments win over secondary windows when multiple shift assignments could otherwise match the same employee and date.</p>
+              <p className="section-copy">Primary assignments win when multiple eligible windows of the same kind could otherwise match the same employee and date.</p>
             </div>
             <input checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} type="checkbox" />
           </label>
@@ -292,24 +303,14 @@ export function ShiftRosterRolloutPanel({
             <span className="muted">Preview or apply an approved rollout to create the first history record.</span>
           </div>
         )}
-        <div className="pagination-bar" aria-label="Roster rollout history pagination">
-          <div className="pagination-bar__summary">
-            <span className="queue-summary-chip">
-              <strong>Page {rolloutPage}</strong>
-              of {Math.max(1, Math.ceil(rolloutTotalCount / Math.max(rolloutPageSize, 1)))}
-            </span>
-            <span className="queue-summary-chip">
-              <strong>{rolloutPageSize}</strong>
-              rows per page
-            </span>
-          </div>
-          <div className="pagination-bar__actions">
-            {hasPreviousRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(1)} type="button">First</button> : <a className="button button--secondary" href={firstRolloutHref}>First</a> : <button className="button button--secondary" disabled type="button">First</button>}
-            {hasPreviousRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(rolloutPage - 1)} type="button">Previous</button> : <a className="button button--secondary" href={previousRolloutHref}>Previous</a> : <button className="button button--secondary" disabled type="button">Previous</button>}
-            {hasNextRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(rolloutPage + 1)} type="button">Next</button> : <a className="button button--secondary" href={nextRolloutHref}>Next</a> : <button className="button button--secondary" disabled type="button">Next</button>}
-            {hasNextRollout ? onRolloutPage ? <button className="button button--secondary" disabled={pending} onClick={() => onRolloutPage(Math.max(1, Math.ceil(rolloutTotalCount / Math.max(rolloutPageSize, 1))))} type="button">Last</button> : <a className="button button--secondary" href={lastRolloutHref}>Last</a> : <button className="button button--secondary" disabled type="button">Last</button>}
-          </div>
-        </div>
+        {rolloutTotalCount > 0 ? <div aria-label="Roster rollout history pagination">
+          <PaginationBar page={rolloutPage} pageSize={rolloutPageSize} totalCount={rolloutTotalCount} pending={pending}
+            hasPrevious={hasPreviousRollout} hasNext={hasNextRollout}
+            firstHref={onRolloutPage ? undefined : firstRolloutHref} previousHref={onRolloutPage ? undefined : previousRolloutHref}
+            nextHref={onRolloutPage ? undefined : nextRolloutHref} lastHref={onRolloutPage ? undefined : lastRolloutHref}
+            onFirst={onRolloutPage ? () => onRolloutPage(1) : undefined} onPrevious={onRolloutPage ? () => onRolloutPage(rolloutPage - 1) : undefined}
+            onNext={onRolloutPage ? () => onRolloutPage(rolloutPage + 1) : undefined} onLast={onRolloutPage ? () => onRolloutPage(Math.max(1, Math.ceil(rolloutTotalCount / Math.max(rolloutPageSize, 1)))) : undefined} />
+        </div> : null}
       </div>
     </section>
   );

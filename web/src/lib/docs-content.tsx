@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import Link from "next/link";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { createElement, type ReactNode } from "react";
 
 const REPO_ROOT = process.cwd().endsWith("/web") ? path.resolve(process.cwd(), "..") : process.cwd();
@@ -217,7 +218,7 @@ function parseTable(lines: string[], currentRelativePath: string, key: string) {
   );
   const [header, , ...body] = rows;
   return (
-    <div className="docs-table-wrap" key={key}>
+    <WorkspaceTableScrollRegion className="docs-table-wrap" key={key} label={`${header.join(", ")} documentation table`}>
       <table className="docs-table">
         <thead>
           <tr>
@@ -236,7 +237,7 @@ function parseTable(lines: string[], currentRelativePath: string, key: string) {
           ))}
         </tbody>
       </table>
-    </div>
+    </WorkspaceTableScrollRegion>
   );
 }
 

@@ -50,5 +50,8 @@ export async function POST(request: NextRequest) {
     cache: "no-store",
   });
   const payload = await upstream.json().catch(() => ({}));
-  return NextResponse.json(payload, { status: upstream.status });
+  const response = NextResponse.json(payload, { status: upstream.status });
+  const replayed = upstream.headers.get("Idempotency-Replayed");
+  if (replayed) response.headers.set("Idempotency-Replayed", replayed);
+  return response;
 }

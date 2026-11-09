@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona,workspacePlatformPersona,type IsolatedQaWorkspace} from '../helpers/isolated-qa-workspace';
 let fixture:IsolatedQaWorkspace;
 test.beforeAll(async({},info)=>{fixture=await provisionIsolatedQaWorkspace(info)});
-test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(fixture)});
+test.afterAll(async({},info)=>{await cleanupIsolatedQaWorkspace(fixture,info)});
 test('tenant shared invite dialog keeps dirty values and restores keyboard focus',async({page},info)=>{
  const user=workspacePersona(fixture,'tenant_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);
  await page.setViewportSize({width:320,height:568});await page.goto('/tenant-admin/users');
@@ -13,7 +13,7 @@ test('tenant shared invite dialog keeps dirty values and restores keyboard focus
  page.once('dialog',async confirmation=>{await confirmation.dismiss()});await dialog.press('Escape');
  await expect(dialog).toBeVisible();await expect(email).toHaveValue('draft@example.test');
  for(let n=0;n<12;n++){await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBeTruthy()}
- await page.screenshot({path:`../docs/qa/evidence/ui-ux-rollout-2026-10-22/${info.project.name}-tenant-invite-320.png`,fullPage:true});
+ await info.attach(`${info.project.name}-tenant-invite-320.png`,{body:await page.screenshot({fullPage:true}),contentType:"image/png"});
  page.once('dialog',async confirmation=>{await confirmation.accept()});await dialog.press('Escape');
  await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
 });
@@ -36,6 +36,6 @@ test('platform create uses shared short-height dialog and keyboard containment',
  const dialog=page.getByRole('dialog',{name:'Create platform tenant',exact:true});await expect(dialog).toBeVisible();
  for(let n=0;n<18;n++){await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBeTruthy()}
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.screenshot({path:`../docs/qa/evidence/ui-ux-rollout-2026-10-22/${info.project.name}-platform-create-320.png`,fullPage:true});
+ await info.attach(`${info.project.name}-platform-create-320.png`,{body:await page.screenshot({fullPage:true}),contentType:"image/png"});
  await dialog.press('Escape');await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
 });

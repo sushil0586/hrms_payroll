@@ -113,6 +113,7 @@ function NavEntry({
   }
   return (
     <Link
+      aria-label={item.label}
       aria-current={active ? (appearance === "accerio" && pathname !== item.href ? "location" : "page") : undefined}
       className={`nav-item${active ? " nav-item--active" : ""}`}
       href={item.href}
@@ -307,7 +308,7 @@ export function WorkspaceChrome({
 
   return (
     <WorkspaceNavigationFeedback documentNavigation={documentNavigation}>
-    <div className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}${appearance === "accerio" ? " accerio-shell" : ""}${workspaceTone === "employee" || workspaceTone === "manager" ? " accerio-workspace" : ""}`}>
+    <div data-workspace-path={pathname} className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}${appearance === "accerio" ? " accerio-shell" : ""}${workspaceTone === "employee" || workspaceTone === "manager" ? " accerio-workspace" : ""}`}>
       <aside className="app-sidebar app-sidebar--workspace">
         <div className="app-sidebar__brand">
           <div className="brand-mark brand-mark--calm" aria-hidden="true">

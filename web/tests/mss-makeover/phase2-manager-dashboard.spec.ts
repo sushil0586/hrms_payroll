@@ -73,6 +73,10 @@ test("dashboard presents decision queues once with explicit destinations", async
   await expect(region.getByRole("link", { name: "Review leave" })).toHaveAttribute("href", "/mss/approvals?queue=leave");
   await expect(region.getByRole("link", { name: "Review attendance" })).toHaveAttribute("href", "/mss/approvals?queue=attendance");
   await expect(page.getByText("attendance signals today")).toBeVisible();
+  const reportees = page.getByRole("table", { name: "Current reportees" });
+  await expect(reportees).toBeVisible();
+  await expect(reportees).toContainText(workspace.manifest.credentials.employee.employee_code);
+  await expect(reportees).not.toContainText(workspace.manifest.credentials.manager.employee_code);
 
   const bodyLayout = await queues.nth(0).locator(".mss-action-row__body").evaluate((element) => ({
     display: getComputedStyle(element).display,
@@ -113,5 +117,6 @@ test("manager with clear queues receives a useful ready dashboard", async ({ pag
   await expect(page.getByRole("main").getByRole("link", { name: "Open ESS" })).toBeVisible();
   await expect(page.getByRole("main").getByRole("link", { name: "Review leave" })).toBeVisible();
   await expect(page.getByRole("main").getByRole("link", { name: "Review attendance" })).toBeVisible();
+  await expect(page.getByText("No employees currently report to you.")).toBeVisible();
   await noDocumentOverflow(page);
 });

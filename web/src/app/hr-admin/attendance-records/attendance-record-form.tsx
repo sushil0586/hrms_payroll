@@ -2,6 +2,9 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useActionFeedback } from "@/components/patterns/action-feedback-provider";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
+import { mutationErrorMessage } from "@/lib/ui/api-error-message";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type {
@@ -20,13 +23,6 @@ type Props = {
   onCancel?: () => void;
 };
 
-function getErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to save attendance record.";
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) return String(value[0]);
-  }
-  return String((payload as Record<string, unknown>).detail || "Unable to save attendance record.");
-}
 
 function selectOptions(items: Array<{ id: string; name: string }>) {
   return [
@@ -41,6 +37,8 @@ export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const feedback = useActionFeedback();
+  const [accepted, setAccepted] = useState(false);
 
   function update<Key extends keyof HrAdminAttendanceRecordWriteInput>(key: Key, value: HrAdminAttendanceRecordWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -48,7 +46,7 @@ export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingRef.current) {
+    if (submittingRef.current || accepted) {
       return;
     }
     submittingRef.current = true;
@@ -73,19 +71,23 @@ export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      setError(mutationErrorMessage(payload, response.status, "Unable to save attendance record."));
       setIsSubmitting(false);
       submittingRef.current = false;
       return;
     }
+    setAccepted(true);
     if (onSaved) {
-      const reconciled = await onSaved();
+      let reconciled = false;
+      try { reconciled = (await onSaved()) === true; } catch { /* Accepted write remains locked. */ }
+      if (reconciled) feedback?.success("Action saved.", "Attendance record updated.");
       if (!reconciled) {
         setError("The change was accepted, but the updated attendance record could not be confirmed. Do not submit it again; retry the queue read.");
         setIsSubmitting(false);
       }
       return;
     }
+    rememberActionSuccess(successHref, "attendance-record", "Action saved.", "Attendance record updated.");
     router.push(successHref);
   }
 
@@ -139,7 +141,7 @@ export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref
         <div className="form-actions-bar">
           <span className="muted">Changes go straight back into the attendance record queue and affect downstream review state immediately.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : "Save attendance record"}</button>
+            <button className="button button--primary" disabled={isSubmitting || accepted} type="submit">{isSubmitting ? "Saving..." : "Save attendance record"}</button>
             <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import type { HrAdminLeaveType, HrAdminLeaveTypeWriteInput } from "@/lib/types";
 
 export function leaveTypeToFormValue(item: HrAdminLeaveType): HrAdminLeaveTypeWriteInput {
   return {
+    expected_updated_at: item.updated_at,
     code: item.code,
     name: item.name,
     short_code: item.short_code,

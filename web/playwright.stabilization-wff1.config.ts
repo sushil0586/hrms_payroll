@@ -1,0 +1,5 @@
+import path from 'node:path';
+import {defineConfig} from '@playwright/test';
+const run=process.env.HRMS_PILOT_RUN;
+if(!run&&!process.argv.includes('--list'))throw Error('Use WF-E evidence launcher');
+export default defineConfig({testDir:'./tests/stabilization-wff',testMatch:['responsive-wff1.spec.ts','guides-wff1.spec.ts','pages.spec.ts'],workers:2,retries:0,timeout:300000,outputDir:run?path.join(run,'results'):undefined,reporter:process.argv.includes('--list')?[['list']]:[['./tests/shift-p8/evidence-reporter.ts'],['list'],['json',{outputFile:path.join(run!,'results.json')}]],use:{baseURL:'http://127.0.0.1:3310',actionTimeout:20000,screenshot:'only-on-failure',trace:'retain-on-failure'},projects:[...(['chromium','firefox','webkit']as const).map(browserName=>({name:`${browserName}-1440`,use:{browserName,viewport:{width:1440,height:900}}})),...(['chromium','firefox','webkit']as const).flatMap(browserName=>[320,768].map(width=>({name:`${browserName}-${width}`,use:{browserName,viewport:{width,height:900}}})))]});

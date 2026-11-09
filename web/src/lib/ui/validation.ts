@@ -68,6 +68,18 @@ export function validateEmail(value: string, message = "Enter a valid email addr
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ? undefined : message;
 }
 
+export function validateEmployeeCode(value: string, message = "Use letters, numbers, periods, underscores, slashes, or hyphens only.") {
+  if (!value.trim()) return undefined;
+  return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value.trim()) ? undefined : message;
+}
+
+export function validatePhoneNumber(value: string, message = "Enter a valid phone number containing 7 to 15 digits.") {
+  if (!value.trim()) return undefined;
+  const normalized = value.trim();
+  const digitCount = (normalized.match(/\d/g) ?? []).length;
+  return /^[+()\- 0-9]+$/.test(normalized) && digitCount >= 7 && digitCount <= 15 ? undefined : message;
+}
+
 export function validateDateNotFuture(value: string | null | undefined, message: string, today = currentDateInputValue()) {
   return value && value > today ? message : undefined;
 }

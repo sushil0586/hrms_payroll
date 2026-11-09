@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { useDocumentSetupState } from "./document-setup-dialog";
 
 const subscribe = () => () => {};
@@ -39,6 +40,6 @@ export function useDocumentSetupDraft(value: unknown, busy: boolean, compact: bo
     else if (compact) window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"));
     else if (!dirty || window.confirm("Discard unsaved changes?")) { leaving.current = true; window.location.assign(new URL(returnPath, window.location.origin)); }
   }
-  async function saved(itemId:string) {if(onSaved)return onSaved(itemId);leaving.current = true; window.location.assign(new URL(`${returnPath}${returnPath.includes("?") ? "&" : "?"}setup_saved=1`, window.location.origin));return true;}
+  async function saved(itemId:string) {if(onSaved){const confirmed=await onSaved(itemId);if(confirmed)rememberActionSuccess(returnPath,itemId,"Document setup saved.","The register now shows the confirmed values.");return confirmed;}rememberActionSuccess(returnPath,itemId,"Document setup saved.","The register now shows the confirmed values.");leaving.current = true; window.location.assign(new URL(`${returnPath}${returnPath.includes("?") ? "&" : "?"}setup_saved=1`, window.location.origin));return true;}
   return { ready, cancel, saved, beginSubmit: () => { if (submitting.current) return false; submitting.current = true; return true; }, endSubmit: () => { submitting.current = false; } };
 }

@@ -428,6 +428,7 @@ class SaasCommercialAuditEvent(UUIDPrimaryKeyModel, TimeStampedModel):
 
 
 class HrmsImportBatchStatus(models.TextChoices):
+    CLAIMED = "claimed", "Claimed"
     PREVIEWED = "previewed", "Previewed"
     COMMITTED = "committed", "Committed"
     PARTIAL = "partial", "Partial"
@@ -471,8 +472,16 @@ class HrmsImportBatchAudit(UUIDPrimaryKeyModel, TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["tenant", "import_type", "source_hash"],
-                condition=models.Q(import_type="leave_balance_actions"),
-                name="uniq_leave_import_source_per_tenant",
+                condition=models.Q(
+                    import_type__in=[
+                        "employees",
+                        "reporting_manager_mappings",
+                        "employee_bank_accounts",
+                        "leave_balance_actions",
+                    ],
+                    source_ref="hrms.bulk_import.browser.v2",
+                ),
+                name="uniq_governed_import_source_per_tenant",
             ),
         ]
         verbose_name = "HRMS Import Batch Audit"

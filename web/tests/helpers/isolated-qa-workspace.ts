@@ -35,7 +35,7 @@ export type IsolatedQaWorkspace = {
 };
 
 async function runWorkspaceCommand(args: string[]) {
-  return execFileAsync(path.join(repoRoot, ".venv/bin/python"), ["backend/manage.py", "manage_playwright_workspace", ...args], {
+  return execFileAsync(process.env.HRMS_QA_PYTHON || path.join(repoRoot, ".venv/bin/python"), ["backend/manage.py", "manage_playwright_workspace", ...args], {
     cwd: repoRoot,
     env: process.env,
     maxBuffer: 2 * 1024 * 1024,
@@ -44,7 +44,7 @@ async function runWorkspaceCommand(args: string[]) {
 
 export async function provisionIsolatedQaWorkspace(testInfo: TestInfo): Promise<IsolatedQaWorkspace> {
   const safeTitle = testInfo.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "").slice(0, 16);
-  const seedRef = `${safeTitle || "fixture"}-${testInfo.workerIndex}-${Date.now().toString(36)}`.slice(0, 32);
+  const seedRef = `${safeTitle || "fixture"}-${testInfo.workerIndex}-${Date.now().toString(36)}`.slice(0, 32).replace(/-+/g, "-").replace(/^-|-$/g, "");
   const tempDir = await mkdtemp(path.join(tmpdir(), "hrms-playwright-"));
   const manifestPath = path.join(tempDir, "workspace.json");
   await runWorkspaceCommand(["--seed-ref", seedRef, "--output-file", manifestPath]);
@@ -54,15 +54,27 @@ export async function provisionIsolatedQaWorkspace(testInfo: TestInfo): Promise<
 
 export async function loadIsolatedQaWorkspace(manifestPath: string, seedRef: string): Promise<IsolatedQaWorkspace> {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  return { seedRef, manifestPath, tempDir: path.dirname(manifestPath), manifest };
+  return { seedRef: seedRef.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), manifestPath, tempDir: path.dirname(manifestPath), manifest };
 }
 
-export async function cleanupIsolatedQaWorkspace(workspace: IsolatedQaWorkspace | undefined) {
+export async function cleanupIsolatedQaWorkspace(workspace: IsolatedQaWorkspace | undefined, testInfo?: TestInfo) {
   if (!workspace) return;
+  async function retainCleanup(name: string, payload: Record<string, unknown>) {
+    if (!testInfo) return;
+    const files = payload.private_file_cleanup as { targets?: { artifact_id: string }[]; deleted?: unknown[]; failed?: unknown[] } | undefined;
+    await testInfo.attach(name, { contentType: "application/json", body: JSON.stringify({
+      redacted: true, expected_tenant: workspace?.manifest.tenant, expected_seed_ref: workspace?.seedRef, action: payload.action, tenant: payload.tenant, ownership: payload.ownership,
+      deleted: payload.deleted, verified_absent: payload.verified_absent,
+      private_files: { planned: files?.targets?.length ?? 0, deleted: files?.deleted?.length ?? 0,
+        failed: files?.failed?.length ?? 0, artifact_ids: files?.targets?.map(item => item.artifact_id) ?? [] },
+    }, null, 2) });
+  }
   try {
     await runWorkspaceCommand(["--seed-ref", workspace.seedRef, "--cleanup", "--dry-run", "--output-file", workspace.manifestPath]);
     const plan = JSON.parse(await readFile(workspace.manifestPath, "utf8"));
-    if (plan.action !== "cleanup_dry_run" || plan.tenant?.code !== workspace.manifest.tenant.code) {
+    await retainCleanup("workspace-cleanup-dry-run", plan);
+    if (plan.action !== "cleanup_dry_run" || plan.tenant?.code !== workspace.manifest.tenant.code
+      || plan.tenant?.id !== workspace.manifest.tenant.id || plan.ownership?.seed_ref !== workspace.seedRef) {
       throw new Error(`Workspace cleanup plan was not ownership verified: ${workspace.seedRef}`);
     }
     await runWorkspaceCommand([
@@ -72,7 +84,8 @@ export async function cleanupIsolatedQaWorkspace(workspace: IsolatedQaWorkspace 
       "--output-file", workspace.manifestPath,
     ]);
     const cleanup = JSON.parse(await readFile(workspace.manifestPath, "utf8"));
-    if (!cleanup.verified_absent) throw new Error(`Workspace cleanup was not verified: ${workspace.seedRef}`);
+    await retainCleanup("workspace-cleanup-result", cleanup);
+    if (cleanup.tenant?.id !== workspace.manifest.tenant.id || !cleanup.verified_absent) throw new Error(`Workspace cleanup was not verified: ${workspace.seedRef}`);
   } finally {
     await rm(workspace.tempDir, { recursive: true, force: true });
   }

@@ -864,10 +864,13 @@ class AttendanceRegularizationApprovalTrackTests(TestCase):
             reporting_manager=self.manager,
             employment_status=EmploymentStatus.ACTIVE,
         )
+        work_date = timezone.localdate() - timedelta(days=1)
+        while work_date.weekday() >= 5:
+            work_date -= timedelta(days=1)
         self.attendance_record = AttendanceRecord.objects.create(
             tenant=self.tenant,
             employee=self.employee,
-            attendance_date=timezone.localdate() - timedelta(days=1),
+            attendance_date=work_date,
             status=AttendanceStatus.ABSENT,
             source=AttendanceSource.SYSTEM,
         )
@@ -877,6 +880,8 @@ class AttendanceRegularizationApprovalTrackTests(TestCase):
             employee=self.employee,
             attendance_record=self.attendance_record,
             requested_status=AttendanceStatus.PRESENT,
+            requested_check_in_at=timezone.make_aware(datetime.combine(self.attendance_record.attendance_date, time(9))),
+            requested_check_out_at=timezone.make_aware(datetime.combine(self.attendance_record.attendance_date, time(18))),
             reason="Missed web punch",
         )
 
@@ -894,6 +899,8 @@ class AttendanceRegularizationApprovalTrackTests(TestCase):
             employee=self.employee,
             attendance_record=self.attendance_record,
             requested_status=AttendanceStatus.PRESENT,
+            requested_check_in_at=timezone.make_aware(datetime.combine(self.attendance_record.attendance_date, time(9))),
+            requested_check_out_at=timezone.make_aware(datetime.combine(self.attendance_record.attendance_date, time(18))),
             reason="Manager history coverage",
         )
 
@@ -914,6 +921,8 @@ class AttendanceRegularizationApprovalTrackTests(TestCase):
             employee=self.employee,
             attendance_record=self.attendance_record,
             requested_status=AttendanceStatus.PRESENT,
+            requested_check_in_at=timezone.make_aware(datetime.combine(self.attendance_record.attendance_date, time(9))),
+            requested_check_out_at=timezone.make_aware(datetime.combine(self.attendance_record.attendance_date, time(18))),
             reason="Legacy regularization without assignment",
         )
         WorkflowAssignment.objects.filter(step_instance__workflow_instance__id=regularization.workflow_reference).delete()

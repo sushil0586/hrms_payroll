@@ -79,7 +79,7 @@ class Ess2AttendanceContractTests(TestCase):
 
     def test_foreign_regularization_and_raw_mutation_are_denied(self):
         for _, other in self.actors[1:]:
-            result = self.client.post("/api/v1/me/attendance-regularizations/", {"attendance_record_id": str(other.attendance_records.first().id), "requested_status": "present", "reason": "Synthetic attempt"}, format="json")
+            result = self.client.post("/api/v1/me/attendance-regularizations/", {"attendance_record_id": str(other.attendance_records.first().id), "requested_status": "present", "requested_check_in_at": "2028-02-07T09:00:00Z", "requested_check_out_at": "2028-02-07T17:00:00Z", "reason": "Synthetic attempt"}, format="json")
             self.assertEqual(result.status_code, 404)
         for method in [self.client.post, self.client.patch, self.client.put, self.client.delete]:
             self.assertEqual(method("/api/v1/me/attendance-records/?month=2028-02", {"status": "absent"}, format="json").status_code, 405)

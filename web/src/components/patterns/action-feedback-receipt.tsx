@@ -1,25 +1,14 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { ActionToast, SUCCESS_TOAST_DURATION_MS } from "@/components/patterns/action-toast";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ActionToast, SUCCESS_TOAST_DURATION_MS } from "./action-toast";
+import { useActionFeedback } from "./action-feedback-provider";
+import { ACTION_RECEIPT_EVENT, ACTION_RECEIPT_KEY, consumeActionReceipt, validActionReceipt, type ActionReceipt } from "./action-feedback-store";
+export { rememberActionSuccess } from "./action-feedback-store";
 
-type Receipt = { pathname: string; id: string; message: string; title: string; createdAt: number };
-const key = "accerio.action-feedback";
-const eventName = "accerio:action-feedback";
 const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
-
-/** Written only after a confirmed mutation. Never an authorization or data source. */
-export function rememberActionSuccess(path: string, id: string, title: string, message: string) {
-  try {
-    const url = new URL(path, window.location.origin);
-    if (url.origin !== window.location.origin || !id) return;
-    const receipt = { pathname: url.pathname, id, title, message, createdAt: Date.now() } satisfies Receipt;
-    sessionStorage.setItem(key, JSON.stringify(receipt));
-    window.dispatchEvent(new CustomEvent<Receipt>(eventName, { detail: receipt }));
-  } catch { /* Restricted browser storage must not prevent an authorized navigation. */ }
-}
 
 export function ActionFeedbackReceipt({ recordIds }: { recordIds: string[] }) {
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
@@ -27,43 +16,46 @@ export function ActionFeedbackReceipt({ recordIds }: { recordIds: string[] }) {
 }
 
 function ClientReceipt({ recordIds }: { recordIds: string[] }) {
-  const [receipt, setReceipt] = useState<Receipt | null>(() => {
+  const feedback = useActionFeedback();
+  const [receipt, setReceipt] = useState<ActionReceipt | null>(() => {
     try {
-      const raw = sessionStorage.getItem(key);
-      if (!raw) return null;
-      const candidate = JSON.parse(raw) as Receipt;
-      if (candidate.pathname === window.location.pathname && typeof candidate.id === "string" && candidate.id
-        && typeof candidate.title === "string" && typeof candidate.message === "string"
-        && Date.now() - candidate.createdAt >= 0 && Date.now() - candidate.createdAt < 120_000) return {
-          ...candidate,
-          message: recordIds.includes(candidate.id) ? candidate.message : "The saved record is outside this view. Review the list filters or your current access to find it.",
-        };
-    } catch { /* Expired/unavailable receipts do not change the authoritative list. */ }
-    return null;
+      const candidate: unknown = JSON.parse(sessionStorage.getItem(ACTION_RECEIPT_KEY) || "null");
+      return validActionReceipt(candidate, window.location.pathname, feedback?.scopeKey) ? candidate : null;
+    } catch { return null; }
   });
   const [showToast, setShowToast] = useState(Boolean(receipt));
+  const published = useRef<ActionReceipt | null>(null);
+  const message = receipt && !recordIds.includes(receipt.id)
+    ? "The saved record is outside this view. Review the list filters or your current access to find it."
+    : receipt?.message ?? "";
+
   useEffect(() => {
-    try { sessionStorage.removeItem(key); } catch { /* Browser storage can be restricted. */ }
-  }, []);
+    if (receipt) consumeActionReceipt(receipt);
+  }, [receipt]);
   useEffect(() => {
     const receive = (event: Event) => {
-      const next = (event as CustomEvent<Receipt>).detail;
-      if (!next || next.pathname !== window.location.pathname) return;
+      const next: unknown = (event as CustomEvent<unknown>).detail;
+      if (!validActionReceipt(next, window.location.pathname, feedback?.scopeKey)) return;
       setReceipt(next);
       setShowToast(true);
-      try { sessionStorage.removeItem(key); } catch { /* Browser storage can be restricted. */ }
+      consumeActionReceipt(next);
     };
-    window.addEventListener(eventName, receive);
-    return () => window.removeEventListener(eventName, receive);
-  }, []);
+    window.addEventListener(ACTION_RECEIPT_EVENT, receive);
+    return () => window.removeEventListener(ACTION_RECEIPT_EVENT, receive);
+  }, [feedback]);
   useEffect(() => {
-    if (!showToast) return;
+    if (!receipt || !feedback || published.current === receipt) return;
+    published.current = receipt;
+    feedback.success(receipt.title, message);
+  }, [receipt, feedback, message]);
+  useEffect(() => {
+    if (feedback || !showToast) return;
     const timeout = window.setTimeout(() => setShowToast(false), SUCCESS_TOAST_DURATION_MS);
     return () => window.clearTimeout(timeout);
-  }, [receipt, showToast]);
+  }, [receipt, showToast, feedback]);
   if (!receipt) return null;
   return <div className="notice notice--success">
-    <strong>{receipt.title}</strong><span>{receipt.message}</span>
-    {showToast ? <ActionToast title={receipt.title} message={receipt.message} tone="success" onDismiss={() => setShowToast(false)} /> : null}
+    <strong>{receipt.title}</strong><span>{message}</span>
+    {!feedback && showToast ? <ActionToast title={receipt.title} message={message} tone="success" onDismiss={() => setShowToast(false)} /> : null}
   </div>;
 }

@@ -309,7 +309,6 @@ export function LeavePolicyList({ canManagePolicies, policies, pending, onOpenCr
                   <h2 className="section-heading-soft">Leave policy detail</h2>
                   <p className="section-copy section-copy-soft">Focused entitlement, eligibility, and governance state.</p>
                 </div>
-                <button className="button button--secondary button--compact" onClick={() => { setSelectedPolicyId(""); window.requestAnimationFrame(() => inspectTriggerRef.current?.focus({ preventScroll: true })); }} type="button">Close</button>
               </div>
               <article className="record-card record-card--compact">
                 <div className="record-card__header">

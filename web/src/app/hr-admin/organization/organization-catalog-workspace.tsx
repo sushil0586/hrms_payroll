@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ActionFeedbackReceipt, rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { WorkspaceFilterForm } from "@/components/patterns/workspace-filter-form";
@@ -27,9 +28,10 @@ export function OrganizationCatalogWorkspace({ initialData, initialQuery, initia
   useEffect(()=>{const restore=()=>{const next=readQuery();setQuery(next);setDraft(next);const p=new URLSearchParams(window.location.search);setSelectedId(p.get("itemId")||"");setDetailClosed(false);setModal(readModal());};window.addEventListener("popstate",restore);return()=>window.removeEventListener("popstate",restore);},[]);
   const all=sections(resource.data.snapshot),items=all[query.section],filtered=useMemo(()=>items.filter(item=>matches(item,query.q,query.status)),[items,query.q,query.status]),pages=Math.max(1,Math.ceil(filtered.length/query.page_size)),page=Math.min(query.page,pages),visible=filtered.slice((page-1)*query.page_size,page*query.page_size),selected=detailClosed?null:items.find(item=>item.id===selectedId)||visible[0]||null,editItem=modal.mode==="edit"?items.find(item=>item.id===modal.id)||null:null;
   const commit=useCallback((next:Query,nextSelected="",nextModal:Modal={mode:"",id:""},mode:"push"|"replace"="push")=>{const resolved={...next,page:Math.min(next.page,Math.max(1,Math.ceil(sections(resource.data.snapshot)[next.section].filter(item=>matches(item,next.q,next.status)).length/next.page_size)))};setQuery(resolved);setDraft(resolved);setSelectedId(nextSelected);setDetailClosed(false);setModal(nextModal);window.history[mode==="push"?"pushState":"replaceState"](window.history.state,"",href(resolved,nextSelected,nextModal));},[resource.data.snapshot]);
-  const reconcile=useCallback(async(saved?:HrAdminOrganizationItem)=>{const result=await resource.load({},"none");if(!result.ok)return false;const nextQuery={...query,page:1};commit(nextQuery,saved?.id||selectedId,{mode:"",id:""},"replace");return true;},[commit,query,resource,selectedId]);
+  const reconcile=useCallback(async(saved?:HrAdminOrganizationItem)=>{const result=await resource.load({},"none");if(!result.ok)return false;if(saved)rememberActionSuccess("/hr-admin/organization",saved.id,"Organization record saved.","The catalog now shows the confirmed record.");const nextQuery={...query,page:1};commit(nextQuery,saved?.id||selectedId,{mode:"",id:""},"replace");return true;},[commit,query,resource,selectedId]);
   const apply=(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const f=new FormData(event.currentTarget),raw=String(f.get("section")||query.section),section=isOrganizationSectionKey(raw)?raw:query.section,status=String(f.get("status")||"all");commit({section,q:String(f.get("q")||""),status:status==="active"||status==="inactive"?status:"all",page:1,page_size:Number(f.get("page_size"))||10});};
   return <div data-local-update-hydrated={hydrated?"true":"false"} aria-busy={resource.isPending||undefined}>
+    <ActionFeedbackReceipt recordIds={items.map(item=>item.id)} />
     {resource.error?<div className="notice notice--error" role="alert"><strong>Catalog update failed.</strong><span>{resource.error}</span><button className="button button--secondary" onClick={()=>void resource.load({},"none")} type="button">Retry</button></div>:null}
     <div className="attendance-summary-strip" aria-label="Organization catalog summary"><span><strong>{items.length}</strong> loaded {ORGANIZATION_SECTION_CONFIG[query.section].label.toLowerCase()}</span><span><strong>{filtered.length}</strong> matching</span><span><strong>{visible.length}</strong> on this page</span></div>
     <section className="organization-catalog" aria-label="Organization catalog">

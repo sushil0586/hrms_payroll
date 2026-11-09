@@ -258,7 +258,7 @@ class AttendanceDerivationContext:
         )
         shift_assignments = list(
             EmployeeShiftAssignment.objects.filter(
-                tenant=tenant, employee_id__in=employee_ids, effective_from__lte=end_date
+                tenant=tenant, employee_id__in=employee_ids, effective_from__lte=end_date, cancelled_at__isnull=True
             )
             .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=start_date))
             .select_related("employee", "shift")
@@ -880,6 +880,7 @@ def preview_employee_shift_assignment_conflicts(
         EmployeeShiftAssignment.objects.filter(
             tenant=tenant,
             employee=employee,
+            cancelled_at__isnull=True,
         )
         .exclude(id=item_id)
         .select_related("employee", "shift")
@@ -944,6 +945,7 @@ def _find_matching_employee_shift_assignment(*, employee, attendance_date):
             tenant=employee.tenant,
             employee=employee,
             effective_from__lte=attendance_date,
+            cancelled_at__isnull=True,
         )
         .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=attendance_date))
         .select_related("employee", "shift")
@@ -958,6 +960,20 @@ def _find_matching_employee_shift_assignment(*, employee, attendance_date):
         reverse=True,
     )
     return assignments[0] if assignments else None
+
+
+def lock_employee_shift_assignment_scope(*, tenant, employee_ids):
+    """Serialize absent-row conflicts on stable parents, in one global order.
+
+    Call within the write transaction, before the conflict query. Parent locks
+    protect both primary and secondary writers without changing precedence or
+    imposing a new constraint on historical/imported records.
+    """
+    return list(
+        Employee.objects.select_for_update().filter(
+            tenant=tenant, id__in={value for value in employee_ids if value}
+        ).order_by("id")
+    )
 
 
 @transaction.atomic
@@ -983,7 +999,14 @@ def preview_shift_roster_template_rollout(
         effective_from=effective_from,
     )
     created_assignments: list[tuple[object, object | None]] = []
-    for employee in employee_queryset.order_by("employee_code"):
+    # Freeze the selected population before locking so the write loop cannot
+    # pick up a newly matching employee that was absent from the locked scope.
+    employees = list(employee_queryset.order_by("employee_code"))
+    if not dry_run:
+        lock_employee_shift_assignment_scope(
+            tenant=tenant, employee_ids=[employee.id for employee in employees],
+        )
+    for employee in employees:
         conflict_check = preview_employee_shift_assignment_conflicts(
             tenant=tenant,
             employee=employee,
@@ -1067,7 +1090,7 @@ def preview_shift_roster_template_rollout(
             skipped_count=skipped_count,
             summary=summary,
         )
-        employee_map = {str(employee.id): employee for employee in employee_queryset}
+        employee_map = {str(employee.id): employee for employee in employees}
         assignment_map = {str(employee.id): assignment for employee, assignment in created_assignments}
         ShiftRosterRolloutItem.objects.bulk_create(
             [
@@ -1834,8 +1857,28 @@ def submit_regularization(
     reason: str = "",
 ) -> AttendanceRegularization:
     """Creates and submits an attendance regularization request."""
+    # Serialize eligibility with approval and competing submissions for this day.
+    attendance_record = AttendanceRecord.objects.select_for_update().get(pk=attendance_record.pk)
+    if attendance_record.employee_id != employee.id or attendance_record.tenant_id != employee.tenant_id:
+        raise ValueError("Attendance record not found for this employee.")
+    if attendance_record.is_regularized or AttendanceRegularization.objects.filter(
+        attendance_record=attendance_record, status=RegularizationStatus.APPROVED,
+    ).exists():
+        raise ValueError("This attendance day has already been approved. Contact HR for further changes.")
+    if resolve_employee_work_day(employee=employee, work_date=attendance_record.attendance_date).get("day_type") == "weekly_off":
+        raise ValueError("Attendance corrections are unavailable on a scheduled weekly off day.")
+    if requested_status != AttendanceStatus.ABSENT and (not requested_check_in_at or not requested_check_out_at):
+        raise ValueError("Requested check-in and requested check-out are required for a worked attendance status.")
+    if requested_check_in_at and requested_check_out_at and requested_check_out_at < requested_check_in_at:
+        raise ValueError("Requested check-out cannot be earlier than requested check-in.")
     if attendance_record.is_locked:
         raise ValueError("Attendance regularization is blocked because the attendance record is locked.")
+    if AttendancePeriodClose.objects.filter(
+        tenant=employee.tenant, legal_entity_id=employee.legal_entity_id,
+        status=AttendancePeriodCloseStatus.CLOSED,
+        period_start__lte=attendance_record.attendance_date, period_end__gte=attendance_record.attendance_date,
+    ).exists():
+        raise ValueError("Attendance regularization is blocked because the attendance period is closed.")
     if AttendanceRegularization.objects.filter(
         tenant=employee.tenant,
         employee=employee,
@@ -1914,6 +1957,17 @@ def resolve_regularization(*, regularization: AttendanceRegularization, actor_em
         return regularization
     if regularization.status in {RegularizationStatus.APPROVED, RegularizationStatus.REJECTED}:
         raise ValidationError({"status": "This attendance regularization has already been resolved with a different outcome."})
+    record = AttendanceRecord.objects.select_for_update().get(pk=regularization.attendance_record_id)
+    if AttendancePeriodClose.objects.filter(
+        tenant=regularization.tenant, legal_entity_id=regularization.employee.legal_entity_id,
+        status=AttendancePeriodCloseStatus.CLOSED,
+        period_start__lte=record.attendance_date, period_end__gte=record.attendance_date,
+    ).exists():
+        raise ValidationError({"detail": "Attendance regularization is blocked because the attendance period is closed."})
+    if approve and record.is_locked:
+        raise ValidationError({"detail": "Attendance regularization is blocked because the attendance record is locked."})
+    if not approve and not (comment or "").strip():
+        raise ValidationError({"comment": "Enter a decision note before rejecting this request."})
     action = WorkflowAction.APPROVE if approve else WorkflowAction.REJECT
     previous_status = regularization.status
     regularization.status = RegularizationStatus.APPROVED if approve else RegularizationStatus.REJECTED
@@ -1930,7 +1984,6 @@ def resolve_regularization(*, regularization: AttendanceRegularization, actor_em
         ]
     )
     if approve:
-        record = AttendanceRecord.objects.select_for_update().get(pk=regularization.attendance_record_id)
         next_check_in_at = regularization.requested_check_in_at or record.check_in_at
         next_check_out_at = regularization.requested_check_out_at or record.check_out_at
         runtime = evaluate_attendance_runtime(

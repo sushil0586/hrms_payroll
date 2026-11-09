@@ -4,14 +4,18 @@ from datetime import timedelta
 from django.utils import timezone
 from apps.employees.models import Employee
 from apps.employee_lifecycle.models import EmployeeExit,EmployeeOnboarding
+from apps.employee_lifecycle.effective_services import initialize_employment_timeline
 from apps.tenants.models import Tenant
 from apps.workflows.models import WorkflowTemplate,WorkflowStep
 m=json.loads(Path(os.environ['QA_LIFECYCLE_MANIFEST']).read_text());t=Tenant.objects.get(id=m['tenant']['id']);assert t.code.startswith('pw-qa-');today=timezone.localdate();manager=Employee.objects.get(id=m['credentials']['manager']['employee_id'])
-def person(code):return Employee.objects.create(tenant=t,employee_code='QA-EXIT-'+code,first_name='QA Exit',last_name=code,employment_status='active',reporting_manager=manager)
+def person(code):
+ e=Employee.objects.create(tenant=t,employee_code='QA-EXIT-'+code,first_name='QA Exit',last_name=code,employment_status='active',reporting_manager=manager,legal_entity=manager.legal_entity,employment_type=manager.employment_type,date_of_joining=today-timedelta(days=365))
+ initialize_employment_timeline(employee_id=e.id,actor_identifier='playwright-fixture',approved_source_reference=f'playwright-exit:{code}',effective_from=e.date_of_joining)
+ return e
 draft=person('draft');pending=person('pending');complete=person('complete');cancel=person('cancel');live=Employee.objects.get(id=m['credentials']['employee']['employee_id'])
 x=EmployeeExit.objects.create(tenant=t,employee=draft,status='draft',resignation_date=today-timedelta(days=10),notice_start_date=today-timedelta(days=9),notice_end_date=today,proposed_last_working_date=today,approved_last_working_date=today,exit_reason='QA original exit',clearance_status_snapshot={'items':[{'code':'qa-return','label':'QA asset return','done':False,'required':True,'blocking':True,'owner':m['credentials']['manager']['username'],'due_on':str(today),'history':[]}],'workflow_template_code':'','notes':'QA original plan'},handover_notes='QA original handover')
 can=EmployeeExit.objects.create(tenant=t,employee=cancel,status='draft',approved_last_working_date=today,exit_reason='QA cancellation')
-liv=EmployeeExit.objects.create(tenant=t,employee=live,status='draft',actual_exit_date=today,exit_reason='QA live access')
+liv=EmployeeExit.objects.create(tenant=t,employee=live,status='clearance_in_progress',approved_last_working_date=today,actual_exit_date=today,exit_reason='QA live access',clearance_status_snapshot={'items':[{'code':'qa-live-access','label':'QA completion guard','done':True,'required':True,'blocking':True,'history':[]}]})
 for i in range(12):EmployeeExit.objects.create(tenant=t,employee=person(f'page{i}'),status='draft',proposed_last_working_date=today+timedelta(days=i),exit_reason=f'QA page exit {i}')
 onboarding=EmployeeOnboarding.objects.create(tenant=t,employee=draft,status='in_progress',assigned_owner_identifier=m['credentials']['manager']['username'],checklist_snapshot=[{'code':'qa-owner-alias','label':'QA shared ownership','owner':m['credentials']['manager']['username'],'escalation_owner':'qa-legacy-escalation','done':False,'required':True,'blocking':True}])
 template=WorkflowTemplate.objects.create(tenant=t,code='qa-phase5-exit',name='QA Phase5 clearance',module='lifecycle',trigger_key='qa.phase5.exit',status='active',version=1)

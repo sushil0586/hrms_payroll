@@ -2625,6 +2625,14 @@ def submit_leave_request(
 ) -> LeaveRequest:
     """Creates and submits a leave request."""
 
+    # Serialize eligibility/overlap checks with reservation and request creation.
+    # Balance locks alone cannot prevent simultaneous overlapping requests.
+    employee = (
+        Employee.objects.select_for_update(of=("self",))
+        .select_related("tenant", "membership", "reporting_manager__membership")
+        .get(pk=employee.pk, tenant=employee.tenant)
+    )
+
     leave_policy = _resolve_leave_policy(employee, leave_type, as_of=start_date)
     requested_units = _calculate_requested_units(
         start_date,
@@ -2774,6 +2782,9 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
             LeaveRequestStatus.WITHDRAWN,
         }:
             raise ValidationError({"status": "This leave request has already been resolved with a different outcome."})
+    if not approve and not comment.strip():
+        raise ValidationError({"comment": "Enter a decision note before rejecting this request."})
+
     workflow_instance = None
     if leave_request.workflow_reference:
         from apps.workflows.models import WorkflowInstance

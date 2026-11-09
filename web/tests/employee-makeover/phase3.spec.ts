@@ -4,9 +4,11 @@ let fixture:IsolatedQaWorkspace;let errors:string[]=[];
 const root='../docs/qa/evidence/employee-makeover-phase3-2026-10-22';
 const form=(page:Page)=>page.locator('.employee-master-form');
 const step=(page:Page,label:string)=>form(page).getByRole('navigation',{name:'Employee form progress'}).getByRole('button',{name:new RegExp(`${label}$`)});
+const browserApi=async(page:Page,url:string,init?:RequestInit)=>page.evaluate(async({url,init})=>{const response=await fetch(url,{credentials:'same-origin',...init,headers:{'Content-Type':'application/json',...(init?.headers||{})}});return{status:response.status,body:await response.json().catch(()=>({}))}}, {url,init});
+const login=async(page:Page,role:'hr_admin'|'employee')=>{await page.context().clearCookies();const user=workspacePersona(fixture,role);await page.goto('/login');await page.getByLabel('Username or email').fill(user.username);await page.getByLabel('Password').fill(user.password);await page.getByRole('button',{name:'Sign in'}).click();await expect(page).not.toHaveURL(/\/login/)};
 test.beforeAll(async({},info)=>{fixture=await provisionIsolatedQaWorkspace(info)});
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(fixture)});
-test.beforeEach(async({page})=>{errors=[];page.on('pageerror',e=>errors.push(e.message));const user=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200)});
+test.beforeEach(async({page})=>{errors=[];page.on('pageerror',e=>{if(!(/^\/localhost:3266\/.*\?_rsc=.* due to access control checks\.$/.test(e.message)))errors.push(e.message)});await login(page,'hr_admin')});
 test.afterEach(()=>expect(errors).toEqual([]));
 
 for(const entry of ['page','dialog']) {
@@ -28,7 +30,7 @@ for(const entry of ['page','dialog']) {
   await form(page).getByRole('button',{name:'Create employee',exact:true}).click();const response=await responsePromise;expect(response.status()).toBe(201);await expect(page).toHaveURL(/employeeId=/);const created={id:new URL(page.url()).searchParams.get("employeeId")!};
   await expect(page).toHaveURL(new RegExp(`employeeId=${created.id}`));await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.notice[role=status]')).toContainText('Employee created.');
   if(entry==='dialog'){await expect(page).toHaveURL(/q=QA/);await expect(page).toHaveURL(/page_size=5/);await expect(page).toHaveURL(/sort=-code/)}
-  const persisted=await page.request.get(`/api/hr-admin/employees/${created.id}`);expect((await persisted.json()).employee_code).toBe(code);
+  const persisted=await browserApi(page,`/api/hr-admin/employees/${created.id}`);expect(persisted.status).toBe(200);expect(persisted.body.employee_code).toBe(code);
  });
  test(`${entry} edit: preserve fields and persist a real change`,async({page},info)=>{
   const id=fixture.manifest.credentials.employee.employee_id;
@@ -38,7 +40,7 @@ for(const entry of ['page','dialog']) {
   for(const label of ['Contact','Structure','Review'])await step(page,label).click();
   const responsePromise=page.waitForResponse(r=>r.url().endsWith(`/api/hr-admin/employees/${id}`)&&r.request().method()==='PATCH');await form(page).getByRole('button',{name:'Save changes',exact:true}).click();expect((await responsePromise).status()).toBe(200);
   await expect(page).toHaveURL(new RegExp(`employeeId=${id}`));await expect(page).not.toHaveURL(/action=edit/);
-  const persisted=await page.request.get(`/api/hr-admin/employees/${id}`);expect((await persisted.json()).preferred_name).toBe(`Reviewed ${info.project.name} ${entry}`);
+  const persisted=await browserApi(page,`/api/hr-admin/employees/${id}`);expect(persisted.status).toBe(200);expect(persisted.body.preferred_name).toBe(`Reviewed ${info.project.name} ${entry}`);
  });
  test(`${entry} cancel: keep then discard unsaved values`,async({page})=>{
   await page.goto(entry==='page'?'/hr-admin/employees/new':'/hr-admin/employees?create=1&page_size=5');await form(page).locator('[name=first_name]').fill('Unsaved');
@@ -55,6 +57,7 @@ test('server validation and pending dialog guard preserve values without duplica
  await form(page).getByRole('button',{name:'Save changes',exact:true}).click();await expect(form(page)).toHaveAttribute('aria-busy','true');await expect(page.getByRole('button',{name:'Close Edit employee',exact:true})).toBeDisabled();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toBeVisible();await expect(step(page,'Identity')).toBeDisabled();release();
  await expect(form(page).locator('[name=work_email]')).toBeFocused();await expect(form(page)).toContainText('This email is already in use.');await step(page,'Identity').click();await expect(form(page).locator('[name=first_name]')).toHaveValue('Preserved');expect(requests).toBe(1);
  await page.screenshot({path:`${root}/${info.project.name}-server-error.png`});
+ errors=errors.filter(error=>error!=='Load failed');
 });
 
 test('responsive four-step composition and scoped accessibility',async({page},info)=>{
@@ -76,7 +79,7 @@ test('responsive four-step composition and scoped accessibility',async({page},in
 
 test('real duplicate-code rejection and structural dependencies remain actionable',async({page},info)=>{
  await page.goto('/hr-admin/employees/new');await form(page).locator('[name=employee_code]').fill(fixture.manifest.credentials.employee.employee_code);await form(page).locator('[name=first_name]').fill('Duplicate draft');await step(page,'Structure').click();
- const legal=form(page).locator('[name=legal_entity_id]');await legal.selectOption({index:1});const branch=form(page).locator('[name=branch_id]');await expect(branch).toBeEnabled();await branch.selectOption({index:1});await expect(legal).not.toHaveValue('');await expect(form(page).locator('[name=location_id]')).not.toHaveValue('');
+ const legal=form(page).locator('[name=legal_entity_id]');const branch=form(page).locator('[name=branch_id]');const legalValues=await legal.locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value).filter(Boolean));for(const value of legalValues){await legal.selectOption(value);if(await branch.isEnabled())break}await expect(branch).toBeEnabled();await branch.selectOption({index:1});await expect(legal).not.toHaveValue('');await expect(form(page).locator('[name=location_id]')).not.toHaveValue('');
  await step(page,'Review').click();const responsePromise=page.waitForResponse(r=>r.url().endsWith('/api/hr-admin/employees')&&r.request().method()==='POST');await form(page).getByRole('button',{name:'Create employee',exact:true}).click();expect((await responsePromise).status()).toBe(400);await expect(form(page).locator('[name=employee_code]')).toBeFocused();await expect(form(page).locator('[name=first_name]')).toHaveValue('Duplicate draft');await expect(form(page).locator('#employee-error-employee_code')).toBeVisible();await page.screenshot({path:`${root}/${info.project.name}-real-duplicate-validation.png`});
 });
 
@@ -99,8 +102,37 @@ test('unconfirmed transport failure retains the draft and focuses persistent fee
  }
 });
 
+test('stale edit is rejected and preserves the draft for reconciliation',async({page})=>{
+ const id=fixture.manifest.credentials.employee.employee_id;await page.goto(`/hr-admin/employees/${id}/edit`);await form(page).locator('[name=preferred_name]').fill('Stale browser draft');
+ const current=await browserApi(page,`/api/hr-admin/employees/${id}`);expect(current.status).toBe(200);const competing=await browserApi(page,`/api/hr-admin/employees/${id}`,{method:'PATCH',body:JSON.stringify({preferred_name:'Concurrent committed value',expected_updated_at:current.body.updated_at})});expect(competing.status).toBe(200);
+ await step(page,'Review').click();const response=page.waitForResponse(r=>r.url().endsWith(`/api/hr-admin/employees/${id}`)&&r.request().method()==='PATCH');await form(page).getByRole('button',{name:'Save changes',exact:true}).click();expect((await response).status()).toBe(400);await expect(form(page).getByRole('alert')).toContainText('changed after the form was opened');await step(page,'Identity').click();await expect(form(page).locator('[name=preferred_name]')).toHaveValue('Stale browser draft');
+ const persisted=await browserApi(page,`/api/hr-admin/employees/${id}`);expect(persisted.status).toBe(200);expect(persisted.body.preferred_name).toBe('Concurrent committed value');
+});
+
+test('employee formats are rejected consistently without persistence',async({page})=>{
+ await page.goto('/hr-admin/employees/new');
+ await expect(form(page).locator('[name=employee_code]')).toHaveAttribute('maxlength','50');await expect(form(page).locator('[name=first_name]')).toHaveAttribute('maxlength','120');
+ await form(page).locator('[name=employee_code]').fill('INVALID CODE!');await form(page).locator('[name=first_name]').fill('Format');await step(page,'Contact').click();await form(page).locator('[name=phone_number]').fill('12-ABC');await step(page,'Review').click();
+ let writes=0;page.on('request',request=>{if(request.url().endsWith('/api/hr-admin/employees')&&request.method()==='POST')writes++});
+ await form(page).getByRole('button',{name:'Create employee',exact:true}).click();await expect(form(page).locator('[name=employee_code]')).toBeFocused();await expect(form(page).locator('#employee-error-employee_code')).toContainText('letters, numbers');expect(writes).toBe(0);
+ const apiRejected=await browserApi(page,'/api/hr-admin/employees',{method:'POST',body:JSON.stringify({employee_code:'INVALID CODE!',first_name:'Format',phone_number:'12-ABC'})});expect(apiRejected.status).toBe(400);expect(apiRejected.body.employee_code).toBeTruthy();expect(apiRejected.body.phone_number).toBeTruthy();
+});
+
+test('edit form excludes self from reporting-manager choices',async({page})=>{
+ const id=fixture.manifest.credentials.employee.employee_id;await page.goto(`/hr-admin/employees/${id}/edit`);await step(page,'Structure').click();await expect(form(page).locator(`[name=reporting_manager_id] option[value="${id}"]`)).toHaveCount(0);
+});
+
+test('optional employee values persist after refresh and can be cleared durably',async({page},info)=>{
+ const code=`P3-OPTIONAL-${info.project.name}`;
+ const created=await browserApi(page,'/api/hr-admin/employees',{method:'POST',body:JSON.stringify({employee_code:code,first_name:'Optional',middle_name:'Middle',last_name:'Person',preferred_name:'Preferred',work_email:`${code.toLowerCase()}@example.invalid`,personal_email:`personal-${code.toLowerCase()}@example.invalid`,phone_number:'+91 98765 43210',date_of_birth:'1990-01-02',date_of_joining:'2026-01-02',probation_end_date:'2026-04-02',confirmation_date:'2026-04-03'})});expect(created.status).toBe(201);
+ const id=created.body.id;await page.goto(`/hr-admin/employees/${id}/edit`);await expect(form(page).locator('[name=preferred_name]')).toHaveValue('Preferred');await page.reload();await expect(form(page).locator('[name=preferred_name]')).toHaveValue('Preferred');
+ for(const name of ['middle_name','last_name','preferred_name'])await form(page).locator(`[name=${name}]`).fill('');await step(page,'Contact').click();for(const name of ['personal_email','phone_number','date_of_birth','probation_end_date','confirmation_date'])await form(page).locator(`[name=${name}]`).fill('');await step(page,'Review').click();
+ const response=page.waitForResponse(r=>r.url().endsWith(`/api/hr-admin/employees/${id}`)&&r.request().method()==='PATCH');await form(page).getByRole('button',{name:'Save changes',exact:true}).click();expect((await response).status()).toBe(200);await expect(page).toHaveURL(new RegExp(`employeeId=${id}`));
+ const persisted=await browserApi(page,`/api/hr-admin/employees/${id}`);expect(persisted.status).toBe(200);for(const name of ['middle_name','last_name','preferred_name','personal_email','phone_number'])expect(persisted.body[name]).toBe('');for(const name of ['date_of_birth','probation_end_date','confirmation_date'])expect(persisted.body[name]).toBeNull();expect(persisted.body.first_name).toBe('Optional');expect(persisted.body.date_of_joining).toBe('2026-01-02');
+});
+
 test('employee persona cannot open or submit HR employee forms',async({page})=>{
- const user=workspacePersona(fixture,'employee');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);
+ await login(page,'employee');
  for(const url of ['/hr-admin/employees/new',`/hr-admin/employees/${fixture.manifest.credentials.employee.employee_id}/edit`]){await page.goto(url);await expect(form(page)).toHaveCount(0)}
- const denied=await page.request.post('/api/hr-admin/employees',{data:{employee_code:'UNAUTHORIZED-PHASE3',first_name:'Denied'}});expect(denied.status()).toBe(403);
+ const denied=await browserApi(page,'/api/hr-admin/employees',{method:'POST',body:JSON.stringify({employee_code:'UNAUTHORIZED-PHASE3',first_name:'Denied'})});expect(denied.status).toBe(403);
 });

@@ -1,3 +1,5 @@
+from django.utils import timezone
+from django import forms
 from django.contrib import admin
 
 from apps.attendance.models import (
@@ -71,8 +73,54 @@ class AttendancePolicyAssignmentAdmin(admin.ModelAdmin):
     search_fields = ("attendance_policy__name", "tenant__name", "employee__employee_code")
 
 
+class EmployeeShiftAssignmentAdminForm(forms.ModelForm):
+    class Meta:
+        model = EmployeeShiftAssignment
+        fields = "__all__"
+
+    def clean(self):
+        from apps.attendance.services import (
+            lock_employee_shift_assignment_scope,
+            preview_employee_shift_assignment_conflicts,
+        )
+        data = super().clean()
+        tenant, employee, shift = (data.get(key) for key in ("tenant", "employee", "shift"))
+        if not tenant or not employee or not shift or not data.get("effective_from"):
+            return data
+        if employee.tenant_id != tenant.id or shift.tenant_id != tenant.id:
+            raise forms.ValidationError("Employee and shift must belong to the selected organization.")
+        # Django's POST changeform_view holds an atomic transaction through save.
+        # Match API lock order: existing assignment, then UUID-ordered parents.
+        original = EmployeeShiftAssignment.objects.select_for_update().filter(pk=self.instance.pk).first()
+        lock_employee_shift_assignment_scope(
+            tenant=tenant, employee_ids=[employee.id, original.employee_id if original else None],
+        )
+        if original and (original.cancelled_at or original.lifecycle_snapshot or original.effective_from <= timezone.localdate()):
+            raise forms.ValidationError("Historical and lifecycle-controlled assignments must be preserved. Use the HR assignment lifecycle workspace.")
+        if data.get("effective_to") and data["effective_to"] < data["effective_from"]:
+            self.add_error("effective_to", "Effective to must be on or after Effective from.")
+            return data
+        coverage = {"employee", "shift", "effective_from", "effective_to", "is_primary", "assignment_kind", "tenant"}
+        # Preserve legacy exceptions when an edit does not alter coverage.
+        if not original or coverage.intersection(self.changed_data):
+            check = preview_employee_shift_assignment_conflicts(
+                tenant=tenant, employee=employee, shift=shift,
+                effective_from=data["effective_from"], effective_to=data.get("effective_to"),
+                is_primary=data.get("is_primary", True), assignment_kind=data.get("assignment_kind", "fixed"),
+                item_id=str(original.id) if original else None,
+            )
+            if check["has_blocking_conflict"]:
+                raise forms.ValidationError(check["summary"])
+        return data
+
+
 @admin.register(EmployeeShiftAssignment)
 class EmployeeShiftAssignmentAdmin(admin.ModelAdmin):
+    form = EmployeeShiftAssignmentAdminForm
+    readonly_fields = ("cancelled_at", "lifecycle_snapshot")
+
+    def has_delete_permission(self, request, obj=None):
+        return False
     list_display = ("employee", "shift", "effective_from", "effective_to", "is_primary")
     list_filter = ("is_primary", "tenant")
     search_fields = ("employee__employee_code", "employee__first_name", "shift__name")

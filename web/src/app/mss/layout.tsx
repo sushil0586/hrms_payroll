@@ -1,3 +1,4 @@
+import { ActionFeedbackProvider } from "@/components/patterns/action-feedback-provider";
 import { WorkspaceHydrationBoundary } from "@/components/shell/workspace-hydration-boundary";
 import { WorkspaceLoading } from "@/components/patterns/workspace-loading";
 import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
@@ -48,7 +49,7 @@ export default async function MssLayout({ children }: { children: React.ReactNod
       workspaceLabel="Manager inbox"
       workspaceTone="manager"
     >
-      {children}
+      <ActionFeedbackProvider scopeKey={`${sessionUser?.id ?? "anonymous"}:${sessionUser?.default_membership?.id ?? "none"}:mss`}>{children}</ActionFeedbackProvider>
     </WorkspaceChrome>
     </WorkspaceHydrationBoundary>
   );

@@ -1,4 +1,4 @@
-export type ImportBatchAuditStatus = "previewed" | "committed" | "partial" | "failed" | "rollback_review";
+export type ImportBatchAuditStatus = "claimed" | "previewed" | "committed" | "partial" | "failed" | "rollback_review";
 
 export type ImportBatchAuditInput = {
   import_type: string;
@@ -25,6 +25,8 @@ export type ImportBatchAudit = ImportBatchAuditInput & {
   updated_at: string;
 };
 
+export type ImportBatchClaim = ImportBatchAudit & { replayed: boolean };
+
 export async function sha256Hex(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest))
@@ -38,6 +40,23 @@ export async function recordImportBatchAudit(input: ImportBatchAuditInput) {
   try {
     const response = await fetch("/api/hr-admin/import-batches", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as ImportBatchAudit | null;
+    return payload && typeof payload.id === "string" && payload.id.trim()
+      ? { ...payload, replayed: response.headers.get("Idempotency-Replayed") === "true" }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function finalizeImportBatchAudit(id: string, input: ImportBatchAuditInput) {
+  try {
+    const response = await fetch(`/api/hr-admin/import-batches/${id}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });

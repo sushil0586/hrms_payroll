@@ -1,5 +1,7 @@
 "use client";
 
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
+
 import { useEffect, useRef, useState } from "react";
 import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { AsyncDownloadButton } from "@/components/patterns/async-download-button";
@@ -96,6 +98,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       if (!refreshed) setError("Review was saved, but the queue could not be refreshed. Retry the queue update before continuing.");
       return;
     }
+    rememberActionSuccess(successHref, itemId, "Document review updated.", "The confirmed review is now shown in the document queue.");
     leaving.current = true;
     window.location.assign(new URL(successHref, window.location.origin));
   }

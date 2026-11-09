@@ -610,3 +610,27 @@
 .hr-admin-compact-ui .employee-import-panel[open] > summary > span:last-child { transform: rotate(45deg); }
 .hr-admin-compact-ui .employee-import-panel .form-field > span { color: var(--ds-text-muted); font-size: 12px; }
 .hr-admin-compact-ui .employee-import-panel .employee-import-panel__csv { min-height: 160px; height: 160px; }
+
+/* Keep roster page-size controls within the shared pagination surface. */
+.attendance-roster-templates-workbench .pagination-panel .attendance-pagination-panel__controls {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .attendance-roster-templates-workbench .pagination-panel .attendance-pagination-panel__controls {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-start;
+  }
+  .attendance-roster-templates-workbench .pagination-panel .attendance-pagination-rows {
+    flex: 1;
+    width: auto;
+    margin: 0;
+  }
+  .attendance-roster-templates-workbench .pagination-panel .attendance-pagination-panel__controls :is(select, button) {
+    min-height: 44px;
+  }
+}

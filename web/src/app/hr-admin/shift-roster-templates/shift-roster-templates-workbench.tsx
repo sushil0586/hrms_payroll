@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { createEmptyShiftRosterTemplateValue, shiftRosterTemplateToFormValue } from "@/app/hr-admin/shift-roster-templates/form-values";
+import { RosterTemplateRemoveAction } from "./roster-template-remove-action";
 import { ShiftRosterTemplateForm } from "@/app/hr-admin/shift-roster-templates/shift-roster-template-form";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -35,7 +36,7 @@ type Props = {
   onOpenCreate?: () => void;
   onOpenEdit?: (id: string) => void;
   onCloseModal?: () => void;
-  onReconcile?: () => Promise<boolean> | boolean;
+  onReconcile?: (message: string) => Promise<boolean> | boolean;
 };
 
 const patterns = ["fixed", "weekly_rotation", "custom_rotation", "alternating_weeks"];
@@ -252,7 +253,7 @@ export function ShiftRosterTemplatesWorkbench({
               </tbody>
             </table>
           </WorkspaceTableScrollRegion>
-          {totalCount > 0 ? <div className="panel-card-soft attendance-pagination-panel">
+          <div>
             <PaginationBar
               navigationMode={onQueryChange ? "scoped" : undefined}
               pending={pending}
@@ -269,8 +270,7 @@ export function ShiftRosterTemplatesWorkbench({
               pageSize={pageSize}
               previousHref={buildHref(currentParams, { page: String(page - 1), page_size: String(pageSize) })}
               totalCount={totalCount}
-            />
-            <WorkspaceFilterForm key={`pagination-${JSON.stringify(currentParams)}`} action={pathname} label="Roster template pagination" className="attendance-pagination-panel__controls workspace-filter-form--inline" pending={pending} updateMode={onQueryChange ? "scoped" : "document"} onSubmit={onQueryChange ? (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onQueryChange({ page: "1", page_size: String(data.get("page_size") || pageSize) }); } : undefined}>
+              controls={<WorkspaceFilterForm key={`pagination-${JSON.stringify(currentParams)}`} action={pathname} label="Roster template pagination" className="attendance-pagination-panel__controls workspace-filter-form--inline" pending={pending} updateMode={onQueryChange ? "scoped" : "document"} onSubmit={onQueryChange ? (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onQueryChange({ page: "1", page_size: String(data.get("page_size") || pageSize) }); } : undefined}>
               {Object.entries(currentParams).map(([key, value]) => {
                 const normalized = normalizeParam(value);
                 if (!normalized || key === "page_size" || key === "page") return null;
@@ -278,8 +278,10 @@ export function ShiftRosterTemplatesWorkbench({
               })}
               <label className="form-field attendance-pagination-rows"><span className="muted">Rows</span><select className="input-control" name="page_size" defaultValue={String(pageSize)}><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
               <button className="button button--secondary" type="submit">Apply</button>
-            </WorkspaceFilterForm>
-          </div> : null}
+            </WorkspaceFilterForm>}
+            />
+
+          </div>
         </section>
 
         {selectedItem ? (
@@ -309,6 +311,7 @@ export function ShiftRosterTemplatesWorkbench({
               ) : (
                 <button className="button button--secondary" disabled title="Requires attendance.policies.manage permission." type="button">Edit template</button>
               )}
+              {canManagePolicies ? <RosterTemplateRemoveAction key={selectedItem.id} item={selectedItem} onRemoved={onReconcile} /> : null}
             </div>
             <details className="record-card" open>
               <summary>Pattern</summary>

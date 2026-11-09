@@ -1,5 +1,6 @@
 "use client";
 
+import { flushSync } from "react-dom";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 
@@ -49,6 +50,18 @@ export function DocumentComplianceReportWorkspace({ documents, initialFilters = 
   const [expiryFocus, setExpiryFocus] = useState(initialFilters.expiry_focus || "All");
   const [sortBy, setSortBy] = useState(initialFilters.sort || "risk");
   const [page, setPage] = useState(Number.isSafeInteger(Number(initialFilters.page)) && Number(initialFilters.page)>0 ? Number(initialFilters.page) : 1);
+  const [printing, setPrinting] = useState(false);
+  const [printedAt, setPrintedAt] = useState("");
+  useEffect(() => {
+    const media = window.matchMedia("print");
+    const enter = () => flushSync(() => { setPrinting(true); setPrintedAt(new Date().toISOString()); });
+    const leave = () => flushSync(() => setPrinting(false));
+    const change = (event: MediaQueryListEvent) => event.matches ? enter() : leave();
+    window.addEventListener("beforeprint", enter);
+    window.addEventListener("afterprint", leave);
+    media.addEventListener("change", change);
+    return () => { window.removeEventListener("beforeprint", enter); window.removeEventListener("afterprint", leave); media.removeEventListener("change", change); };
+  }, []);
   const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   const verificationStatuses = useMemo(() => ["All", ...unique(documents.map((item) => item.verification_status))], [documents]);
@@ -101,7 +114,7 @@ export function DocumentComplianceReportWorkspace({ documents, initialFilters = 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
+  const visibleRows = printing ? filteredRows : filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const exportHref = useMemo(() => {
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
@@ -138,6 +151,7 @@ export function DocumentComplianceReportWorkspace({ documents, initialFilters = 
 
   return (
     <fieldset disabled={!ready} data-hydrated={ready} className="section section--tight document-report-ready" aria-label="Document compliance report workspace">
+      <p className="document-compliance-print-meta">Printed {printedAt}. {filteredRows.length} matching records of {documents.length} loaded. Search: {query || "All"}; category: {category}; verification: {verificationStatus}; record state: {recordStatus}; expiry: {expiryFocus}; sort: {sortBy}. Complete filtered register; not a transactional snapshot.</p>
       <div className="report-catalog-workspace document-compliance-report" data-testid="document-compliance-report">
         <div className="report-command-panel">
           <div>
@@ -290,7 +304,7 @@ export function DocumentComplianceReportWorkspace({ documents, initialFilters = 
               ))}
               {visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={printing ? 6 : 7}>
                     <div className="empty-state">No document compliance rows match the selected filters.</div>
                   </td>
                 </tr>

@@ -871,7 +871,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
               </span>
             </div>
           ) : null}
-            <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Document records table">
+            <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Required documents table">
               <table className="workspace-table " aria-label="Required documents">
                 <thead>
                   <tr>
@@ -1001,7 +1001,7 @@ export function EmployeeDocumentCenter({ data: initialData, currentFilters, uplo
             </WorkspaceFilterBar>
           </WorkspaceFilterForm>
 
-          <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Document records table">
+          <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Document history table">
             <table className="workspace-table " aria-label="Document history">
               <thead>
                 <tr>

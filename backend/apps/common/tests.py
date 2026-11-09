@@ -213,6 +213,34 @@ class HrAdminOptionMetadataTests(TestCase):
         self.assertEqual(manager_item["assigned_role_count"], 1)
         self.assertLessEqual(len(employee_queries), 5)
 
+    def test_manager_team_summary_excludes_inactive_and_exited_reports(self):
+        manager = self.membership.employee
+        Employee.objects.bulk_create(
+            [
+                Employee(
+                    tenant=self.tenant,
+                    employee_code=f"SCOPE-{status}",
+                    first_name=status.replace("_", " ").title(),
+                    employment_status=status,
+                    reporting_manager=manager,
+                )
+                for status in [
+                    EmploymentStatus.ACTIVE,
+                    EmploymentStatus.ON_NOTICE,
+                    EmploymentStatus.INACTIVE,
+                    EmploymentStatus.EXITED,
+                ]
+            ]
+        )
+
+        summary = get_manager_team_summary(manager)
+
+        self.assertEqual(summary["team_size"], 2)
+        self.assertEqual(
+            {item["employee_code"] for item in summary["reportees"]},
+            {"SCOPE-active", "SCOPE-on_notice"},
+        )
+
     def test_employee_list_rejects_invalid_pagination_and_is_tenant_scoped(self):
         other_tenant = Tenant.objects.create(
             code="other-employees",

@@ -20,6 +20,7 @@ export default async function HrAdminEmployeesPage({searchParams}:PageProps){
    initialQuery={{q:param(params.q)??"",department:param(params.department)??"all",status:param(params.status)??"all",managerView:param(params.managerView)??"all",readiness:param(params.readiness)??"all",sort:["name","-name","code","-code"].includes(param(params.sort)??"")?param(params.sort)!:"name",page:Number.isSafeInteger(rawPage)&&rawPage>0?rawPage:1,page_size:[5,8,10,25,50].includes(rawSize)?rawSize:8}}
    initialSelectedId={param(params.employeeId)??""}
    initialAction={param(params.create)==="1"?"create":param(params.action)??""}
+   initialSaved={param(params.saved)??""}
    permissions={{create:permission("employees.create"),edit:permission("employees.edit"),import:permission("employees.import"),access:permission("employees.access.manage")}}
   />
  </main>;

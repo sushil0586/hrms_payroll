@@ -623,7 +623,11 @@
     width: 100%;
   }
 
-  .mss-experience-shell .workspace-standard-header__actions .button,
+  .mss-experience-shell .workspace-standard-header__actions .button {
+    flex: 0 1 auto;
+    min-height: 44px;
+  }
+
   .mss-experience-shell .mss-personal-links .button {
     flex: 1 1 140px;
   }
@@ -2127,7 +2131,7 @@ select.input-control {
 }
 
 .workspace-search__result small {
-  color: #718096;
+  color: var(--ds-text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -2136,7 +2140,7 @@ select.input-control {
   flex: 0 0 auto;
   max-width: 140px;
   overflow: hidden;
-  color: #64748b;
+  color: var(--ds-text-muted);
   font-size: 10px;
   font-style: normal;
   font-weight: 800;
@@ -2267,7 +2271,7 @@ select.input-control {
 }
 
 .mobile-workspace-nav__link small {
-  color: #64748b;
+  color: var(--ds-text-muted);
   font-size: 12px;
   line-height: 1.25;
 }
@@ -4848,7 +4852,9 @@ select.input-control {
   background: #edf4ff;
 }
 
-.workspace-tone--hr .attendance-directory-table tr.is-selected .workspace-table__primary-cell span {
+.workspace-tone--hr .attendance-directory-table[aria-label="Attendance records"] tr:is(.is-selected, :hover) td > span:not([class]),
+.workspace-tone--hr .attendance-directory-table tr.is-selected .workspace-table__primary-cell span,
+.workspace-tone--hr .attendance-directory-table[aria-label="Attendance records"] tr:hover .workspace-table__primary-cell span {
   color: #5b6472;
 }
 
@@ -19331,7 +19337,7 @@ details.workspace-filter-disclosure:not([open]) > :not(summary) {
 .shell--time-leave .form-field > .muted:first-child,
 .shell--time-leave .form-field > span:first-child,
 .shell--time-leave .queue-toolbar__search > .muted:first-child {
-  color: #7c879d;
+  color: #667085;
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.07em;
@@ -32771,3 +32777,95 @@ body {
 .payroll-readiness-table td:first-child .button-link > span {
   color: #475569;
 }
+
+/* WF-F: scope existing semantic tokens to the audited non-Payroll pages. */
+.hr-admin-enterprise-dashboard .hr-admin-launch-audit__chip.hr-admin-launch-audit__chip--ready { color: var(--ds-success); }
+.hr-admin-enterprise-dashboard .hr-admin-launch-audit__chip.hr-admin-launch-audit__chip--warning { color: var(--ds-warning); }
+.hr-admin-enterprise-dashboard .hr-admin-launch-audit__chip.hr-admin-launch-audit__chip--blocked { color: var(--ds-danger); }
+main.hr-admin-enterprise-dashboard .hr-admin-section-heading .workspace-card__eyebrow { color: var(--ds-text-muted); }
+.saas-resilience-page .readiness-badge--ready { color: var(--ds-success); }
+.saas-resilience-page .readiness-badge--warning { color: var(--ds-warning); }
+.saas-resilience-page .readiness-badge--blocked { color: var(--ds-danger); }
+.docs-shell .docs-table th { color: var(--ds-text-muted); }
+.notification-review-card__header .notification-review-title { font-size: var(--type-size-lg); margin: 0; }
+
+/* WF-F search hints: explicit non-Payroll route scope; other workspace styles stay unchanged. */
+.app-shell[data-workspace-path="/ess"] .workspace-search__result small,
+.app-shell[data-workspace-path="/ess/notifications"] .workspace-search__result small,
+.app-shell[data-workspace-path="/ess/profile"] .workspace-search__result small,
+.app-shell[data-workspace-path="/ess/settings"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/audit"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/employees"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/employees"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/employees"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/employees"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/employees/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/exits"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/exits"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/exits/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/import-history"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/launch-remediation"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/lifecycle"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/movements"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/movements"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/movements/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notification-delivery"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notification-diagnostics"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notification-events"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/notification-events"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notification-events/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notification-templates"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/notification-templates"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notification-templates/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notifications"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/notifications-admin"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/notifications"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/onboardings"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/onboardings"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/onboardings/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/organization"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/organization"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/organization"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/probation-reviews"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/probation-reviews"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/probation-reviews/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/reports"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/reports/export-audits"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/reports/hr-core"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/reports/lifecycle-aging"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/reports/lifecycle-queue"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/reports/workforce"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/saas-control-plane"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/saas-operations"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/saas-resilience"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/saas-sla-operations"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/workflow-template-assignments"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/workflow-template-assignments"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/workflow-template-assignments/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/workflow-templates"] .workspace-search__result small,
+.app-shell[data-workspace-path^="/hr-admin/workflow-templates"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/workflow-templates/new"] .workspace-search__result small,
+.app-shell[data-workspace-path="/hr-admin/workflows"] .workspace-search__result small,
+.app-shell[data-workspace-path="/mss"] .workspace-search__result small,
+.app-shell[data-workspace-path="/mss/notifications"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/admins"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/audit-logs"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/data-governance"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/launch"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/leads"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/onboarding"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/permissions"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/policy-packs"] .workspace-search__result small,
+.app-shell[data-workspace-path="/platform-admin/tenants"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/data-governance"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/plan"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/roles"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/security-readiness"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/settings"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/setup"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/support-access"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/trust-audit"] .workspace-search__result small,
+.app-shell[data-workspace-path="/tenant-admin/users"] .workspace-search__result small { color: var(--ds-text-muted); }

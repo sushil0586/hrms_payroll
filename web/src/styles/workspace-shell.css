@@ -55,6 +55,8 @@
 .accerio-shell.workspace-tone .topbar-context__label { display: none; }
 .accerio-shell.workspace-tone .topbar-context strong { font-size: var(--type-size-md); font-weight: 600; color: var(--ds-text); white-space: nowrap; }
 .accerio-shell.workspace-tone .workspace-search { flex: 1; min-width: 160px; max-width: 360px; width: auto; order: 0; }
+/* An active search popup must sit above sibling header actions. */
+.accerio-shell.workspace-tone .workspace-search:focus-within { z-index: 3; }
 .accerio-shell.workspace-tone .search-chip--calm { display: flex; height: 44px; min-height: 44px; padding: 0 var(--space-3); gap: var(--space-2); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-shell-search); box-shadow: none; }
 .accerio-shell.workspace-tone .workspace-search__input { min-width: 0; min-height: 0; height: 34px; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: var(--type-size-sm); color: var(--ds-text); }
 .accerio-shell.workspace-tone .workspace-search__input::placeholder { color: var(--ds-text-muted); }
@@ -97,3 +99,23 @@
 
 /* Keyboard hints remain readable in every consuming workspace. */
 .accerio-shell.workspace-tone .search-chip kbd { color: var(--ds-text-muted); background: var(--ds-surface); border-color: var(--ds-border); }
+
+/* Keep narrow-screen suggestions anchored to their input, as on desktop. */
+@media (max-width: 640px) {
+  .accerio-shell.workspace-tone .workspace-search__panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    max-width: 100%;
+  }
+  .accerio-shell.workspace-tone .workspace-search__result {
+    flex-wrap: wrap;
+  }
+  .accerio-shell.workspace-tone .workspace-search__result span {
+    flex: 1 1 120px;
+  }
+  .accerio-shell.workspace-tone .workspace-search__result :is(strong, small, em) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
+import { useSearchParams } from "next/navigation";
+
+import { ActionFeedbackReceipt, rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { ShiftRosterTemplatesWorkbench } from "./shift-roster-templates-workbench";
 import { ShiftRosterRolloutPanel } from "./shift-roster-rollout-panel";
 import type { HrAdminPolicyWorkbenchOptions, HrAdminShiftRosterRollout, HrAdminShiftRosterTemplate } from "@/lib/types";
@@ -19,22 +22,40 @@ function readRolloutQuery(): RolloutQuery { const p = new URLSearchParams(window
 function readModal(): Modal { const p = new URLSearchParams(window.location.search); const id = p.get("editRoster") || ""; return id ? { mode: "edit", id } : p.get("rosterModal") === "create" ? { mode: "create", id: "" } : { mode: "", id: "" }; }
 function href(query: Query) { const p = new URLSearchParams(); if (query.q) p.set("q", query.q); if (query.status !== "all") p.set("status", query.status); if (query.kind !== "all") p.set("kind", query.kind); if (query.pattern !== "all") p.set("pattern", query.pattern); if (query.page !== 1) p.set("page", String(query.page)); if (query.page_size !== 10) p.set("page_size", String(query.page_size)); return `/hr-admin/shift-roster-templates${p.size ? `?${p}` : ""}`; }
 
+function resolveCatalogQuery(query: Query, data: Data): Query { return { ...query, page: data.page, page_size: data.page_size }; }
+
 export function ShiftRosterTemplatesWorkspace({ initialData, initialQuery, initialModal, initialEditItem, initialRolloutData, initialRolloutQuery, options, canManagePolicies }: { initialData: Data; initialQuery: Query; initialModal: Modal; initialEditItem?: HrAdminShiftRosterTemplate | null; initialRolloutData: RolloutData; initialRolloutQuery: RolloutQuery; options: HrAdminPolicyWorkbenchOptions; canManagePolicies: boolean }) {
+  const historySearch = useSearchParams().toString();
   const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
   const [modal, setModal] = useState(initialModal);
   const request = useCallback(async (query: Query, signal: AbortSignal) => { const p = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)])); const response = await fetch(`/api/hr-admin/shift-roster-templates/workspace?${p}`, { cache: "no-store", signal }); const payload = await response.json().catch(() => ({})); if (!response.ok || !Array.isArray((payload as Data).items)) throw new ScopedResourceError(typeof payload.detail === "string" ? payload.detail : "Roster templates could not be updated.", response.status); return payload as Data; }, []);
-  const resource = useScopedWorkspaceResource({ initialData, initialQuery, request, historyHref: href, readHistoryQuery: readQuery, resolveQuery: (query, data) => ({ ...query, page: data.page, page_size: data.page_size }), fallbackError: "Roster templates could not be updated. The last confirmed page is still shown." });
+  const resource = useScopedWorkspaceResource({ initialData, initialQuery, request, historyHref: href, readHistoryQuery: readQuery, resolveQuery: resolveCatalogQuery, fallbackError: "Roster templates could not be updated. The last confirmed page is still shown." });
   const rolloutRequest = useCallback(async (query: RolloutQuery, signal: AbortSignal) => { const response = await fetch(`/api/hr-admin/shift-roster-rollouts?page=${query.page}&page_size=${query.page_size}`, { cache: "no-store", signal }); const payload = await response.json().catch(() => ({})); if (!response.ok || !Array.isArray((payload as RolloutData).items)) throw new ScopedResourceError(typeof payload.detail === "string" ? payload.detail : "Roster rollout history could not be updated.", response.status); return { ...(payload as RolloutData), page: (payload as RolloutData).page ?? query.page, page_size: query.page_size }; }, []);
   const rolloutResource = useScopedWorkspaceResource({ initialData: initialRolloutData, initialQuery: initialRolloutQuery, request: rolloutRequest, readHistoryQuery: readRolloutQuery, resolveQuery: (query, data) => ({ ...query, page: data.page, page_size: data.page_size }), fallbackError: "Roster rollout history could not be updated. The last confirmed page is still shown." });
+  const { query: committedQuery, load: restoreQuery } = resource;
+  const restoredSearchRef = useRef(historySearch);
+  useEffect(() => {
+    // Next can restore a cached route without retaining the previous popstate listener.
+    // Reconcile its committed URL with the scoped resource after that restoration.
+    // A clamped page can intentionally differ from the URL. Restore once per
+    // committed URL transition, never again merely because a read normalized it.
+    if (restoredSearchRef.current === historySearch) return;
+    restoredSearchRef.current = historySearch;
+    const restored = readQuery();
+    if (JSON.stringify(restored) !== JSON.stringify(committedQuery)) {
+      void restoreQuery(restored, "none", "history");
+    }
+  }, [historySearch, restoreQuery, committedQuery]);
   useEffect(() => { const restore = () => setModal(readModal()); window.addEventListener("popstate", restore); return () => window.removeEventListener("popstate", restore); }, []);
   const currentParams = useMemo(() => Object.fromEntries(Object.entries(resource.query).map(([key, value]) => [key, String(value)])), [resource.query]);
   const changeQuery = (updates: Record<string, string>) => { const next = { ...resource.query, ...updates, page: number(updates.page ?? String(resource.query.page), 1), page_size: Math.min(number(updates.page_size ?? String(resource.query.page_size), 10), 100) }; void resource.load(next, "push"); };
-  const writeModal = (next: Modal) => { const url = new URL(window.location.href); url.searchParams.delete("rosterModal"); url.searchParams.delete("editRoster"); if (next.mode === "create") url.searchParams.set("rosterModal", "create"); if (next.mode === "edit") url.searchParams.set("editRoster", next.id); window.history.pushState(window.history.state, "", `${url.pathname}${url.search}`); setModal(next); };
-  const reconcile = useCallback(async () => { const result = await resource.load(resource.query, "none"); if (result.ok) writeModal({ mode: "", id: "" }); return result.ok; }, [resource]);
+  const writeModal = (next: Modal) => { const url = new URL(window.location.href); url.searchParams.delete("rosterModal"); url.searchParams.delete("editRoster"); if (next.mode === "create") url.searchParams.set("rosterModal", "create"); if (next.mode === "edit") url.searchParams.set("editRoster", next.id); window.history.pushState(null, "", `${url.pathname}${url.search}`); setModal(next); };
+  const reconcile = useCallback(async (message: string) => { const next = message === "Roster template created." ? { ...resource.query, page: 1 } : resource.query; const result = await resource.load(next, "none"); if (result.ok) { const url = new URL(window.location.href); if (result.query.page === 1) url.searchParams.delete("page"); else url.searchParams.set("page", String(result.query.page)); window.history.replaceState(null, "", `${url.pathname}${url.search}`); writeModal({ mode: "", id: "" }); rememberActionSuccess(window.location.pathname, "roster-catalog", "Action saved.", message); } return result.ok; }, [resource]);
   const totalPages = resource.data.total_pages ?? Math.max(1, Math.ceil(resource.data.total_count / resource.data.page_size));
   const rolloutTotalPages = rolloutResource.data.total_pages ?? Math.max(1, Math.ceil(rolloutResource.data.total_count / rolloutResource.data.page_size));
-  const loadRolloutPage = (page: number) => { void rolloutResource.load({ ...rolloutResource.query, page }, "none").then((result) => { if (!result.ok) return; const url = new URL(window.location.href); if (result.query.page === 1) url.searchParams.delete("rollout_page"); else url.searchParams.set("rollout_page", String(result.query.page)); if (result.query.page_size === 6) url.searchParams.delete("rollout_page_size"); else url.searchParams.set("rollout_page_size", String(result.query.page_size)); window.history.pushState(window.history.state, "", `${url.pathname}${url.search}`); }); };
+  const loadRolloutPage = (page: number) => { void rolloutResource.load({ ...rolloutResource.query, page }, "none").then((result) => { if (!result.ok) return; const url = new URL(window.location.href); if (result.query.page === 1) url.searchParams.delete("rollout_page"); else url.searchParams.set("rollout_page", String(result.query.page)); if (result.query.page_size === 6) url.searchParams.delete("rollout_page_size"); else url.searchParams.set("rollout_page_size", String(result.query.page_size)); window.history.pushState(null, "", `${url.pathname}${url.search}`); }); };
   return <div data-local-update-hydrated={hydrated ? "true" : "false"} aria-busy={resource.isPending || undefined}>
+    <ActionFeedbackReceipt recordIds={["roster-catalog", ...resource.data.items.map(item => item.id)]} />
     {resource.error ? <div className="notice notice--error" role="alert"><strong>Template update failed.</strong><span>{resource.error}</span><button className="button button--secondary button--compact" onClick={() => void resource.load(resource.query, "none")} type="button">Retry</button></div> : null}
     <ShiftRosterTemplatesWorkbench canManagePolicies={canManagePolicies} currentParams={currentParams} editItem={initialEditItem} items={resource.data.items} options={options} page={resource.data.page} pageSize={resource.data.page_size} state={resource.data.state} totalCount={resource.data.total_count} totalPages={totalPages} pending={resource.isPending} modalMode={modal.mode} editRosterId={modal.id} onQueryChange={changeQuery} onOpenCreate={() => writeModal({ mode: "create", id: "" })} onOpenEdit={(id) => writeModal({ mode: "edit", id })} onCloseModal={() => writeModal({ mode: "", id: "" })} onReconcile={reconcile} />
     {canManagePolicies ? <>

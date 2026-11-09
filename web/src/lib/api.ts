@@ -166,7 +166,7 @@ async function getAccessToken() {
   return cookieStore.get("hrms_access_token")?.value || BEARER_TOKEN;
 }
 
-class ApiRequestError extends Error {
+export class ApiRequestError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
     this.name = "ApiRequestError";
@@ -181,7 +181,7 @@ export function isApiNotFoundError(error: unknown) {
   return error instanceof ApiRequestError && error.status === 404;
 }
 
-async function apiGet<T>(path: string, timeoutMs?: number): Promise<{ data: T; state: ApiState }> {
+async function apiGet<T>(path: string, timeoutMs?: number, redirectUnauthorized = true): Promise<{ data: T; state: ApiState }> {
   if (!API_BASE_URL) {
     if (DEMO_DATA_ENABLED) {
       return { data: getDemoData<T>(path), state: "demo" };
@@ -192,6 +192,7 @@ async function apiGet<T>(path: string, timeoutMs?: number): Promise<{ data: T; s
 
   const token = await getAccessToken();
   if (!token) {
+    if (!redirectUnauthorized) throw buildApiError(path, "Not authenticated.", 401);
     redirect(LOGIN_PATH);
   }
 
@@ -204,7 +205,7 @@ async function apiGet<T>(path: string, timeoutMs?: number): Promise<{ data: T; s
       ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });
 
-    if (result.status === 401) {
+    if (result.status === 401 && redirectUnauthorized) {
       redirect(LOGIN_PATH);
     }
 
@@ -997,8 +998,8 @@ export async function getHrAdminEmployeeShiftAssignments(params?: {
   risk?: string;
   page?: string | number;
   page_size?: string | number;
-}) {
-  return apiGet<HrAdminEmployeeShiftAssignmentListResponse>(`/hr-admin/employee-shift-assignments/${buildQueryString(params ?? {})}`);
+}, options?: { redirectUnauthorized?: boolean }) {
+  return apiGet<HrAdminEmployeeShiftAssignmentListResponse>(`/hr-admin/employee-shift-assignments/${buildQueryString(params ?? {})}`, undefined, options?.redirectUnauthorized !== false);
 }
 
 export async function getHrAdminEmployeeShiftAssignment(itemId: string) {
@@ -1012,8 +1013,8 @@ export async function getHrAdminShiftRosterTemplates(params?: {
   pattern?: string;
   page?: string | number;
   page_size?: string | number;
-}) {
-  return apiGet<HrAdminShiftRosterTemplateListResponse>(`/hr-admin/shift-roster-templates/${buildQueryString(params ?? {})}`);
+}, options?: { redirectUnauthorized?: boolean }) {
+  return apiGet<HrAdminShiftRosterTemplateListResponse>(`/hr-admin/shift-roster-templates/${buildQueryString(params ?? {})}`, undefined, options?.redirectUnauthorized !== false);
 }
 
 export async function getHrAdminShiftRosterTemplate(itemId: string) {
@@ -1497,6 +1498,7 @@ function getDemoData<T>(path: string): T {
     pending_leave_approvals_count: 2,
     pending_attendance_regularizations_count: 3,
     attendance_exceptions_today: 2,
+    reportees: [],
   };
 
   const demoHrAdminEmployees: HrAdminEmployeeListItem[] = [
@@ -2386,6 +2388,7 @@ function getDemoData<T>(path: string): T {
   const demoHrAdminLeaveTypes: HrAdminLeaveType[] = [
     {
       id: "lt-1",
+      updated_at: "2026-01-01T00:00:00Z",
       code: "casual-leave",
       name: "Casual Leave",
       short_code: "CL",
@@ -2403,6 +2406,7 @@ function getDemoData<T>(path: string): T {
     },
     {
       id: "lt-2",
+      updated_at: "2026-01-01T00:00:00Z",
       code: "sick-leave",
       name: "Sick Leave",
       short_code: "SL",
@@ -2458,6 +2462,7 @@ function getDemoData<T>(path: string): T {
   const demoHrAdminLeavePolicies: HrAdminLeavePolicy[] = [
     {
       id: "lp-1",
+      updated_at: "2026-01-01T00:00:00Z",
       leave_type_id: "lt-1",
       leave_type: "Casual Leave",
       code: "cl-standard",

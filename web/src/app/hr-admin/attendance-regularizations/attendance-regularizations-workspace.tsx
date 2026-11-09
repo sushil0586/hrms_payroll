@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 
 import { AttendanceRegularizationQueue } from "./attendance-regularization-queue";
 import type { AttendanceRegularizationItem, HrAdminAttendanceRegularizationListResponse, HrAdminEnumOption } from "@/lib/types";
@@ -41,6 +42,7 @@ export function AttendanceRegularizationsWorkspace({ initialData, initialQuery, 
   const query = resource.query;
   const reconcile = useCallback(async () => (await resource.load(query, "none")).ok, [query, resource]);
   return <div data-local-update-hydrated={hydrated ? "true" : "false"} aria-busy={resource.isPending || undefined}>
+    <ActionFeedbackReceipt recordIds={["attendance-regularization"]} />
     {resource.error ? <div className="notice notice--error" role="alert"><strong>Regularization update failed.</strong><span>{resource.error}</span><button className="button button--secondary button--compact" onClick={() => void resource.load(query, "none")} type="button">Retry</button></div> : null}
     <AttendanceRegularizationQueue items={resource.data.items} regularizationStatusOptions={regularizationStatusOptions} attendanceStatusOptions={attendanceStatusOptions}
       reviewItem={resource.data.reviewItem} currentFilters={query} pagination={resource.data} canReviewRegularizations={canReviewRegularizations} pending={resource.isPending}

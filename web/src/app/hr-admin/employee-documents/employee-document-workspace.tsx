@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useSyncExternalStore } from "react";
 
+import { ActionFeedbackReceipt, rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import type {
   HrAdminDocumentCategory,
@@ -96,9 +97,9 @@ export function EmployeeDocumentWorkspace({ initialData, initialQuery, canVerify
   const filters = { q: query.q, verification_status: query.verification_status, status: query.status, category_id: query.category_id, expiry_filter: query.expiry_filter, sort: query.sort, page: query.page, page_size: query.page_size };
   const refresh = useCallback(async () => (await resource.load(query, "none")).ok, [query, resource]);
   const closeReview = useCallback(() => { void resource.load({ ...query, reviewDocument: "" }, "push"); }, [query, resource]);
-  const reviewSaved = useCallback(async () => {
+  const reviewSaved = useCallback(async (itemId: string) => {
     const result = await resource.load({ ...query, reviewDocument: "" }, "replace");
-    if (result.ok) setNotice("Document review updated.");
+    if (result.ok) rememberActionSuccess("/hr-admin/employee-documents", itemId, "Document review updated.", "The confirmed review is now shown in the document queue.");
     return result.ok;
   }, [query, resource]);
   const closeUpload = useCallback(() => { void resource.load({ ...query, uploadDocument: "" }, "push"); }, [query, resource]);
@@ -111,6 +112,7 @@ export function EmployeeDocumentWorkspace({ initialData, initialQuery, canVerify
   const expiredOnPage = resource.data.items.filter((item) => item.is_expired).length;
 
   return <div data-local-update-hydrated={hydrated ? "true" : "false"}>
+    <ActionFeedbackReceipt recordIds={resource.data.items.map(item => item.id)} />
     <div className="document-workspace-local-actions">
       {canUploadDocuments ? <button className="button button--primary" type="button" onClick={() => void resource.load({ ...query, uploadDocument: "create", reviewDocument: "" }, "push")}>Upload document</button> : null}
     </div>

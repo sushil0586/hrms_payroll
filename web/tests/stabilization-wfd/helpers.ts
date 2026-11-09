@@ -1,0 +1,13 @@
+import {test as base,expect,type Page,type TestInfo} from '@playwright/test';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {provisionIsolatedQaWorkspace,cleanupIsolatedQaWorkspace,workspacePersona,type IsolatedQaWorkspace} from '../helpers/isolated-qa-workspace';
+const exec=promisify(execFile);
+export type Owned={workspace:IsolatedQaWorkspace;prepared:{assignment_id:string;type_id:string;policy_id:string;request_id:string;employee_id:string;balance_id:string;dates:Record<string,string>}};
+export const test=base.extend<{owned:Owned}>({owned:async({},provide,info)=>{const workspace=await provisionIsolatedQaWorkspace(info);try{const {stdout}=await exec(process.env.HRMS_QA_PYTHON!,['web/tests/stabilization-wfd/prepare.py',workspace.manifestPath,workspace.seedRef],{env:process.env});const prepared=JSON.parse(stdout);await info.attach('owned-fixture',{body:stdout,contentType:'application/json'});await provide({workspace,prepared});const result=await exec(process.env.HRMS_QA_PYTHON!,['web/tests/stabilization-wfd/reconcile.py',workspace.manifestPath,workspace.seedRef,info.title],{env:process.env});await info.attach('postgresql-after',{body:result.stdout,contentType:'application/json'});}finally{await cleanupIsolatedQaWorkspace(workspace,info)}}});
+export {expect};
+export async function login(page:Page,owned:Owned,role:'hr_admin'|'employee'|'manager'|'manager_b'){const actor=workspacePersona(owned.workspace,role);expect((await page.request.post('/api/auth/login',{data:{identifier:actor.username,password:actor.password}})).status()).toBe(200);}
+export async function shot(page:Page,info:TestInfo,id:string){if(!id.includes('loading'))await expect(page.locator('main h1').first()).toBeVisible();await page.evaluate(()=>document.fonts.ready);await info.attach(id+'.png',{body:await page.screenshot({animations:'disabled'}),contentType:'image/png'});}
+export async function axe(page:Page,info:TestInfo,id:string){await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});const violations=await page.evaluate(async()=>await (window as unknown as{axe:{run:()=>Promise<{violations:unknown[]}>}}).axe.run().then(r=>r.violations));await info.attach(id,{body:JSON.stringify(violations),contentType:'application/json'});expect(violations).toEqual([]);}
+export async function keys(page:Page){const dialog=page.getByRole('dialog');for(const key of ['Tab','Shift+Tab'])for(let i=0;i<15;i++){await page.keyboard.press(key);expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);}}
+export function dayLabel(day:string){return new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(day+'T12:00Z'));}

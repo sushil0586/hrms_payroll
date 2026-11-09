@@ -12,33 +12,39 @@ const panel=(page:Page,kind:Kind)=>page.getByTestId(testId(kind));
 const employeeId=()=>fixture.manifest.credentials.employee.employee_id;
 const employeeCode=()=>fixture.manifest.credentials.employee.employee_code;
 const managerCode=()=>fixture.manifest.credentials.manager_b.employee_code;
+const campaignDate=()=>new Date().toISOString().slice(0,10);
 let serial=0;
 function csv(kind:Kind,tag:string,two=false){
  serial++;
  if(kind==='employee'){
  const headers='employee_code,first_name,middle_name,last_name,preferred_name,work_email,personal_email,phone_number,employment_status,date_of_birth,date_of_joining,probation_end_date,confirmation_date,legal_entity,branch,location,business_unit,department,cost_center,designation,grade,employment_type,reporting_manager_code';
- const row=(suffix:string)=>{const vals=Array(23).fill('');vals[0]=`P5-${tag}-${serial}-${suffix}`;vals[1]='Synthetic';vals[8]='active';return vals.join(',')};
+ const safeTag=tag.replace(/[^a-z0-9]+/gi,'-');
+ const row=(suffix:string)=>{const vals=Array(23).fill('');vals[0]=`P5-${safeTag}-${serial}-${suffix}`;vals[1]='Synthetic';vals[8]='active';return vals.join(',')};
  return headers+'\n'+row('a')+(two?'\n'+row('b'):'');
  }
- if(kind==='bank')return 'employee_code,account_holder_name,bank_name,account_number,ifsc_code,branch_name,is_primary\n'+`${employeeCode()},Synthetic Employee,${tag},998877665544,HDFC0001234,QA Branch,true`+(two?`\n${managerCode()},Synthetic Manager,${tag} Other,998877665599,HDFC0001234,QA Branch,false`:'');
- return 'employee_code,reporting_manager_code,effective_date,reason\n'+`${employeeCode()},${managerCode()},2026-10-22,${tag}`+(two?`\n${fixture.manifest.credentials.hr_checker.employee_code},${managerCode()},2026-10-22,${tag} Other`:'');
+ if(kind==='bank'){
+ const sequence=String(serial).padStart(4,'0');
+ return 'employee_code,account_holder_name,bank_name,account_number,ifsc_code,branch_name,is_primary\n'+`${employeeCode()},Synthetic Employee,${tag},99887766${sequence},HDFC0001234,QA Branch,true`+(two?`\n${managerCode()},Synthetic Manager,${tag} Other,99887767${sequence},HDFC0001234,QA Branch,false`:'');
+ }
+ return 'employee_code,reporting_manager_code,effective_date,reason\n'+`${employeeCode()},${managerCode()},${campaignDate()},${tag}`+(two?`\n${fixture.manifest.credentials.hr_checker.employee_code},${managerCode()},${campaignDate()},${tag} Other`:'');
 }
 async function open(page:Page,kind:Kind){
  await page.goto('/hr-admin/employees?sort=-name&page_size=5');
- await page.locator('#employee-imports > details > summary').click();
+ await page.locator('details.employee-imports-disclosure > summary').click();
  await panel(page,kind).locator(':scope > summary').click();
  await expect(panel(page,kind).getByRole('textbox',{name:'CSV data',exact:true})).toBeEnabled();
 }
-async function preview(page:Page,kind:Kind,text:string){const p=panel(page,kind);await p.getByRole('textbox',{name:'CSV data',exact:true}).fill(text);await p.getByRole('button',{name:'Preview import',exact:true}).click();await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','false')}
-function mutation(url:string,method:string,kind:Kind){return kind==='employee'?url.endsWith('/api/hr-admin/employees')&&method==='POST':kind==='bank'?url.includes('/bank-accounts')&&method==='POST':/\/api\/hr-admin\/employees\/[^/]+$/.test(url)&&method==='PATCH'}
+async function preview(page:Page,kind:Kind,text:string){const p=panel(page,kind);await p.getByRole('textbox',{name:'CSV data',exact:true}).fill(text);await p.getByRole('button',{name:'Preview import',exact:true}).click();await expect(p.locator('tbody tr').first()).toBeVisible();await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','false')}
+function mutation(url:string,method:string,kind:Kind){return kind==='employee'?url.endsWith('/api/hr-admin/employees')&&method==='POST':kind==='bank'?url.includes('/bank-accounts')&&method==='POST':url.endsWith('/api/hr-admin/movements')&&method==='POST'}
 test.beforeAll(async({},info)=>{fixture=await provisionIsolatedQaWorkspace(info)});
 test.afterAll(async()=>{await cleanupIsolatedQaWorkspace(fixture)});
-test.beforeEach(async({page})=>{errors=[];page.on('pageerror',e=>errors.push(e.message));const user=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200)});
+test.beforeEach(async({page})=>{errors=[];page.on('pageerror',e=>errors.push(e.message));const user=workspacePersona(fixture,'hr_admin');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);const token=(await page.context().cookies()).find(cookie=>cookie.name==='hrms_access_token')?.value;expect(token).toBeTruthy();await page.context().addCookies([{name:'hrms_access_token',value:token!,url:'http://127.0.0.1:3269',httpOnly:true,sameSite:'Lax'}]);await page.context().setExtraHTTPHeaders({Authorization:`Token ${token}`})});
 test.afterEach(()=>expect(errors).toEqual([]));
 
 for(const kind of kinds){
  test(`${kind} preview errors, source invalidation, template upload and focus`,async({page},info)=>{
   await page.setViewportSize({width:390,height:844});await open(page,kind);const p=panel(page,kind);await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();
+  const templateLink=p.getByRole('link',{name:'Download template',exact:true});await expect(templateLink).toHaveAttribute('download',new RegExp(`${kind==='manager'?'employee-manager':kind==='bank'?'employee-bank':'employee'}-import-template\\.csv`));const templateHref=await templateLink.getAttribute('href');expect(templateHref).toMatch(/^data:text\/csv;charset=utf-8,/);expect(decodeURIComponent(templateHref!.split(',')[1]).split('\n')[0]).toBe(csv(kind,'headers-only').split('\n')[0]);
   await p.getByRole('button',{name:'Preview import',exact:true}).click();await expect(p.getByRole('alert')).toContainText('at least one');await expect(p.getByRole('alert')).toBeFocused();await expect(p.getByRole('alert')).not.toHaveClass(/notice--success/);
   await preview(page,kind,csv(kind,info.project.name+' input'));await expect(p.locator('tbody tr')).toHaveCount(1);await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeEnabled();
   const textarea=p.getByRole('textbox',{name:'CSV data',exact:true});await textarea.fill('bad headers\ninvalid');await expect(p.locator('tbody tr')).toHaveCount(0);await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();await expect(textarea).toBeFocused();
@@ -46,29 +52,34 @@ for(const kind of kinds){
   await page.screenshot({path:`${root}/${info.project.name}-${kind}-preview-390.png`});
  });
  test(`${kind} real commit preserves receipts and does not replay saved rows`,async({page},info)=>{
-  await open(page,kind);const p=panel(page,kind);const input=csv(kind,`${info.project.name} real`);await preview(page,kind,input);
+  await open(page,kind);const p=panel(page,kind);const input=csv(kind,`${info.project.name} real`);await preview(page,kind,input);await expect(p.locator('tbody')).toContainText('ready');await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeEnabled();const authCookie=(await page.context().cookies()).find(cookie=>cookie.name==='hrms_access_token');expect(authCookie).toBeTruthy();const authHeaders={Cookie:`${authCookie!.name}=${authCookie!.value}`};
   let writes=0;page.on('request',request=>{if(mutation(request.url(),request.method(),kind))writes++});
   page.once('dialog',d=>d.dismiss());await p.getByRole('button',{name:'Commit ready rows',exact:true}).click();expect(writes).toBe(0);
-  page.once('dialog',d=>d.accept());const response=page.waitForResponse(r=>mutation(r.url(),r.request().method(),kind));await p.getByRole('button',{name:'Commit ready rows',exact:true}).click();const savedResponse=await response;expect(savedResponse.status()).toBe(kind==='manager'?200:201);const saved=await savedResponse.json();await expect(p.locator('.notice[role="status"]')).toContainText('Import complete');await expect(p.locator('.notice[role="status"]')).toBeFocused();await expect(p.locator('tbody')).toContainText('Saved');expect(writes).toBe(1);
-  if(kind==='employee'){const current=await page.request.get(`/api/hr-admin/employees/${saved.id}`);expect((await current.json()).employee_code).toBe(saved.employee_code)}
-  if(kind==='manager'){const current=await page.request.get(`/api/hr-admin/employees/${employeeId()}`);expect((await current.json()).reporting_manager_id).toBe(fixture.manifest.credentials.manager_b.employee_id)}
+  page.once('dialog',d=>d.accept());const response=page.waitForResponse(r=>mutation(r.url(),r.request().method(),kind));await p.getByRole('button',{name:'Commit ready rows',exact:true}).click();const savedResponse=await response;expect(savedResponse.status()).toBe(201);const saved=await savedResponse.json();await expect(p.locator('.notice[role="status"]')).toContainText('Import complete');await expect(p.locator('.notice[role="status"]')).toBeFocused();await expect(p.locator('tbody')).toContainText('Saved');expect(writes).toBe(1);
+  if(kind==='employee'){const current=await page.request.get(`/api/hr-admin/employees/${saved.id}`,{headers:authHeaders});expect(current.status()).toBe(200);expect((await current.json()).employee_code).toBe(saved.employee_code)}
+  if(kind==='manager'){const current=await page.request.get(`/api/hr-admin/employees/${employeeId()}`,{headers:authHeaders});expect(current.status()).toBe(200);expect((await current.json()).reporting_manager).toBe('Meera Manager');expect(saved).toMatchObject({employee_id:employeeId(),to_manager_id:fixture.manifest.credentials.manager_b.employee_id,effective_date:campaignDate(),reason:`${info.project.name} real`,status:'completed',movement_type:'reporting_change'})}
   if(kind==='bank'){const current=await (await page.request.get(`/api/hr-admin/employees/${employeeId()}/bank-accounts`)).json();const rows=Array.isArray(current)?current:current.results;expect(rows.filter((r:{is_primary:boolean})=>r.is_primary)).toHaveLength(1);expect(rows.find((r:{id:string})=>r.id===saved.id).is_primary).toBe(true);await expect(p.locator('table')).not.toContainText('998877665544')}
-  await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','false');await page.screenshot({path:`${root}/${info.project.name}-${kind}-committed.png`});const history=await (await page.request.get(`/api/hr-admin/import-batches?source_hash=${createHash('sha256').update(input).digest('hex')}`)).json();expect(history.items.some((r:{status:string;created_count:number})=>r.status==='committed'&&r.created_count===1)).toBe(true);await p.getByRole('textbox',{name:'CSV data',exact:true}).fill(input+'\n');await expect(p.getByRole('region',{name:'Earlier row receipts'})).toContainText('Saved');await p.getByRole('button',{name:'Preview import',exact:true}).click();await expect(p.locator('tbody')).toContainText('Saved');await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();expect(writes).toBe(1);
+  await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','false');await page.screenshot({path:`${root}/${info.project.name}-${kind}-committed.png`});const history=await (await page.request.get(`/api/hr-admin/import-batches?source_hash=${createHash('sha256').update(input).digest('hex')}`,{headers:authHeaders})).json();expect(history.items.some((r:{status:string;created_count:number})=>r.status==='committed'&&r.created_count===1)).toBe(true);await p.getByRole('textbox',{name:'CSV data',exact:true}).fill(input+'\n');await expect(p.getByRole('region',{name:'Earlier row receipts'})).toContainText('Saved');await p.getByRole('button',{name:'Preview import',exact:true}).click();await expect(p.locator('tbody')).toContainText('Saved');await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();expect(writes).toBe(1);
   await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','false');await page.screenshot({path:`${root}/${info.project.name}-${kind}-saved.png`});
+  await page.reload();await open(page,kind);const reopened=panel(page,kind);await preview(page,kind,input);
+  if(kind==='employee'){
+   await expect(reopened.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();await expect(reopened.locator('tbody')).toContainText('already exists');const replay=await page.request.post('/api/hr-admin/import-batches',{data:{import_type:'employees',status:'claimed',file_name:'employee-import.csv',source_hash:createHash('sha256').update(input).digest('hex'),source_ref:'hrms.bulk_import.browser.v2',row_count:1,ready_count:1},headers:authHeaders});expect(replay.status()).toBe(200);expect(replay.headers()['idempotency-replayed']).toBe('true');
+  }else{page.once('dialog',d=>d.accept());await reopened.getByRole('button',{name:'Commit ready rows',exact:true}).click();await expect(reopened.getByRole('alert')).toContainText('already claimed')}
+  expect(writes).toBe(1);
  });
  test(`${kind} pending locks source and actions, then rejection preserves draft`,async({page})=>{
   await open(page,kind);const p=panel(page,kind);const input=csv(kind,'rejected');await preview(page,kind,input);let release!:()=>void;const gate=new Promise<void>(r=>release=r);let writes=0;
-  await page.route('**/api/hr-admin/employees**',async route=>{if(!mutation(route.request().url(),route.request().method(),kind))return route.continue();writes++;await gate;await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({detail:'Synthetic row rejected.'})})});
+  await page.route(/\/api\/hr-admin\/(employees|movements)/,async route=>{if(!mutation(route.request().url(),route.request().method(),kind))return route.continue();writes++;await gate;await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({detail:'Synthetic row rejected.'})})});
   page.once('dialog',d=>d.accept());await p.getByRole('button',{name:'Commit ready rows',exact:true}).click();await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','true');await expect(p.getByRole('textbox',{name:'CSV data',exact:true})).toBeDisabled();await expect(p.getByRole('button',{name:'Preview import',exact:true})).toBeDisabled();await expect(p.getByLabel('Upload CSV',{exact:true})).toBeDisabled();await expect(p.getByRole('button',{name:'Committing rows',exact:true})).toBeDisabled();release();await expect(p.getByRole('alert')).toContainText('Batch finished');await expect(p.getByRole('alert')).toBeFocused();await expect(p.getByRole('textbox',{name:'CSV data',exact:true})).toHaveValue(input);expect(writes).toBe(1);await expect(p.locator('tbody')).toContainText('Synthetic row rejected.');
  });
  test(`${kind} uncertain write stops later rows and cannot be replayed by preview`,async({page},info)=>{
   await open(page,kind);const p=panel(page,kind);await preview(page,kind,csv(kind,'uncertain',true));await expect(p.locator('tbody tr')).toHaveCount(2);let writes=0;
-  await page.route('**/api/hr-admin/employees**',route=>{if(!mutation(route.request().url(),route.request().method(),kind))return route.continue();writes++;return route.abort('failed')});
+  await page.route(/\/api\/hr-admin\/(employees|movements)/,route=>{if(!mutation(route.request().url(),route.request().method(),kind))return route.continue();writes++;return route.abort('failed')});
   page.once('dialog',d=>d.accept());await p.getByRole('button',{name:'Commit ready rows',exact:true}).click();await expect(p.getByRole('alert')).toContainText('outcome unconfirmed');await expect(p.getByRole('alert')).toBeFocused();await expect(p.locator('tbody')).toContainText('No automatic retry');expect(writes).toBe(1);await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();await p.getByRole('button',{name:'Preview import',exact:true}).click();await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();expect(writes).toBe(1);await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','false');await page.screenshot({path:`${root}/${info.project.name}-${kind}-unconfirmed.png`});
  });
  test(`${kind} mixed local validation and missing history receipt are truthful`,async({page})=>{
   await open(page,kind);const p=panel(page,kind);let text=csv(kind,'mixed',true);text=text+'\n'+(kind==='employee'?',,,,,,,,active,,,,,,,,,,,,,,':kind==='bank'?'UNKNOWN,,,,,,true':'UNKNOWN,UNKNOWN,not-a-date,');
-  await page.route('**/api/hr-admin/import-batches',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));await preview(page,kind,text);await expect(p.locator('tbody tr')).toHaveCount(3);await expect(p.getByRole('alert').filter({hasText:'Preview ready'})).toContainText('1 blocked');await expect(p.getByRole('alert').filter({hasText:'Import history needs checking'})).toBeVisible();await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeEnabled();
+  await page.route('**/api/hr-admin/import-batches',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));await preview(page,kind,text);await expect(p.locator('tbody tr')).toHaveCount(3);await expect(p.getByRole('alert').filter({hasText:'Preview ready'})).toContainText('1 blocked');let writes=0;page.on('request',request=>{if(mutation(request.url(),request.method(),kind))writes++});page.once('dialog',d=>d.accept());await p.getByRole('button',{name:'Commit ready rows',exact:true}).click();await expect(p.getByRole('alert').filter({hasText:'Import history needs checking'})).toBeVisible();await expect(p.getByRole('alert').filter({hasText:'Import did not start'})).toBeVisible();expect(writes).toBe(0);
  });
 }
 
@@ -82,15 +93,15 @@ test('responsive import hierarchy, keyboard scroll, and scoped accessibility',as
  }
 });
 test('employee persona cannot see imports or mutate employee records',async({page})=>{
- const user=workspacePersona(fixture,'employee');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);await page.goto('/hr-admin/employees');await expect(page.locator('#employee-imports')).toHaveCount(0);
- for(const [url,method] of [['/api/hr-admin/employees','POST'],[`/api/hr-admin/employees/${employeeId()}/bank-accounts`,'POST'],[`/api/hr-admin/employees/${employeeId()}`,'PATCH']]){const r=await page.request.fetch(url,{method,data:{first_name:'Denied'}});expect(r.status()).toBe(403)}
+ const user=workspacePersona(fixture,'employee');expect((await page.request.post('/api/auth/login',{data:{identifier:user.username,password:user.password}})).status()).toBe(200);const token=(await page.context().cookies()).find(cookie=>cookie.name==='hrms_access_token')?.value;expect(token).toBeTruthy();await page.context().addCookies([{name:'hrms_access_token',value:token!,url:'http://127.0.0.1:3269',httpOnly:true,sameSite:'Lax'}]);await page.context().setExtraHTTPHeaders({Authorization:`Token ${token}`});await page.goto('/hr-admin/employees');await expect(page.locator('details.employee-imports-disclosure')).toHaveCount(0);
+ for(const [url,method] of [['/api/hr-admin/employees','POST'],[`/api/hr-admin/employees/${employeeId()}/bank-accounts`,'POST'],[`/api/hr-admin/employees/${employeeId()}`,'PATCH']]){const r=await page.request.fetch(url,{method,data:{first_name:'Denied'},headers:{Authorization:`Token ${token}`}});expect(r.status()).toBe(403)}
 });
 
 for(const kind of kinds)test(`${kind} real partial batch retains success while a later rejection is correctable`,async({page},info)=>{
- await open(page,kind);const p=panel(page,kind);const input=csv(kind,`${info.project.name} partial`,true);await preview(page,kind,input);let writes=0;let savedId='';
- await page.route('**/api/hr-admin/employees**',async route=>{
+ await open(page,kind);const p=panel(page,kind);let input=csv(kind,`${info.project.name} partial`,true);if(kind==='manager'){const lines=input.split('\n');input=[lines[0],lines[2],lines[1]].join('\n')}await preview(page,kind,input);let writes=0;let savedId='';
+ await page.route(/\/api\/hr-admin\/(employees|movements)/,async route=>{
   if(!mutation(route.request().url(),route.request().method(),kind))return route.continue();writes++;
-  if(writes===1){const r=await route.fetch();expect(r.status()).toBe(kind==='manager'?200:201);savedId=(await r.json()).id;return route.fulfill({response:r})}
+  if(writes===1){const r=await route.fetch();expect(r.status()).toBe(201);savedId=(await r.json()).id;return route.fulfill({response:r})}
   return route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({detail:'Second row rejected for correction.'})});
  });
  page.once('dialog',d=>d.accept());await p.getByRole('button',{name:'Commit ready rows',exact:true}).click();await expect(p.getByRole('alert')).toContainText('1 saved; 1 blocked or rejected');await expect(p.locator('[aria-busy]').first()).toHaveAttribute('aria-busy','false');expect(writes).toBe(2);expect(savedId).not.toBe('');await page.screenshot({path:`${root}/${info.project.name}-${kind}-partial.png`});
@@ -120,8 +131,14 @@ test('ambiguous manager names are blocked and employee codes disambiguate both i
  }
 });
 
+test('duplicate employee references block every affected row',async({page},info)=>{
+ for(const kind of kinds){
+  await open(page,kind);const first=csv(kind,`duplicate-${info.project.name}`);const row=first.split('\n')[1];const duplicated=`${first}\n${row}`;await preview(page,kind,duplicated);const p=panel(page,kind);await expect(p.locator('tbody tr')).toHaveCount(2);await expect(p.locator('tbody tr').nth(0)).toContainText(/Every duplicate/);await expect(p.locator('tbody tr').nth(1)).toContainText(/Every duplicate/);await expect(p.getByRole('button',{name:'Commit ready rows',exact:true})).toBeDisabled();
+ }
+});
+
 test('filtered directory keeps full import employee lookup and secondary tools',async({page})=>{
- await page.goto('/hr-admin/employees?q=Esha&sort=-name&page_size=5');await expect(page.locator('#employee-imports > details')).not.toHaveAttribute('open','');await page.locator('#employee-imports > details > summary').click();
+ await page.goto('/hr-admin/employees?q=Esha&sort=-name&page_size=5');const disclosure=page.locator('details.employee-imports-disclosure');await expect(disclosure).not.toHaveAttribute('open','');await disclosure.locator(':scope > summary').click();
  for(const kind of kinds)await expect(panel(page,kind)).not.toHaveAttribute('open','');
  await panel(page,'bank').locator(':scope > summary').click();await preview(page,'bank',csv('bank','Outside matching scope').replace(employeeCode(),managerCode()));await expect(panel(page,'bank').getByRole('button',{name:'Commit ready rows',exact:true})).toBeEnabled();await expect(page).toHaveURL(/q=Esha/);await expect(page).toHaveURL(/page_size=5/);
 });

@@ -30,6 +30,7 @@ type SelectionProviderProps = {
   onAction?: (action: "edit" | "access" | "bank", detail: HrAdminEmployeeDetail) => void;
   onActionFocusRestored?: () => void;
   returnFocusAction?: "edit" | "access" | "bank" | null;
+  selectionResetToken?: number;
 };
 
 const SelectionContext = createContext<SelectionContextValue | null>(null);
@@ -56,6 +57,7 @@ export function EmployeeSelectionProvider({
   onAction,
   onActionFocusRestored,
   returnFocusAction,
+  selectionResetToken = 0,
 }: SelectionProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -74,6 +76,7 @@ export function EmployeeSelectionProvider({
   const selectedIdRef = useRef<string | null>(initialSelectedId);
   const triggerRef = useRef<HTMLAnchorElement | null>(null);
   const urlSyncInitializedRef = useRef(false);
+  const selectionResetInitializedRef = useRef(false);
 
   const loadDetail = useCallback(async (employeeId: string, useCached = true) => {
     const cached = cacheRef.current.get(employeeId);
@@ -175,6 +178,19 @@ export function EmployeeSelectionProvider({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => () => requestRef.current?.controller.abort(), []);
+
+  useEffect(() => {
+    if (!selectionResetInitializedRef.current) {
+      selectionResetInitializedRef.current = true;
+      return;
+    }
+    requestRef.current?.controller.abort();
+    selectedIdRef.current = null;
+    setSelectedId(null);
+    setDetail(null);
+    setError("");
+    setState("idle");
+  }, [selectionResetToken]);
 
   const contextValue = useMemo<SelectionContextValue>(() => ({
     detail,

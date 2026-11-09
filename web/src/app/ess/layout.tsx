@@ -1,3 +1,4 @@
+import { ActionFeedbackProvider } from "@/components/patterns/action-feedback-provider";
 import "./ess-experience.css";
 
 import { WorkspaceHydrationBoundary } from "@/components/shell/workspace-hydration-boundary";
@@ -62,7 +63,7 @@ export default async function EssLayout({ children }: { children: React.ReactNod
       workspaceLabel="Self service"
       workspaceTone="employee"
     >
-      <div id="ess-content" tabIndex={-1}>{children}</div>
+      <div id="ess-content" tabIndex={-1}><ActionFeedbackProvider scopeKey={`${sessionUser?.id ?? "anonymous"}:${sessionUser?.default_membership?.id ?? "none"}:ess`}>{children}</ActionFeedbackProvider></div>
     </WorkspaceChrome>
     </WorkspaceHydrationBoundary>
     </>

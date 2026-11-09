@@ -10,6 +10,7 @@ import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { leaveDecisionMessage } from "@/lib/ui/leave-decision-message";
 import { requireText } from "@/lib/ui/validation";
 import { clearMutationIdempotencyKey, mutationIdempotencyKey } from "@/lib/ui/mutation-idempotency";
+import { useApprovalSuccess } from "./approval-feedback";
 
 type Props = {
   itemId: string;
@@ -48,6 +49,7 @@ export function ManagerDecisionPanel({
   onCompleted,
 }: Props) {
   const [comment, setComment] = useState("");
+  const notifySuccess = useApprovalSuccess();
   const [error, setError] = useState("");
   const [commentError, setCommentError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -134,7 +136,6 @@ export function ManagerDecisionPanel({
       ? leaveDecisionMessage(payload, action, isCancellationRequest)
       : action === "approve" ? "Attendance regularization approved." : "Attendance regularization rejected.";
     setSuccessMessage(message);
-    setToast({ title: "Action saved.", message, tone: "success" });
     let confirmed = true;
     try {
       confirmed = (await onCompleted?.()) !== false;
@@ -143,6 +144,8 @@ export function ManagerDecisionPanel({
     }
     if (confirmed) {
       setComment("");
+      if (notifySuccess) notifySuccess(message);
+      else setToast({ title: "Action saved.", message, tone: "success" });
     } else {
       const uncertain = "The decision was saved, but the latest queue could not be confirmed. Do not submit it again; retry the queue read first.";
       setError(uncertain);

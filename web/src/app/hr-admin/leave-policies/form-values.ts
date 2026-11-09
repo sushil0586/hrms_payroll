@@ -3,6 +3,7 @@ import type { HrAdminLeavePolicy, HrAdminLeavePolicyWriteInput } from "@/lib/typ
 export function leavePolicyToFormValue(item: HrAdminLeavePolicy): HrAdminLeavePolicyWriteInput {
   const baseValue = createEmptyLeavePolicyValue(item.status, item.accrual_frequency);
   return {
+    expected_updated_at: item.updated_at,
     leave_type_id: item.leave_type_id,
     code: item.code,
     name: item.name,

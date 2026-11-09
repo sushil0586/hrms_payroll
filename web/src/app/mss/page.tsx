@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 
 import { WorkspaceStandardHeader, WorkspaceStandardPanel, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getMssApprovalInbox } from "@/lib/api";
@@ -134,6 +135,21 @@ export default async function MssControlCenterPage() {
           <span><strong>{summary.employees_on_leave_today}</strong> on leave today</span>
         </div>
       </section>
+
+      <WorkspaceStandardPanel
+        title="Current reportees"
+        description="Employees currently assigned to your manager scope. Historical assignments remain in HR records."
+        meta={<span className="queue-summary-chip"><strong>{summary.reportees.length}</strong> current</span>}
+      >
+        {summary.reportees.length ? (
+          <WorkspaceTableScrollRegion className="workspace-table-scroll workspace-table-region" label="Current reportees table">
+            <table className="workspace-table" aria-label="Current reportees">
+              <thead><tr><th scope="col">Employee</th><th scope="col">Department</th><th scope="col">Designation</th></tr></thead>
+              <tbody>{summary.reportees.map((item) => <tr key={item.employee_id}><th scope="row">{item.employee_name}<small>{item.employee_code}</small></th><td>{item.department || "Not assigned"}</td><td>{item.designation || "Not assigned"}</td></tr>)}</tbody>
+            </table>
+          </WorkspaceTableScrollRegion>
+        ) : <p role="status">No employees currently report to you.</p>}
+      </WorkspaceStandardPanel>
 
       <section className="mss-dashboard" data-testid="mss-control-center">
         <WorkspaceStandardPanel

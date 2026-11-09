@@ -18,6 +18,10 @@ from apps.employee_lifecycle.models import (
     EmploymentSpellStatus,
 )
 from apps.employees.models import Employee
+from apps.platform_config.models import ConfigStatus, TenantConfiguration
+
+
+MOVEMENT_BACKDATING_WINDOW_CONFIG_KEY = "lifecycle.movement_backdating_window_days"
 
 
 ASSIGNMENT_FIELDS = (
@@ -78,6 +82,25 @@ def resolve_employment_scope(employee: Employee, *, as_of: date) -> EmploymentSc
     return _scope_from(assignment, "employment_assignment") if assignment else _scope_from(employee, "legacy_employee_projection")
 
 
+def resolve_movement_backdating_window_days(tenant) -> int:
+    """Return the published tenant window; missing or invalid policy fails closed."""
+
+    configuration = (
+        TenantConfiguration.objects.filter(
+            tenant=tenant,
+            definition__key=MOVEMENT_BACKDATING_WINDOW_CONFIG_KEY,
+            status=ConfigStatus.PUBLISHED,
+        )
+        .filter(Q(effective_from__isnull=True) | Q(effective_from__lte=timezone.now()))
+        .select_related("definition")
+        .first()
+    )
+    value = configuration.published_value if configuration else 0
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return max(value, 0)
+
+
 @transaction.atomic
 def initialize_employment_timeline(
     *, employee_id, actor_identifier: str, approved_source_reference: str, effective_from: date | None = None
@@ -132,6 +155,14 @@ def apply_completed_movement(movement_id, *, actor_identifier: str) -> Employmen
     if movement.resulting_assignment_id:
         return movement.resulting_assignment
     employee = Employee.objects.select_for_update().get(id=movement.employee_id)
+    today = timezone.localdate()
+    if movement.effective_date < today:
+        window_days = resolve_movement_backdating_window_days(movement.tenant)
+        age_days = (today - movement.effective_date).days
+        if window_days == 0 or age_days > window_days:
+            raise ValidationError(
+                f"Backdated movements are limited to the configured {window_days}-day window."
+            )
     current = (
         EmploymentAssignment.objects.select_for_update()
         .filter(
@@ -173,15 +204,17 @@ def apply_completed_movement(movement_id, *, actor_identifier: str) -> Employmen
         if value is not None:
             target_values[target_field] = value
 
+    activates_immediately = movement.effective_date <= timezone.localdate()
     current.effective_to = movement.effective_date - timedelta(days=1)
-    current.status = EmploymentAssignmentStatus.SUPERSEDED
+    if activates_immediately:
+        current.status = EmploymentAssignmentStatus.SUPERSEDED
     current.save(update_fields=["effective_to", "status", "updated_at"])
     assignment = EmploymentAssignment.objects.create(
         tenant=movement.tenant,
         employee=employee,
         employment_spell=current.employment_spell,
         effective_from=movement.effective_date,
-        status=EmploymentAssignmentStatus.PLANNED if movement.effective_date > timezone.localdate() else EmploymentAssignmentStatus.ACTIVE,
+        status=EmploymentAssignmentStatus.ACTIVE if activates_immediately else EmploymentAssignmentStatus.PLANNED,
         source_reference=f"employee_movement:{movement.id}",
         approved_by_identifier=actor_identifier,
         approved_at=timezone.now(),
@@ -190,11 +223,49 @@ def apply_completed_movement(movement_id, *, actor_identifier: str) -> Employmen
     )
     movement.resulting_assignment = assignment
     movement.save(update_fields=["resulting_assignment", "updated_at"])
-    if movement.effective_date <= timezone.localdate():
+    if activates_immediately:
         for field, value in target_values.items():
             setattr(employee, field, value)
         employee.save(update_fields=[*ASSIGNMENT_FIELDS, "updated_at"])
     return assignment
+
+
+@transaction.atomic
+def activate_due_employment_assignments(*, as_of: date | None = None) -> list[EmploymentAssignment]:
+    """Activate due planned assignments exactly once and refresh employee projections."""
+
+    activation_date = as_of or timezone.localdate()
+    due_ids = list(
+        EmploymentAssignment.objects.filter(
+            status=EmploymentAssignmentStatus.PLANNED,
+            effective_from__lte=activation_date,
+        )
+        .order_by("employee_id", "effective_from", "created_at")
+        .values_list("id", flat=True)
+    )
+    activated: list[EmploymentAssignment] = []
+    for assignment_id in due_ids:
+        assignment = EmploymentAssignment.objects.select_for_update().select_related("employee").get(id=assignment_id)
+        if assignment.status != EmploymentAssignmentStatus.PLANNED or assignment.effective_from > activation_date:
+            continue
+        employee = Employee.objects.select_for_update().get(id=assignment.employee_id)
+        EmploymentAssignment.objects.select_for_update().filter(
+            tenant=assignment.tenant,
+            employee=employee,
+            status=EmploymentAssignmentStatus.ACTIVE,
+            effective_to__lt=assignment.effective_from,
+        ).exclude(id=assignment.id).update(status=EmploymentAssignmentStatus.SUPERSEDED)
+        assignment.status = EmploymentAssignmentStatus.ACTIVE
+        assignment.evidence_snapshot = {
+            **assignment.evidence_snapshot,
+            "activated_on": activation_date.isoformat(),
+        }
+        assignment.save(update_fields=["status", "evidence_snapshot", "updated_at"])
+        for field in ASSIGNMENT_FIELDS:
+            setattr(employee, field, getattr(assignment, field))
+        employee.save(update_fields=[*ASSIGNMENT_FIELDS, "updated_at"])
+        activated.append(assignment)
+    return activated
 
 
 def classify_employment_history(tenant) -> dict:

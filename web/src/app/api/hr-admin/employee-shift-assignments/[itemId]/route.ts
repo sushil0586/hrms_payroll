@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE_URL = process.env.HRMS_API_BASE_URL;
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ itemId: string }> }) {
+async function forward(request: NextRequest, context: { params: Promise<{ itemId: string }> }) {
   if (!API_BASE_URL) {
     return NextResponse.json({ detail: "HRMS_API_BASE_URL is not configured." }, { status: 500 });
   }
@@ -13,7 +13,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { itemId } = await context.params;
   const body = await request.json();
   const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/employee-shift-assignments/${itemId}/`, {
-    method: "PATCH",
+    method: request.method,
     headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
     body: JSON.stringify(body),
     cache: "no-store",
@@ -21,3 +21,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const payload = await upstreamResponse.json().catch(() => ({}));
   return NextResponse.json(payload, { status: upstreamResponse.status });
 }
+
+export const PATCH = forward;
+export const POST = forward;

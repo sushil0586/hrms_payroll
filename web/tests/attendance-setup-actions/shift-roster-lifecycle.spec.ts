@@ -1,3 +1,4 @@
+import { retainShiftMutationEvidence } from "../shift-pilot/database-evidence";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import {
@@ -21,7 +22,7 @@ test.beforeAll(async ({}, testInfo) => {
   workspace = await provisionIsolatedQaWorkspace(testInfo);
 });
 
-test.afterAll(async () => cleanupIsolatedQaWorkspace(workspace));
+test.afterAll(async ({}, info) => cleanupIsolatedQaWorkspace(workspace, info));
 
 test.beforeEach(async ({ page }) => {
   const actor = workspacePersona(workspace, "hr_admin");
@@ -37,7 +38,8 @@ async function closeDialog(dialog: Locator, trigger: Locator, name: string | Reg
   await expect(trigger).toBeFocused();
 }
 
-test("shift Inspect, Close, Create, validation, duplicate prevention, Edit, Save, and Cancel work", async ({ page }) => {
+test("shift Inspect, Close, Create, validation, duplicate prevention, Edit, Save, and Cancel work", async ({ page }, info) => {
+  await retainShiftMutationEvidence(page, info, workspace.manifest.tenant.id, workspace.manifest.credentials.hr_admin.username);
   await page.goto("/hr-admin/shifts");
   let inspect = page.getByRole("button", { name: "Inspect", exact: true }).first();
   await inspect.click();

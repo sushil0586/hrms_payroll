@@ -181,9 +181,12 @@ export function EmployeeBankImportWorkbench({ employees, onCommitted }: Employee
     columns={[{key:"employee_code",label:"Employee"},{key:"bank_name",label:"Bank"},{key:"is_primary",label:"Primary (blank = true)"}]}
     prepare={text => {
       const parsed=parseCsv(text);const primary=new Set<string>();
+      const counts=new Map<string,number>();parsed.rows.forEach(row=>{if(!parseBoolean(row.is_primary||"true"))return;const key=row.employee_code.trim().toLowerCase();if(key)counts.set(key,(counts.get(key)??0)+1)});
       return {error:parsed.error,rows:parsed.rows.map((row,index) => {
         const result=buildPayload(row,employeesByCode,primary);
-        return {index:index+1,source:row,employeeId:result.employeeId,payload:result.payload,status:result.errors.length ? "blocked" : "ready",message:result.errors.join(" ")};
+        const duplicate=parseBoolean(row.is_primary||"true")&&(counts.get(row.employee_code.trim().toLowerCase())??0)>1;
+        const errors=duplicate?[...result.errors,"Every duplicate primary-account row is blocked; keep one primary row and preview again."]:result.errors;
+        return {index:index+1,source:row,employeeId:result.employeeId,payload:duplicate?null:result.payload,status:errors.length ? "blocked" : "ready",message:errors.join(" ")};
       })};
     }}
     request={row => ({url:`/api/hr-admin/employees/${row.employeeId}/bank-accounts`,method:"POST",body:row.payload})}

@@ -1,8 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 
+import { apiFieldErrors, mutationErrorMessage, networkMutationMessage } from "@/lib/ui/api-error-message";
+import { useValidationFocus } from "@/lib/ui/use-validation-focus";
+import { useFeedbackFocus } from "@/lib/ui/use-feedback-focus";
+import { hasFieldErrors, requireText } from "@/lib/ui/validation";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminPolicyOptions, HrAdminShiftRosterTemplateWriteInput } from "@/lib/types";
@@ -15,7 +20,7 @@ type Props = {
   cancelHref?: string;
   successHref?: string;
   compact?: boolean;
-  onSaved?: () => Promise<boolean> | boolean;
+  onSaved?: (message: string) => Promise<boolean> | boolean;
   onCancel?: () => void;
 };
 
@@ -32,14 +37,9 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
-function getErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to save roster template.";
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) return String(value[0]);
-    if (typeof value === "string" && value) return value;
-  }
-  return String((payload as Record<string, unknown>).detail || "Unable to save roster template.");
-}
+const fields = ["code", "name", "shift_id", "config_snapshot"] as const;
+type Field = typeof fields[number];
+const subscribe = () => () => undefined;
 
 const guidedPatterns = [
   { value: "custom_cycle", label: "Custom cycle" },
@@ -69,17 +69,29 @@ export function ShiftRosterTemplateForm({
   onCancel,
 }: Props) {
   const router = useRouter();
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<Field, string>>>({});
+  const formRef = useValidationFocus<Field>(fieldErrors);
+  const prefix = useId();
+  const fieldProps = (field: Field) => ({ name: field, "aria-label": ({ code: "Code", name: "Name", shift_id: "Base shift", config_snapshot: "Rotation pattern" })[field], "aria-invalid": Boolean(fieldErrors[field]), "aria-describedby": fieldErrors[field] ? `${prefix}-${field}` : undefined });
+  const fieldError = (field: Field) => fieldErrors[field] ? <span className="field-error-text" id={`${prefix}-${field}`}>{fieldErrors[field]}</span> : null;
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedUnconfirmed, setAcceptedUnconfirmed] = useState(false);
   const submittingRef = useRef(false);
+  const feedbackRef = useFeedbackFocus(error, isSubmitting, hasFieldErrors(fieldErrors));
 
   function update<Key extends keyof HrAdminShiftRosterTemplateWriteInput>(key: Key, value: HrAdminShiftRosterTemplateWriteInput[Key]) {
-    setFormValue((current) => ({ ...current, [key]: value }));
+    setError("");
+    setFieldErrors(current => ({ ...current, [key]: undefined }));
+    setFormValue((current) => ({ ...current, [key]: value,
+      ...(key === "shift_id" ? { config_snapshot: { ...current.config_snapshot, rotation: { ...current.config_snapshot.rotation, entries: current.config_snapshot.rotation.entries.map(entry => entry.entry_kind === "off" ? entry : !entry.shift_id || entry.shift_id === current.shift_id ? { ...entry, shift_id: value as string | null } : entry) } } } : {}),
+    }));
   }
 
   function updateRotationEntry(index: number, key: "entry_kind" | "shift_id" | "span_days", value: string | number | null) {
+    setError(""); setFieldErrors(current => ({ ...current, config_snapshot: undefined }));
     setFormValue((current) => ({
       ...current,
       config_snapshot: {
@@ -101,6 +113,7 @@ export function ShiftRosterTemplateForm({
   }
 
   function addRotationEntry() {
+    setError(""); setFieldErrors(current => ({ ...current, config_snapshot: undefined }));
     setFormValue((current) => ({
       ...current,
       config_snapshot: {
@@ -117,6 +130,7 @@ export function ShiftRosterTemplateForm({
   }
 
   function updatePatternType(patternType: string) {
+    setError(""); setFieldErrors(current => ({ ...current, config_snapshot: undefined }));
     setFormValue((current) => ({
       ...current,
       assignment_kind: "weekly_rotation",
@@ -137,6 +151,7 @@ export function ShiftRosterTemplateForm({
   }
 
   function removeRotationEntry(index: number) {
+    setError(""); setFieldErrors(current => ({ ...current, config_snapshot: undefined }));
     setFormValue((current) => ({
       ...current,
       config_snapshot: {
@@ -153,9 +168,21 @@ export function ShiftRosterTemplateForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingRef.current || acceptedUnconfirmed) return;
+    if (!hydrated || submittingRef.current || acceptedUnconfirmed) return;
     submittingRef.current = true;
     setError("");
+    const errors: Partial<Record<Field, string>> = {
+      code: requireText(formValue.code, "Enter a unique roster template code."),
+      name: requireText(formValue.name, "Enter the roster template name."),
+      shift_id: requireText(formValue.shift_id, "Select a base shift."),
+    };
+    if (formValue.assignment_kind === "weekly_rotation") {
+      const entries = formValue.config_snapshot.rotation.entries;
+      if (!entries.some(entry => (entry.entry_kind ?? "work") === "work")) errors.config_snapshot = "Add at least one work step.";
+      else if (entries.some(entry => !Number.isInteger(entry.span_days) || entry.span_days < 1)) errors.config_snapshot = "Each rotation step needs a whole number of days greater than zero.";
+    }
+    setFieldErrors(errors);
+    if (hasFieldErrors(errors)) { setError("Review the highlighted fields and try again."); submittingRef.current = false; return; }
     setIsSubmitting(true);
     let response: Response;
     try {
@@ -165,32 +192,36 @@ export function ShiftRosterTemplateForm({
         body: JSON.stringify(formValue),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      setError(networkMutationMessage);
       setIsSubmitting(false);
       submittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      setFieldErrors(apiFieldErrors<Field>(payload, fields));
+      setError(mutationErrorMessage(payload, response.status, "Unable to save roster template."));
       setIsSubmitting(false);
       submittingRef.current = false;
       return;
     }
+    const message = mode === "create" ? "Roster template created." : "Roster template updated.";
     if (onSaved) {
       setAcceptedUnconfirmed(true);
-      const reconciled = await onSaved();
+      let reconciled = false;
+      try { reconciled = await onSaved(message); } catch { /* Preserve the accepted-write lock on confirmation failure. */ }
       if (!reconciled) {
         setError("The template was accepted, but the queue could not be confirmed. Do not submit it again; retry the queue read.");
         setIsSubmitting(false);
       }
       return;
     }
+    rememberActionSuccess(successHref, String(payload.id || itemId || ""), "Action saved.", message);
     router.push(successHref);
   }
 
   return (
-    <form className={`section form-layout-modern shift-roster-template-form${compact ? " shift-roster-template-form--modal" : ""}`} onSubmit={handleSubmit}>
+    <form ref={formRef} noValidate aria-busy={isSubmitting || undefined} className={`section form-layout-modern shift-roster-template-form${compact ? " shift-roster-template-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -205,10 +236,10 @@ export function ShiftRosterTemplateForm({
         <div className="form-shell-card__grid">
           <FormSection title="Identity" description="Give the roster template a reusable code and business-friendly description.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Code</span><input className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} /></label>
-              <label className="form-field"><span className="muted">Name</span><input className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} /></label>
+              <label className="form-field"><span className="muted">Code</span><input {...fieldProps("code")} maxLength={60} className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />{fieldError("code")}</label>
+              <label className="form-field"><span className="muted">Name</span><input {...fieldProps("name")} maxLength={255} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldError("name")}</label>
               <label className="form-field"><span className="muted">Status</span><select className="input-control" value={formValue.status} onChange={(e) => update("status", e.target.value as HrAdminShiftRosterTemplateWriteInput["status"])}><option value="draft">Draft</option><option value="published">Published</option><option value="locked">Locked</option></select></label>
-              <label className="form-field"><span className="muted">Base shift</span><select className="input-control" value={formValue.shift_id ?? ""} onChange={(e) => update("shift_id", e.target.value || null)}>{selectOptions(options.shifts)}</select></label>
+              <label className="form-field"><span className="muted">Base shift</span><select {...fieldProps("shift_id")} required className="input-control" value={formValue.shift_id ?? ""} onChange={(e) => update("shift_id", e.target.value || null)}>{selectOptions(options.shifts)}</select>{fieldError("shift_id")}</label>
               <label className="form-field"><span className="muted">Assignment mode</span><select className="input-control" value={formValue.assignment_kind} onChange={(e) => update("assignment_kind", e.target.value as HrAdminShiftRosterTemplateWriteInput["assignment_kind"])}><option value="fixed">Fixed</option><option value="weekly_rotation">Weekly rotation</option><option value="temporary_override">Temporary override</option></select></label>
             </div>
             <label className="form-field">
@@ -223,20 +254,21 @@ export function ShiftRosterTemplateForm({
                 <label className="form-field"><span className="muted">Pattern</span><select className="input-control" value={formValue.config_snapshot.rotation.pattern_type ?? "custom_cycle"} onChange={(e) => updatePatternType(e.target.value)}>{guidedPatterns.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
                 <label className="form-field"><span className="muted">Rotation anchor date</span><input className="input-control" type="date" value={formValue.config_snapshot.rotation.anchor_date ?? ""} onChange={(e) => setFormValue((current) => ({ ...current, config_snapshot: { ...current.config_snapshot, rotation: { ...current.config_snapshot.rotation, anchor_date: e.target.value || null } } }))} /></label>
               </div>
-              <div className="detail-grid">
+              <div {...fieldProps("config_snapshot")} tabIndex={-1}>
+                {fieldError("config_snapshot")}
                 {formValue.config_snapshot.rotation.entries.map((entry, index) => (
                   <div className="detail-row" key={`${entry.position}-${index}`}>
                     <span className="detail-label">Step {index + 1}</span>
                     <span className="detail-value">
                       <span className="inline-form-row">
-                        <select className="input-control" value={entry.entry_kind ?? "work"} onChange={(e) => updateRotationEntry(index, "entry_kind", e.target.value)}>
+                        <select aria-label={`Step ${index + 1} type`} className="input-control" value={entry.entry_kind ?? "work"} onChange={(e) => updateRotationEntry(index, "entry_kind", e.target.value)}>
                           <option value="work">Work</option>
                           <option value="off">Off</option>
                         </select>
-                        <select className="input-control" disabled={(entry.entry_kind ?? "work") === "off"} value={entry.shift_id ?? ""} onChange={(e) => updateRotationEntry(index, "shift_id", e.target.value || null)}>
+                        <select aria-label={`Step ${index + 1} shift`} className="input-control" disabled={(entry.entry_kind ?? "work") === "off"} value={entry.shift_id ?? ""} onChange={(e) => updateRotationEntry(index, "shift_id", e.target.value || null)}>
                           {selectOptions(options.shifts)}
                         </select>
-                        <input className="input-control" min={1} type="number" value={entry.span_days} onChange={(e) => updateRotationEntry(index, "span_days", Number(e.target.value))} />
+                        <input aria-label={`Step ${index + 1} days`} className="input-control" min={1} type="number" value={entry.span_days} onChange={(e) => updateRotationEntry(index, "span_days", Number(e.target.value))} />
                         <button className="button button--secondary" disabled={formValue.config_snapshot.rotation.entries.length <= 1} onClick={() => removeRotationEntry(index)} type="button">Remove</button>
                       </span>
                     </span>
@@ -263,11 +295,11 @@ export function ShiftRosterTemplateForm({
             </FormSection>
           )}
         </div>
-        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div ref={feedbackRef} tabIndex={-1} className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Draft templates can be tested in rollout preview first. Published and locked templates are safer for operational rollout.</span>
           <div className="form-actions-bar__buttons">
-            <AsyncActionButton className="button button--primary" disabled={acceptedUnconfirmed} pending={isSubmitting} pendingLabel="Saving roster template" type="submit">{acceptedUnconfirmed ? "Accepted; awaiting confirmation" : mode === "create" ? "Create template" : "Save changes"}</AsyncActionButton>
+            <AsyncActionButton className="button button--primary" disabled={!hydrated || acceptedUnconfirmed} pending={isSubmitting} pendingLabel="Saving roster template" type="submit">{acceptedUnconfirmed ? "Accepted; awaiting confirmation" : mode === "create" ? "Create template" : "Save changes"}</AsyncActionButton>
             <button className="button button--secondary" onClick={() => onCancel ? onCancel() : (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>

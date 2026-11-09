@@ -97,16 +97,20 @@ test.describe("ESS-1 production dashboard and self profile", () => {
       await nav.getByRole("link", { name: label, exact: true }).click();
       await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
       await expect(nav.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
-      const expectedFields = label === "Contact information" ? [["Work email", "work_email"], ["Personal email", "personal_email"], ["Phone number", "phone_number"]]
+      const expectedFields = label === "Contact information" ? [["Work email", "work_email"]]
         : label === "Employment & organization" ? [["Manager", "reporting_manager"], ["Department", "department"], ["Legal entity", "legal_entity"], ["Location", "location"]]
         : label === "Personal details" ? [["Full name", "full_name"], ["Preferred name", "preferred_name"]] : [];
       for (const [fieldLabel, fieldKey] of expectedFields) {
         const row = page.locator(".ess-fields > div").filter({ has: page.getByText(fieldLabel, { exact: true }) });
         await expect(row.locator("dd")).toHaveText(ownProfile[fieldKey] || "Not recorded");
       }
+      if (label === "Contact information") {
+        await expect(page.getByLabel("Personal email", { exact: true })).toHaveValue(ownProfile.personal_email || "");
+        await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue(ownProfile.phone_number || "");
+      }
     }
-    await expect(page.getByRole("table", { name: "Profile field permissions" })).toContainText("No profile fields are currently available for direct editing.");
-    await expect(page.getByRole("button", { name: /save|edit|request change|reveal/i })).toHaveCount(0);
+    await expect(page.getByRole("table", { name: "Profile field permissions" })).toContainText("Preferred name, personal email and phone number.");
+    await expect(page.getByRole("button", { name: "Save profile", exact: true })).toHaveCount(0);
     await page.goBack();
     await expect(page.getByRole("heading", { name: "Payroll & documents", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "View published payslips" }).click();

@@ -50,3 +50,11 @@ uploads/
 media/
 backend/media/
 tmp/
+
+# Generated campaign snapshots and decoded browser evidence (retain QA source/reports).
+docs/qa/agentic/**/application-before/
+docs/qa/agentic/**/application-after/
+docs/qa/agentic/**/final-test-sources/
+docs/qa/agentic/**/first-run-test-sources/
+docs/qa/agentic/**/after-test-sources/
+docs/qa/agentic/**/decoded-attachments/

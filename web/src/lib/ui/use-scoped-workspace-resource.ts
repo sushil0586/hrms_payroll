@@ -84,7 +84,7 @@ export function useScopedWorkspaceResource<Data, Query>({
       onApplied?.(appliedQuery, nextData, reason);
       if (historyMode !== "none" && historyHref) {
         window.history[historyMode === "push" ? "pushState" : "replaceState"](
-          window.history.state,
+          null,
           "",
           historyHref(appliedQuery, nextData),
         );

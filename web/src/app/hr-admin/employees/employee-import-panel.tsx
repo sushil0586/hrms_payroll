@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
-import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
+import { finalizeImportBatchAudit, recordImportBatchAudit, sha256Hex, type ImportBatchAuditInput } from "@/lib/import-batch-audit";
 import { submitImportRequest } from "@/lib/ui/import-request";
 
 export type EmployeeImportRow = {
@@ -65,19 +65,24 @@ export function EmployeeImportPanel<Row extends EmployeeImportRow>(props: Props<
     source.current?.focus();
   }
 
-  async function audit(next: Row[], status: "previewed" | "committed" | "partial" | "failed", text: string) {
+  function auditInput(next: Row[], status: ImportBatchAuditInput["status"], text: string, sourceHash: string): ImportBatchAuditInput {
+    return {
+      import_type: props.importType, status, file_name: props.filename,
+      source_hash: sourceHash, row_count: next.length,
+      source_ref: "hrms.bulk_import.browser.v2",
+      ready_count: next.filter(row => row.status === "ready").length,
+      created_count: next.filter(row => row.status === "created").length,
+      blocked_count: next.filter(row => row.status === "blocked").length,
+      failed_count: next.filter(row => row.status === "failed" || row.status === "unconfirmed").length,
+      rollback_supported: false,
+      evidence_snapshot: { headers: props.template.trim().split(","), ui: props.testId, created_ids: next.flatMap(row => row.createdId ? [row.createdId] : []), unconfirmed_rows: next.filter(row => row.status === "unconfirmed").map(row => row.index) },
+      row_errors: next.filter(row => ["blocked", "failed", "unconfirmed"].includes(row.status)).map(row => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+    };
+  }
+
+  async function finalizeAudit(id: string, next: Row[], status: "committed" | "partial" | "failed", text: string, sourceHash: string) {
     try {
-      const result = await recordImportBatchAudit({
-        import_type: props.importType, status, file_name: props.filename,
-        source_hash: await sha256Hex(text), row_count: next.length,
-        ready_count: next.filter(row => row.status === "ready").length,
-        created_count: next.filter(row => row.status === "created").length,
-        blocked_count: next.filter(row => row.status === "blocked").length,
-        failed_count: next.filter(row => row.status === "failed" || row.status === "unconfirmed").length,
-        rollback_supported: false,
-        evidence_snapshot: { headers: props.template.trim().split(","), ui: props.testId, created_ids: next.flatMap(row => row.createdId ? [row.createdId] : []), unconfirmed_rows: next.filter(row => row.status === "unconfirmed").map(row => row.index) },
-        row_errors: next.filter(row => ["blocked", "failed", "unconfirmed"].includes(row.status)).map(row => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
-      });
+      const result = await finalizeImportBatchAudit(id, auditInput(next, status, text, sourceHash));
       if (!result) setAuditWarning("The batch history receipt could not be confirmed. Row results below remain valid; check import history before repeating any action.");
     } catch {
       setAuditWarning("The batch history receipt could not be confirmed. Check import history before repeating any action.");
@@ -98,7 +103,6 @@ export function EmployeeImportPanel<Row extends EmployeeImportRow>(props: Props<
       const invalid = next.filter(row => row.status === "blocked").length;
       const unconfirmed = next.some(row => row.status === "unconfirmed");
       setFeedback({ tone: invalid || unconfirmed ? "error" : "info", title: unconfirmed ? "Preview contains an unconfirmed row" : "Preview ready", text: `${next.length} rows reviewed. ${invalid} blocked. Only ready rows can be committed; preview does not save employee changes.` });
-      await audit(next, "previewed", csv);
     } finally { lock.current = false; setBusy(""); }
   }
 
@@ -109,6 +113,17 @@ export function EmployeeImportPanel<Row extends EmployeeImportRow>(props: Props<
     setFeedback({ tone: "info", title: "Committing rows", text: "Keep this page open until the batch stops. Each confirmed row is preserved." });
     const next = [...rows];
     try {
+      const sourceHash = await sha256Hex(csv);
+      const claim = await recordImportBatchAudit(auditInput(next, "claimed", csv, sourceHash));
+      if (!claim) {
+        setAuditWarning("The durable import claim could not be confirmed. No rows were sent. Check import history before trying again.");
+        setFeedback({ tone: "error", title: "Import did not start", text: "No employee records were changed because the durable import claim could not be confirmed." });
+        return;
+      }
+      if (claim.replayed) {
+        setFeedback({ tone: "error", title: "This CSV was already claimed", text: `The same source was previously recorded as ${claim.status}. No rows were sent again. Review import history before preparing a corrected file.` });
+        return;
+      }
       for (let i = 0; i < next.length; i++) {
         const row = next[i];
         if (row.status !== "ready") continue;
@@ -130,7 +145,7 @@ export function EmployeeImportPanel<Row extends EmployeeImportRow>(props: Props<
       const rejected = next.filter(row => row.status === "failed" || row.status === "blocked").length;
       if (saved) await props.onCommitted?.();
       setFeedback({ tone: unconfirmed || rejected ? "error" : "success", title: unconfirmed ? "Batch stopped — outcome unconfirmed" : rejected ? "Batch finished with rows needing attention" : "Import complete", text: `${saved} saved; ${rejected} blocked or rejected; ${next.filter(row => row.status === "ready").length} not attempted. ${unconfirmed ? "Check current records before another import. Remaining rows were not sent." : "Saved rows remain saved. Correct rejected rows and preview again; unchanged saved rows will not be submitted again in this session."}` });
-      await audit(next, unconfirmed || rejected ? "partial" : "committed", csv);
+      await finalizeAudit(claim.id, next, unconfirmed || rejected ? "partial" : "committed", csv, sourceHash);
     } finally { lock.current = false; setBusy(""); }
   }
 

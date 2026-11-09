@@ -60,7 +60,7 @@ export default async function HrAdminSaasResiliencePage() {
   const retentionChecks = data.checks.filter((check) => check.ref.startsWith("retention."));
 
   return (
-    <main className="shell shell--workspace accerio-page">
+    <main className="shell shell--workspace accerio-page saas-resilience-page">
       <PageIntro appearance="accerio"
         eyebrow={result.state === "live" ? "Live resilience" : "Demo resilience"}
         title="SaaS Resilience"

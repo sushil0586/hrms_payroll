@@ -2,6 +2,7 @@ import type { HrAdminEmployeeDetail, HrAdminEmployeeWriteInput } from "@/lib/typ
 
 export function employeeDetailToFormValue(detail: HrAdminEmployeeDetail): HrAdminEmployeeWriteInput {
   return {
+    expected_updated_at: detail.updated_at,
     employee_code: detail.employee_code,
     first_name: detail.first_name,
     middle_name: detail.middle_name,

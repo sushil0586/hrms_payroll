@@ -1,0 +1,5 @@
+import {test,expect} from '@playwright/test';import fs from 'node:fs';import path from 'node:path';
+const [own]=JSON.parse(fs.readFileSync(path.join(process.env.C02S_STATE!,'fixtures.json'),'utf8'));
+for(const route of ['attendance-regularizations','leave-policy-assignments'])test('B2R-REG-shared-history-'+route,async({page},info)=>{
+ await page.context().addCookies([{name:'hrms_access_token',value:own.tokens.hr_admin,domain:'127.0.0.1',path:'/'}]);const base='/hr-admin/'+route;await page.goto(base);const input=page.locator('input[name=q]').first();await expect(input).toHaveValue('');await input.fill('c02s-no-match');await page.getByRole('button',{name:'Apply filters',exact:true}).click();await expect.poll(()=>new URL(page.url()).searchParams.get('q')).toBe('c02s-no-match');await page.goBack();await expect(input).toHaveValue('');await page.goForward();await expect(input).toHaveValue('c02s-no-match');await page.reload();await expect(input).toHaveValue('c02s-no-match');await info.attach('shared-history-render',{body:await page.screenshot(),contentType:'image/png'});
+});

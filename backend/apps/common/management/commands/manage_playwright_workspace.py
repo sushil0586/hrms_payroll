@@ -45,6 +45,7 @@ from apps.employee_lifecycle.models import (
     EmploymentSpell,
     ProbationReview,
 )
+from apps.employee_lifecycle.effective_services import MOVEMENT_BACKDATING_WINDOW_CONFIG_KEY, initialize_employment_timeline
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, RolePermission, TenantMembership, User
 from apps.iam.permission_catalog import get_permission_catalog
@@ -138,6 +139,7 @@ from apps.payroll.models import (
     SalaryStructureVersion,
 )
 from apps.platform_policies.models import PlatformPolicyDomain, PlatformPolicyPack, PlatformPolicyPackStatus
+from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
 from apps.tenant_onboarding.models import TenantOnboarding, TenantOnboardingAdminContact
 from apps.tenants.models import LegalHold, LegalHoldStatus, SubscriptionPlan, Tenant, TenantOnboardingStatus, TenantStatus
 from apps.tenants.retention import authorized_synthetic_tenant_teardown
@@ -245,6 +247,7 @@ class Command(BaseCommand):
             is_sandbox=True,
             onboarding_status=TenantOnboardingStatus.ACTIVE,
         )
+        self._create_lifecycle_configuration(tenant)
         org = self._create_org(tenant)
         people = self._create_people(tenant, seed_ref, password, org)
         self._create_platform_admin(seed_ref, password)
@@ -262,6 +265,7 @@ class Command(BaseCommand):
         if tenant.employees.exists() or LegalEntity.objects.filter(tenant=tenant).exists():
             raise CommandError("Existing workspace already contains organization or employee fixtures.")
         marker = {"owner": "playwright", "seed_ref": seed_ref}
+        self._create_lifecycle_configuration(tenant)
         org = self._create_org(tenant)
         people = self._create_people(tenant, seed_ref, password, org)
         self._create_platform_admin(seed_ref, password)
@@ -273,6 +277,31 @@ class Command(BaseCommand):
         self._create_employee_notification(tenant, people["employee"])
         self._create_manager_notification(tenant, people["manager"])
         return tenant
+
+    def _create_lifecycle_configuration(self, tenant: Tenant) -> None:
+        definition, _created = ConfigurationDefinition.objects.get_or_create(
+            key=MOVEMENT_BACKDATING_WINDOW_CONFIG_KEY,
+            defaults={
+                "name": "Movement backdating window",
+                "category": ConfigCategory.LIFECYCLE,
+                "data_type": ConfigDataType.INTEGER,
+                "description": "Maximum age in days for an approved backdated employee movement.",
+                "default_value": 0,
+                "validation_schema": {"minimum": 0},
+                "is_system_managed": True,
+            },
+        )
+        TenantConfiguration.objects.update_or_create(
+            tenant=tenant,
+            definition=definition,
+            defaults={
+                "status": ConfigStatus.PUBLISHED,
+                "current_value": 365,
+                "published_value": 365,
+                "published_at": timezone.now(),
+                "published_by_note": "Playwright-owned synthetic policy",
+            },
+        )
 
     def _create_org(self, tenant: Tenant) -> dict:
         legal_entity = LegalEntity.objects.create(tenant=tenant, code="qa-entity", name="QA Entity", registered_name="QA Entity Pvt Ltd", timezone=tenant.timezone)
@@ -351,6 +380,12 @@ class Command(BaseCommand):
                 department=org["department"], business_unit=org["business_unit"], cost_center=org["cost_center"],
                 designation=org["designation"], grade=org["grade"], employment_type=org["employment_type"],
                 reporting_manager=manager,
+            )
+            initialize_employment_timeline(
+                employee_id=employee.id,
+                actor_identifier="playwright-fixture",
+                approved_source_reference=f"playwright:{seed_ref}:employment-baseline",
+                effective_from=employee.date_of_joining,
             )
             if key == "manager":
                 manager = employee

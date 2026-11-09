@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -692,17 +692,28 @@ class Command(BaseCommand):
 
         approved_leave_date, _ = self._next_contiguous_working_range(today, days_ahead=0, length=1)
 
+        def previous_working_date(value):
+            weekly_off = {str(day).lower() for day in (shift.weekly_off_days or [])}
+            while value.strftime("%A").lower() in weekly_off:
+                value -= timedelta(days=1)
+            return value
+
+        pending_attendance_date = previous_working_date(today)
+        approved_attendance_date = previous_working_date(today - timedelta(days=3))
         record_specs = [
-            (employees["riya"], today - timedelta(days=3), AttendanceStatus.LATE, "10:14", "18:30", 74),
+            (employees["riya"], approved_attendance_date, AttendanceStatus.LATE, "10:14", "18:30", 74),
             (employees["riya"], today - timedelta(days=2), AttendanceStatus.PRESENT, "09:08", "18:22", 0),
             (employees["riya"], today - timedelta(days=1), AttendanceStatus.PRESENT, "09:03", "18:15", 0),
             (employees["riya"], today, AttendanceStatus.PRESENT, "09:12", None, 0),
             (employees["aman"], approved_leave_date, AttendanceStatus.ON_LEAVE, None, None, 0),
-            (employees["meera"], today, AttendanceStatus.LATE, "09:58", None, 48),
+            (employees["meera"], pending_attendance_date, AttendanceStatus.LATE, "09:58", None, 48),
             (employees["manager"], today, AttendanceStatus.PRESENT, "09:01", None, 0),
         ]
         created_records = {}
         for employee, attendance_date, status, check_in, check_out, late_minutes in record_specs:
+            check_in_at = self._to_datetime(attendance_date, check_in)
+            check_out_at = self._to_datetime(attendance_date, check_out)
+            recorded_hours = (Decimal(str((check_out_at - check_in_at).total_seconds())) / Decimal("3600")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if check_in_at and check_out_at else Decimal("0.00")
             record, _ = AttendanceRecord.objects.update_or_create(
                 tenant=tenant,
                 employee=employee,
@@ -713,7 +724,7 @@ class Command(BaseCommand):
                     "shift": shift,
                     "check_in_at": self._to_datetime(attendance_date, check_in),
                     "check_out_at": self._to_datetime(attendance_date, check_out),
-                    "work_duration_hours": Decimal("8.00") if check_in and check_out else Decimal("0"),
+                    "work_duration_hours": recorded_hours,
                     "overtime_hours": Decimal("0"),
                     "late_minutes": late_minutes,
                     "is_regularized": False,
@@ -749,18 +760,18 @@ class Command(BaseCommand):
         )
         pending_regularization = submit_regularization(
             employee=employees["meera"],
-            attendance_record=created_records[(employees["meera"].employee_code, today.isoformat())],
+            attendance_record=created_records[(employees["meera"].employee_code, pending_attendance_date.isoformat())],
             requested_status=AttendanceStatus.PRESENT,
-            requested_check_in_at=self._to_datetime(today, "09:05"),
-            requested_check_out_at=self._to_datetime(today, "18:20"),
+            requested_check_in_at=self._to_datetime(pending_attendance_date, "09:05"),
+            requested_check_out_at=self._to_datetime(pending_attendance_date, "18:20"),
             reason="Biometric kiosk was down at entry time.",
         )
         approved_regularization = submit_regularization(
             employee=employees["riya"],
-            attendance_record=created_records[(employees["riya"].employee_code, (today - timedelta(days=3)).isoformat())],
+            attendance_record=created_records[(employees["riya"].employee_code, approved_attendance_date.isoformat())],
             requested_status=AttendanceStatus.PRESENT,
-            requested_check_in_at=self._to_datetime(today - timedelta(days=3), "09:05"),
-            requested_check_out_at=self._to_datetime(today - timedelta(days=3), "18:30"),
+            requested_check_in_at=self._to_datetime(approved_attendance_date, "09:05"),
+            requested_check_out_at=self._to_datetime(approved_attendance_date, "18:30"),
             reason="Biometric kiosk was offline during morning entry.",
         )
         resolve_regularization(

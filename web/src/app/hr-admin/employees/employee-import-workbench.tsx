@@ -291,10 +291,13 @@ export function EmployeeImportWorkbench({ employees, options, onCommitted }: Emp
     columns={[{key:"employee_code",label:"Employee"},{key:"work_email",label:"Work email"}]}
     prepare={text => {
       const parsed=parseCsv(text); const batchCodes=new Set<string>();
+      const counts=new Map<string,number>();parsed.rows.forEach(row=>{const key=row.employee_code.trim().toLowerCase();if(key)counts.set(key,(counts.get(key)??0)+1)});
       return {error:parsed.error,rows:parsed.rows.map((row,index) => {
         const result=buildPayload(row,options,existingCodes,batchCodes);
         if(row.employee_code.trim()) batchCodes.add(row.employee_code.trim().toLowerCase());
-        return {index:index+1,source:row,payload:result.payload,status:result.errors.length ? "blocked" : "ready",message:result.errors.join(" ")};
+        const duplicate=(counts.get(row.employee_code.trim().toLowerCase())??0)>1;
+        const errors=duplicate?[...result.errors,"Every duplicate employee-code row is blocked; keep one row and preview again."]:result.errors;
+        return {index:index+1,source:row,payload:duplicate?null:result.payload,status:errors.length ? "blocked" : "ready",message:errors.join(" ")};
       })};
     }}
     request={row => ({url:"/api/hr-admin/employees",method:"POST",body:row.payload})}

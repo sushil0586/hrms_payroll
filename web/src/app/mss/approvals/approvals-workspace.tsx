@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatWorkspaceDate as formatDate, formatWorkspaceDateTime as formatDateTime } from "@/lib/ui/date-time-format";
 import { useCallback, useSyncExternalStore, type MouseEvent } from "react";
 
 import { WorkspaceStandardHeader, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
@@ -23,34 +24,6 @@ type ApprovalPermissions = { canApproveLeave: boolean; canReviewAttendance: bool
 const subscribe = () => () => undefined;
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
-
-function formatDate(value: string | null, timeZone: string) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone,
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string | null | undefined, timeZone: string) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone,
-  }).format(new Date(value));
-}
 
 function statusTone(status: string) {
   if (status === "approved" || status === "completed") return "success";

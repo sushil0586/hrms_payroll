@@ -1,6 +1,8 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 type Props = {
+  controls?: ReactNode;
   navigationMode?: "document" | "scoped";
   pending?: boolean;
   page: number;
@@ -49,6 +51,7 @@ function PaginationAction({
 }
 
 export function PaginationBar({
+  controls,
   navigationMode,
   pending = false,
   page,
@@ -93,6 +96,7 @@ export function PaginationBar({
             <PaginationAction navigationMode={navigationMode} disabled={pending || !hasNext} href={lastHref} label="Last" onClick={onLast} />
           </div>
         ) : null}
+        {controls}
       </div>
     </section>
   );

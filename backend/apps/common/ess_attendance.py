@@ -43,6 +43,10 @@ def employee_attendance_month(employee, params):
         tenant=employee.tenant, legal_entity_id=employee.legal_entity_id,
         status=AttendancePeriodCloseStatus.CLOSED, period_start__lte=end, period_end__gte=start,
     ).values_list("period_start", "period_end"))
+    approved = set(AttendanceRegularization.objects.filter(
+        tenant=employee.tenant, employee=employee, status=RegularizationStatus.APPROVED,
+        attendance_record__attendance_date__range=(start, end),
+    ).values_list("attendance_record_id", flat=True))
     pending = set(AttendanceRegularization.objects.filter(
         tenant=employee.tenant, employee=employee, status=RegularizationStatus.PENDING,
         attendance_record__attendance_date__range=(start, end),
@@ -53,11 +57,20 @@ def employee_attendance_month(employee, params):
         # Finalized evidence is read from the row, never reconstructed from live policy.
         derivation = None if locked else build_attendance_derivation_summary(record)
         policy = None if locked else resolve_attendance_policy_for_employee(employee, as_of=record.attendance_date)
-        unavailable = "This attendance day is finalized. Contact HR for a governed correction." if locked else (
-            "A correction for this day is already awaiting approval." if record.id in pending else (
-                "The applicable attendance policy does not permit regularization." if policy and not policy.allow_regularization else ""
-            )
-        )
+        already_approved = record.is_regularized or record.id in approved
+        weekly_off = bool(derivation and derivation.get("schedule_day_type") == "weekly_off")
+        if locked:
+            unavailable = "This attendance day is finalized. Contact HR for a governed correction."
+        elif already_approved:
+            unavailable = "This attendance day has already been approved. Contact HR for further changes."
+        elif weekly_off:
+            unavailable = "Attendance corrections are unavailable on a scheduled weekly off day."
+        elif record.id in pending:
+            unavailable = "A correction for this day is already awaiting approval."
+        elif policy and not policy.allow_regularization:
+            unavailable = "The applicable attendance policy does not permit regularization."
+        else:
+            unavailable = ""
         days.append({
             "id": str(record.id), "attendance_date": record.attendance_date.isoformat(), "status": record.status,
             "shift": record.shift.name if record.shift else None,

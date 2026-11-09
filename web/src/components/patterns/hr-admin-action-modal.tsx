@@ -31,6 +31,8 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+const backgroundInertOwners = new WeakMap<HTMLElement, { count: number; previous: boolean }>();
+
 function modalFocusables(dialog: HTMLElement) {
   return Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
     .filter(item => item.offsetParent !== null && !item.matches(":disabled"));
@@ -65,9 +67,44 @@ export function HrAdminActionModal({
     const dialog = dialogRef.current;
     const focusable = dialog ? modalFocusables(dialog) : [];
     const firstInput = focusable.find((item) => item.matches("input, select, textarea"));
-    (firstInput ?? focusable[0] ?? dialog)?.focus();
+    // Isolate background subtrees while preserving native date/time segment navigation.
+    const inertSiblings: HTMLElement[] = [];
+    let branch = dialog;
+    while (branch && branch !== document.body && branch.parentElement) {
+      for (const sibling of Array.from(branch.parentElement.children)) {
+        if (sibling !== branch && sibling instanceof HTMLElement) {
+          const owner = backgroundInertOwners.get(sibling);
+          if (owner) owner.count += 1;
+          else backgroundInertOwners.set(sibling, { count: 1, previous: sibling.inert });
+          inertSiblings.push(sibling);
+          sibling.inert = true;
+        }
+      }
+      branch = branch.parentElement;
+    }
+    let lastFocused = firstInput ?? focusable[0] ?? dialog;
+    function containFocus(event: FocusEvent) {
+      if (!dialog || dialog.closest("[inert]") || !(event.target instanceof Node)) return;
+      if (dialog.contains(event.target)) {
+        if (event.target instanceof HTMLElement) lastFocused = event.target;
+        return;
+      }
+      const target = lastFocused?.isConnected && !lastFocused.matches(":disabled")
+        ? lastFocused : modalFocusables(dialog)[0] ?? dialog;
+      target?.focus({ preventScroll: true });
+    }
+    document.addEventListener("focusin", containFocus);
+    lastFocused?.focus();
 
     return () => {
+      document.removeEventListener("focusin", containFocus);
+      for (const element of inertSiblings.reverse()) {
+        const owner = backgroundInertOwners.get(element);
+        if (owner && --owner.count === 0) {
+          element.inert = owner.previous;
+          backgroundInertOwners.delete(element);
+        }
+      }
       document.body.style.overflow = previousOverflow;
       previousFocusRef.current?.focus({ preventScroll: true });
     };
@@ -136,6 +173,16 @@ export function HrAdminActionModal({
       const next = event.shiftKey ? (index <= 0 ? focusable.length - 1 : index - 1) : (index + 1) % focusable.length;
       focusable[next]?.focus();
       return;
+    }
+    if (nativeSegments) {
+      // Keep native segment traversal; recover only if its default Tab action leaves the modal.
+      const index = focusable.findIndex((item) => item === active);
+      const next = event.shiftKey ? (index <= 0 ? focusable.length - 1 : index - 1) : (index + 1) % focusable.length;
+      requestAnimationFrame(() => {
+        if (dialog?.isConnected && !dialog.closest("[inert]") && !dialog.contains(document.activeElement)) {
+          (focusable[next] ?? dialog).focus();
+        }
+      });
     }
     const first = focusable[0];
     const last = focusable[focusable.length - 1];

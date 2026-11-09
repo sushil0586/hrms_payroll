@@ -233,7 +233,6 @@ export function LeaveTypesWorkbench({ canManagePolicies, leaveTypes, pending, on
                 <h2 className="section-heading-soft">Leave type detail</h2>
                 <p className="section-copy section-copy-soft">Focused rules and governance state.</p>
               </div>
-              <button className="button button--secondary button--compact" onClick={() => { setSelectedId(""); window.requestAnimationFrame(() => inspectTriggerRef.current?.focus({ preventScroll: true })); }} type="button">Close</button>
             </div>
             <article className="record-card record-card--compact">
               <div className="record-card__header">

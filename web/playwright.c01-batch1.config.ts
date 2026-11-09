@@ -1,0 +1,3 @@
+import {defineConfig} from '@playwright/test';import path from 'node:path';
+if(!process.env.C01_STATE||!process.env.C01_EVIDENCE||!process.env.C01_DOCS)throw Error('C01 private owner/environment required');
+export default defineConfig({testDir:'./tests/c01-batch1',workers:1,retries:0,maxFailures:1,timeout:180000,outputDir:path.join(process.env.C01_EVIDENCE,'results'),reporter:[['list'],['json',{outputFile:path.join(process.env.C01_EVIDENCE,'playwright-results.json')}]],projects:[{name:'chromium-1440',use:{browserName:'chromium',viewport:{width:1440,height:900},trace:'retain-on-failure',screenshot:'only-on-failure'}}]});

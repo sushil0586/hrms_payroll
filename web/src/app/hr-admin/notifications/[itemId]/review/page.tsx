@@ -41,7 +41,7 @@ export default async function HrAdminNotificationReviewPage({ params, searchPara
         <article className="record-card notification-review-card">
           <div className="notification-review-card__header">
             <div className="record-card__title-block">
-              <h3>{item.title || "Untitled"}</h3>
+              <h2 className="notification-review-title">{item.title || "Untitled"}</h2>
               <p>{item.event_definition_name || "Direct notification"} • {item.subject_type}</p>
             </div>
             <div className="record-card__actions">

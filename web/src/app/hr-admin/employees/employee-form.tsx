@@ -9,7 +9,7 @@ import { FormSection } from "@/components/patterns/form-section";
 import { AsyncActionButton } from "@/components/patterns/async-action-button";
 import { WorkspaceFormFooter } from "@/components/patterns/workspace-standard";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeWriteInput, HrAdminOptionItem } from "@/lib/types";
-import { hasFieldErrors, requireText, validateDateOrder, validateEmail } from "@/lib/ui/validation";
+import { hasFieldErrors, requireText, validateDateOrder, validateEmail, validateEmployeeCode, validatePhoneNumber } from "@/lib/ui/validation";
 
 export type EmployeeFormProps = {
   initialValue: HrAdminEmployeeWriteInput;
@@ -396,10 +396,11 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
     setError("");
     setFieldErrors({});
     const nextErrors: FieldErrors = {
-      employee_code: requireText(formValue.employee_code, "Enter the employee code."),
+      employee_code: requireText(formValue.employee_code, "Enter the employee code.") ?? validateEmployeeCode(formValue.employee_code),
       first_name: requireText(formValue.first_name, "Enter the first name."),
       work_email: validateEmail(formValue.work_email, "Enter a valid work email address."),
       personal_email: validateEmail(formValue.personal_email, "Enter a valid personal email address."),
+      phone_number: validatePhoneNumber(formValue.phone_number),
       date_of_birth:
         formValue.date_of_birth && formValue.date_of_joining && formValue.date_of_birth >= formValue.date_of_joining
           ? "Date of birth must be earlier than date of joining."
@@ -529,7 +530,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Employee code</span>
-                <input name="employee_code" aria-invalid={Boolean(fieldErrors.employee_code)} aria-describedby={fieldErrors.employee_code ? "employee-error-employee_code" : undefined} className="input-control" required value={formValue.employee_code} onChange={(event) => updateField("employee_code", event.target.value)} />
+                <input name="employee_code" maxLength={50} aria-invalid={Boolean(fieldErrors.employee_code)} aria-describedby={fieldErrors.employee_code ? "employee-error-employee_code" : undefined} className="input-control" required value={formValue.employee_code} onChange={(event) => updateField("employee_code", event.target.value)} />
                 <FieldError field="employee_code" message={fieldErrors.employee_code} />
               </label>
               <label className="form-field">
@@ -545,22 +546,22 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
               </label>
               <label className="form-field">
                 <span className="muted">First name</span>
-                <input name="first_name" aria-invalid={Boolean(fieldErrors.first_name)} aria-describedby={fieldErrors.first_name ? "employee-error-first_name" : undefined} className="input-control" required value={formValue.first_name} onChange={(event) => updateField("first_name", event.target.value)} />
+                <input name="first_name" maxLength={120} aria-invalid={Boolean(fieldErrors.first_name)} aria-describedby={fieldErrors.first_name ? "employee-error-first_name" : undefined} className="input-control" required value={formValue.first_name} onChange={(event) => updateField("first_name", event.target.value)} />
                 <FieldError field="first_name" message={fieldErrors.first_name} />
               </label>
               <label className="form-field">
                 <span className="muted">Middle name</span>
-                <input name="middle_name" aria-invalid={Boolean(fieldErrors.middle_name)} aria-describedby={fieldErrors.middle_name ? "employee-error-middle_name" : undefined} className="input-control" value={formValue.middle_name} onChange={(event) => updateField("middle_name", event.target.value)} />
+                <input name="middle_name" maxLength={120} aria-invalid={Boolean(fieldErrors.middle_name)} aria-describedby={fieldErrors.middle_name ? "employee-error-middle_name" : undefined} className="input-control" value={formValue.middle_name} onChange={(event) => updateField("middle_name", event.target.value)} />
                 <FieldError field="middle_name" message={fieldErrors.middle_name} />
               </label>
               <label className="form-field">
                 <span className="muted">Last name</span>
-                <input name="last_name" aria-invalid={Boolean(fieldErrors.last_name)} aria-describedby={fieldErrors.last_name ? "employee-error-last_name" : undefined} className="input-control" value={formValue.last_name} onChange={(event) => updateField("last_name", event.target.value)} />
+                <input name="last_name" maxLength={120} aria-invalid={Boolean(fieldErrors.last_name)} aria-describedby={fieldErrors.last_name ? "employee-error-last_name" : undefined} className="input-control" value={formValue.last_name} onChange={(event) => updateField("last_name", event.target.value)} />
                 <FieldError field="last_name" message={fieldErrors.last_name} />
               </label>
               <label className="form-field">
                 <span className="muted">Preferred name</span>
-                <input name="preferred_name" aria-invalid={Boolean(fieldErrors.preferred_name)} aria-describedby={fieldErrors.preferred_name ? "employee-error-preferred_name" : undefined} className="input-control" value={formValue.preferred_name} onChange={(event) => updateField("preferred_name", event.target.value)} />
+                <input name="preferred_name" maxLength={120} aria-invalid={Boolean(fieldErrors.preferred_name)} aria-describedby={fieldErrors.preferred_name ? "employee-error-preferred_name" : undefined} className="input-control" value={formValue.preferred_name} onChange={(event) => updateField("preferred_name", event.target.value)} />
                 <FieldError field="preferred_name" message={fieldErrors.preferred_name} />
               </label>
             </div>
@@ -582,7 +583,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
               </label>
               <label className="form-field">
                 <span className="muted">Phone number</span>
-                <input name="phone_number" aria-invalid={Boolean(fieldErrors.phone_number)} aria-describedby={fieldErrors.phone_number ? "employee-error-phone_number" : undefined} className="input-control" value={formValue.phone_number} onChange={(event) => updateField("phone_number", event.target.value)} />
+                <input name="phone_number" maxLength={30} aria-invalid={Boolean(fieldErrors.phone_number)} aria-describedby={fieldErrors.phone_number ? "employee-error-phone_number" : undefined} className="input-control" value={formValue.phone_number} onChange={(event) => updateField("phone_number", event.target.value)} />
                 <FieldError field="phone_number" message={fieldErrors.phone_number} />
               </label>
               <label className="form-field">
@@ -718,7 +719,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHr
                 <span className="muted">Reporting manager</span>
                 <select name="reporting_manager_id" aria-invalid={Boolean(fieldErrors.reporting_manager_id)} aria-describedby={fieldErrors.reporting_manager_id ? "employee-error-reporting_manager_id" : undefined} className="input-control" value={formValue.reporting_manager_id ?? ""} onChange={(event) => updateField("reporting_manager_id", event.target.value || null)}>
                   <option value="">Select an option</option>
-                  {options.managers.map((manager) => (
+                  {options.managers.filter((manager) => manager.id !== employeeId).map((manager) => (
                     <option key={manager.id} value={manager.id}>
                       {manager.name} ({manager.employee_code})
                     </option>

@@ -3,6 +3,9 @@
 import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 
 import { useRef, useState } from "react";
+import { useActionFeedback } from "@/components/patterns/action-feedback-provider";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
+import { mutationErrorMessage } from "@/lib/ui/api-error-message";
 import { useRouter } from "next/navigation";
 
 import type { AttendanceRegularizationItem } from "@/lib/types";
@@ -16,13 +19,6 @@ type Props = {
   onCancel?: () => void;
 };
 
-function getErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "Unable to update attendance regularization.";
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) return String(value[0]);
-  }
-  return String((payload as Record<string, unknown>).detail || "Unable to update attendance regularization.");
-}
 
 function formatDateTime(value: string | null, fallback: string) {
   return value ? formatWorkspaceDateTime(value, "Asia/Kolkata") : fallback;
@@ -49,9 +45,15 @@ export function AttendanceRegularizationReviewForm({ item, cancelHref, successHr
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const feedback = useActionFeedback();
+  const [accepted, setAccepted] = useState(false);
 
   async function handleDecision(action: "approve" | "reject") {
-    if (submittingRef.current) {
+    if (submittingRef.current || accepted) {
+      return;
+    }
+    if (action === "reject" && !comment.trim()) {
+      setError("Enter a decision note before rejecting this request.");
       return;
     }
     submittingRef.current = true;
@@ -72,19 +74,24 @@ export function AttendanceRegularizationReviewForm({ item, cancelHref, successHr
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      setError(mutationErrorMessage(payload, response.status, "Unable to update attendance regularization."));
       setIsSubmitting(false);
       submittingRef.current = false;
       return;
     }
+    setAccepted(true);
+    const message = action === "approve" ? "Regularization approved." : "Regularization rejected.";
     if (onReconcile) {
-      const reconciled = await onReconcile();
+      let reconciled = false;
+      try { reconciled = await onReconcile(); } catch { /* Accepted write remains locked. */ }
+      if (reconciled) feedback?.success("Action saved.", message);
       if (!reconciled) {
         setError("The decision was accepted, but the queue could not be confirmed. Do not submit it again; retry the queue read.");
         setIsSubmitting(false);
       }
       return;
     }
+    rememberActionSuccess(successHref ?? "/hr-admin/attendance-regularizations", "attendance-regularization", "Action saved.", message);
     router.push(successHref ?? "/hr-admin/attendance-regularizations");
   }
 
@@ -167,16 +174,16 @@ export function AttendanceRegularizationReviewForm({ item, cancelHref, successHr
         ) : null}
         <label className="form-field">
           <span className="muted">HR decision note</span>
-          <textarea className="input-control" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
+          <textarea aria-label="HR decision note" className="input-control" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
         </label>
         {error ? <div className="notice notice--error" role="alert"><strong>Action failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Approvals update the attendance regularization queue immediately.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting || item.status !== "pending"} onClick={() => handleDecision("approve")} type="button">
+            <button className="button button--primary" disabled={isSubmitting || accepted || item.status !== "pending"} onClick={() => handleDecision("approve")} type="button">
               {isSubmitting ? "Saving..." : "Approve request"}
             </button>
-            <button className="button button--secondary" disabled={isSubmitting || item.status !== "pending"} onClick={() => handleDecision("reject")} type="button">
+            <button className="button button--secondary" disabled={isSubmitting || accepted || item.status !== "pending"} onClick={() => handleDecision("reject")} type="button">
               Reject request
             </button>
             <button className="button button--ghost" onClick={handleCancel} type="button">

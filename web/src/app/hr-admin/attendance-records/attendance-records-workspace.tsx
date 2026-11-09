@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { ActionFeedbackReceipt } from "@/components/patterns/action-feedback-receipt";
 
 import { AttendanceRecordBulkManager } from "./attendance-record-bulk-manager";
 import { AttendanceRecordImportWorkbench } from "./attendance-record-import-workbench";
@@ -56,6 +57,7 @@ export function AttendanceRecordsWorkspace({ initialData, initialQuery, workbenc
   const validationError = attendanceDateError(query.from_date, query.to_date);
   const reconcile = useCallback(async () => (await resource.load(query, "none")).ok, [query, resource]);
   return <div data-local-update-hydrated={hydrated ? "true" : "false"} aria-busy={resource.isPending || undefined}>
+    <ActionFeedbackReceipt recordIds={["attendance-record"]} />
     {resource.error ? <div className="notice notice--error" role="alert"><strong>Attendance update failed.</strong><span>{resource.error}</span><button className="button button--secondary button--compact" onClick={() => void resource.load(query, "none")} type="button">Retry</button></div> : null}
     <AttendanceRecordBulkManager
       items={resource.data.items} state={resource.data.state} statusOptions={workbenchOptions.attendance_statuses} sourceOptions={workbenchOptions.attendance_sources}

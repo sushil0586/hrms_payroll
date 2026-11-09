@@ -9,7 +9,20 @@ function command(code:string){return execFileSync(path.join(repo,'.venv/bin/pyth
 function proof(info:any,value:any){appendFileSync(path.join(root,'proofs.jsonl'),JSON.stringify({browser:info.project.name,...value})+'\n')}
 test.beforeAll(async({},info)=>{fixture=await provisionIsolatedQaWorkspace(info);mkdirSync(root,{recursive:true});appendFileSync(path.join(root,'fixtures.jsonl'),JSON.stringify({seedRef:fixture.seedRef,tenant:fixture.manifest.tenant,tempDir:fixture.tempDir})+'\n');command("exec(open('web/tests/organization-lifecycle/phase3-fixtures.py').read())");context=JSON.parse(readFileSync(path.join(fixture.tempDir,'lifecycle-phase3-context.json'),'utf8'));appendFileSync(path.join(root,'foreign-fixtures.jsonl'),JSON.stringify({id:context.foreign_tenant,code:fixture.manifest.tenant.code+'-foreign'})+'\n')});
 test.afterAll(async()=>{writeFileSync(control,'{}');if(fixture){try{command("import os;os.environ['QA_LIFECYCLE_CLEANUP']='1';exec(open('web/tests/organization-lifecycle/phase3-fixtures.py').read())")}finally{await cleanupIsolatedQaWorkspace(fixture)}}});
-async function login(page:any,persona='hr_admin'){const u=workspacePersona(fixture,persona as any);expect((await page.request.post('/api/auth/login',{data:{identifier:u.username,password:u.password}})).status()).toBe(200);const token=(await page.context().cookies()).find((x:any)=>x.name==='hrms_access_token')?.value;await page.context().setExtraHTTPHeaders(token?{Authorization:`Token ${token}`}:{})}
+async function login(page:any,persona='hr_admin'){
+ const u=workspacePersona(fixture,persona as any);
+ await page.context().clearCookies();
+ await page.goto('/login',{waitUntil:'domcontentloaded'});
+ await page.getByLabel('Username or email',{exact:true}).fill(u.username);
+ await page.getByLabel('Password',{exact:true}).fill(u.password);
+ const authenticated=page.waitForResponse((response:any)=>response.url().endsWith('/api/auth/login')&&response.request().method()==='POST');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ expect((await authenticated).status()).toBe(200);
+ await expect.poll(async()=>(await page.context().cookies()).some((cookie:any)=>cookie.name==='hrms_access_token')).toBeTruthy();
+ await expect(page).toHaveURL(/\/hr-admin(?:[/?]|$)/,{timeout:15_000});
+ const token=(await page.context().cookies()).find((cookie:any)=>cookie.name==='hrms_access_token')?.value;
+ await page.context().setExtraHTTPHeaders(token?{Authorization:`Token ${token}`}:{})
+}
 test.beforeEach(async({page})=>{writeFileSync(control,'{}');await login(page)});
 async function open(page:any,url:string){expect((await page.goto(url,{waitUntil:'domcontentloaded'}))?.status()).toBe(200);await expect(page.getByRole('heading',{level:1})).toBeVisible();for(const f of await page.locator('[data-hydrated]').all())await expect(f).toHaveAttribute('data-hydrated','true')}
 async function api(page:any,url:string,method='GET',data?:unknown){const cookie=(await page.context().cookies()).find((c:any)=>c.name==='hrms_access_token');return page.request.fetch('http://127.0.0.1:8079/api/v1/'+url,{method,headers:{Authorization:`Token ${cookie.value}`},...(data?{data}:{})})}

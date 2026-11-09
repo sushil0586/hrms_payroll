@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
+import { ActionFeedbackReceipt, rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { ShiftsWorkbench } from "./shifts-workbench";
 import type { HrAdminShift } from "@/lib/types";
 import { ScopedResourceError, useScopedWorkspaceResource } from "@/lib/ui/use-scoped-workspace-resource";
@@ -33,8 +34,9 @@ export function ShiftsWorkspace({ initialData, canManagePolicies, initialModal }
     if (next.mode === "edit") url.searchParams.set("editShift", next.id);
     window.history.pushState(window.history.state, "", `${url.pathname}${url.search}`); setModal(next);
   };
-  const reconcile = useCallback(async () => { const result = await resource.load({}, "none"); if (result.ok) writeModal({ mode: "", id: "" }); return result.ok; }, [resource]);
+  const reconcile = useCallback(async (message: string) => { const result = await resource.load({}, "none"); if (result.ok) { writeModal({ mode: "", id: "" }); rememberActionSuccess(window.location.pathname, "shift-catalog", "Action saved.", message); } return result.ok; }, [resource]);
   return <div data-local-update-hydrated={hydrated ? "true" : "false"} aria-busy={resource.isPending || undefined}>
+    <ActionFeedbackReceipt recordIds={["shift-catalog", ...resource.data.items.map(item => item.id)]} />
     {resource.error ? <div className="notice notice--error" role="alert"><strong>Shift update failed.</strong><span>{resource.error}</span><button className="button button--secondary button--compact" onClick={() => void resource.load({}, "none")} type="button">Retry</button></div> : null}
     <ShiftsWorkbench items={resource.data.items} state={resource.data.state} canManagePolicies={canManagePolicies} modalMode={modal.mode} editShiftId={modal.id} pending={resource.isPending} onOpenCreate={() => writeModal({ mode: "create", id: "" })} onOpenEdit={(id) => writeModal({ mode: "edit", id })} onCloseModal={() => writeModal({ mode: "", id: "" })} onReconcile={reconcile} />
   </div>;

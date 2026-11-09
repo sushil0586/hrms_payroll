@@ -3,6 +3,7 @@
 import { WorkspaceTableScrollRegion } from "@/components/patterns/workspace-table-scroll-region";
 import { PageIntro } from "@/components/patterns/page-intro";
 import Link from "next/link";
+import { formatWorkspaceDateTime } from "@/lib/ui/date-time-format";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -69,18 +70,6 @@ function buildHref(
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function formatDateTime(value: string | null | undefined) {
-  if (!value) {
-    return "Not available";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 
 function resolveSourceHref(item: HrAdminNotification, workspace: "ess" | "mss") {
   const leaveId = item.subject_identifier || String(item.payload?.leave_request_id || "");
@@ -326,7 +315,7 @@ export function UserNotificationCenter({
                           <span className={`record-chip record-chip--${item.status}`}>{titleCase(item.status)}</span>
                           <span className="workspace-table__secondary">{titleCase(item.channel)}</span>
                         </td>
-                        <td><span className="workspace-table__secondary">{formatDateTime(item.created_at)}</span></td>
+                        <td><span className="workspace-table__secondary">{formatWorkspaceDateTime(item.created_at)}</span></td>
                         <td>
                           <div className="table-actions">
                             <UserNotificationDetailAction closeHref={closeHref} endpoint={`${apiEndpointBase}/${item.id}`} item={item} onReadSaved={(readAt) => onReadSaved?.(item.id, readAt)} sourceHref={resolveSourceHref(item, workspace)} />

@@ -1596,6 +1596,7 @@ def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict, in
     return result
 
 
+@transaction.atomic
 def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload: dict, include_console: bool = True) -> dict:
     role = Role.objects.select_for_update().filter(tenant=tenant, id=role_id).prefetch_related("permissions").first()
     if not role:
@@ -3814,11 +3815,16 @@ def get_employee_attendance_summary(employee: Employee) -> dict:
 def get_manager_team_summary(manager: Employee) -> dict:
     """Builds a manager summary for MSS dashboards."""
 
-    team = Employee.objects.filter(reporting_manager=manager).order_by()
+    current_reportee_statuses = [EmploymentStatus.ACTIVE, EmploymentStatus.ON_NOTICE]
+    team = Employee.objects.filter(
+        reporting_manager=manager,
+        employment_status__in=current_reportee_statuses,
+    ).order_by()
     today = timezone.localdate()
 
     employees_on_leave = LeaveRequest.objects.filter(
         employee__reporting_manager=manager,
+        employee__employment_status__in=current_reportee_statuses,
         status=LeaveRequestStatus.APPROVED,
         start_date__lte=today,
         end_date__gte=today,
@@ -3826,10 +3832,12 @@ def get_manager_team_summary(manager: Employee) -> dict:
     pending_leave_approvals = _get_manager_pending_leave_request_queryset(manager).count()
     pending_regularizations = AttendanceRegularization.objects.filter(
         employee__reporting_manager=manager,
+        employee__employment_status__in=current_reportee_statuses,
         status=RegularizationStatus.PENDING,
     ).count()
     attendance_exceptions = AttendanceRecord.objects.filter(
         employee__reporting_manager=manager,
+        employee__employment_status__in=current_reportee_statuses,
         attendance_date=today,
         status__in=[AttendanceStatus.ABSENT, AttendanceStatus.HALF_DAY, AttendanceStatus.LATE, AttendanceStatus.UNKNOWN],
     ).count()
@@ -3841,6 +3849,16 @@ def get_manager_team_summary(manager: Employee) -> dict:
         "pending_leave_approvals_count": pending_leave_approvals,
         "pending_attendance_regularizations_count": pending_regularizations,
         "attendance_exceptions_today": attendance_exceptions,
+        "reportees": [
+            {
+                "employee_id": item.id,
+                "employee_code": item.employee_code,
+                "employee_name": f"{item.first_name} {item.last_name}".strip() or item.employee_code,
+                "department": item.department.name if item.department else None,
+                "designation": item.designation.name if item.designation else None,
+            }
+            for item in team.select_related("department", "designation").order_by("employee_code")
+        ],
     }
 
 
@@ -7318,6 +7336,18 @@ def get_hr_admin_employee_form_options(employee: Employee) -> dict:
     }
 
 
+def get_hr_admin_assignable_access_roles(employee: Employee):
+    """Return roles the current access administrator may delegate."""
+
+    queryset = Role.objects.filter(tenant=employee.tenant, is_active=True)
+    actor_role_codes = set(
+        employee.membership.membership_roles.values_list("role__code", flat=True)
+    ) if employee.membership_id else set()
+    if "tenant-admin" not in actor_role_codes:
+        queryset = queryset.exclude(code="tenant-admin")
+    return queryset.order_by("name")
+
+
 def get_hr_admin_employee_access_options(employee: Employee) -> dict:
     """Returns tenant-scoped access options for employee onboarding."""
 
@@ -7329,7 +7359,7 @@ def get_hr_admin_employee_access_options(employee: Employee) -> dict:
                 "code": role.code,
                 "name": role.name,
             }
-            for role in Role.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")
+            for role in get_hr_admin_assignable_access_roles(employee)
         ],
     }
 

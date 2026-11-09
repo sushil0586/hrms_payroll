@@ -1,3 +1,4 @@
+import { retainShiftMutationEvidence } from "../shift-pilot/database-evidence";
 import { expect, test, type Locator } from "@playwright/test";
 
 import {
@@ -16,7 +17,7 @@ test.beforeAll(async ({}, testInfo) => {
   workspace = await provisionIsolatedQaWorkspace(testInfo);
 });
 
-test.afterAll(async () => cleanupIsolatedQaWorkspace(workspace));
+test.afterAll(async ({}, info) => cleanupIsolatedQaWorkspace(workspace, info));
 
 test.beforeEach(async ({ page }) => {
   const actor = workspacePersona(workspace, "hr_admin");
@@ -32,7 +33,8 @@ async function closeDialog(dialog: Locator, trigger: Locator, name: string | Reg
   await expect(trigger).toBeFocused();
 }
 
-test("employee shift assignment buttons, validation, conflicts, persistence, and focus work end to end", async ({ page }) => {
+test("employee shift assignment buttons, validation, conflicts, persistence, and focus work end to end", async ({ page }, info) => {
+  await retainShiftMutationEvidence(page, info, workspace.manifest.tenant.id, workspace.manifest.credentials.hr_admin.username);
   await page.goto("/hr-admin/employee-shift-assignments");
   let inspect = page.getByRole("button", { name: "Inspect", exact: true }).first();
   await inspect.click();
@@ -49,16 +51,26 @@ test("employee shift assignment buttons, validation, conflicts, persistence, and
 
   await create.click();
   dialog = page.getByRole("dialog", { name: "Create shift assignment", exact: true });
-  const failed = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/api/hr-admin/employee-shift-assignments"));
+  let blankWrites = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/api/hr-admin/employee-shift-assignments")) blankWrites += 1;
+  });
   await dialog.getByRole("button", { name: "Create assignment", exact: true }).click();
-  expect((await failed).status()).toBe(400);
   const alert = dialog.getByRole("alert").filter({ hasText: "Save failed." });
-  await expect(alert).toBeFocused();
-  await expect(alert).toContainText(/required|may not be null/i);
+  await expect(alert).toContainText("Review the highlighted fields.");
+  await expect(dialog.getByRole("combobox", { name: "Employee", exact: true })).toBeFocused();
+  await expect(dialog.getByRole("combobox", { name: "Employee", exact: true })).toHaveAttribute("aria-invalid", "true");
+  expect(blankWrites).toBe(0);
+  // A distinct real backend guard probe retains rejection/SQL non-effect coverage.
+  const rejectedStatus = await page.evaluate(async () => (await fetch("/api/hr-admin/employee-shift-assignments", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employee_id: null, shift_id: null, effective_from: "" }),
+  })).status);
+  expect(rejectedStatus).toBe(400);
 
   const target = workspace.manifest.credentials.manager_b;
   await dialog.getByLabel("Find person", { exact: true }).fill(target.employee_code);
-  const employee = dialog.locator("label").filter({ hasText: "Employee" }).locator("select").first();
+  const employee = dialog.getByRole("combobox", { name: "Employee", exact: true });
   await expect.poll(() => employee.locator("option").count()).toBeGreaterThan(1);
   await employee.selectOption(target.employee_id);
   await dialog.getByRole("combobox", { name: /^Base shift/ }).selectOption(workspace.manifest.attendance.shift_id);
@@ -78,11 +90,19 @@ test("employee shift assignment buttons, validation, conflicts, persistence, and
 
   const search = page.getByPlaceholder("Employee, code, shift, scope");
   await search.fill(target.employee_code);
+  const filtered = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === "/api/hr-admin/employee-shift-assignments/workspace" && url.searchParams.get("q") === target.employee_code;
+  });
   await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+  expect((await filtered).status()).toBe(200);
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(target.employee_code);
+  await expect(page.locator('[data-local-update-hydrated][aria-busy="true"]')).toHaveCount(0);
   await expect(page.getByRole("table")).toContainText(target.employee_code);
   const createdRow = page.getByRole("row").filter({ hasText: target.employee_code }).filter({ hasText: "2035-01-01" });
   inspect = createdRow.getByRole("button", { name: "Inspect", exact: true });
   await inspect.click();
+  await expect(detail).toBeVisible();
   const edit = detail.getByRole("button", { name: "Edit assignment", exact: true });
   await edit.click();
   dialog = page.getByRole("dialog", { name: /Edit / });

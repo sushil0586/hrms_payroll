@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { rememberActionSuccess } from "@/components/patterns/action-feedback-receipt";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useDocumentUploadDraft } from "@/lib/ui/use-document-upload-draft";
 
@@ -192,6 +193,7 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
       if (!confirmed) { setError("The record was saved, but the catalog confirmation failed. Keep this dialog open and refresh the catalog without submitting again."); setIsSubmitting(false); return; }
     } else {
       const destination = new URL(returnHref, window.location.origin);destination.searchParams.set("itemId",payload.id);destination.searchParams.set("saved","1");
+      rememberActionSuccess(destination.pathname, payload.id, "Organization record saved.", "The catalog now shows the confirmed record.");
       navigation.complete(destination.pathname+destination.search);
     }
   }

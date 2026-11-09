@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
   if (!token) {
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
-  const query = new URLSearchParams();
+  // Keep the monthly projection contract even when requesting the current period.
+  const query = new URLSearchParams({ month: request.nextUrl.searchParams.get("month") || "" });
   for (const key of ["month", "page", "page_size"]) {
     const value = request.nextUrl.searchParams.get(key);
     if (value !== null) query.set(key, value);

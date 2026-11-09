@@ -1,6 +1,7 @@
 """Serializers for the first ESS/MSS API slice."""
 
 from decimal import Decimal
+import re
 
 from rest_framework import serializers
 
@@ -278,7 +279,13 @@ class HrAdminEmployeeBankAccountWriteSerializer(serializers.Serializer):
     account_holder_name = serializers.CharField(max_length=255)
     bank_name = serializers.CharField(max_length=255)
     account_number = serializers.CharField(max_length=64)
-    ifsc_code = serializers.CharField(max_length=20, allow_blank=True, required=False)
+    ifsc_code = serializers.RegexField(
+        regex=r"^[A-Z]{4}0[A-Z0-9]{6}$",
+        max_length=11,
+        allow_blank=True,
+        required=False,
+        error_messages={"invalid": "Enter a valid IFSC code."},
+    )
     branch_name = serializers.CharField(max_length=255, allow_blank=True, required=False)
     is_primary = serializers.BooleanField(required=False, default=True)
 
@@ -394,6 +401,7 @@ class HrAdminEmployeeAccessWriteSerializer(serializers.Serializer):
 
 
 class HrAdminEmployeeWriteSerializer(serializers.Serializer):
+    expected_updated_at = serializers.DateTimeField(required=False, write_only=True)
     employee_code = serializers.CharField(max_length=50, required=False)
     first_name = serializers.CharField(max_length=120, required=False)
     middle_name = serializers.CharField(max_length=120, allow_blank=True, required=False)
@@ -417,6 +425,25 @@ class HrAdminEmployeeWriteSerializer(serializers.Serializer):
     reporting_manager_id = serializers.UUIDField(allow_null=True, required=False)
     probation_end_date = serializers.DateField(allow_null=True, required=False)
     confirmation_date = serializers.DateField(allow_null=True, required=False)
+
+    def validate_employee_code(self, value):
+        normalized = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", normalized):
+            raise serializers.ValidationError(
+                "Use letters, numbers, periods, underscores, slashes, or hyphens only."
+            )
+        return normalized
+
+    def validate_phone_number(self, value):
+        normalized = value.strip()
+        if not normalized:
+            return ""
+        digit_count = sum(character.isdigit() for character in normalized)
+        if not re.fullmatch(r"[+()\- 0-9]+", normalized) or not 7 <= digit_count <= 15:
+            raise serializers.ValidationError(
+                "Enter a valid phone number containing 7 to 15 digits."
+            )
+        return normalized
 
     def validate(self, attrs):
         if not self.partial:
@@ -3619,6 +3646,7 @@ class HrAdminPayrollSettlementSetupSerializer(serializers.Serializer):
 
 class HrAdminLeaveTypeSerializer(serializers.Serializer):
     id = serializers.UUIDField()
+    updated_at = serializers.DateTimeField()
     code = serializers.CharField()
     name = serializers.CharField()
     short_code = serializers.CharField(allow_blank=True)
@@ -3665,6 +3693,7 @@ class HrAdminLeaveTypeImpactSerializer(serializers.Serializer):
 
 
 class HrAdminLeaveTypeWriteSerializer(serializers.Serializer):
+    expected_updated_at = serializers.DateTimeField(required=False, write_only=True)
     code = serializers.CharField(max_length=50, required=False)
     name = serializers.CharField(max_length=255, required=False)
     short_code = serializers.CharField(max_length=20, allow_blank=True, required=False)
@@ -3819,6 +3848,7 @@ class HrAdminAttendancePolicyWriteSerializer(serializers.Serializer):
 
 class HrAdminLeavePolicySerializer(serializers.Serializer):
     id = serializers.UUIDField()
+    updated_at = serializers.DateTimeField()
     leave_type_id = serializers.UUIDField()
     leave_type = serializers.CharField()
     code = serializers.CharField()
@@ -4064,6 +4094,7 @@ class HrAdminLeavePolicyPreviewSerializer(serializers.Serializer):
 
 
 class HrAdminLeavePolicyWriteSerializer(serializers.Serializer):
+    expected_updated_at = serializers.DateTimeField(required=False, write_only=True)
     leave_type_id = serializers.UUIDField(required=False)
     code = serializers.CharField(max_length=60, required=False)
     name = serializers.CharField(max_length=255, required=False)
@@ -4071,11 +4102,23 @@ class HrAdminLeavePolicyWriteSerializer(serializers.Serializer):
     effective_from = serializers.DateField(allow_null=True, required=False)
     effective_to = serializers.DateField(allow_null=True, required=False)
     accrual_frequency = serializers.ChoiceField(choices=AccrualFrequency.values, required=False, default=AccrualFrequency.NONE)
-    annual_entitlement = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0)
-    max_carry_forward = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0)
-    max_consecutive_days = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True, required=False)
-    min_days_per_request = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0.5)
-    notice_days_required = serializers.IntegerField(required=False, default=0)
+    annual_entitlement = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0, min_value=Decimal("0"))
+    max_carry_forward = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0, min_value=Decimal("0"))
+    max_consecutive_days = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        allow_null=True,
+        required=False,
+        min_value=Decimal("0.5"),
+    )
+    min_days_per_request = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        required=False,
+        default=0.5,
+        min_value=Decimal("0.5"),
+    )
+    notice_days_required = serializers.IntegerField(required=False, default=0, min_value=0)
     allow_half_day = serializers.BooleanField(required=False, default=False)
     allow_backdated_application = serializers.BooleanField(required=False, default=False)
     allow_weekend_holiday_overlap = serializers.BooleanField(required=False, default=False)
@@ -4083,7 +4126,7 @@ class HrAdminLeavePolicyWriteSerializer(serializers.Serializer):
     is_probation_eligible = serializers.BooleanField(required=False, default=True)
     gender_restriction = serializers.CharField(max_length=30, allow_blank=True, required=False)
     marital_status_restriction = serializers.CharField(max_length=30, allow_blank=True, required=False)
-    minimum_service_days = serializers.IntegerField(required=False, default=0)
+    minimum_service_days = serializers.IntegerField(required=False, default=0, min_value=0)
     config_snapshot = HrAdminLeavePolicyAdvancedConfigSerializer(required=False, default=dict)
 
     def validate(self, attrs):
@@ -4094,6 +4137,12 @@ class HrAdminLeavePolicyWriteSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"code": "This field is required."})
             if not attrs.get("name"):
                 raise serializers.ValidationError({"name": "This field is required."})
+        if attrs.get("effective_from") and attrs.get("effective_to") and attrs["effective_to"] < attrs["effective_from"]:
+            raise serializers.ValidationError({"effective_to": "Effective-to date must be on or after effective-from."})
+        maximum = attrs.get("max_consecutive_days")
+        minimum = attrs.get("min_days_per_request")
+        if maximum is not None and minimum is not None and maximum < minimum:
+            raise serializers.ValidationError({"max_consecutive_days": "Maximum consecutive days cannot be less than minimum days per request."})
         return attrs
 
 
@@ -4280,7 +4329,27 @@ class HrAdminAttendancePolicyAssignmentResolutionSerializer(serializers.Serializ
     summary = serializers.CharField()
 
 
+class HrAdminEmployeeShiftAssignmentLifecycleSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["cancel", "end"])
+    expected_updated_at = serializers.DateTimeField()
+    reason = serializers.CharField(max_length=2000, trim_whitespace=True)
+    last_working_date = serializers.DateField(required=False)
+    acknowledge_schedule_change = serializers.BooleanField()
+
+    def validate_acknowledge_schedule_change(self, value):
+        if not value:
+            raise serializers.ValidationError("Review and acknowledge the schedule change.")
+        return value
+
+
 class HrAdminEmployeeShiftAssignmentSerializer(serializers.Serializer):
+    lifecycle_state = serializers.CharField()
+    lifecycle_action = serializers.CharField(allow_blank=True)
+    lifecycle_unavailable_reason = serializers.CharField(allow_blank=True)
+    schedule_today = serializers.DateField()
+    schedule_timezone = serializers.CharField()
+    cancelled_at = serializers.DateTimeField(allow_null=True)
+    lifecycle_snapshot = serializers.JSONField()
     id = serializers.UUIDField()
     employee_id = serializers.UUIDField()
     employee = serializers.CharField()
@@ -6303,6 +6372,7 @@ class ManagerTeamSummarySerializer(serializers.Serializer):
     pending_leave_approvals_count = serializers.IntegerField()
     pending_attendance_regularizations_count = serializers.IntegerField()
     attendance_exceptions_today = serializers.IntegerField()
+    reportees = ManagerApprovalEmployeeSerializer(many=True)
 
 
 class LeaveRequestCreateSerializer(serializers.Serializer):
@@ -6355,6 +6425,14 @@ class AttendanceRegularizationCreateSerializer(serializers.Serializer):
     def validate(self, attrs):
         requested_check_in_at = attrs.get("requested_check_in_at")
         requested_check_out_at = attrs.get("requested_check_out_at")
+        if attrs.get("requested_status", "present") != "absent":
+            errors = {}
+            if not requested_check_in_at:
+                errors["requested_check_in_at"] = "Requested check-in is required for a worked attendance status."
+            if not requested_check_out_at:
+                errors["requested_check_out_at"] = "Requested check-out is required for a worked attendance status."
+            if errors:
+                raise serializers.ValidationError(errors)
         if requested_check_in_at and requested_check_out_at and requested_check_out_at < requested_check_in_at:
             raise serializers.ValidationError(
                 {"requested_check_out_at": "Requested check-out cannot be earlier than requested check-in."}
